@@ -1,3 +1,4 @@
+
 from pydantic import BaseModel
 
 class ServiceBase(BaseModel):
@@ -6,7 +7,7 @@ class ServiceBase(BaseModel):
     price: float
 
 class ServiceCreate(ServiceBase):
-    business_id: int  # До якого салону належить ця послуга
+    business_id: int
 
 class ServiceResponse(ServiceBase):
     id: int

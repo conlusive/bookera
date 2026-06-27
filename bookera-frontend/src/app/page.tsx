@@ -6,13 +6,10 @@ export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const [businesses, setBusinesses] = useState<any[]>([]);
 
-  // 1. Відстежуємо скрол до рівня закінчення Hero-блоку (~450px)
+  // 1. Відстежуємо скрол до рівня закінчення Hero-блоку (~500px)
   useEffect(() => {
     const handleScroll = () => {
-      // Крос-браузерне отримання поточної позиції скролу
       const currentScroll = window.scrollY || document.documentElement.scrollTop;
-
-      // Лог у консоль браузера (можна подивитися через F12 -> Console)
       console.log("Поточна позиція скролу (px):", currentScroll);
 
       if (currentScroll > 500) {
@@ -22,24 +19,28 @@ export default function Home() {
       }
     };
 
-    // Виклик при першому рендері для точності
     handleScroll();
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 2. Клієнтська вигрузка даних з вашого FastAPI бекенду
+  // 2. КЛІЄНТСЬКА ВИГРУЗКА ДАНИХ (127.0.0.1:8001)
   useEffect(() => {
     async function loadBusinesses() {
       try {
-        const res = await fetch('http://localhost:8000/businesses/all');
+        console.log("Надсилаємо запит до бекенду на http://127.0.0.1:8001/businesses/all ...");
+        const res = await fetch('http://127.0.0.1:8001/businesses/all');
+
         if (res.ok) {
           const data = await res.json();
+          console.log("Успішно отримано салони з бази даних:", data);
           setBusinesses(data);
+        } else {
+          console.error("Бекенд відповів, але повернув помилку. Статус:", res.status);
         }
       } catch (error) {
-        console.error("Помилка підключення до API:", error);
+        console.error("Мережева помилка! Не вдалося достукатися до API:", error);
       }
     }
     loadBusinesses();
@@ -74,14 +75,13 @@ export default function Home() {
         .input-focus:focus { border-color: #c5a880 !important; }
       `}</style>
 
-      {/* 1. РОЗУМНИЙ ХЕДЕР (Змінюється суворо після 450px) */}
+      {/* 1. РОЗУМНИЙ ХЕДЕР */}
       <header style={{
         position: 'fixed',
         top: 0,
         left: 0,
         width: '100%',
         backgroundColor: scrolled ? '#0b0f17' : 'transparent',
-        // ВИПРАВЛЕНО: коли scrolled === false, лінії та рамок немає взагалі
         borderBottom: scrolled ? '1px solid #1e293b' : 'none',
         padding: scrolled ? '0.6rem 4rem' : '1.25rem 4rem',
         zIndex: 100,
@@ -94,7 +94,7 @@ export default function Home() {
             Book<span style={{ color: '#ffffff' }}>Era</span>
           </div>
 
-          {/* Міні-пошук (Висувається лише після червоної лінії, коли scrolled === true) */}
+          {/* Міні-пошук при скролі */}
           <div style={{
             display: 'flex',
             gap: '0.25rem',
@@ -115,7 +115,12 @@ export default function Home() {
 
           {/* Правий блок */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#c5a880', cursor: 'pointer' }}>Для бізнесу</span>
+            <span
+  style={{ fontSize: '0.9rem', fontWeight: '600', color: '#c5a880', cursor: 'pointer' }}
+  onClick={() => window.location.href = '/business'}
+>
+  Для бізнесу
+</span>
             <button className="anim" style={{ backgroundColor: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '0.55rem 1.25rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
               Кабінет
             </button>
@@ -137,11 +142,11 @@ export default function Home() {
             Ексклюзивне бронювання послуг в Україні
           </span>
           <h1 style={{ fontSize: '3.6rem', fontWeight: '800', marginBottom: '1.5rem', letterSpacing: '-0.03em', lineHeight: '1.15' }}>
-            Твій час. Твій стиль. <br/>
+            Твій час. Твій style. <br/>
             <span style={{ color: '#c5a880' }}>Завжди бездоганно.</span>
           </h1>
           <p style={{ color: '#8f9bba', fontSize: '1.15rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6', fontWeight: '400' }}>
-            Онлайн-запис до топ-майстрів твого міста. Жодних очікувань чи зайвих дзвінків.
+            Online-запис до топ-майстрів твого міста. Жодних очікувань чи зайвих дзвінків.
           </p>
         </div>
 
@@ -214,7 +219,13 @@ export default function Home() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '2rem' }}>
             {businesses.map((business: any) => (
-              <div key={business.slug} className="anim salon-card" style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eef0f3', overflow: 'hidden', cursor: 'pointer' }}>
+              /* ЗМІНЕНО: Клік на всю картку перенаправляє на профіль салону */
+              <div
+                key={business.slug}
+                className="anim salon-card"
+                style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eef0f3', overflow: 'hidden', cursor: 'pointer' }}
+                onClick={() => window.location.href = `/salon/${business.slug}`}
+              >
                 <div style={{ height: '210px', background: 'linear-gradient(135deg, #0b0f17 0%, #1e293b 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c5a880', fontSize: '4.5rem', position: 'relative' }}>
                   ✨
                   <div style={{ position: 'absolute', top: '1rem', right: '1rem', backgroundColor: '#ffffff', padding: '0.35rem 0.65rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '700', color: '#0b0f17', display: 'flex', alignItems: 'center', gap: '0.25rem', boxShadow: '0 4px 10px rgba(0,0,0,0.08)' }}>
@@ -239,9 +250,10 @@ export default function Home() {
                     <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
                       Доступно: <span style={{ color: '#0b0f17', fontWeight: '700' }}>Сьогодні з 15:00</span>
                     </div>
-                    <button className="anim btn-gold" style={{ border: 'none', padding: '0.65rem 1.5rem', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer' }}>
-                      Бронювати
-                    </button>
+                    {/* ЗМІНЕНО: Велику кнопку видалено, натомість додано елегантний текстовий лінк */}
+                    <span style={{ color: '#c5a880', fontSize: '0.9rem', fontWeight: '750' }}>
+                      Детальніше →
+                    </span>
                   </div>
                 </div>
               </div>
@@ -256,7 +268,7 @@ export default function Home() {
           <div style={{ maxWidth: '650px' }}>
             <h2 style={{ fontSize: '2.2rem', fontWeight: '800', marginBottom: '1rem', letterSpacing: '-0.02em', color: '#ffffff' }}>Розвивайте бізнес разом з BookEra</h2>
             <p style={{ color: '#94a3b8', fontSize: '1.1rem', margin: 0, lineHeight: '1.6' }}>
-              Цифрова екосистема для преміальних салонів, барбершопів та майстрів. Повний контроль розкладу, CRM, аналітика завантаженості та автоматичні сповіщення клієнтів.
+              Цифрова екосистема для преміальних салонів, barbershop-ів та майстрів. Повний контроль розкладу, CRM, аналітика завантаженості та автоматичні сповіщення клієнтів.
             </p>
           </div>
           <button className="anim btn-gold" style={{ padding: '1.1rem 2.5rem', borderRadius: '12px', border: 'none', fontSize: '1rem', fontWeight: '750', cursor: 'pointer', whiteSpace: 'nowrap' }}>

@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Enum, Float
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Enum, Float, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 import enum
@@ -52,6 +52,9 @@ class Service(Base):
 class Appointment(Base):
     __tablename__ = "appointments"
 
+    # Всередині класу Appointment(Base):
+    master_id = Column(Integer, nullable=False, default=1)
+
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     business_id: Mapped[int] = mapped_column(ForeignKey("businesses.id"))
     client_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
@@ -59,5 +62,6 @@ class Appointment(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime)
     end_time: Mapped[datetime] = mapped_column(DateTime)
     status: Mapped[StatusEnum] = mapped_column(Enum(StatusEnum), default=StatusEnum.pending)
+
 
     business = relationship("Business", back_populates="appointments")

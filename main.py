@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.models.base import Base
 from app.core.database import engine
 
+
+
 app = FastAPI(
     title="BookEra API",
     description="Backend engine for BookEra - The ultimate booking platform",

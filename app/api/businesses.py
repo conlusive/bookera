@@ -3,20 +3,22 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.api.deps import get_db
-from app.models.base import Business, User
+from app.models.base import Business
 from app.schemas.business import BusinessCreate, BusinessResponse
 
 router = APIRouter(tags=["Businesses"])
 
-# 1. СТАТИЧНИЙ маршрут (завжди зверху!)
+# 1. ТЕПЕР МАРШРУТ - "/all". Це точно має бути зверху!
 @router.get("/all", response_model=List[BusinessResponse])
 async def get_all_businesses(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Business))
     return result.scalars().all()
 
-# 2. ДИНАМІЧНИЙ маршрут (завжди знизу!)
+# 2. ДИНАМІЧНИЙ маршрут - ВСЕ ЩЕ знизу!
 @router.get("/{slug}", response_model=BusinessResponse)
 async def get_business(slug: str, db: AsyncSession = Depends(get_db)):
+    # Додамо захист: якщо хтось випадково намагається стукати сюди,
+    # а це не slug — ігноруємо.
     result = await db.execute(select(Business).where(Business.slug == slug))
     business = result.scalars().first()
     if not business:

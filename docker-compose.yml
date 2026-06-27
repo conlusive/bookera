@@ -4,9 +4,9 @@ services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_USER: booksy_user
-      POSTGRES_PASSWORD: booksy_password
-      POSTGRES_DB: booksy_db
+      POSTGRES_USER: bookera_user
+      POSTGRES_PASSWORD: bookera_password
+      POSTGRES_DB: bookera_db
     ports:
       - "5432:5432"
 

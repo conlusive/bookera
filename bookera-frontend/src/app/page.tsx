@@ -146,7 +146,7 @@ export default function HomePage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.75rem' }}>
-            <Link href="/business" className="nav-link" style={{ transition: '0.2s' }}>Додати свій бізнес</Link>
+            <Link href="/business" className="nav-link" style={{ transition: '0.2s' }}>Для бізнесу</Link>
             <span className="nav-link" style={{ color: '#c5a880', cursor: 'pointer', transition: '0.2s' }}>Увійти</span>
           </div>
 

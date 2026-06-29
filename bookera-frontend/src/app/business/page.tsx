@@ -29,7 +29,7 @@ export default function BusinessLandingPage() {
         .btn-dark { background-color: #0b0f17 !important; color: #ffffff !important; font-weight: 800; border: none; cursor: pointer; }
         .btn-dark:hover { background-color: #1e293b !important; box-shadow: 0 4px 15px rgba(11, 15, 23, 0.3); transform: translateY(-2px); }
 
-        .nav-link { color: #ffffff; text-decoration: none; transition: 0.2s; font-weight: 600; font-size: 0.95rem; }
+        .nav-link { color: #ffffff; text-decoration: none; transition: 0.2s; font-weight: 600; font-size: 0.9rem; }
         .nav-link:hover { color: #c5a880 !important; }
 
         .footer-link { color: #94a3b8; text-decoration: none; font-size: 0.9rem; }

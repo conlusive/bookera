@@ -229,45 +229,53 @@ export default function BusinessCabinet() {
         .action-btn { border: none; padding: 0.5rem 0; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; height: 38px; }
       `}</style>
 
-      {/* ХЕДЕР: Знято фіксовану висоту, додано невидиму розпірку */}
+      {/* ХЕДЕР — ПОВНІСТЮ СИНХРОНІЗОВАНИЙ З ГОЛОВНОЮ СТОРІНКОЮ */}
       <header style={{
         position: 'fixed', top: 0, left: 0, width: '100%',
         backgroundColor: scrolled ? '#0b0f17' : 'transparent',
         borderBottom: scrolled ? '1px solid #1e293b' : 'none',
-        padding: scrolled ? '0.6rem 0' : '1.25rem 0', // Відступи ідентичні головній
+        padding: scrolled ? '0.6rem 0' : '1.25rem 0',
         zIndex: 100,
         boxShadow: scrolled ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'
       }} className="anim">
         <div style={{ maxWidth: '1340px', margin: '0 auto', padding: '0 4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box' }}>
 
-          {/* Логотип: BookEra business без зайвих рамок */}
-          <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => window.location.href = '/'}>
-            <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c5a880', letterSpacing: '-0.04em', lineHeight: '1' }}>
+          {/* Елегантна безшовна інтеграція слова business по базовій лінії шрифту */}
+          <div style={{ display: 'flex', alignItems: 'baseline', cursor: 'pointer' }} onClick={() => window.location.href = '/'}>
+            <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c5a880', letterSpacing: '-0.04em' }}>
               Book<span style={{ color: '#ffffff' }}>Era</span>
             </span>
-            <span style={{ fontSize: '0.9rem', color: '#ffffff', marginLeft: '0.5rem', fontWeight: '500', textTransform: 'lowercase', letterSpacing: '0', lineHeight: '1' }}>business</span>
+            <span style={{ fontSize: '0.9rem', color: '#94a3b8', marginLeft: '0.45rem', fontWeight: '500', textTransform: 'lowercase', letterSpacing: '-0.01em' }}>business</span>
           </div>
 
-          {/* НЕВИДИМА РОЗПІРКА: Ідеально копіює розмір пошуку з головної сторінки, утримуючи логотип на місці */}
-          <div style={{ maxWidth: '450px', width: '100%', margin: '0 2rem', padding: '0.35rem', visibility: 'hidden', pointerEvents: 'none' }}></div>
+          {/* Невидимий клон оригінального пошукового блоку для утримання ідеальних пропорцій хедера */}
+          <div style={{
+            display: 'flex', gap: '0.25rem', backgroundColor: '#ffffff', padding: '0.35rem', borderRadius: '10px',
+            maxWidth: '450px', width: '100%', margin: '0 2rem', border: '1px solid #e2e8f0', visibility: 'hidden', pointerEvents: 'none'
+          }}>
+            <input type="text" style={{ flex: 1, padding: '0.4rem 0.75rem', backgroundColor: 'transparent', border: 'none' }} />
+            <input type="text" style={{ width: '80px', padding: '0.4rem 0.75rem', backgroundColor: 'transparent', border: 'none' }} value="Львів" readOnly />
+            <button className="btn-gold" style={{ border: 'none', padding: '0 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: '700' }}>Знайти</button>
+          </div>
 
+          {/* Навігація справа */}
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#c5a880', cursor: 'pointer', lineHeight: '1' }} onClick={() => window.location.href = '/'}>Повернутись на сайт →</span>
+            <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#c5a880', cursor: 'pointer' }} onClick={() => window.location.href = '/'}>Повернутись на сайт →</span>
           </div>
 
         </div>
       </header>
 
-      {/* БАНЕР */}
+      {/* БАНЕР — ЗАФІКСОВАНИЙ ТА КОМПАКТНИЙ НА ВСІХ ТРЬОХ ЕКРАНАХ */}
       <section style={{
         backgroundColor: '#0b0f17',
         color: '#ffffff',
         background: 'radial-gradient(circle at top right, #161f30 0%, #0b0f17 100%)',
-        minHeight: '240px',
+        minHeight: '130px',
         boxSizing: 'border-box',
         display: 'flex',
         alignItems: 'center',
-        padding: '11rem 0 3.5rem 0', // Відступ повернуто до стандарту, банер не злазить
+        padding: '6.5rem 0 1.5rem 0',
         transition: 'all 0.3s ease',
         width: '100%'
       }}>
@@ -276,91 +284,84 @@ export default function BusinessCabinet() {
           {currentView === 'dashboard' && (
             <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h1 style={{ fontSize: '2.5rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>Мій Бізнес Кабінет</h1>
-                <p style={{ color: '#94a3b8', margin: '0.25rem 0 0 0', fontSize: '1rem' }}>Керуйте діючими студіями або реєструйте нові преміум-локації.</p>
+                <h1 style={{ fontSize: '2.2rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>Мій Бізнес Кабінет</h1>
+                <p style={{ color: '#94a3b8', margin: '0.15rem 0 0 0', fontSize: '0.95rem' }}>Керуйте діючими студіями або реєструйте нові преміум-локації.</p>
               </div>
             </div>
           )}
 
           {currentView === 'add_salon' && (
             <div style={{ width: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                <button onClick={() => setCurrentView('dashboard')} style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.15)', padding: '0.35rem 0.85rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }} className="anim">← Назад</button>
-                <span style={{ color: '#c5a880', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Новий заклад</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                <button onClick={() => setCurrentView('dashboard')} style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.15)', padding: '0.25rem 0.65rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }} className="anim">← Назад</button>
+                <span style={{ color: '#c5a880', fontSize: '0.7rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Новий заклад</span>
               </div>
-              <h1 style={{ fontSize: '2.6rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>Реєстрація локації</h1>
+              <h1 style={{ fontSize: '2.2rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>Реєстрація локації</h1>
             </div>
           )}
 
           {currentView === 'manage_salon' && (
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                    <button onClick={handleBackToDashboard} style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.15)', padding: '0.35rem 0.85rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }} className="anim">← Назад</button>
-                    <span style={{ color: '#c5a880', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Живий Конструктор</span>
-                  </div>
-                  {!isEditingProfile && (
-                    <>
-                      <h1 style={{ fontSize: '2.6rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>{selectedBusiness?.name}</h1>
-                      <p style={{ color: '#94a3b8', margin: '0.25rem 0 0 0', fontSize: '1rem' }}>📍 {selectedBusiness?.address}</p>
-                    </>
-                  )}
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                  <button onClick={handleBackToDashboard} style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.15)', padding: '0.25rem 0.65rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }} className="anim">← Назад</button>
+                  <span style={{ color: '#c5a880', fontSize: '0.7rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Живий Конструктор</span>
                 </div>
-
-                {!isEditingProfile && (
-                  <button onClick={() => setIsEditingProfile(true)} className="anim btn-gold" style={{ border: 'none', padding: '0.6rem 1.5rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '750', cursor: 'pointer' }}>⚙️ Редагувати профіль закладу</button>
-                )}
+                <h1 style={{ fontSize: '2.2rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>{selectedBusiness?.name}</h1>
+                <p style={{ color: '#94a3b8', margin: '0.15rem 0 0 0', fontSize: '0.95rem' }}>📍 {selectedBusiness?.address}</p>
               </div>
 
-              {/* ПОЛЕ РЕДАКТОРУ ПРОФІЛЮ */}
-              {isEditingProfile && (
-                <div style={{ width: '100%', backgroundColor: 'rgba(255,255,255,0.02)', padding: '2rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.07)', boxSizing: 'border-box' }} className="anim">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#c5a880', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Назва закладу</label>
-                        <input type="text" className="input-dark-premium" value={editName} onChange={(e) => handleEditNameChange(e.target.value)} placeholder="Введіть назву салону" />
-                      </div>
-                      <div>
-                        {/* ЗНЯТО БЛОКУВАННЯ ПОЛЯ SLUG В РЕДАКТОРІ */}
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Унікальний URL Slug (системний)</label>
-                        <input type="text" className="input-dark-premium" value={editSlug} onChange={(e) => setEditSlug(e.target.value)} placeholder="наприклад: mij-salon" />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#c5a880', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Адреса локації</label>
-                        <input type="text" className="input-dark-premium" value={editAddress} onChange={(e) => setEditAddress(e.target.value)} placeholder="Введіть повну адресу" />
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Instagram URL</label>
-                          <input type="text" className="input-dark-premium" value={editInstagram} onChange={(e) => setEditInstagram(e.target.value)} placeholder="https://instagram.com/..." />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Офіційний сайт</label>
-                          <input type="text" className="input-dark-premium" value={editWebsite} onChange={(e) => setEditWebsite(e.target.value)} placeholder="https://..." />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
-                    <button onClick={() => setIsEditingProfile(false)} style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '0.65rem 1.5rem', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer' }} className="anim">Скасувати</button>
-                    <button onClick={handleUpdateBusinessProfile} className="anim btn-gold" style={{ border: 'none', padding: '0.65rem 2rem', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 20px rgba(197, 168, 128, 0.25)' }}>💾 Зберегти зміни профілю</button>
-                  </div>
-                </div>
+              {!isEditingProfile && (
+                <button onClick={() => setIsEditingProfile(true)} className="anim btn-gold" style={{ border: 'none', padding: '0.5rem 1.25rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '750', cursor: 'pointer' }}>⚙️ Редагувати профіль закладу</button>
               )}
-
             </div>
           )}
+
         </div>
       </section>
 
       {/* КОНТЕНТ */}
       <main style={{ maxWidth: '1340px', margin: '0 auto', padding: '0 4rem', boxSizing: 'border-box' }}>
+
+        {/* ФОРМА РЕДАКТУВАННЯ ЗА МЕЖАМИ БАНЕРА */}
+        {currentView === 'manage_salon' && isEditingProfile && (
+          <div style={{ width: '100%', backgroundColor: '#0b0f17', padding: '2rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.07)', boxSizing: 'border-box', marginTop: '2rem', color: '#ffffff' }} className="anim">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#c5a880', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Назва закладу</label>
+                  <input type="text" className="input-dark-premium" value={editName} onChange={(e) => handleEditNameChange(e.target.value)} placeholder="Введіть назву салону" />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Унікальний URL Slug (системний)</label>
+                  <input type="text" className="input-dark-premium" value={editSlug} onChange={(e) => setEditSlug(e.target.value)} placeholder="наприклад: mij-salon" />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#c5a880', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Адреса локації</label>
+                  <input type="text" className="input-dark-premium" value={editAddress} onChange={(e) => setEditAddress(e.target.value)} placeholder="Введіть повну адресу" />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Instagram URL</label>
+                    <input type="text" className="input-dark-premium" value={editInstagram} onChange={(e) => setEditInstagram(e.target.value)} placeholder="https://instagram.com/..." />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Офіційний сайт</label>
+                    <input type="text" className="input-dark-premium" value={editWebsite} onChange={(e) => setEditWebsite(e.target.value)} placeholder="https://..." />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
+              <button onClick={() => setIsEditingProfile(false)} style={{ backgroundColor: 'transparent', color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '0.65rem 1.5rem', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer' }} className="anim">Скасувати</button>
+              <button onClick={handleUpdateBusinessProfile} className="anim btn-gold" style={{ border: 'none', padding: '0.65rem 2rem', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 20px rgba(197, 168, 128, 0.25)' }}>💾 Зберегти зміни профілю</button>
+            </div>
+          </div>
+        )}
 
         {/* ================= ЕКРАН 1: ДЕШБОРД ================= */}
         {currentView === 'dashboard' && (
@@ -404,7 +405,7 @@ export default function BusinessCabinet() {
 
         {/* ================= ЕКРАН 2: РЕЄСТРАЦІЯ НОВОГО ЗАКЛАДУ ================= */}
         {currentView === 'add_salon' && (
-          <div style={{ padding: '4rem 0 6rem 0', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ padding: '3rem 0 6rem 0', display: 'flex', justifyContent: 'center' }}>
             <div className="card-premium" style={{ maxWidth: '700px', width: '100%', padding: '3.5rem' }}>
               <h2 style={{ fontSize: '1.8rem', fontWeight: '900', marginBottom: '0.5rem', color: '#0b0f17' }}>Створення нового профілю</h2>
               <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2.5rem' }}>Будь ласка, введіть базову інформацію про заклад. Після створення ви зможете додати майстрів та прайс-лист у живому конструкторі.</p>
@@ -416,7 +417,6 @@ export default function BusinessCabinet() {
                     <input type="text" className="input-premium" placeholder="Наприклад: Solid Barber" value={bizName} onChange={(e) => handleNameChange(e.target.value)} required />
                   </div>
                   <div>
-                    {/* ЗНЯТО БЛОКУВАННЯ ПОЛЯ SLUG ПРИ РЕЄСТРАЦІЇ */}
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', marginBottom: '0.5rem', color: '#0b0f17' }}>Системний Slug (URL)</label>
                     <input type="text" className="input-premium" placeholder="solid-barber" value={bizSlug} onChange={(e) => setBizSlug(e.target.value)} required />
                   </div>

@@ -136,9 +136,6 @@ export default function SalonProfile() {
     }
   };
 
-  if (loading) return <div style={{ backgroundColor: '#0b0f17', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c5a880' }}>Синхронізація з екосистемою BookEra...</div>;
-  if (!salon) return <div style={{ backgroundColor: '#0b0f17', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>Заклад не знайдено.</div>;
-
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0b0f17' }}>
 
@@ -157,21 +154,22 @@ export default function SalonProfile() {
         .close-modal-btn:hover { background: #e2e8f0; transform: scale(1.05); }
       `}</style>
 
-      {/* ХЕДЕР СИНХРОНІЗОВАНИЙ З ГОЛОВНОЮ НА 100% */}
+      {/* ХЕДЕР — РОЗТЯГНУТИЙ НА 100% З ОДНАКОВИМИ ВІДСТУПАМИ ТА ЦЕНТРУВАННЯМ */}
       <header style={{
         position: 'fixed', top: 0, left: 0, width: '100%',
         backgroundColor: scrolled ? '#0b0f17' : 'transparent',
         borderBottom: scrolled ? '1px solid #1e293b' : 'none',
-        padding: scrolled ? '0.6rem 0' : '1.25rem 0', zIndex: 100
+        padding: scrolled ? '0.6rem 0' : '1.25rem 0', zIndex: 100,
+        boxShadow: scrolled ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'
       }} className="anim">
         <div style={{ maxWidth: '1340px', margin: '0 auto', padding: '0 4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box' }}>
 
-          {/* Логотип */}
-          <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c5a880', cursor: 'pointer' }} onClick={() => window.location.href = '/'}>
+          {/* ВИПРАВЛЕНО: Додано letterSpacing: '-0.04em' щоб розмір літер один-в-один копіював головну */}
+          <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c5a880', letterSpacing: '-0.04em', cursor: 'pointer' }} onClick={() => window.location.href = '/'}>
             Book<span style={{ color: '#ffffff' }}>Era</span>
           </div>
 
-          {/* ВИПРАВЛЕНО: ПОВНА КОПІЯ ПРЕМІУМ ПОШУКОВОГО ВІДЖЕТА З ГОЛОВНОЇ СТОРІНКИ */}
+          {/* ПРЕМІУМ ПОШУКОВИЙ ВІДЖЕТ */}
           <div style={{
             flex: '0 1 540px',
             margin: '0 1.5rem',
@@ -183,65 +181,35 @@ export default function SalonProfile() {
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
             border: '1px solid #e4e4e7'
           }}>
-            {/* Пошук послуги */}
             <input
               type="text"
               placeholder="Що шукаєте?"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
-                flex: 1.3,
-                border: 'none',
-                outline: 'none',
-                padding: '0.55rem 0.75rem',
-                fontSize: '0.88rem',
-                fontWeight: '600',
-                color: '#0b0f17',
-                backgroundColor: 'transparent'
+                flex: 1.3, border: 'none', outline: 'none', padding: '0.55rem 0.75rem',
+                fontSize: '0.88rem', fontWeight: '600', color: '#0b0f17', backgroundColor: 'transparent'
               }}
             />
-
-            {/* Розділювальна лінія */}
             <div style={{ width: '1px', height: '24px', backgroundColor: '#e4e4e7' }}></div>
-
-            {/* Локація */}
             <input
               type="text"
               value={cityQuery}
               onChange={(e) => setCityQuery(e.target.value)}
               style={{
-                flex: 0.7,
-                border: 'none',
-                outline: 'none',
-                padding: '0.55rem 0.75rem',
-                fontSize: '0.88rem',
-                fontWeight: '700',
-                color: '#0b0f17',
-                backgroundColor: 'transparent'
+                flex: 0.7, border: 'none', outline: 'none', padding: '0.55rem 0.75rem',
+                fontSize: '0.88rem', fontWeight: '700', color: '#0b0f17', backgroundColor: 'transparent'
               }}
             />
-
-            {/* Золота кнопка Знайти */}
-            <button
-              className="anim btn-gold"
-              style={{
-                border: 'none',
-                padding: '0.55rem 1.25rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: '800',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap'
-              }}
-            >
+            <button className="anim btn-gold" style={{ border: 'none', padding: '0.55rem 1.25rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '800', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Знайти
             </button>
           </div>
 
-          {/* Навігація */}
+          {/* Навігація на правій лінії */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
             <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#c5a880', cursor: 'pointer' }} onClick={() => window.location.href = '/business'}>Для бізнесу</span>
-            <button className="anim" style={{ backgroundColor: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '0.55rem 1.25rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
+            <button className="anim" style={{ backgroundColor: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '0.55rem 1.25rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }} onClick={() => window.location.href = '/business'}>
               Кабінет
             </button>
           </div>
@@ -249,17 +217,25 @@ export default function SalonProfile() {
         </div>
       </header>
 
-      {/* БАНЕР */}
+      {/* БАНЕР З ПРАВИЛЬНИМ ВЕРХНІМ ВІДСТУПОМ */}
       <section style={{
-        backgroundColor: '#0b0f17', color: '#ffffff',
-        padding: '0 4rem',
+        backgroundColor: '#0b0f17',
+        color: '#ffffff',
+        padding: '11rem 0 3.5rem 0',
         background: 'radial-gradient(circle at top right, #161f30 0%, #0b0f17 100%)',
-        height: '240px', boxSizing: 'border-box', display: 'flex', alignItems: 'center',
-        paddingTop: '4rem'
+        height: '240px',
+        boxSizing: 'border-box',
+        display: 'flex',
+        alignItems: 'center',
+        width: '100%'
       }}>
-        <div style={{ maxWidth: '1340px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>{salon.name}</h1>
-          <p style={{ color: '#94a3b8', margin: '0.25rem 0 0 0', fontSize: '1rem' }}>📍 {salon.address} • <span style={{ color: '#c5a880', fontWeight: '700' }}>⭐ 5.0 (388 відгуків)</span></p>
+        <div style={{ maxWidth: '1340px', width: '100%', margin: '0 auto', padding: '0 4rem', boxSizing: 'border-box' }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>
+            {salon ? salon.name : "Завантаження..."}
+          </h1>
+          <p style={{ color: '#94a3b8', margin: '0.25rem 0 0 0', fontSize: '1rem' }}>
+            {salon ? `📍 ${salon.address} • ` : ""} <span style={{ color: '#c5a880', fontWeight: '700' }}>⭐ 5.0 (388 відгуків)</span>
+          </p>
         </div>
       </section>
 
@@ -282,20 +258,17 @@ export default function SalonProfile() {
               <h2 style={{ fontSize: '1.6rem', fontWeight: '800', marginBottom: '1.5rem', color: '#0b0f17' }}>Послуги закладу</h2>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                {services.map((service: any) => (
+                {!loading && services.map((service: any) => (
                   <div key={service.id} className="anim service-row" style={{
                     display: 'grid', gridTemplateColumns: '1fr 120px 200px', alignItems: 'center', padding: '1.5rem 0', borderBottom: '1px solid #f2f4f7'
                   }}>
-
                     <div style={{ paddingRight: '1rem' }}>
                       <div style={{ fontWeight: '800', fontSize: '1.25rem', color: '#0b0f17', marginBottom: '0.35rem' }}>{service.name}</div>
                       <div style={{ color: '#667085', fontSize: '0.9rem', fontWeight: '600' }}>⏱️ {service.duration_minutes} хв</div>
                     </div>
-
                     <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#0b0f17', textAlign: 'right', paddingRight: '1.5rem' }}>
                       {service.price} ₴
                     </div>
-
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <button
                         className="anim btn-booksy-style"
@@ -305,7 +278,6 @@ export default function SalonProfile() {
                         Вибрати час
                       </button>
                     </div>
-
                   </div>
                 ))}
               </div>
@@ -320,8 +292,8 @@ export default function SalonProfile() {
               <div style={{ border: '1px solid #eaecf0', borderRadius: '16px', overflow: 'hidden', backgroundColor: '#ffffff' }}>
                 <div style={{ height: '130px', background: 'radial-gradient(ellipse at center, #cbd5e1 0%, #94a3b8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📍</div>
                 <div style={{ padding: '1.25rem' }}>
-                  <div style={{ fontWeight: '800', fontSize: '1rem', marginBottom: '0.2rem', color: '#0b0f17' }}>{salon.name}</div>
-                  <div style={{ color: '#667085', fontSize: '0.85rem' }}>{salon.address}</div>
+                  <div style={{ fontWeight: '800', fontSize: '1rem', marginBottom: '0.2rem', color: '#0b0f17' }}>{salon ? salon.name : "..."}</div>
+                  <div style={{ color: '#667085', fontSize: '0.85rem' }}>{salon ? salon.address : "..."}</div>
                 </div>
               </div>
 
@@ -359,113 +331,6 @@ export default function SalonProfile() {
 
         </div>
       </main>
-
-      {/* МОДАЛЬНЕ ВІКНО БРОНЮВАННЯ */}
-      {isModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(5, 7, 10, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: '24px', maxWidth: '1050px', width: '90%', height: '80vh', boxShadow: '0 30px 70px rgba(0,0,0,0.2)', display: 'grid', gridTemplateColumns: '1.4fr 1fr', overflow: 'hidden', border: '1px solid #eaecf0', position: 'relative' }}>
-
-            <div style={{ position: 'absolute', top: '1.25rem', left: '1.25rem', zIndex: 10 }}>
-              <button className="close-modal-btn" onClick={() => { setIsModalOpen(false); setSelectedTime(null); }}>✕</button>
-            </div>
-
-            {!bookingSuccess ? (
-              <>
-                <div style={{ padding: '3.5rem 2.5rem 2.5rem 2.5rem', overflowY: 'auto', borderRight: '1px solid #f2f4f7' }}>
-                  <div style={{ fontWeight: '800', fontSize: '1.25rem', marginBottom: '1.5rem', color: '#0b0f17' }}>
-                    <span>Червень - Липень 2026</span> 📅
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '1.25rem', borderBottom: '1px solid #f2f4f7', marginBottom: '2rem' }}>
-                    {calendarDays.map((day) => (
-                      <button
-                        key={day.date}
-                        onClick={() => { setSelectedDate(day.date); setSelectedTime(null); }}
-                        style={{
-                          minWidth: '60px', height: '75px', borderRadius: '50px', border: '1px solid #e4e4e7',
-                          backgroundColor: selectedDate === day.date ? '#0b0f17' : '#ffffff',
-                          color: selectedDate === day.date ? '#ffffff' : '#0b0f17',
-                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', gap: '0.15rem'
-                        }}
-                        className="anim"
-                      >
-                        <span style={{ fontSize: '1.15rem', fontWeight: '800' }}>{day.dayNum}</span>
-                        <span style={{ fontSize: '0.75rem', fontWeight: '600', opacity: 0.7 }}>{day.dayName}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    {['morning', 'afternoon', 'evening'].map((block: string) => (
-                      <div key={block}>
-                        <h4 style={{ margin: '0 0 0.85rem 0', color: '#64748b', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: '600' }}>
-                          {block === 'morning' ? 'Ранок' : block === 'afternoon' ? 'День' : 'Вечір'}
-                        </h4>
-                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                          {(timeSlots as any)[block].map((t: string) => {
-                            const busy = isSlotBusy(t);
-                            return (
-                              <button key={t} disabled={busy} className={`time-pill ${selectedTime === t ? 'selected' : ''} ${busy ? 'busy' : ''}`} onClick={() => setSelectedTime(t)}>{t}</button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ backgroundColor: '#f9fafb', padding: '3.5rem 2.5rem 2.5rem 2.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div>
-                    <h3 style={{ fontSize: '1.3rem', fontWeight: '900', margin: '0 0 1.25rem 0', color: '#0b0f17' }}>Ваше замовлення</h3>
-                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e4e4e7', borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '2rem' }}>
-                      <div style={{ fontWeight: '800', fontSize: '1rem', color: '#0b0f17' }}>{selectedService?.name}</div>
-                      <div style={{ color: '#64748b', fontSize: '0.85rem' }}>⏱️ {selectedService?.duration_minutes} хв</div>
-                    </div>
-
-                    <h4 style={{ fontSize: '0.9rem', fontWeight: '800', margin: '0 0 1rem 0', color: '#64748b', textTransform: 'uppercase' }}>Доступні майстри</h4>
-                    <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
-                      {staffers.map((staff) => (
-                        <div key={staff.id} onClick={() => { setSelectedMasterId(staff.id); setSelectedTime(null); }}
-                          style={{
-                            textAlign: 'center', cursor: 'pointer', padding: '0.5rem', borderRadius: '14px', border: '2px solid',
-                            borderColor: selectedMasterId === staff.id ? '#0b0f17' : 'transparent',
-                            backgroundColor: selectedMasterId === staff.id ? '#ffffff' : 'transparent', minWidth: '75px'
-                          }} className="anim"
-                        >
-                          <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: staff.color, margin: '0 auto 0.4rem auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', border: '2px solid #ffffff', boxShadow: selectedMasterId === staff.id ? '0 0 0 2px #0b0f17' : '0 0 0 2px #e4e4e7' }}>{staff.icon}</div>
-                          <div style={{ fontSize: '0.75rem', fontWeight: '750', color: '#0b0f17' }}>{staff.name}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid #e4e4e7', paddingTop: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                      <span style={{ fontWeight: '700', color: '#64748b' }}>Загалом</span>
-                      <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#0b0f17' }}>{selectedService?.price} ₴</span>
-                    </div>
-                    <button onClick={handleConfirmBooking} disabled={!selectedTime} className="anim"
-                      style={{
-                        width: '100%', backgroundColor: selectedTime ? '#0b0f17' : '#e4e4e7', color: selectedTime ? '#ffffff' : '#a1a1aa',
-                        border: 'none', padding: '1rem', borderRadius: '12px', fontWeight: '800', fontSize: '1rem', cursor: selectedTime ? 'pointer' : 'not-allowed'
-                      }}
-                    >
-                      Підтвердити запис
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-                <span style={{ fontSize: '4rem', display: 'block', marginBottom: '1rem' }}>🎉</span>
-                <h3 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#0b0f17' }}>Успішно заброньовано!</h3>
-                <p style={{ color: '#64748b', fontSize: '1rem' }}>Ваш візит занесено в розклад майстра через BookEra.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

@@ -15,16 +15,18 @@ class StatusEnum(str, enum.Enum):
     confirmed = "confirmed"
     cancelled = "cancelled"
 
+
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String)
+
     role: Mapped[RoleEnum] = mapped_column(Enum(RoleEnum), default=RoleEnum.client)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     business = relationship("Business", back_populates="owner", uselist=False)
-
 class Business(Base):
     __tablename__ = "businesses"
 

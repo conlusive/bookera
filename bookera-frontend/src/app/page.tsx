@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,21 +7,17 @@ export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const [businesses, setBusinesses] = useState<any[]>([]);
 
-  // 1. Відстежуємо скрол до рівня закінчення Hero-блоку (~500px)
+  // 1. Відстежуємо скрол до рівня закінчення Hero-блоку (~420px)
   useEffect(() => {
     const handleScroll = () => {
       const currentScroll = window.scrollY || document.documentElement.scrollTop;
-      console.log("Поточна позиція скролу (px):", currentScroll);
-
-      if (currentScroll > 500) {
+      if (currentScroll > 420) {
         setScrolled(true);
       } else {
         setScrolled(false);
       }
     };
-
     handleScroll();
-
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -29,15 +26,10 @@ export default function Home() {
   useEffect(() => {
     async function loadBusinesses() {
       try {
-        console.log("Надсилаємо запит до бекенду на http://127.0.0.1:8001/businesses/all ...");
         const res = await fetch('http://127.0.0.1:8001/businesses/all');
-
         if (res.ok) {
           const data = await res.json();
-          console.log("Успішно отримано салони з бази даних:", data);
           setBusinesses(data);
-        } else {
-          console.error("Бекенд відповів, але повернув помилку. Статус:", res.status);
         }
       } catch (error) {
         console.error("Мережева помилка! Не вдалося достукатися до API:", error);
@@ -56,7 +48,7 @@ export default function Home() {
   ];
 
   return (
-    <div style={{ backgroundColor: '#fafafa', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0b0f17' }}>
+    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0b0f17' }}>
 
       {/* ПРЕМІУМ СТИЛІ ТА ХОВЕРИ */}
       <style>{`
@@ -75,7 +67,7 @@ export default function Home() {
         .input-focus:focus { border-color: #c5a880 !important; }
       `}</style>
 
-      {/* 1. РОЗУМНИЙ ХЕДЕР */}
+      {/* 1. ХЕДЕР */}
       <header style={{
         position: 'fixed',
         top: 0,
@@ -83,14 +75,14 @@ export default function Home() {
         width: '100%',
         backgroundColor: scrolled ? '#0b0f17' : 'transparent',
         borderBottom: scrolled ? '1px solid #1e293b' : 'none',
-        padding: scrolled ? '0.6rem 4rem' : '1.25rem 4rem',
+        padding: scrolled ? '0.6rem 0' : '1.25rem 0',
         zIndex: 100,
         boxShadow: scrolled ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'
       }} className="anim">
-        <div style={{ maxWidth: '1340px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ maxWidth: '1340px', margin: '0 auto', padding: '0 4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box' }}>
 
           {/* Логотип */}
-          <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c5a880', letterSpacing: '-0.04em', cursor: 'pointer' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c5a880', letterSpacing: '-0.04em', cursor: 'pointer' }} onClick={() => window.location.href = '/'}>
             Book<span style={{ color: '#ffffff' }}>Era</span>
           </div>
 
@@ -101,115 +93,116 @@ export default function Home() {
             backgroundColor: '#ffffff',
             padding: '0.35rem',
             borderRadius: '10px',
-            maxWidth: '550px',
+            maxWidth: '450px',
             width: '100%',
             margin: '0 2rem',
             opacity: scrolled ? 1 : 0,
             transform: scrolled ? 'translateY(0)' : 'translateY(-10px)',
-            visibility: scrolled ? 'visible' : 'hidden'
+            visibility: scrolled ? 'visible' : 'hidden',
+            border: '1px solid #e2e8f0'
           }} className="anim">
-            <input type="text" placeholder="Що шукаєте?" style={{ flex: 1, padding: '0.4rem 0.75rem', border: 'none', outline: 'none', fontSize: '0.9rem', color: '#0b0f17' }} />
-            <input type="text" defaultValue="Львів" style={{ width: '100px', padding: '0.4rem 0.75rem', border: 'none', borderLeft: '1px solid #e2e8f0', outline: 'none', fontSize: '0.9rem', fontWeight: '600', color: '#0b0f17' }} />
-            <button className="btn-gold" style={{ border: 'none', padding: '0 1.2rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer' }}>Знайти</button>
+            <input type="text" placeholder="Що шукаєте?" style={{ flex: 1, padding: '0.4rem 0.75rem', border: 'none', outline: 'none', fontSize: '0.9rem', color: '#0b0f17', backgroundColor: 'transparent' }} />
+            <input type="text" defaultValue="Львів" style={{ width: '80px', padding: '0.4rem 0.75rem', border: 'none', borderLeft: '1px solid #e2e8f0', outline: 'none', fontSize: '0.9rem', fontWeight: '600', color: '#0b0f17', backgroundColor: 'transparent' }} />
+            <button className="btn-gold" style={{ border: 'none', padding: '0 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer' }}>Знайти</button>
           </div>
 
-          {/* Правий блок */}
+          {/* Навігація */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-            <span
-  style={{ fontSize: '0.9rem', fontWeight: '600', color: '#c5a880', cursor: 'pointer' }}
-  onClick={() => window.location.href = '/business'}
->
-  Для бізнесу
-</span>
-            <button className="anim" style={{ backgroundColor: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '0.55rem 1.25rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#c5a880', cursor: 'pointer' }} onClick={() => window.location.href = '/business'}>
+              Для бізнесу
+            </span>
+            <button className="anim" style={{ backgroundColor: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: '#ffffff', padding: '0.55rem 1.25rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem' }} onClick={() => window.location.href = '/business'}>
               Кабінет
             </button>
           </div>
         </div>
       </header>
 
-      {/* 2. МАТОВИЙ HERO БЛОК */}
+      {/* 2. КОМПАКТНИЙ HERO БЛОК (НИЖНЯ МЕЖА ПІДТЯГНУТА ПІД ВІДЖЕТ) */}
       <section style={{
         backgroundColor: '#0b0f17',
         color: '#ffffff',
-        padding: '11rem 2rem 8rem 2rem',
-        textAlign: 'center',
+        padding: '12rem 0 5rem 0', // ВИПРАВЛЕНО: Зменшено нижній padding, щоб банер став компактнішим
         position: 'relative',
         background: 'radial-gradient(circle at top right, #161f30 0%, #0b0f17 100%)'
       }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '1340px', margin: '0 auto', padding: '0 4rem', boxSizing: 'border-box', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+
           <span style={{ border: '1px solid rgba(197, 168, 128, 0.3)', color: '#c5a880', padding: '0.4rem 1.2rem', borderRadius: '30px', fontSize: '0.8rem', fontWeight: '600', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '1.75rem', display: 'inline-block', backgroundColor: 'rgba(197, 168, 128, 0.03)' }}>
-            Ексклюзивне бронювання послуг в Україні
+            ⚡ Ексклюзивне бронювання послуг в Україні
           </span>
-          <h1 style={{ fontSize: '3.6rem', fontWeight: '800', marginBottom: '1.5rem', letterSpacing: '-0.03em', lineHeight: '1.15' }}>
+
+          <h1 style={{ fontSize: '3.6rem', fontWeight: '900', marginBottom: '1.5rem', letterSpacing: '-0.03em', lineHeight: '1.15' }}>
             Твій час. Твій style. <br/>
             <span style={{ color: '#c5a880' }}>Завжди бездоганно.</span>
           </h1>
-          <p style={{ color: '#8f9bba', fontSize: '1.15rem', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6', fontWeight: '400' }}>
+
+          <p style={{ color: '#8f9bba', fontSize: '1.15rem', maxWidth: '600px', margin: '0 auto 3.5rem auto', lineHeight: '1.6', fontWeight: '400' }}>
             Online-запис до топ-майстрів твого міста. Жодних очікувань чи зайвих дзвінків.
           </p>
-        </div>
 
-        {/* ПЛАВАЮЧИЙ ГОЛОВНИЙ ПОШУК */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          padding: '0.6rem',
-          borderRadius: '16px',
-          boxShadow: '0 30px 60px rgba(5, 7, 10, 0.25)',
-          maxWidth: '940px',
-          width: 'calc(100% - 4rem)',
-          display: 'flex',
-          gap: '0.5rem',
-          border: '1px solid rgba(255,255,255,0.08)',
-          position: 'absolute',
-          bottom: '-35px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 20
-        }}>
-          <div style={{ flex: 1.5, display: 'flex', alignItems: 'center', padding: '0.5rem 1rem' }}>
-            <span style={{ marginRight: '0.75rem', fontSize: '1.2rem' }}>🔍</span>
-            <input type="text" placeholder="Яка послуга чи майстер вас цікавить?" style={{ width: '100%', border: 'none', outline: 'none', color: '#0b0f17', fontSize: '1rem', fontWeight: '500' }} />
+          {/* ЦЕНТРОВАНИЙ ПОШУКОВИЙ ВІДЖЕТ */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            padding: '4px',
+            borderRadius: '14px',
+            boxShadow: '0 20px 50px rgba(5, 7, 10, 0.2)',
+            maxWidth: '940px',
+            width: '100%',
+            display: 'flex',
+            gap: '0.25rem',
+            border: '1px solid #e4e4e7',
+            position: 'absolute',
+            bottom: '-32px', // Віджет ідеально сідає наполовину на білий фон
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 20,
+            boxSizing: 'border-box'
+          }}>
+            <div style={{ flex: 1.5, display: 'flex', alignItems: 'center', padding: '0.5rem 1rem' }}>
+              <span style={{ marginRight: '0.75rem', fontSize: '1.2rem' }}>🔍</span>
+              <input type="text" placeholder="Яка послуга чи майстер вас цікавить?" style={{ width: '100%', border: 'none', outline: 'none', color: '#0b0f17', fontSize: '1rem', fontWeight: '500', backgroundColor: 'transparent' }} />
+            </div>
+            <div style={{ width: '1px', backgroundColor: '#e2e8f0', margin: '0.5rem 0' }}></div>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0.5rem 1rem' }}>
+              <span style={{ marginRight: '0.75rem', fontSize: '1.2rem' }}>📍</span>
+              <input type="text" defaultValue="Львів" style={{ width: '100%', border: 'none', outline: 'none', color: '#0b0f17', fontSize: '1rem', fontWeight: '600', backgroundColor: 'transparent' }} />
+            </div>
+            <button className="anim btn-gold" style={{ padding: '1rem 3.5rem', borderRadius: '12px', border: 'none', fontSize: '1rem', fontWeight: '750', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Знайти заклади
+            </button>
           </div>
-          <div style={{ width: '1px', backgroundColor: '#e2e8f0', margin: '0.5rem 0' }}></div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0.5rem 1rem' }}>
-            <span style={{ marginRight: '0.75rem', fontSize: '1.2rem' }}>📍</span>
-            <input type="text" defaultValue="Львів" style={{ width: '100%', border: 'none', outline: 'none', color: '#0b0f17', fontSize: '1rem', fontWeight: '600' }} />
-          </div>
-          <button className="anim btn-gold" style={{ padding: '1rem 3.5rem', borderRadius: '12px', border: 'none', fontSize: '1rem', fontWeight: '750', cursor: 'pointer', boxShadow: '0 4px 15px rgba(197, 168, 128, 0.25)' }}>
-            Знайти заклади
-          </button>
         </div>
       </section>
 
       {/* 3. КАТЕГОРІЇ ПОСЛУГ */}
-      <section style={{ maxWidth: '1340px', margin: '7rem auto 0 auto', padding: '0 4rem' }}>
-        <h2 style={{ fontSize: '1.6rem', fontWeight: '800', marginBottom: '0.25rem', letterSpacing: '-0.02em' }}>Категорії сервісу</h2>
-        <p style={{ color: '#64748b', margin: '0 0 2rem 0', fontSize: '0.9rem' }}>Миттєвий вибір напрямку послуг</p>
+      <section style={{ maxWidth: '1340px', margin: '5rem auto 0 auto', padding: '0 4rem', boxSizing: 'border-box' }}>
+        <h2 style={{ fontSize: '1.8rem', fontWeight: '800', marginBottom: '0.35rem', letterSpacing: '-0.02em', color: '#0b0f17' }}>Категорії сервісу</h2>
+        <p style={{ color: '#64748b', margin: '0 0 2.5rem 0', fontSize: '0.95rem', fontWeight: '500' }}>Миттєвий вибір напрямку послуг</p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '1.25rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem' }}>
           {categories.map((cat) => (
-            <div key={cat.name} className="anim category-item" style={{ backgroundColor: '#ffffff', padding: '1.75rem 1.25rem', borderRadius: '14px', border: '1px solid #eef0f3', cursor: 'pointer' }}>
-              <div style={{ fontSize: '2.4rem', marginBottom: '1rem' }}>{cat.icon}</div>
-              <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#0b0f17', marginBottom: '0.25rem' }}>{cat.name}</div>
-              <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: '500' }}>{cat.count}</div>
+            <div key={cat.name} className="anim category-item" style={{ backgroundColor: '#ffffff', padding: '2rem', borderRadius: '16px', border: '1px solid #eaecf0', cursor: 'pointer' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>{cat.icon}</div>
+              <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#0b0f17', marginBottom: '0.25rem' }}>{cat.name}</div>
+              <div style={{ color: '#667085', fontSize: '0.85rem', fontWeight: '500' }}>{cat.count}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* 4. ЖИВИЙ СПИСОК ЗАКЛАДІВ З БЕКЕНДУ */}
-      <section style={{ maxWidth: '1340px', margin: '5rem auto 0 auto', padding: '0 4rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      {/* 4. СПИСОК ЗАКЛАДІВ */}
+      <section style={{ maxWidth: '1340px', margin: '5rem auto 0 auto', padding: '0 4rem', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
           <div>
-            <h2 style={{ fontSize: '1.6rem', fontWeight: '800', letterSpacing: '-0.02em' }}>Рекомендовані студії у Львові</h2>
-            <p style={{ color: '#64748b', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>Винятковий сервіс за оцінками відвідувачів</p>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: '800', letterSpacing: '-0.02em', color: '#0b0f17' }}>Рекомендовані студії у Львові</h2>
+            <p style={{ color: '#64748b', margin: '0.35rem 0 0 0', fontSize: '0.95rem', fontWeight: '500' }}>Винятковий сервіс за оцінками відвідувачів</p>
           </div>
           <span style={{ color: '#c5a880', fontWeight: '750', cursor: 'pointer', fontSize: '0.95rem' }}>Усі заклади міста →</span>
         </div>
 
         {businesses.length === 0 ? (
-          <div style={{ padding: '6rem 2rem', backgroundColor: '#ffffff', borderRadius: '20px', border: '1px solid #eef0f3', textAlign: 'center' }}>
+          <div style={{ padding: '6rem 2rem', backgroundColor: '#ffffff', borderRadius: '20px', border: '1px solid #eaecf0', textAlign: 'center' }}>
             <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>🏛️</span>
             <p style={{ fontSize: '1.25rem', fontWeight: '700', margin: '0 0 0.5rem 0', color: '#0b0f17' }}>Платформа активована</p>
             <p style={{ color: '#64748b', fontSize: '0.95rem', maxWidth: '420px', margin: '0 auto', lineHeight: '1.6' }}>
@@ -219,11 +212,10 @@ export default function Home() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '2rem' }}>
             {businesses.map((business: any) => (
-              /* ЗМІНЕНО: Клік на всю картку перенаправляє на профіль салону */
               <div
                 key={business.slug}
                 className="anim salon-card"
-                style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eef0f3', overflow: 'hidden', cursor: 'pointer' }}
+                style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eaecf0', overflow: 'hidden', cursor: 'pointer' }}
                 onClick={() => window.location.href = `/salon/${business.slug}`}
               >
                 <div style={{ height: '210px', background: 'linear-gradient(135deg, #0b0f17 0%, #1e293b 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c5a880', fontSize: '4.5rem', position: 'relative' }}>
@@ -250,7 +242,6 @@ export default function Home() {
                     <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
                       Доступно: <span style={{ color: '#0b0f17', fontWeight: '700' }}>Сьогодні з 15:00</span>
                     </div>
-                    {/* ЗМІНЕНО: Велику кнопку видалено, натомість додано елегантний текстовий лінк */}
                     <span style={{ color: '#c5a880', fontSize: '0.9rem', fontWeight: '750' }}>
                       Детальніше →
                     </span>
@@ -263,12 +254,12 @@ export default function Home() {
       </section>
 
       {/* 5. B2B МАРКЕТИНГОВИЙ БЛОК */}
-      <section style={{ maxWidth: '1340px', margin: '7rem auto 6rem auto', padding: '0 4rem' }}>
+      <section style={{ maxWidth: '1340px', margin: '6rem auto 6rem auto', padding: '0 4rem', boxSizing: 'border-box' }}>
         <div style={{ backgroundColor: '#0b0f17', borderRadius: '24px', padding: '4.5rem', color: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '2rem', background: 'radial-gradient(circle at bottom left, #161f30, #0b0f17)', border: '1px solid rgba(197, 168, 128, 0.15)' }}>
           <div style={{ maxWidth: '650px' }}>
             <h2 style={{ fontSize: '2.2rem', fontWeight: '800', marginBottom: '1rem', letterSpacing: '-0.02em', color: '#ffffff' }}>Розвивайте бізнес разом з BookEra</h2>
             <p style={{ color: '#94a3b8', fontSize: '1.1rem', margin: 0, lineHeight: '1.6' }}>
-              Цифрова екосистема для преміальних салонів, barbershop-ів та майстрів. Повний контроль розкладу, CRM, аналітика завантаженості та автоматичні сповіщення клієнтів.
+              Цифрова екосистема для преміальних salons, barbershop-ів та майстрів. Повний контроль розкладу, CRM, аналітика завантаженості та автоматичні сповіщення клієнтів.
             </p>
           </div>
           <button className="anim btn-gold" style={{ padding: '1.1rem 2.5rem', borderRadius: '12px', border: 'none', fontSize: '1rem', fontWeight: '750', cursor: 'pointer', whiteSpace: 'nowrap' }}>

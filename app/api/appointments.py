@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta
 from app.api.deps import get_db
-from app.models.base import Appointment, Business, Service, \
+from app.models.user import Appointment, Business, Service, \
     User  # Переконайся, що модель в base.py називається Appointment
 from app.schemas.appointment import AppointmentCreate, AppointmentResponse
 

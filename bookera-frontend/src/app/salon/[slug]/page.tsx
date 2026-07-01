@@ -1,18 +1,25 @@
-// src/app/salon/[slug]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function SalonProfile() {
   const { slug } = useParams();
+  const router = useRouter();
+
   const [salon, setSalon] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Стан для пошуку (шапка)
+  // Стан для шапки та профілю
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [initials, setInitials] = useState<string>('');
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [cityQuery, setCityQuery] = useState('Львів');
 
@@ -24,7 +31,6 @@ export default function SalonProfile() {
   const [selectedMasterId, setSelectedMasterId] = useState<number>(0);
   const [bookingSuccess, setBookingSuccess] = useState(false);
 
-  // Дані майстрів
   const staffers = [
     { id: 0, name: "Будь-хто", role: "Без переваг", color: "#e2e8f0", icon: "👥" },
     { id: 1, name: "Яміло", role: "Топ-майстер", color: "#1e293b", icon: "👨🏽‍💼" },
@@ -50,8 +56,41 @@ export default function SalonProfile() {
   };
 
   useEffect(() => {
+    // Перевірка сесії
+    if (typeof window !== 'undefined') {
+      const storedName = localStorage.getItem('userName');
+      if (storedName) {
+        setIsLoggedIn(true);
+        setUserName(storedName);
+        const nameParts = storedName.split(' ');
+        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
+        setInitials(init.toUpperCase());
+      }
+    }
+
     if (slug) loadDataFromBackend();
   }, [slug]);
+
+  // Закриття меню
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    const handleScrollClose = () => {
+      if (isProfileOpen) setIsProfileOpen(false);
+    };
+
+    if (isProfileOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('scroll', handleScrollClose, { passive: true });
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScrollClose);
+    };
+  }, [isProfileOpen]);
 
   const loadDataFromBackend = async () => {
     try {
@@ -111,7 +150,15 @@ export default function SalonProfile() {
     }
   };
 
-  // Фейкові фото для галереї
+  const handleLogout = () => {
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userId');
+    setIsLoggedIn(false);
+    setIsProfileOpen(false);
+    setUserName(null);
+    router.push('/login');
+  };
+
   const galleryPhotos = [
     "https://d2zdpiztbgorvt.cloudfront.net/region1/us/481342/biz_photo/37b3ba97c70144ecb6a9f27b90745d-flawless-fades-studio-biz-photo-22fa4e1e561f4fc8b8e6ad41255e26-booksy.jpeg?size=640x427",
     "https://d2zdpiztbgorvt.cloudfront.net/region1/us/481342/biz_photo/5cae86992018478ca5c0f4da56d90e-flawless-fades-studio-biz-photo-42f75605a905499180a10a7d3dfbea-booksy.jpeg?size=640x427",
@@ -123,31 +170,26 @@ export default function SalonProfile() {
 
       <style>{`
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; }
-
         .anim { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
 
         .btn-gold { background-color: #c5a880 !important; color: #0b0f17 !important; font-weight: 750; }
         .btn-gold:hover { background-color: #b39369 !important; box-shadow: 0 4px 12px rgba(197, 168, 128, 0.3); }
-
         .btn-dark { background-color: #0f172a !important; color: #ffffff !important; font-weight: 700; }
         .btn-dark:hover { background-color: #1e293b !important; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2); transform: translateY(-2px); }
-
         .btn-outline { border: 1px solid #e2e8f0; background-color: #ffffff; color: #0f172a; font-weight: 600; }
         .btn-outline:hover { border-color: #cbd5e1; background-color: #f1f5f9; }
-
         .nav-link { color: #ffffff; text-decoration: none; transition: 0.2s; font-weight: 600; font-size: 0.95rem; }
         .nav-link:hover { color: #c5a880 !important; }
 
-        /* Стильна галерея */
+        /* Галерея */
         .gallery-container { display: grid; grid-template-columns: 2.2fr 1fr; gap: 16px; height: 420px; border-radius: 20px; overflow: hidden; margin-top: 110px; }
         .gallery-main { width: 100%; height: 100%; object-fit: cover; }
         .gallery-side { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; height: 100%; }
         .gallery-img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; cursor: pointer; transition: 0.3s; }
         .gallery-img:hover { opacity: 0.9; filter: brightness(0.9); }
 
-        /* Картки (Послуги, Майстри, Карта) */
+        /* Картки */
         .white-card { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
-
         .service-row { border-bottom: 1px solid #f1f5f9; padding: 1.5rem 0; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
         .service-row:last-child { border-bottom: none; padding-bottom: 0; }
         .service-row:first-child { padding-top: 0; }
@@ -157,28 +199,42 @@ export default function SalonProfile() {
         .time-pill:hover:not(.busy):not(.selected) { border-color: #94a3b8; }
         .time-pill.selected { background-color: #0f172a !important; color: #ffffff !important; border-color: #0f172a; }
         .time-pill.busy { background-color: #f8fafc !important; color: #94a3b8 !important; border-color: #e2e8f0; cursor: not-allowed !important; text-decoration: line-through; }
-
         .master-card { padding: 0.5rem; border-radius: 12px; border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s; background: #ffffff; }
         .master-card.selected { border-color: #0f172a; background-color: #f8fafc; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-
         .date-card { padding: 0.75rem 0.5rem; border-radius: 12px; border: 1px solid #e2e8f0; cursor: pointer; text-align: center; min-width: 60px; transition: 0.2s; background: #ffffff; }
         .date-card.selected { background-color: #0f172a; color: #ffffff; border-color: #0f172a; }
-
-        .close-modal-btn { background: #f1f5f9; color: #64748b; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: 0.2s; }
-        .close-modal-btn:hover { background: #e2e8f0; color: #0f172a; }
-
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
         .footer-link { color: #94a3b8; text-decoration: none; font-size: 0.9rem; }
         .footer-link:hover { color: #ffffff; }
+
+        /* GLASSMORPHISM ПРОФІЛЬ */
+        .profile-menu-container {
+          position: absolute; top: 150%; right: 0; width: 230px;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border-radius: 16px;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+          padding: 0.5rem; z-index: 1001;
+          border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        .profile-menu-item { display: block; width: 100%; text-align: left; padding: 0.75rem 1rem; border-radius: 8px; color: #334155; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: all 0.2s ease; background: transparent; border: none; cursor: pointer; }
+        .profile-menu-item:hover { background-color: rgba(15, 23, 42, 0.05); color: #0f172a; }
+        .profile-menu-logout { color: #ef4444; border-top: 1px solid rgba(0,0,0,0.05); border-radius: 0 0 8px 8px; margin-top: 4px; padding-top: 0.85rem; }
+        .profile-menu-logout:hover { background-color: rgba(239, 68, 68, 0.08); color: #dc2626; }
+
+        .profile-trigger { cursor: pointer; display: flex; align-items: center; gap: 0.6rem; user-select: none; padding: 0.3rem; border-radius: 20px; transition: 0.2s; }
+        .profile-trigger .profile-name { color: #e2e8f0; transition: 0.2s; }
+        .profile-trigger svg path { stroke: #94a3b8; transition: 0.2s; }
+        .profile-trigger:hover .profile-name { color: #ffffff; }
+        .profile-trigger:hover svg path { stroke: #ffffff; }
       `}</style>
 
-      {/* 1. ТЕМНИЙ ХЕДЕР ЯК НА ГОЛОВНІЙ СТОРІНЦІ */}
+      {/* 1. ТЕМНИЙ ХЕДЕР З СМАРТ ПРОФІЛЕМ */}
       <header style={{
         position: 'fixed', top: 0, left: 0, width: '100%', height: '72px',
-        backgroundColor: '#0b0f17', /* Ідентичний колір з головною сторінкою */
-        borderBottom: '1px solid #1e293b',
+        backgroundColor: '#0b0f17', borderBottom: '1px solid #1e293b',
         zIndex: 100, display: 'flex', alignItems: 'center',
         boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
       }}>
@@ -188,32 +244,53 @@ export default function SalonProfile() {
             Book<span style={{ color: '#ffffff' }}>Era</span>
           </Link>
 
-          {/* Пошук в хедері (Темний стиль, як на головній) */}
           <div style={{
             display: 'flex', gap: '0.25rem', backgroundColor: '#ffffff', padding: '0.35rem', borderRadius: '8px',
             maxWidth: '560px', width: '100%', margin: '0 1rem', border: '1px solid #1e293b', boxSizing: 'border-box'
           }} className="anim">
-            <input
-              type="text"
-              placeholder="Послуга, бренд або салон"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ flex: '1 1 auto', minWidth: 0, border: 'none', outline: 'none', padding: '0.4rem 0.75rem', fontSize: '0.85rem', color: 'black', backgroundColor: 'transparent' }}
-            />
+            <input type="text" placeholder="Послуга, бренд або салон" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ flex: '1 1 auto', minWidth: 0, border: 'none', outline: 'none', padding: '0.4rem 0.75rem', fontSize: '0.85rem', color: 'black', backgroundColor: 'transparent' }} />
             <div style={{ width: '1px', height: '24px', backgroundColor: '#1e293b', alignSelf: 'center' }}></div>
-            <input
-              type="text"
-              value={cityQuery}
-              onChange={(e) => setCityQuery(e.target.value)}
-              style={{ flex: '0 1 120px', minWidth: 0, border: 'none', outline: 'none', padding: '0.4rem 0.75rem', fontSize: '0.85rem', fontWeight: '700', color: '#c5a880', backgroundColor: 'transparent' }}
-            />
-            <button className="anim btn-gold" style={{ flexShrink: 0, border: 'none', padding: '0.4rem 1.25rem', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Знайти
-            </button>
+            <input type="text" value={cityQuery} onChange={(e) => setCityQuery(e.target.value)} style={{ flex: '0 1 120px', minWidth: 0, border: 'none', outline: 'none', padding: '0.4rem 0.75rem', fontSize: '0.85rem', fontWeight: '700', color: '#c5a880', backgroundColor: 'transparent' }} />
+            <button className="anim btn-gold" style={{ flexShrink: 0, border: 'none', padding: '0.4rem 1.25rem', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>Знайти</button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span className="nav-link anim" style={{ cursor: 'pointer' }}>Увійти / Зареєструватись</span>
+            {isLoggedIn ? (
+              <div style={{ position: 'relative' }} ref={profileRef}>
+                <div onClick={() => setIsProfileOpen(!isProfileOpen)} className="profile-trigger">
+                  <span className="profile-name" style={{ fontSize: '0.9rem', fontWeight: '600' }}>
+                    {userName}
+                  </span>
+                  <div style={{
+                    width: '34px', height: '34px', borderRadius: '50%', backgroundColor: '#c5a880',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b0f17',
+                    fontWeight: '800', fontSize: '0.85rem', boxShadow: '0 2px 8px rgba(197, 168, 128, 0.25)'
+                  }}>
+                    {initials}
+                  </div>
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                    <path d="M1 1L5 5L9 1" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+
+                {isProfileOpen && (
+                  <div className="anim profile-menu-container">
+                    <div style={{ padding: '0.5rem 1rem 0.75rem 1rem', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Акаунт</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#0f172a', marginTop: '2px' }}>{userName}</div>
+                    </div>
+                    <Link href="/profile" className="profile-menu-item" onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
+                    <Link href="/cabinet" className="profile-menu-item" onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>
+                    <Link href="/settings" className="profile-menu-item" onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
+                    <button onClick={handleLogout} className="profile-menu-item profile-menu-logout">
+                      Вийти з акаунту
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span onClick={() => router.push('/login')} className="nav-link anim" style={{ cursor: 'pointer' }}>Увійти / Зареєструватись</span>
+            )}
           </div>
 
         </div>
@@ -239,7 +316,7 @@ export default function SalonProfile() {
         </div>
       </section>
 
-      {/* 3. НАЗВА ТА ОСНОВНА ІНФО (Без рамок для рейтингу) */}
+      {/* 3. НАЗВА ТА ОСНОВНА ІНФО */}
       <section className="container" style={{ marginTop: '2.5rem', marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
@@ -252,7 +329,6 @@ export default function SalonProfile() {
           </div>
 
           <div style={{ textAlign: 'right' }}>
-            {/* Очищений блок рейтингу (без рамок та тіней) */}
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0' }}>
               <span style={{ color: '#fbbf24', fontSize: '1.4rem' }}>★</span>
               <span style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>5.0</span>
@@ -266,9 +342,7 @@ export default function SalonProfile() {
       <main className="container" style={{ paddingBottom: '6rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '4rem' }}>
 
-          {/* ЛІВА КОЛОНКА (Про нас + Послуги) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
-
             <div className="white-card">
               <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '1rem', color: '#0f172a' }}>Про нас</h2>
               <p style={{ color: '#475569', lineHeight: '1.6', fontSize: '1rem', margin: 0 }}>
@@ -303,14 +377,10 @@ export default function SalonProfile() {
                 )}
               </div>
             </div>
-
           </div>
 
-          {/* ПРАВА КОЛОНКА (Sticky) - ПРАВИЛЬНИЙ ПОРЯДОК БЛОКІВ */}
           <div>
             <div style={{ position: 'sticky', top: '100px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-              {/* 1. Картка майстрів */}
               <div className="white-card" style={{ padding: '1.5rem' }}>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 1.25rem 0', color: '#0f172a' }}>Наші топ-майстри</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
@@ -326,7 +396,6 @@ export default function SalonProfile() {
                 </div>
               </div>
 
-              {/* 2. Картка локації (Карта) */}
               <div className="white-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ height: '180px', background: 'radial-gradient(ellipse at center, #e2e8f0 0%, #cbd5e1 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem' }}>📍</div>
                 <div style={{ padding: '1.5rem' }}>
@@ -336,7 +405,6 @@ export default function SalonProfile() {
                 </div>
               </div>
 
-              {/* 3. Подарункові сертифікати */}
               <div className="white-card anim" style={{ cursor: 'pointer', border: '1px solid #c5a880', display: 'flex', alignItems: 'center', gap: '1.25rem', padding: '1.5rem' }}>
                 <div style={{ fontSize: '2.2rem' }}>🎁</div>
                 <div>
@@ -344,7 +412,6 @@ export default function SalonProfile() {
                   <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>Ідеальний подарунок для близьких</p>
                 </div>
               </div>
-
             </div>
           </div>
 
@@ -371,7 +438,6 @@ export default function SalonProfile() {
                   {selectedService?.name} • {selectedService?.price} ₴
                 </p>
 
-                {/* 1. Майстри */}
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Оберіть майстра</label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem', marginTop: '0.75rem' }}>
@@ -384,7 +450,6 @@ export default function SalonProfile() {
                   </div>
                 </div>
 
-                {/* 2. Дати */}
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>2. Оберіть дату</label>
                   <div className="hide-scrollbar" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', marginTop: '0.75rem', paddingBottom: '0.25rem' }}>
@@ -397,7 +462,6 @@ export default function SalonProfile() {
                   </div>
                 </div>
 
-                {/* 3. Час */}
                 <div style={{ marginBottom: '2.5rem' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>3. Доступний час</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
@@ -422,7 +486,6 @@ export default function SalonProfile() {
                   </div>
                 </div>
 
-                {/* Кнопка */}
                 <button onClick={handleConfirmBooking} className="btn-dark anim" style={{ width: '100%', border: 'none', padding: '1.1rem', borderRadius: '12px', fontSize: '1.05rem', cursor: 'pointer' }}>
                   Підтвердити бронювання
                 </button>
@@ -436,7 +499,6 @@ export default function SalonProfile() {
       <footer style={{ backgroundColor: '#05070a', borderTop: '1px solid #1e293b', padding: '4rem 0 3rem 0' }}>
         <div className="container">
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2rem' }}>
-
             <nav style={{ display: 'flex', gap: '5rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <Link href="#" className="footer-link anim">Блог</Link>
@@ -449,12 +511,10 @@ export default function SalonProfile() {
                 <Link href="#" className="footer-link anim">Контакти</Link>
               </div>
             </nav>
-
             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <div style={{ fontSize: '1.5rem', fontWeight: '900', color: '#c5a880' }}>Book<span style={{ color: '#fff' }}>Era</span></div>
               <span style={{ color: '#64748b', fontSize: '0.85rem' }}>© 2026 Всі права захищені.</span>
             </div>
-
           </div>
         </div>
       </footer>

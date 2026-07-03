@@ -1,0 +1,22 @@
+{
+  "name": "BookEra Business",
+  "short_name": "BookEra",
+  "description": "Платформа для управління б'юті-бізнесом та онлайн-запису",
+  "start_url": "/business",
+  "display": "standalone",
+  "background_color": "#05070a",
+  "theme_color": "#0b0f17",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x562.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

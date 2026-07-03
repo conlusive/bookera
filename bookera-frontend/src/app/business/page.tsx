@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { createClient } from '@/utils/supabase/client';
+import { signUpUser } from './actions';
 
 export default function BusinessLandingPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [scrolled, setScrolled] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -63,7 +66,8 @@ export default function BusinessLandingPage() {
     };
   }, [isProfileOpen]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('userName');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
@@ -71,26 +75,92 @@ export default function BusinessLandingPage() {
     setIsProfileOpen(false);
     setUserName(null);
     setUserRole('client');
+    router.refresh();
   };
 
   const handleModalAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const newName = isLoginView ? 'Діма Кора' : `${regFirstName} ${regLastName}`;
-      // Даємо роль 'client', бо бізнес ще не створено. Роль 'vendor' дамо в кінці візарду.
-      const newRole = 'client';
+      if (isLoginView) {
+        // --- 🟢 ЛОГІКА ВХОДУ ---
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword,
+        });
 
-      localStorage.setItem('userName', newName);
-      localStorage.setItem('userId', '1');
-      localStorage.setItem('userRole', newRole);
+        if (error) {
+          alert(`Помилка входу: ${error.message}`);
+          return;
+        }
 
-      setIsLoggedIn(true);
-      setIsAuthModalOpen(false);
+        // Отримуємо профіль користувача з бази даних
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, role')
+          .eq('id', data.user.id)
+          .single();
 
-      // Миттєвий перехід на онбординг!
-      router.push('/business/register');
+        const finalName = profile?.full_name || data.user.email || 'Користувач';
+        const finalRole = profile?.role || 'client';
+
+        // 💾 ЗАПИСУЄМО В LOCALSTORAGE ПЕРЕД РЕДІРЕКТОМ
+        localStorage.setItem('userName', finalName);
+        localStorage.setItem('userRole', finalRole);
+        localStorage.setItem('userId', data.user.id);
+
+        setUserName(finalName);
+        setUserRole(finalRole);
+        const nameParts = finalName.split(' ');
+        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
+        setInitials(init.toUpperCase());
+
+        setIsLoggedIn(true);
+        setIsAuthModalOpen(false);
+
+        // 🚀 АВТОМАТИЧНИЙ РЕДІРЕКТ ПІСЛЯ УСПІШНОГО ВХОДУ
+        if (finalRole === 'vendor') {
+          router.push('/cabinet');
+        } else {
+          router.push('/business/register');
+        }
+
+      } else {
+        // --- 🟢 ЛОГІКА РЕЄСТРАЦІЇ ---
+        const targetEmail = loginEmail.trim().toLowerCase();
+        const targetFullName = `${regFirstName} ${regLastName}`.trim();
+
+        const result = await signUpUser({
+          email: targetEmail,
+          password: loginPassword,
+          fullName: targetFullName
+        });
+
+        if (!result.success) {
+          alert(`Помилка реєстрації: ${result.error}`);
+          return;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+
+        // 💾 ЗАПИСУЄМО ДАНІ РЕЄСТРАЦІЇ В LOCALSTORAGE ПЕРЕД РЕДІРЕКТОМ
+        localStorage.setItem('userName', targetFullName);
+        localStorage.setItem('userRole', 'client');
+        if (session?.user) {
+          localStorage.setItem('userId', session.user.id);
+        }
+
+        setUserName(targetFullName);
+        setUserRole('client');
+        setInitials((regFirstName[0] + (regLastName[0] || '')).toUpperCase());
+
+        setIsLoggedIn(true);
+        setIsAuthModalOpen(false);
+
+        // 🚀 АВТОМАТИЧНИЙ РЕДІРЕКТ НА СТОРІНКУ РЕЄСТРАЦІЇ БІЗНЕСУ ПІСЛЯ СТВОРЕННЯ АКАУНТУ
+        router.push('/business/register');
+      }
     } catch (error) {
-      alert("Помилка мережі");
+      alert("Відбулася непередбачувана помилка при з'єднанні з сервером.");
     }
   };
 
@@ -101,7 +171,7 @@ export default function BusinessLandingPage() {
     } else if (isLoggedIn) {
       router.push('/business/register');
     } else {
-      setIsLoginView(false); // Відкриваємо модалку на вкладці "Реєстрація"
+      setIsLoginView(false); // Спочатку просимо створити акаунт (Реєстрація)
       setIsAuthModalOpen(true);
     }
   };
@@ -236,7 +306,6 @@ export default function BusinessLandingPage() {
                     </div>
                     <Link href="/profile" className="profile-menu-item" onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
 
-                    {/* Доступ до Кабінету тільки якщо ти вже Vendor */}
                     {userRole === 'vendor' && (
                       <Link href="/cabinet" className="profile-menu-item" onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>
                     )}
@@ -249,7 +318,8 @@ export default function BusinessLandingPage() {
                 )}
               </div>
             ) : (
-              <span onClick={() => setIsAuthModalOpen(true)} className="nav-link anim" style={{ color: '#c5a880', cursor: 'pointer', transition: '0.2s' }}>Увійти / Зареєструватись</span>
+              // При кліку на "Увійти" у шапці — відкриваємо саме вкладку Входу (isLoginView = true)
+              <span onClick={() => { setIsLoginView(true); setIsAuthModalOpen(true); }} className="nav-link anim" style={{ color: '#c5a880', cursor: 'pointer', transition: '0.2s' }}>Увійти / Зареєструватись</span>
             )}
           </div>
 
@@ -269,7 +339,6 @@ export default function BusinessLandingPage() {
             <h1 style={{ fontSize: '3.5rem', fontWeight: '900', color: '#ffffff', lineHeight: '1.15', marginBottom: '1.5rem', letterSpacing: '-0.02em' }}>Бізнес-додаток, створений для барберів та салонів</h1>
             <p style={{ color: '#e2e8f0', fontSize: '1.15rem', lineHeight: '1.6', marginBottom: '2.5rem' }}>Відкрийте нові можливості для свого бізнесу. Онлайн-запис, розумний календар, захист від неявок та інструменти маркетингу в одній екосистемі BookEra Business.</p>
 
-            {/* 🔴 РОЗУМНА КНОПКА З ФУНКЦІЄЮ */}
             <button onClick={handleStartBusinessClick} className="btn-gold anim" style={{ padding: '1rem 2.5rem', borderRadius: '10px', fontSize: '1.05rem' }}>
               {userRole === 'vendor' ? 'Перейти в панель керування' : isLoggedIn ? 'Відкрити свій бізнес на BookEra' : 'Почати безкоштовно'}
             </button>
@@ -320,9 +389,8 @@ export default function BusinessLandingPage() {
           <h2 style={{ fontSize: '2.8rem', fontWeight: '900', color: '#ffffff', marginBottom: '1.5rem', letterSpacing: '-0.02em' }}>Готові вивести бізнес на новий рівень?</h2>
           <p style={{ color: '#94a3b8', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto 2.5rem auto', lineHeight: '1.6' }}>Приєднуйтесь до платформи BookEra Business. Усі функції включено. Жодних прихованих платежів чи сюрпризів.</p>
 
-          {/* 🔴 РОЗУМНА КНОПКА РОЛЕЙ В ФУТЕРІ */}
           <button onClick={handleStartBusinessClick} className="btn-gold anim" style={{ padding: '1rem 3rem', borderRadius: '10px', fontSize: '1.1rem' }}>
-            {userRole === 'vendor' ? 'Перейти в панель керування' : isLoggedIn ? 'Відкрити свій бізнес' : 'Створити кабінет компанії'}
+            {userRole === 'vendor' ? 'Перейти вยอม панель керування' : isLoggedIn ? 'Відкрити свій бізнес' : 'Створити кабінет компанії'}
           </button>
         </div>
       </section>

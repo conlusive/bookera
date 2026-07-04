@@ -46,13 +46,6 @@ const Icons = {
   Filter: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
 };
 
-// Мокові дані для Журналу записів (щоб показати дизайн)
-const mockAppointments = [
-  { id: 1, client: 'Олександр В.', service: 'Чоловіча стрижка', startHour: 10, startMin: 0, duration: 60, master: 'Яміло', color: '#e0e7ff', textColor: '#3730a3', status: 'Підтверджено' },
-  { id: 2, client: 'Максим С.', service: 'Моделювання бороди', startHour: 12, startMin: 30, duration: 45, master: 'Луїс', color: '#fef3c7', textColor: '#b45309', status: 'Очікує' },
-  { id: 3, client: 'Іван К.', service: 'Комплекс', startHour: 15, startMin: 0, duration: 90, master: 'Яміло', color: '#dcfce7', textColor: '#047857', status: 'Оплачено' }
-];
-
 export default function BusinessCabinet() {
   const router = useRouter();
   const supabase = createClient();
@@ -84,6 +77,67 @@ export default function BusinessCabinet() {
   const [activeTab, setActiveTab] = useState('Calendar');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+
+  // --- СТАНИ ДЛЯ КАЛЕНДАРЯ ---
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [isApptModalOpen, setIsApptModalOpen] = useState(false);
+  const [apptForm, setApptForm] = useState({
+    client_name: '', service_name: '', master_name: '', time: '10:00', duration: 60
+  });
+  const [filterMaster, setFilterMaster] = useState('all');
+  // --- СТАНИ ТА ЛОГІКА ДЛЯ ЗАДАЧ (TO-DO) ---
+  const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean}[]>([]);
+  const [showTaskInfoModal, setShowTaskInfoModal] = useState(false);
+  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [hasSeenTaskInfo, setHasSeenTaskInfo] = useState(false); // Запам'ятовує, чи бачили підказку
+
+  const handleAddTaskClick = () => {
+    if (!hasSeenTaskInfo && tasks.length === 0) {
+      setShowTaskInfoModal(true); // Показуємо онбординг
+    } else {
+      setIsAddingTask(true); // Відразу відкриваємо поле вводу
+    }
+  };
+
+  const confirmTaskInfo = () => {
+    setHasSeenTaskInfo(true);
+    setShowTaskInfoModal(false);
+    setIsAddingTask(true);
+  };
+
+  const saveNewTask = () => {
+    if (newTaskText.trim() === '') {
+      setIsAddingTask(false);
+      return;
+    }
+    setTasks([...tasks, { id: Date.now(), text: newTaskText, completed: false }]);
+    setNewTaskText('');
+    setIsAddingTask(false);
+  };
+
+  const toggleTask = (id: number) => {
+    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+  };
+
+  // Функція швидкого додавання при кліку на сітку
+  const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
+    setCurrentDate(targetDate);
+    setApptForm({
+      ...apptForm,
+      time: `${hour.toString().padStart(2, '0')}:00`,
+      master_name: filterMaster !== 'all' ? filterMaster : ''
+    });
+    setIsApptModalOpen(true);
+  };
+
+  // Застосовуємо фільтр до записів
+  const filteredAppointments = appointments.filter(app => {
+    if (filterMaster !== 'all' && app.master_name !== filterMaster) return false;
+    return true;
+  });
+  const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
 
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
@@ -154,6 +208,30 @@ export default function BusinessCabinet() {
     }
     loadCabinetData();
   }, []);
+
+  // Завантаження записів для вибраного дня
+  useEffect(() => {
+    async function fetchAppointments() {
+      if (!business) return;
+
+      const startOfDay = new Date(currentDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(currentDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('business_id', business.id)
+        .gte('start_time', startOfDay.toISOString())
+        .lte('start_time', endOfDay.toISOString());
+
+      if (!error && data) {
+        setAppointments(data);
+      }
+    }
+    fetchAppointments();
+  }, [currentDate, business]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -248,6 +326,36 @@ export default function BusinessCabinet() {
     }
   };
 
+  // --- ЛОГІКА ДОДАВАННЯ ЗАПИСУ ---
+  const handleSaveAppointment = async () => {
+    if (!apptForm.client_name || !apptForm.service_name) return alert("Заповніть ім'я клієнта та оберіть послугу!");
+
+    // Формуємо правильний ISO timestamp для вибраного дня та часу
+    const [hours, minutes] = apptForm.time.split(':');
+    const startDateTime = new Date(currentDate);
+    startDateTime.setHours(Number(hours), Number(minutes), 0, 0);
+
+    const { data, error } = await supabase.from('appointments').insert({
+      business_id: business.id,
+      client_name: apptForm.client_name,
+      service_name: apptForm.service_name,
+      master_name: apptForm.master_name || 'Не вказано',
+      start_time: startDateTime.toISOString(),
+      duration: apptForm.duration,
+      status: 'Підтверджено',
+      color: '#dcfce7' // Зеленуватий колір для нових записів
+    }).select().single();
+
+    if (!error && data) {
+      setAppointments([...appointments, data]);
+      setIsApptModalOpen(false);
+      setApptForm({ client_name: '', service_name: '', master_name: '', time: '10:00', duration: 60 });
+    } else {
+      console.error("Помилка створення запису:", error);
+      alert("Не вдалося створити запис. Перевірте консоль.");
+    }
+  };
+
   const getSmartAdvice = () => {
     if (services.length === 0) return { title: "З чого почати?", text: "Додайте 3-4 базові послуги (наприклад, чоловіча стрижка, моделювання бороди), щоб клієнти могли почати записуватись до вас." };
     const avgPrice = services.reduce((acc, s) => acc + s.price, 0) / services.length;
@@ -310,6 +418,24 @@ export default function BusinessCabinet() {
     if (activeTab === 'Calendar') return { title: 'Журнал записів', desc: 'Керуйте розкладом та переглядайте майбутні візити клієнтів.' };
     return { title: navItems.find(item => item.id === activeTab)?.label || '', desc: `Керування даними закладу "${business?.name}"` };
   };
+
+  // --- ЛОГІКА КАЛЕНДАРЯ (Математика) ---
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => {
+    let day = new Date(year, month, 1).getDay();
+    return day === 0 ? 6 : day - 1; // Робимо понеділок першим днем (0)
+  };
+
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth();
+  const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+  const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
+  const blanks = Array.from({ length: firstDay }, (_, i) => i);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const now = new Date();
+  const isToday = currentDate.toDateString() === now.toDateString();
+  const currentMinutesOffset = (now.getHours() - 9) * 60 + now.getMinutes(); // 9:00 - початок сітки
 
   if (loading) {
     return (
@@ -399,6 +525,10 @@ export default function BusinessCabinet() {
         .cal-app-card:hover { transform: translateX(2px); box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
         .fab-button { position: fixed; bottom: 2rem; right: 3rem; width: 60px; height: 60px; border-radius: 50%; background: #0f172a; color: #fff; border: none; box-shadow: 0 10px 20px rgba(15,23,42,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; }
         .fab-button:hover { transform: translateY(-4px); box-shadow: 0 15px 25px rgba(15,23,42,0.4); }
+        .quick-add-hint { opacity: 0; transition: 0.2s; color: #94a3b8; font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem; height: 100%; padding-left: 1rem; }
+        .cal-grid-row:hover .quick-add-hint { opacity: 1; }
+        .month-add-btn { opacity: 0; transform: scale(0.8); transition: 0.2s; background: #0f172a; color: #fff; border: none; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: absolute; top: 0.5rem; right: 0.5rem; }
+        .month-day-cell:hover .month-add-btn { opacity: 1; transform: scale(1); }
       `}</style>
 
       {/* 🔴 САЙДБАР */}
@@ -519,61 +649,92 @@ export default function BusinessCabinet() {
         {activeTab === 'Calendar' ? (
           <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden' }}>
 
-            {/* Ліва панель: Міні-календар та фільтри */}
+            {/* Ліва панель: Міні-календар та віджети */}
             <div className="custom-scroll" style={{ width: '320px', borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto' }}>
 
               {/* Міні-календар */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1.05rem' }}>Липень 2026</div>
+                  <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1.05rem', textTransform: 'capitalize' }}>
+                    {currentDate.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}
+                  </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="action-icon-btn"><Icons.ChevronLeft /></button>
-                    <button className="action-icon-btn"><Icons.ChevronRight /></button>
+                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth - 1, 1))}><Icons.ChevronLeft /></button>
+                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth + 1, 1))}><Icons.ChevronRight /></button>
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.2rem', textAlign: 'center', marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: '600', color: '#94a3b8' }}>
                   <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.2rem' }}>
-                  {/* Заглушки для вирівнювання (1 липня - середа) */}
-                  <div></div><div></div>
-                  {Array.from({length: 31}, (_, i) => i + 1).map(day => (
-                    <div key={day} className={`cal-mini-day ${day === 3 ? 'selected' : ''}`}>
-                      {day}
-                    </div>
-                  ))}
+                  {blanks.map(blank => <div key={`blank-${blank}`}></div>)}
+                  {days.map(day => {
+                    const isSelected = day === currentDate.getDate();
+                    return (
+                      <div
+                        key={day}
+                        onClick={() => setCurrentDate(new Date(currentYear, currentMonth, day))}
+                        className={`cal-mini-day ${isSelected ? 'selected' : ''}`}
+                      >
+                        {day}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               <div style={{ height: '1px', backgroundColor: '#f1f5f9' }}></div>
 
-              {/* Фільтри */}
-              <div>
-                <div style={{ fontWeight: '700', color: '#0f172a', marginBottom: '1rem', fontSize: '0.95rem' }}>Статус оплати</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: '#475569', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ accentColor: '#10b981', width: '16px', height: '16px' }} />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#10b981'}}></div> Оплачено</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: '#475569', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ accentColor: '#0f172a', width: '16px', height: '16px' }} />
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><div style={{ width:'8px', height:'8px', borderRadius:'50%', background:'#64748b'}}></div> Неоплачено</span>
-                  </label>
+              {/* Віджет Задачі (To-Do) */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ fontWeight: '700', color: '#0f172a', marginBottom: '1rem', fontSize: '0.95rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  Справи на сьогодні
+                  <button onClick={handleAddTaskClick} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
+                    <Icons.Plus />
+                  </button>
                 </div>
-              </div>
 
-              <div>
-                <div style={{ fontWeight: '700', color: '#0f172a', marginBottom: '1rem', fontSize: '0.95rem' }}>Статус запису</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: '#475569', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ accentColor: '#3b82f6', width: '16px', height: '16px' }} /> Підтверджено
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: '#475569', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ accentColor: '#f59e0b', width: '16px', height: '16px' }} /> Очікує підтвердження
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: '#475569', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ accentColor: '#ef4444', width: '16px', height: '16px' }} /> Скасовано / Не прийшов
-                  </label>
+                <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '300px', overflowY: 'auto', paddingRight: '0.2rem' }}>
+                  {/* Заглушка, якщо задач немає */}
+                  {tasks.length === 0 && !isAddingTask && (
+                    <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.85rem', border: '1px dashed #e2e8f0', borderRadius: '12px' }}>
+                      Немає завдань на сьогодні.<br/>Натисніть <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>+</span> щоб додати.
+                    </div>
+                  )}
+
+                  {/* Рендер задач */}
+                  {tasks.map(task => (
+                    <div key={task.id} style={{ background: task.completed ? '#f8fafc' : '#ffffff', border: '1px solid', borderColor: task.completed ? '#f1f5f9' : '#e2e8f0', borderRadius: '8px', padding: '0.75rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start', transition: '0.2s', opacity: task.completed ? 0.6 : 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={() => toggleTask(task.id)}
+                        style={{ marginTop: '0.2rem', accentColor: '#0f172a', cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
+                      />
+                      <div style={{ fontSize: '0.85rem', color: task.completed ? '#94a3b8' : '#334155', lineHeight: '1.4', textDecoration: task.completed ? 'line-through' : 'none', flex: 1, wordBreak: 'break-word' }}>
+                        {task.text}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Поле вводу для нової задачі */}
+                  {isAddingTask && (
+                    <div style={{ background: '#ffffff', border: '1px solid #3b82f6', borderRadius: '8px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={newTaskText}
+                        onChange={e => setNewTaskText(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveNewTask(); if (e.key === 'Escape') setIsAddingTask(false); }}
+                        placeholder="Що потрібно зробити?"
+                        style={{ border: 'none', outline: 'none', fontSize: '0.85rem', width: '100%', color: '#0f172a' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                        <button onClick={() => setIsAddingTask(false)} style={{ background: 'transparent', border: 'none', fontSize: '0.75rem', color: '#64748b', cursor: 'pointer', fontWeight: '600' }}>Скасувати</button>
+                        <button onClick={saveNewTask} style={{ background: '#3b82f6', border: 'none', fontSize: '0.75rem', color: '#fff', cursor: 'pointer', borderRadius: '4px', padding: '0.3rem 0.6rem', fontWeight: '600' }}>Зберегти</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -582,70 +743,53 @@ export default function BusinessCabinet() {
             {/* Права панель: Сітка розкладу */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
 
-              {/* Топ бар календаря */}
-              <div style={{ padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {/* Топ бар календаря (З фільтрами) */}
+              <div style={{ padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <button className="client-dark-btn" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>Сьогодні</button>
+                  <button onClick={() => setCurrentDate(new Date())} className="client-dark-btn" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>Сьогодні</button>
                   <div style={{ display: 'flex', gap: '0.2rem' }}>
-                    <button className="action-icon-btn"><Icons.ChevronLeft /></button>
-                    <button className="action-icon-btn"><Icons.ChevronRight /></button>
+                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() - 1))}><Icons.ChevronLeft /></button>
+                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() + 1))}><Icons.ChevronRight /></button>
                   </div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', marginLeft: '0.5rem' }}>П'ятниця, 3 Липня</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', marginLeft: '0.5rem', textTransform: 'capitalize' }}>
+                    {currentDate.toLocaleString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  </div>
+
+                  {/* CRM-фішка: Акуратний фільтр по майстрах */}
+                  <div style={{ marginLeft: '1.5rem', paddingLeft: '1.5rem', borderLeft: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <select
+                        value={filterMaster}
+                        onChange={e => setFilterMaster(e.target.value)}
+                        style={{ appearance: 'none', background: 'transparent', border: 'none', fontSize: '0.95rem', fontWeight: '700', color: '#0f172a', cursor: 'pointer', paddingRight: '1.5rem', outline: 'none' }}
+                      >
+                        <option value="all">Усі майстри</option>
+                        {team.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                      </select>
+                      <div style={{ position: 'absolute', right: 0, pointerEvents: 'none', color: '#94a3b8' }}>
+                        <Icons.ChevronDown />
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#f1f5f9', padding: '0.3rem 0.8rem', borderRadius: '20px' }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }}></div>
+                      Записів: {filteredAppointments.length}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '0.2rem' }}>
-                  <button style={{ background: '#fff', border: 'none', borderRadius: '6px', padding: '0.4rem 1rem', fontWeight: '600', color: '#0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>День</button>
-                  <button style={{ background: 'transparent', border: 'none', borderRadius: '6px', padding: '0.4rem 1rem', fontWeight: '500', color: '#64748b', cursor: 'pointer' }}>Тиждень</button>
+
+                {/* Перемикачі День / Тиждень / Місяць */}
+                <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '0.25rem' }}>
+                  <button onClick={() => setCalendarView('day')} style={{ background: calendarView === 'day' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', padding: '0.4rem 1rem', fontWeight: calendarView === 'day' ? '600' : '500', color: calendarView === 'day' ? '#0f172a' : '#64748b', cursor: 'pointer', boxShadow: calendarView === 'day' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', transition: '0.2s' }}>День</button>
+                  <button onClick={() => setCalendarView('week')} style={{ background: calendarView === 'week' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', padding: '0.4rem 1rem', fontWeight: calendarView === 'week' ? '600' : '500', color: calendarView === 'week' ? '#0f172a' : '#64748b', cursor: 'pointer', boxShadow: calendarView === 'week' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', transition: '0.2s' }}>Тиждень</button>
+                  <button onClick={() => setCalendarView('month')} style={{ background: calendarView === 'month' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', padding: '0.4rem 1rem', fontWeight: calendarView === 'month' ? '600' : '500', color: calendarView === 'month' ? '#0f172a' : '#64748b', cursor: 'pointer', boxShadow: calendarView === 'month' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', transition: '0.2s' }}>Місяць</button>
                 </div>
               </div>
 
-              {/* Сітка (1px = 1 хвилина. Година = 60px) */}
-              <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', position: 'relative', paddingBottom: '4rem' }}>
-
-                {/* Сірий блок неробочого часу (до 10:00) */}
-                <div style={{ position: 'absolute', top: 0, left: '60px', right: 0, height: '60px', background: 'repeating-linear-gradient(45deg, #f8fafc, #f8fafc 10px, #ffffff 10px, #ffffff 20px)' }}></div>
-
-                {Array.from({length: 11}, (_, i) => i + 9).map(hour => (
-                  <div key={hour} className="cal-grid-row" style={{ height: '60px' }}>
-                    <div className="cal-time-col">
-                      {hour.toString().padStart(2, '0')}:00
-                    </div>
-                  </div>
-                ))}
-
-                {/* Рендер записів (абсолютне позиціювання) */}
-                {mockAppointments.map(app => {
-                  const topOffset = ((app.startHour - 9) * 60) + app.startMin;
-                  const height = app.duration;
-                  return (
-                    <div key={app.id} className="cal-app-card" style={{
-                      top: `${topOffset}px`,
-                      height: `${height}px`,
-                      backgroundColor: app.color,
-                      borderColor: app.textColor,
-                      color: app.textColor
-                    }}>
-                      <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>{app.service}</span>
-                        <span>{app.startHour.toString().padStart(2, '0')}:{app.startMin.toString().padStart(2, '0')}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', opacity: 0.9 }}>
-                        <span>Клієнт: {app.client}</span>
-                        <span>{app.master}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Індикатор поточного часу (наприклад, 14:40) */}
-                <div style={{ position: 'absolute', top: `${(14 - 9)*60 + 40}px`, left: '60px', right: 0, borderTop: '2px solid #ef4444', zIndex: 10 }}>
-                  <div style={{ position: 'absolute', left: '-50px', top: '-10px', background: '#ef4444', color: '#fff', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '700' }}>14:40</div>
-                </div>
-
-              </div>
             </div>
 
             {/* FAB (Floating Action Button) для нового запису */}
-            <button className="fab-button" title="Новий запис">
+            <button className="fab-button" title="Новий запис" onClick={() => setIsApptModalOpen(true)}>
               <Icons.Plus />
             </button>
 
@@ -1019,6 +1163,115 @@ export default function BusinessCabinet() {
               <button onClick={handleSaveService} disabled={isServiceSaving} style={{ padding: '0.8rem 1.5rem', backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', fontWeight: '600', color: '#ffffff', cursor: isServiceSaving ? 'not-allowed' : 'pointer', opacity: isServiceSaving ? 0.7 : 1 }}>
                 {isServiceSaving ? 'Збереження...' : 'Зберегти'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛЬНЕ ВІКНО НОВОГО ЗАПИСУ (КАЛЕНДАР) --- */}
+      {isApptModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ animation: 'slideUp 0.3s ease' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Новий запис</h2>
+              <button onClick={() => setIsApptModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <label className="modal-label">Ім'я клієнта</label>
+                <input
+                  type="text"
+                  value={apptForm.client_name}
+                  onChange={e => setApptForm({...apptForm, client_name: e.target.value})}
+                  className="modal-input"
+                  placeholder="Наприклад: Іван Іванов"
+                />
+              </div>
+
+              {/* Розумний вибір послуги з підтягуванням тривалості */}
+              <div>
+                <label className="modal-label">Послуга</label>
+                <select
+                  value={apptForm.service_name}
+                  onChange={e => {
+                    const selectedService = services.find(s => s.name === e.target.value);
+                    setApptForm({
+                      ...apptForm,
+                      service_name: e.target.value,
+                      duration: selectedService ? selectedService.duration : apptForm.duration
+                    });
+                  }}
+                  className="modal-input"
+                  style={{ cursor: 'pointer', appearance: 'auto' }}
+                >
+                  <option value="" disabled>Оберіть послугу...</option>
+                  {services.map(s => (
+                    <option key={s.id} value={s.name}>{s.name} ({s.price} ₴)</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Вибір майстра */}
+              <div>
+                <label className="modal-label">Майстер</label>
+                <select
+                  value={apptForm.master_name}
+                  onChange={e => setApptForm({...apptForm, master_name: e.target.value})}
+                  className="modal-input"
+                  style={{ cursor: 'pointer', appearance: 'auto' }}
+                >
+                  <option value="">Будь-який майстер (Не вказано)</option>
+                  {team.map(m => (
+                    <option key={m.id} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label className="modal-label">Час візиту (ГГ:ХХ)</label>
+                  <input
+                    type="time"
+                    value={apptForm.time}
+                    onChange={e => setApptForm({...apptForm, time: e.target.value})}
+                    className="modal-input"
+                  />
+                </div>
+                <div>
+                  <label className="modal-label">Тривалість (хв)</label>
+                  <input
+                    type="number"
+                    value={apptForm.duration}
+                    onChange={e => setApptForm({...apptForm, duration: Number(e.target.value)})}
+                    className="modal-input"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button onClick={handleSaveAppointment} style={{ width: '100%', marginTop: '2.5rem', padding: '0.85rem', backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#1e293b'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#0f172a'}>
+              Створити запис
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛКА: ІНФОРМАЦІЯ ПРО ЗАДАЧІ --- */}
+      {showTaskInfoModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ animation: 'slideUp 0.3s ease', maxWidth: '400px', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+              <Icons.Sparkles />
+            </div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.5rem' }}>Менеджер задач</h2>
+            <p style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '2rem' }}>
+              Тут ви можете створювати швидкі списки справ на день (To-Do). Вони допоможуть майстрам та адміністраторам не забути про замовлення матеріалів, дзвінки клієнтам чи інші важливі задачі.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button onClick={() => setShowTaskInfoModal(false)} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '8px', fontWeight: '600', color: '#475569', cursor: 'pointer', flex: 1 }}>Скасувати</button>
+              <button onClick={confirmTaskInfo} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#3b82f6', border: 'none', borderRadius: '8px', fontWeight: '600', color: '#ffffff', cursor: 'pointer', flex: 1, boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>Зрозуміло</button>
             </div>
           </div>
         </div>

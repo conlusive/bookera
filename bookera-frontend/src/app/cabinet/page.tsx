@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import Link from 'next/link';
 
 const Icons = {
   SidebarToggle: ({ collapsed }: { collapsed: boolean }) => (
@@ -46,76 +45,30 @@ const Icons = {
   Filter: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
 };
 
-const popularTags = ["Стрижка", "Борода", "Комплекс", "Брови"];
-
-const navItems = [
-  { id: 'Calendar', label: 'Журнал записів', icon: Icons.Calendar },
-  { id: 'Clients', label: 'Клієнтська база', icon: Icons.Clients },
-  { id: 'Stats', label: 'Статистика та звіти', icon: Icons.Stats },
-  { id: 'Team', label: 'Персонал', icon: Icons.Team },
-  { id: 'Services', label: 'Послуги', icon: Icons.Services },
-  { id: 'Storefront', label: 'Профіль закладу', icon: Icons.Storefront },
-  { id: 'Marketing', label: 'Маркетинг', icon: Icons.Marketing },
-  { id: 'Settings', label: 'Налаштування', icon: Icons.Settings },
-];
-
-const sortOptions = [
-  { value: 'custom', label: 'Свій порядок (Вручну)', icon: <Icons.Grip /> },
-  { value: 'priceAsc', label: 'Від найдешевших', icon: <Icons.TrendingUp /> },
-  { value: 'priceDesc', label: 'Від найдорожчих', icon: <Icons.TrendingDown /> },
-  { value: 'nameAsc', label: 'За алфавітом (А-Я)', icon: <Icons.SortAlpha /> },
-];
-
-const businessSettingsCards = [
-  { id: 'payments', title: 'Платежі та каса', desc: 'Налаштуйте методи оплати, перевірте рахунки.', icon: Icons.CreditCard },
-  { id: 'details', title: 'Деталі бізнесу', desc: 'Редагуйте інформацію про заклад, локацію та правила.', icon: Icons.Storefront },
-  { id: 'services', title: 'Налаштування послуг', desc: 'Додайте деталі послуг та згрупуйте їх.', icon: Icons.Services },
-  { id: 'advanced', title: 'Додаткові опції', desc: 'Доступ до налаштувань бронювання та сповіщень.', icon: Icons.Settings },
-  { id: 'billing', title: 'Підписка та білінг', desc: 'Деталі оплати, підписка та методи оплати.', icon: Icons.Calendar },
-  { id: 'booking', title: 'Онлайн бронювання', desc: 'Вирішіть, які опції будуть доступні клієнтам.', icon: Icons.Globe },
-  { id: 'inventory', title: 'Склад', desc: 'Налаштуйте інвентар для відстеження товарів.', icon: Icons.Box },
-];
+// --- КОНСТАНТИ ЧАСУ ---
+const START_HOUR = 6;
+const TOTAL_HOURS = 24;
 
 const toLocalDateStr = (d: Date) => {
   const offset = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - offset).toISOString().split('T')[0];
 };
 
-// --- НАДІЙНА ФУНКЦІЯ ДЛЯ ПЕРЕВІРКИ ДАТИ ---
-const checkSameDay = (dbDateStr: string, targetDateObj: Date) => {
-  if (!dbDateStr) return false;
-  if (dbDateStr.length === 10) {
-    const [y, m, d] = dbDateStr.split('-');
-    return parseInt(y, 10) === targetDateObj.getFullYear() &&
-           parseInt(m, 10) - 1 === targetDateObj.getMonth() &&
-           parseInt(d, 10) === targetDateObj.getDate();
-  }
-  const d = new Date(dbDateStr);
-  return d.getFullYear() === targetDateObj.getFullYear() &&
-         d.getMonth() === targetDateObj.getMonth() &&
-         d.getDate() === targetDateObj.getDate();
-};
+// Типізація для стану форми запису
+interface ApptFormState {
+  client_name: string;
+  client_phone: string;
+  service_id: string;
+  staff_id: string;
+  date: string;
+  time: string;
+  duration: number; // Використовується фронтендом для відображення
+  block_reason: string;
+}
 
 export default function BusinessCabinet() {
   const router = useRouter();
   const supabase = createClient();
-
-  // --- СТАНИ ДАТ ТА ТАСОК ---
-  const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean, date: string}[]>([]);
-  const [currentDate, setCurrentDate] = useState(new Date());
-
-  const now = new Date();
-
-  const formatDateKey = (date: Date) => {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  };
-
-  const realTodayStr = formatDateKey(now);
-
-  const hasOverdueTasks = (dateObj: Date) => {
-    const dStr = formatDateKey(dateObj);
-    return tasks.some(t => t.date === dStr && !t.completed && t.date < realTodayStr);
-  };
 
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -145,26 +98,23 @@ export default function BusinessCabinet() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
   const [appointments, setAppointments] = useState<any[]>([]);
   const [isApptModalOpen, setIsApptModalOpen] = useState(false);
 
-  const [apptForm, setApptForm] = useState({
-    client_name: '', client_phone: '', service_id: '', staff_id: '', date: toLocalDateStr(new Date()), time: '10:00', block_reason: ''
+  const [apptMode, setApptMode] = useState<'client' | 'block'>('client');
+  const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null); // Стан для модалки існуючого запису
+
+  const [apptForm, setApptForm] = useState<ApptFormState>({
+    client_name: '', client_phone: '', service_id: '', staff_id: '', date: toLocalDateStr(new Date()), time: '10:00', duration: 60, block_reason: ''
   });
 
   const [filterMaster, setFilterMaster] = useState('all');
-  const [isBlockMode, setIsBlockMode] = useState(false);
 
   const [showCalSettingsModal, setShowCalSettingsModal] = useState(false);
   const [showShiftsModal, setShowShiftsModal] = useState(false);
-  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
-
-  const [calSettings, setCalSettings] = useState({
-    defaultView: 'day',
-    displayMode: 'fit',
-    colorScheme: 'pastel',
-  });
+  const [calSettings, setCalSettings] = useState({ defaultView: 'day', displayMode: 'fit', colorScheme: 'pastel' });
 
   const [shifts, setShifts] = useState([
     { day: 'Понеділок', active: true, start: '09:00', end: '20:00' },
@@ -184,9 +134,7 @@ export default function BusinessCabinet() {
       setCalendarView(parsed.defaultView || 'day');
     }
     const savedShifts = localStorage.getItem('bookera_shifts');
-    if (savedShifts) {
-      setShifts(JSON.parse(savedShifts));
-    }
+    if (savedShifts) setShifts(JSON.parse(savedShifts));
   }, []);
 
   const handleSaveCalSettings = () => {
@@ -200,14 +148,13 @@ export default function BusinessCabinet() {
   };
 
   const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
-    const displayHour = hour % 24;
     setApptForm({
       ...apptForm,
       date: toLocalDateStr(targetDate),
-      time: `${displayHour.toString().padStart(2, '0')}:00`,
+      time: `${hour.toString().padStart(2, '0')}:00`,
       staff_id: filterMaster !== 'all' ? filterMaster : ''
     });
-    setIsBlockMode(false);
+    setApptMode('client');
     setIsApptModalOpen(true);
   };
 
@@ -216,57 +163,66 @@ export default function BusinessCabinet() {
     return true;
   });
 
+  const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean}[]>([]);
   const [showTaskInfoModal, setShowTaskInfoModal] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [hasSeenTaskInfo, setHasSeenTaskInfo] = useState(false);
 
   const handleAddTaskClick = () => {
-    if (!hasSeenTaskInfo && tasks.length === 0) {
-      setShowTaskInfoModal(true);
-    } else {
-      setIsAddingTask(true);
-    }
+    if (!hasSeenTaskInfo && tasks.length === 0) setShowTaskInfoModal(true);
+    else setIsAddingTask(true);
   };
 
-  const confirmTaskInfo = () => {
-    setHasSeenTaskInfo(true);
-    setShowTaskInfoModal(false);
-    setIsAddingTask(true);
-  };
+  const confirmTaskInfo = () => { setHasSeenTaskInfo(true); setShowTaskInfoModal(false); setIsAddingTask(true); };
 
   const saveNewTask = () => {
-    if (newTaskText.trim() === '') {
-      setIsAddingTask(false);
-      return;
-    }
-    const dateKey = formatDateKey(currentDate);
-    setTasks([...tasks, { id: Date.now(), text: newTaskText, completed: false, date: dateKey }]);
-    setNewTaskText('');
-    setIsAddingTask(false);
+    if (newTaskText.trim() === '') { setIsAddingTask(false); return; }
+    setTasks([...tasks, { id: Date.now(), text: newTaskText, completed: false }]);
+    setNewTaskText(''); setIsAddingTask(false);
   };
 
-  const toggleTask = (id: number) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-  };
+  const toggleTask = (id: number) => { setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)); };
 
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const viewMenuRef = useRef<HTMLDivElement>(null);
+
+  const navItems = [
+    { id: 'Calendar', label: 'Журнал записів', icon: Icons.Calendar },
+    { id: 'Clients', label: 'Клієнтська база', icon: Icons.Clients },
+    { id: 'Stats', label: 'Статистика та звіти', icon: Icons.Stats },
+    { id: 'Team', label: 'Персонал', icon: Icons.Team },
+    { id: 'Services', label: 'Послуги', icon: Icons.Services },
+    { id: 'Storefront', label: 'Профіль закладу', icon: Icons.Storefront },
+    { id: 'Marketing', label: 'Маркетинг', icon: Icons.Marketing },
+    { id: 'Settings', label: 'Налаштування', icon: Icons.Settings },
+  ];
+
+  const sortOptions = [
+    { value: 'custom', label: 'Свій порядок (Вручну)', icon: <Icons.Grip /> },
+    { value: 'priceAsc', label: 'Від найдешевших', icon: <Icons.TrendingUp /> },
+    { value: 'priceDesc', label: 'Від найдорожчих', icon: <Icons.TrendingDown /> },
+    { value: 'nameAsc', label: 'За алфавітом (А-Я)', icon: <Icons.SortAlpha /> },
+  ];
+
+  const businessSettingsCards = [
+    { id: 'payments', title: 'Платежі та каса', desc: 'Налаштуйте методи оплати, перевірте рахунки.', icon: Icons.CreditCard },
+    { id: 'details', title: 'Деталі бізнесу', desc: 'Редагуйте інформацію про заклад, локацію та правила.', icon: Icons.Storefront },
+    { id: 'services', title: 'Налаштування послуг', desc: 'Додайте деталі послуг та згрупуйте їх.', icon: Icons.Services },
+    { id: 'advanced', title: 'Додаткові опції', desc: 'Доступ до налаштувань бронювання та сповіщень.', icon: Icons.Settings },
+    { id: 'billing', title: 'Підписка та білінг', desc: 'Деталі оплати, підписка та методи оплати.', icon: Icons.Calendar },
+    { id: 'booking', title: 'Онлайн бронювання', desc: 'Вирішіть, які опції будуть доступні клієнтам.', icon: Icons.Globe },
+    { id: 'inventory', title: 'Склад', desc: 'Налаштуйте інвентар для відстеження товарів.', icon: Icons.Box },
+  ];
 
   useEffect(() => {
     async function loadCabinetData() {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session) return router.push('/business');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return router.push('/business');
 
-        const userId = session.user.id;
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
-        setUserProfile(profile || { full_name: session.user.email });
-
-        const { data: bizData } = await supabase.from('businesses').select('*').eq('owner_id', userId).limit(1).single();
-
+        const { data: bizData } = await supabase.from('businesses').select('*').eq('owner_id', session.user.id).single();
         if (bizData) {
           setBusiness(bizData);
           setFormData({
@@ -280,8 +236,8 @@ export default function BusinessCabinet() {
           const { data: srvs } = await supabase.from('services').select('*').eq('business_id', bizData.id).order('created_at', { ascending: true });
           setServices(srvs || []);
 
-          const { data: masters } = await supabase.from('staff').select('*').eq('business_id', bizData.id);
-          setTeam(masters || []);
+          const { data: staff } = await supabase.from('staff').select('*').eq('business_id', bizData.id);
+          setTeam(staff || []);
         }
       } catch (error) {
         console.error("Помилка завантаження даних:", error);
@@ -295,53 +251,16 @@ export default function BusinessCabinet() {
   useEffect(() => {
     async function fetchAppointments() {
       if (!business) return;
+      let start = new Date(currentDate); start.setHours(0,0,0,0);
+      let end = new Date(currentDate); end.setHours(23,59,59,999);
+      if (calendarView === 'week') { start.setDate(currentDate.getDate() - currentDate.getDay() + 1); end.setDate(start.getDate() + 6); }
+      else if (calendarView === 'month') { start.setDate(1); end.setMonth(currentDate.getMonth() + 1, 0); }
 
-      const y = currentDate.getFullYear();
-      const m = currentDate.getMonth();
-
-      const startFetch = new Date(y, m, 1);
-      startFetch.setDate(startFetch.getDate() - 7);
-
-      const endFetch = new Date(y, m + 1, 0);
-      endFetch.setDate(endFetch.getDate() + 7);
-      endFetch.setHours(23, 59, 59, 999);
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('business_id', business.id)
-        .gte('booking_date', toLocalDateStr(startFetch))
-        .lte('booking_date', toLocalDateStr(endFetch));
-
-      if (!error && data) {
-        setAppointments(data);
-      }
+      const { data } = await supabase.from('bookings').select('*').eq('business_id', business.id).gte('booking_date', toLocalDateStr(start)).lte('booking_date', toLocalDateStr(end));
+      setAppointments(data || []);
     }
     fetchAppointments();
-  }, [currentDate.getFullYear(), currentDate.getMonth(), business?.id]);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [formData.description, activeTab]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
-        setIsProfileMenuOpen(false);
-      }
-      if (sortMenuRef.current && !sortMenuRef.current.contains(event.target as Node)) {
-        setIsSortDropdownOpen(false);
-      }
-      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
-        setIsViewDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [currentDate, business, calendarView]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -416,50 +335,47 @@ export default function BusinessCabinet() {
     }
   };
 
+  // --- ЛОГІКА ДОДАВАННЯ ТА ВИДАЛЕННЯ ЗАПИСУ ---
   const handleSaveAppointment = async () => {
+    const isBlockMode = apptMode === 'block';
+
     if (!isBlockMode && (!apptForm.client_name || !apptForm.client_phone || !apptForm.service_id || !apptForm.date)) {
       return alert("Заповніть обов'язкові поля: Ім'я, Телефон, Послуга та Дата!");
+    }
+    if (isBlockMode && !apptForm.date) {
+      return alert("Оберіть дату!");
     }
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return alert("Помилка: Ви не авторизовані (сесія відсутня).");
 
-      const selectedService = services.find(s => s.id === apptForm.service_id);
-      if (!isBlockMode && !selectedService) return alert("Оберіть існуючу послугу.");
-
+      const [year, month, day] = apptForm.date.split('-');
       const [hours, minutes] = apptForm.time.split(':').map(Number);
-      const startDateTime = new Date(1970, 0, 1, hours, minutes);
-      const endDateTime = new Date(startDateTime.getTime() + (isBlockMode ? apptForm.duration : selectedService.duration) * 60000);
+      const startDateTime = new Date(Number(year), Number(month) - 1, Number(day), hours, minutes);
+
+      let durationMins = Number(apptForm.duration);
+      if (!isBlockMode) {
+        const selectedService = services.find(s => s.id === apptForm.service_id);
+        if (selectedService) durationMins = selectedService.duration;
+      }
+
+      const endDateTime = new Date(startDateTime.getTime() + durationMins * 60000);
 
       const startTimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
       const endTimeStr = `${endDateTime.getHours().toString().padStart(2, '0')}:${endDateTime.getMinutes().toString().padStart(2, '0')}:00`;
 
-      const bookingData = isBlockMode
-      ? {
-          business_id: business.id,
-          staff_id: apptForm.staff_id || null,
-          service_id: null,
-          client_name: 'Неробочий час',
-          client_phone: '0000000000',
-          client_email: null,
-          booking_date: apptForm.date,
-          start_time: startTimeStr,
-          end_time: endTimeStr,
-          status: 'blocked'
-        }
-      : {
-          business_id: business.id,
-          staff_id: apptForm.staff_id || null,
-          service_id: apptForm.service_id,
-          client_name: apptForm.client_name,
-          client_phone: apptForm.client_phone,
-          client_email: null,
-          booking_date: apptForm.date,
-          start_time: startTimeStr,
-          end_time: endTimeStr,
-          status: 'confirmed'
-        };
+      const bookingData = {
+        business_id: business.id,
+        staff_id: apptForm.staff_id || null,
+        service_id: isBlockMode ? null : apptForm.service_id,
+        client_name: isBlockMode ? (apptForm.block_reason || 'Неробочий час') : apptForm.client_name,
+        client_phone: isBlockMode ? null : apptForm.client_phone,
+        booking_date: apptForm.date,
+        start_time: startTimeStr,
+        end_time: endTimeStr,
+        status: isBlockMode ? 'blocked' : 'confirmed'
+      };
 
       const { data, error } = await supabase.from('bookings').insert([bookingData]).select().single();
 
@@ -469,12 +385,24 @@ export default function BusinessCabinet() {
       } else if (data) {
         setAppointments([...appointments, data]);
         setIsApptModalOpen(false);
-        setApptForm({ client_name: '', client_phone: '', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '' });
-        setIsBlockMode(false);
+        setApptForm({ client_name: '', client_phone: '', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', duration: 60, block_reason: '' });
       }
     } catch (err: any) {
       console.error("Системна помилка створення запису:", err);
       alert(`Критична помилка: ${err.message || 'Невідома помилка'}`);
+    }
+  };
+
+  const handleCancelAppointment = async (id: string) => {
+    if (!confirm("Ви впевнені, що хочете видалити цей запис/блок?")) return;
+    try {
+      const { error } = await supabase.from('bookings').delete().eq('id', id);
+      if (error) throw error;
+      setAppointments(appointments.filter(app => app.id !== id));
+      setSelectedAppointment(null);
+    } catch (error: any) {
+      console.error(error);
+      alert(`Помилка видалення: ${error.message}`);
     }
   };
 
@@ -541,33 +469,7 @@ export default function BusinessCabinet() {
     return { title: navItems.find(item => item.id === activeTab)?.label || '', desc: `Керування даними закладу "${business?.name}"` };
   };
 
-  // --- ДИНАМІЧНИЙ РОЗРАХУНОК СІТКИ ЧАСУ ---
-  // Скануємо всі активні зміни, щоб календар показував рівно від першої робочої години до останньої
-  const activeShifts = shifts.filter(s => s.active);
-  let gridStartHour = 8;
-  let gridEndHour = 20;
-
-  if (activeShifts.length > 0) {
-    gridStartHour = Math.min(...activeShifts.map(s => parseInt(s.start.split(':')[0], 10)));
-    gridEndHour = Math.max(...activeShifts.map(s => {
-      let h = parseInt(s.end.split(':')[0], 10);
-      return h <= gridStartHour ? h + 24 : h;
-    }));
-  } else if (business) {
-     const parseTime = (val: any) => parseInt(String(val).split(':')[0], 10);
-     if (business.work_start) gridStartHour = parseTime(business.work_start);
-     if (business.work_end) {
-        let e = parseTime(business.work_end);
-        gridEndHour = e <= gridStartHour ? e + 24 : e;
-     }
-  }
-
-  // Якщо старт і енд співпадають (напр. цілодобово), ставимо 24 години
-  if (gridEndHour === gridStartHour) gridEndHour = gridStartHour + 24;
-
-  const gridTotalHours = gridEndHour - gridStartHour;
-  const hoursArray = Array.from({length: gridTotalHours}, (_, i) => gridStartHour + i);
-
+  // --- ЛОГІКА КАЛЕНДАРЯ ТА ШТРИХУВАННЯ РОБОЧИХ ГОДИН ---
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => {
     let day = new Date(year, month, 1).getDay();
@@ -581,60 +483,59 @@ export default function BusinessCabinet() {
   const blanks = Array.from({ length: firstDay }, (_, i) => i);
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
+  const now = new Date();
   const isToday = currentDate.toDateString() === now.toDateString();
 
-  const currentHourAdjusted = now.getHours() < gridStartHour ? now.getHours() + 24 : now.getHours();
-  const currentMinutesOffset = (currentHourAdjusted - gridStartHour) * 60 + now.getMinutes();
+  const currentHourAdjusted = now.getHours() < START_HOUR ? now.getHours() + 24 : now.getHours();
+  const currentMinutesOffset = (currentHourAdjusted - START_HOUR) * 60 + now.getMinutes();
 
   const weekDays = Array.from({length: 7}).map((_, i) => {
     const d = new Date(currentDate);
     d.setDate(currentDate.getDate() - currentDate.getDay() + 1 + i);
-    return d;
+    return d.toDateString();
   });
-  const isCurrentWeek = weekDays.some(wd => wd.toDateString() === now.toDateString());
+  const isCurrentWeek = weekDays.includes(now.toDateString());
+
+  // Обчислення тривалості між start_time та end_time
+  const calculateDurationMins = (startStr: string, endStr: string) => {
+    const [sH, sM] = startStr.split(':').map(Number);
+    const [eH, eM] = endStr.split(':').map(Number);
+    let duration = (eH * 60 + eM) - (sH * 60 + sM);
+    if (duration < 0) duration += 24 * 60; // Якщо перейшло через північ
+    return duration;
+  };
+
+  // Функція для розрахунку позиції картки на сітці
+  const getCardPosition = (startStr: string, endStr: string) => {
+    const [sH, sM] = startStr.split(':').map(Number);
+    const adjustedSH = sH < START_HOUR ? sH + 24 : sH;
+    const topPx = (adjustedSH - START_HOUR) * 60 + sM;
+    const heightPx = Math.max(calculateDurationMins(startStr, endStr), 20); // мінімум 20px висота
+    return { top: topPx, height: heightPx };
+  };
 
   const renderNonWorkingHours = (shift: any) => {
     if (!shift.active) {
-      return <div className="non-working-bg" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>;
+       return <div style={{ position: 'absolute', top: 0, height: TOTAL_HOURS * 60, left: 0, right: 0, background: 'repeating-linear-gradient(45deg, #f8fafc, #f8fafc 10px, #f1f5f9 10px, #f1f5f9 20px)', zIndex: 1, pointerEvents: 'none', opacity: 0.7 }}></div>;
     }
 
     const [startH, startM] = shift.start.split(':').map(Number);
     const [endH, endM] = shift.end.split(':').map(Number);
 
-    const adjustedStartH = startH < gridStartHour ? startH + 24 : startH;
-    const adjustedEndH = endH <= startH ? endH + 24 : endH;
+    const adjustedStartH = startH < START_HOUR ? startH + 24 : startH;
+    const adjustedEndH = endH < START_HOUR ? endH + 24 : endH;
 
-    const startPx = Math.max(0, (adjustedStartH - gridStartHour) * 60 + startM);
-    const endPx = Math.max(0, (adjustedEndH - gridStartHour) * 60 + endM);
-    const totalPx = gridTotalHours * 60;
+    const startPx = Math.max(0, (adjustedStartH - START_HOUR) * 60 + startM);
+    const endPx = Math.max(0, (adjustedEndH - START_HOUR) * 60 + endM);
+    const totalPx = TOTAL_HOURS * 60;
 
     return (
       <>
-        {startPx > 0 && <div className="non-working-bg" style={{ position: 'absolute', top: 0, height: startPx, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>}
-        {endPx < totalPx && <div className="non-working-bg" style={{ position: 'absolute', top: endPx, bottom: 0, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>}
+        {startPx > 0 && <div style={{ position: 'absolute', top: 0, height: startPx, left: 0, right: 0, background: 'repeating-linear-gradient(45deg, #f8fafc, #f8fafc 10px, #f1f5f9 10px, #f1f5f9 20px)', zIndex: 1, pointerEvents: 'none', opacity: 0.7 }}></div>}
+        {endPx < totalPx && <div style={{ position: 'absolute', top: endPx, bottom: 0, left: 0, right: 0, background: 'repeating-linear-gradient(45deg, #f8fafc, #f8fafc 10px, #f1f5f9 10px, #f1f5f9 20px)', zIndex: 1, pointerEvents: 'none', opacity: 0.7 }}></div>}
       </>
     )
   };
-
-  const getCardPosition = (timeStr: string, durationStr: any) => {
-    if(!timeStr) return { top: 0, height: 60 };
-    const [h, m] = timeStr.split(':').map(Number);
-    const adjustedH = h < gridStartHour ? h + 24 : h;
-    const topPx = (adjustedH - gridStartHour) * 60 + m;
-
-    let durationMins = 60;
-    if(durationStr && typeof durationStr === 'string' && durationStr.includes(':')) {
-       const [dh, dm] = durationStr.split(':').map(Number);
-       durationMins = dh * 60 + dm;
-    } else if (durationStr && typeof durationStr === 'number') {
-       durationMins = durationStr;
-    }
-
-    return { top: topPx, height: durationMins };
-  };
-
-  const selectedDateStr = formatDateKey(currentDate);
-  const tasksForSelectedDay = tasks.filter(t => t.date === selectedDateStr);
 
   if (loading) {
     return (
@@ -697,19 +598,12 @@ export default function BusinessCabinet() {
         .search-input { width: 100%; padding: 0.75rem 1rem 0.75rem 2.5rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; outline: none; transition: 0.2s; background: #f8fafc; color: #0f172a; font-family: inherit; }
         .search-input:focus { background: #fff; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
 
-        .custom-select-trigger { width: 100%; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; background: #f8fafc; color: #0f172a; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; font-weight: 500; }
-        .custom-select-trigger:hover { background: #f1f5f9; border-color: #cbd5e1; }
-        .custom-select-dropdown { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); z-index: 50; overflow: hidden; animation: slideUp 0.2s ease; }
-        .custom-select-option { padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: #475569; cursor: pointer; transition: 0.2s; font-weight: 500; }
-        .custom-select-option:hover { background: #f8fafc; color: #0f172a; }
-        .custom-select-option.selected { background: #f1f5f9; color: #0f172a; font-weight: 600; }
-
-        .tag-pill { background: #f1f5f9; color: #475569; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
-        .tag-pill:hover { background: #e2e8f0; color: #0f172a; }
+        .custom-select { width: 100%; padding: 0.85rem 1rem; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; outline: none; background: #fff url('data:image/svg+xml;utf8,<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9L12 15L18 9" stroke="%2364748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right 1rem center; background-size: 16px; appearance: none; color: #0f172a; cursor: pointer; transition: 0.2s; }
+        .custom-select:focus { border-color: #0f172a; box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1); }
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: #fff; width: 100%; max-width: 480px; border-radius: 20px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
-        .modal-input { width: 100%; padding: 0.8rem 1rem; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; outline: none; transition: 0.2s; background: #fff; color: #0f172a; font-family: inherit; }
+        .modal-content { background: #fff; width: 100%; max-width: 450px; border-radius: 20px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); cursor: default; }
+        .modal-input { width: 100%; padding: 0.8rem 1rem; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; outline: none; transition: 0.2s; background: #fff; color: #0f172a; }
         .modal-input:focus { border-color: #0f172a; box-shadow: 0 0 0 2px rgba(15,23,42,0.1); }
         .modal-label { display: block; font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 0.4rem; }
 
@@ -718,55 +612,21 @@ export default function BusinessCabinet() {
         .cal-mini-day { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; border-radius: 50%; cursor: pointer; transition: 0.2s; color: #475569; }
         .cal-mini-day:hover { background: #f1f5f9; }
         .cal-mini-day.selected { background: #0f172a; color: #fff; font-weight: 700; }
-        .cal-grid-row { display: flex; border-bottom: 1px dashed #e2e8f0; position: relative; cursor: pointer; transition: 0.2s; }
-        .cal-grid-row:hover { background-color: #f8fafc; }
-        .cal-time-col { width: 60px; padding: 0.5rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; text-align: right; border-right: 1px solid #e2e8f0; flex-shrink: 0; position: relative; z-index: 10; background: transparent; }
-        
+        .cal-grid-row { display: flex; border-bottom: 1px dashed #e2e8f0; position: relative; }
+        .cal-time-col { width: 60px; padding: 0.5rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; text-align: right; border-right: 1px solid #e2e8f0; flex-shrink: 0; }
         .cal-app-card { position: absolute; left: 70px; right: 20px; border-radius: 8px; padding: 0.5rem 0.75rem; border-left: 4px solid; box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 0.85rem; overflow: hidden; cursor: pointer; transition: 0.2s; z-index: 5; }
         .cal-app-card:hover { transform: translateX(2px); box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
-        
-        /* 🟩 ІДЕАЛЬНА ШТРИХОВКА для неробочих годин */
-        .non-working-bg {
-          background-image: repeating-linear-gradient(
-            45deg,
-            #ffffff,
-            #ffffff 10px,
-            #f1f5f9 10px,
-            #f1f5f9 20px
-          ) !important;
-          background-color: #ffffff !important;
-        }
-
-        .month-view-cell { border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 0.5rem; cursor: pointer; transition: 0.2s; background-color: #ffffff; position: relative; }
-        .month-view-cell:hover { background-color: #f1f5f9; }
-
-        .week-day-header { flex: 1; text-align: center; padding: 0.5rem; cursor: pointer; border-left: 1px solid #e2e8f0; transition: 0.2s; overflow: hidden; position: relative; z-index: 10; }
-        .week-day-header:hover { background-color: #f1f5f9; }
-
-        .fab-button { position: fixed; bottom: 2rem; right: 3rem; width: 60px; height: 60px; border-radius: 50%; background: #0f172a; color: #fff; border: none; box-shadow: 0 10px 20px rgba(15,23,42,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; z-index: 50; }
+        .fab-button { position: fixed; bottom: 2rem; right: 3rem; width: 60px; height: 60px; border-radius: 50%; background: #0f172a; color: #fff; border: none; box-shadow: 0 10px 20px rgba(15,23,42,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; z-index: 100; }
         .fab-button:hover { transform: translateY(-4px); box-shadow: 0 15px 25px rgba(15,23,42,0.4); }
+
         .quick-add-hint { opacity: 0; transition: 0.2s; color: #94a3b8; font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem; height: 100%; padding-left: 1rem; }
         .cal-grid-row:hover .quick-add-hint { opacity: 1; }
-
-        /* Стилі для кастомних select у модалці */
-        .modal-select-wrapper { position: relative; }
-        .modal-select-wrapper select {
-          appearance: none; -webkit-appearance: none; width: 100%;
-          padding: 0.8rem 2.5rem 0.8rem 1rem; border: 1px solid #cbd5e1;
-          border-radius: 10px; font-size: 0.95rem; background-color: #fff;
-          color: #0f172a; font-family: inherit; cursor: pointer; transition: 0.2s;
-        }
-        .modal-select-wrapper select:focus {
-          border-color: #0f172a; box-shadow: 0 0 0 2px rgba(15,23,42,0.1); outline: none;
-        }
-        .modal-select-icon {
-          position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
-          pointer-events: none; color: #64748b;
-        }
+        .month-add-btn { opacity: 0; transform: scale(0.8); transition: 0.2s; background: #0f172a; color: #fff; border: none; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: absolute; top: 0.5rem; right: 0.5rem; }
+        .month-day-cell:hover .month-add-btn { opacity: 1; transform: scale(1); }
       `}</style>
 
       {/* 🔴 САЙДБАР */}
-      <aside style={{ width: isSidebarCollapsed ? '80px' : '280px', backgroundColor: '#0e0e11', borderRight: '1px solid #1f2128', display: 'flex', flexDirection: 'column', flexShrink: 0, transition: 'width 0.4s cubic-bezier(0.25, 1, 0.5, 1)', zIndex: 100 }}>
+      <aside style={{ width: isSidebarCollapsed ? '80px' : '280px', backgroundColor: '#0e0e11', borderRight: '1px solid #1f2128', display: 'flex', flexDirection: 'column', flexShrink: 0, transition: 'width 0.4s cubic-bezier(0.25, 1, 0.5, 1)' }}>
         <div style={{ padding: '1.5rem 1rem', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', minHeight: '76px' }}>
           <div style={{ opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', whiteSpace: 'nowrap' }}>
             <span style={{ color: '#8b8d98', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', marginLeft: '0.5rem' }}>Панель керування</span>
@@ -832,7 +692,7 @@ export default function BusinessCabinet() {
       {/* 🔴 ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflowY: 'auto', position: 'relative' }}>
 
-        {/* Хедер - показуємо тільки якщо це не Календар */}
+        {/* Хедер */}
         {activeTab !== 'Calendar' && (
           <header style={{ padding: '2rem 3rem 1.5rem 3rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff' }}>
             <div>
@@ -884,7 +744,7 @@ export default function BusinessCabinet() {
           <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden' }}>
 
             {/* Ліва панель: Міні-календар та віджети */}
-            <div className="custom-scroll" style={{ width: '320px', borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', flexShrink: 0, zIndex: 10 }}>
+            <div className="custom-scroll" style={{ width: '320px', borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', flexShrink: 0 }}>
 
               {/* Міні-календар */}
               <div>
@@ -904,18 +764,13 @@ export default function BusinessCabinet() {
                   {blanks.map(blank => <div key={`blank-${blank}`}></div>)}
                   {days.map(day => {
                     const isSelected = day === currentDate.getDate();
-                    const dObj = new Date(currentYear, currentMonth, day);
-                    const hasOverdue = hasOverdueTasks(dObj);
-
                     return (
                       <div
                         key={day}
-                        onClick={() => { setCurrentDate(dObj); setCalendarView('day'); }}
+                        onClick={() => setCurrentDate(new Date(currentYear, currentMonth, day))}
                         className={`cal-mini-day ${isSelected ? 'selected' : ''}`}
-                        style={{ position: 'relative' }}
                       >
                         {day}
-                        {hasOverdue && <div style={{ position: 'absolute', top: '2px', right: '2px', width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%' }}></div>}
                       </div>
                     );
                   })}
@@ -927,42 +782,32 @@ export default function BusinessCabinet() {
               {/* Віджет Задачі (To-Do) */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ fontWeight: '700', color: '#0f172a', marginBottom: '1rem', fontSize: '0.95rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  Справи на {isToday ? 'сьогодні' : currentDate.toLocaleDateString('uk-UA', {day: 'numeric', month: 'short'})}
+                  Справи на сьогодні
                   <button onClick={handleAddTaskClick} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
                     <Icons.Plus />
                   </button>
                 </div>
 
                 <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '300px', overflowY: 'auto', paddingRight: '0.2rem' }}>
-                  {tasksForSelectedDay.length === 0 && !isAddingTask && (
+                  {tasks.length === 0 && !isAddingTask && (
                     <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.85rem', border: '1px dashed #e2e8f0', borderRadius: '12px' }}>
                       Немає завдань на цей день.<br/>Натисніть <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>+</span> щоб додати.
                     </div>
                   )}
 
-                  {tasksForSelectedDay.map(task => {
-                    const isOverdue = task.date < realTodayStr && !task.completed;
-                    return (
-                      <div key={task.id} style={{
-                        background: task.completed ? '#f8fafc' : (isOverdue ? '#fef2f2' : '#ffffff'),
-                        border: '1px solid',
-                        borderColor: task.completed ? '#f1f5f9' : (isOverdue ? '#fca5a5' : '#e2e8f0'),
-                        borderRadius: '8px', padding: '0.75rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start',
-                        transition: '0.2s', opacity: task.completed ? 0.6 : 1
-                      }}>
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => toggleTask(task.id)}
-                          style={{ marginTop: '0.2rem', accentColor: isOverdue ? '#ef4444' : '#0f172a', cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
-                        />
-                        <div style={{ fontSize: '0.85rem', color: task.completed ? '#94a3b8' : (isOverdue ? '#b91c1c' : '#334155'), lineHeight: '1.4', textDecoration: task.completed ? 'line-through' : 'none', flex: 1, wordBreak: 'break-word' }}>
-                          {task.text}
-                          {isOverdue && <span style={{ display: 'block', fontSize: '0.7rem', color: '#ef4444', marginTop: '4px', fontWeight: 'bold' }}>(Протерміновано)</span>}
-                        </div>
+                  {tasks.map(task => (
+                    <div key={task.id} style={{ background: task.completed ? '#f8fafc' : '#ffffff', border: '1px solid', borderColor: task.completed ? '#f1f5f9' : '#e2e8f0', borderRadius: '8px', padding: '0.75rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start', transition: '0.2s', opacity: task.completed ? 0.6 : 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={() => toggleTask(task.id)}
+                        style={{ marginTop: '0.2rem', accentColor: '#0f172a', cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
+                      />
+                      <div style={{ fontSize: '0.85rem', color: task.completed ? '#94a3b8' : '#334155', lineHeight: '1.4', textDecoration: task.completed ? 'line-through' : 'none', flex: 1, wordBreak: 'break-word' }}>
+                        {task.text}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
 
                   {isAddingTask && (
                     <div style={{ background: '#ffffff', border: '1px solid #3b82f6', borderRadius: '8px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}>
@@ -989,32 +834,18 @@ export default function BusinessCabinet() {
             {/* Права панель: Сітка розкладу */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
 
-              {/* Топ бар календаря (З позиціонуванням поверх усього) */}
-              <div style={{ padding: '0.75rem 2rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', position: 'relative', zIndex: 100 }}>
+              {/* Топ бар календаря */}
+              <div style={{ padding: '0.75rem 2rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <button onClick={() => setCurrentDate(new Date())} className="client-dark-btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Сьогодні</button>
                   <div style={{ display: 'flex', gap: '0.2rem' }}>
-                    <button className="action-icon-btn" onClick={() => {
-                        const d = new Date(currentDate);
-                        if (calendarView === 'day') d.setDate(d.getDate() - 1);
-                        else if (calendarView === 'week') d.setDate(d.getDate() - 7);
-                        else d.setMonth(d.getMonth() - 1);
-                        setCurrentDate(d);
-                    }}><Icons.ChevronLeft /></button>
-                    <button className="action-icon-btn" onClick={() => {
-                        const d = new Date(currentDate);
-                        if (calendarView === 'day') d.setDate(d.getDate() + 1);
-                        else if (calendarView === 'week') d.setDate(d.getDate() + 7);
-                        else d.setMonth(d.getMonth() + 1);
-                        setCurrentDate(d);
-                    }}><Icons.ChevronRight /></button>
+                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() - 1))}><Icons.ChevronLeft /></button>
+                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth, currentDate.getDate() + 1))}><Icons.ChevronRight /></button>
                   </div>
                   <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', marginLeft: '0.5rem', textTransform: 'capitalize' }}>
                     {calendarView === 'week'
-                      ? `${weekDays[0].getDate()} - ${weekDays[6].getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
-                      : calendarView === 'month'
-                        ? currentDate.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })
-                        : currentDate.toLocaleString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })
+                      ? `${new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay() + 1).getDate()} - ${new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay() + 7).getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
+                      : currentDate.toLocaleString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })
                     }
                   </div>
 
@@ -1024,19 +855,17 @@ export default function BusinessCabinet() {
                       <select
                         value={filterMaster}
                         onChange={e => setFilterMaster(e.target.value)}
-                        style={{ appearance: 'none', background: 'transparent', border: 'none', fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', cursor: 'pointer', paddingRight: '1.5rem', outline: 'none' }}
+                        className="custom-select"
+                        style={{ padding: '0.4rem 2rem 0.4rem 0.8rem', borderRadius: '8px', border: 'none', background: 'transparent', fontSize: '0.9rem', fontWeight: '700', outline: 'none' }}
                       >
                         <option value="all">Усі майстри</option>
                         {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
-                      <div style={{ position: 'absolute', right: 0, pointerEvents: 'none', color: '#94a3b8' }}>
-                        <Icons.ChevronDown />
-                      </div>
                     </div>
 
                     <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#f1f5f9', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>
                       <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }}></div>
-                      Записів: {filteredAppointments.filter(a => a.status !== 'blocked').length}
+                      Записів: {filteredAppointments.length}
                     </div>
                   </div>
                 </div>
@@ -1053,321 +882,249 @@ export default function BusinessCabinet() {
                     <Icons.Settings />
                   </button>
 
-                  {/* 🎨 Кнопка вибору вигляду (День, Тиждень, Місяць) */}
-                  <div style={{ position: 'relative' }} ref={viewMenuRef}>
-                    <button
-                      onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', background: 'rgba(241, 245, 249, 0.6)', border: '1px solid transparent', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#0f172a', cursor: 'pointer', transition: '0.2s' }}
-                      onMouseOver={e => e.currentTarget.style.borderColor = '#cbd5e1'}
-                      onMouseOut={e => e.currentTarget.style.borderColor = 'transparent'}
-                    >
-                      {calendarView === 'day' ? 'День' : calendarView === 'week' ? 'Тиждень' : 'Місяць'}
-                      <Icons.ChevronDown />
-                    </button>
-
-                    {isViewDropdownOpen && (
-                      <div className="menu-popup" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: '130px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.3rem', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', zIndex: 200 }}>
-                        {['day', 'week', 'month'].map(view => {
-                          const labels: any = { day: 'День', week: 'Тиждень', month: 'Місяць' };
-                          const isActive = calendarView === view;
-                          return (
-                            <div
-                              key={view}
-                              onClick={() => { setCalendarView(view as any); setIsViewDropdownOpen(false); }}
-                              style={{ padding: '0.6rem 0.8rem', fontSize: '0.9rem', color: isActive ? '#0f172a' : '#475569', fontWeight: isActive ? '700' : '500', cursor: 'pointer', borderRadius: '6px', backgroundColor: isActive ? '#f1f5f9' : 'transparent', transition: '0.2s' }}
-                              onMouseOver={e => { if (!isActive) e.currentTarget.style.backgroundColor = '#f8fafc' }}
-                              onMouseOut={e => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent' }}
-                            >
-                              {labels[view]}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                  <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '0.2rem' }}>
+                    <button onClick={() => setCalendarView('day')} style={{ background: calendarView === 'day' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', padding: '0.3rem 0.8rem', fontSize: '0.85rem', fontWeight: calendarView === 'day' ? '600' : '500', color: calendarView === 'day' ? '#0f172a' : '#64748b', cursor: 'pointer', boxShadow: calendarView === 'day' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', transition: '0.2s' }}>День</button>
+                    <button onClick={() => setCalendarView('week')} style={{ background: calendarView === 'week' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', padding: '0.3rem 0.8rem', fontSize: '0.85rem', fontWeight: calendarView === 'week' ? '600' : '500', color: calendarView === 'week' ? '#0f172a' : '#64748b', cursor: 'pointer', boxShadow: calendarView === 'week' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', transition: '0.2s' }}>Тиждень</button>
+                    <button onClick={() => setCalendarView('month')} style={{ background: calendarView === 'month' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', padding: '0.3rem 0.8rem', fontSize: '0.85rem', fontWeight: calendarView === 'month' ? '600' : '500', color: calendarView === 'month' ? '#0f172a' : '#64748b', cursor: 'pointer', boxShadow: calendarView === 'month' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', transition: '0.2s' }}>Місяць</button>
                   </div>
-
                 </div>
               </div>
 
               {/* --- ДЕНЬ --- */}
               {calendarView === 'day' && (
-                <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', position: 'relative', zIndex: 1, paddingBottom: '4rem', minWidth: '600px' }}>
-                  <div style={{ position: 'relative', height: `${gridTotalHours * 60}px` }}>
+                <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', position: 'relative', paddingBottom: '4rem', minWidth: '600px' }}>
 
-                    {hoursArray.map((hour, i) => {
-                      const displayHour = hour % 24;
-                      const isNextDay = hour >= 24;
-                      return (
-                        <div
-                          key={i}
-                          className="cal-grid-row"
-                          style={{ height: '60px', cursor: 'pointer' }}
-                          onClick={() => handleQuickAdd(displayHour)}
-                        >
-                          <div className="cal-time-col">
-                            <div>{displayHour.toString().padStart(2, '0')}:00</div>
-                            {isNextDay && <div style={{ fontSize: '0.55rem', color: '#cbd5e1' }}>+1д</div>}
-                          </div>
-                          <div className="quick-add-hint"><Icons.Plus /> <span>Додати запис</span></div>
-                        </div>
-                      );
-                    })}
-
-                    {/* Штрихування неробочого часу для поточного дня (Тільки на сітці, не перекриває час) */}
-                    <div style={{ position: 'absolute', top: 0, bottom: 0, left: '60px', right: 0, pointerEvents: 'none' }}>
-                      {renderNonWorkingHours(shifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
-                    </div>
-
-                    {/* Рендер записів */}
-                    {filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, currentDate)).map(app => {
-                      const { top, height } = getCardPosition(app.start_time, app.duration);
-
-                      const serviceName = services.find(s => s.id === app.service_id)?.name || app.service_name;
-                      const staffName = team.find(m => m.id === app.staff_id)?.name || app.master_name || 'Без майстра';
-
-                      const isBlock = app.status === 'blocked' || app.color === 'blocked';
-                      const bgColor = calSettings.colorScheme === 'vivid' ? '#3b82f6' : '#e0e7ff';
-                      const textColor = calSettings.colorScheme === 'vivid' ? '#ffffff' : '#334155';
-
-                      return (
-                        <div
-                          key={app.id}
-                          className={`cal-app-card ${isBlock ? 'non-working-bg' : ''}`}
-                          style={{
-                            top: `${top}px`,
-                            height: `${height}px`,
-                            backgroundColor: isBlock ? 'transparent' : bgColor,
-                            borderColor: isBlock ? '#cbd5e1' : (calSettings.colorScheme === 'vivid' ? '#2563eb' : '#cbd5e1'),
-                            color: isBlock ? '#64748b' : textColor,
-                            borderLeft: isBlock ? '1px solid #cbd5e1' : `4px solid ${calSettings.colorScheme === 'vivid' ? '#2563eb' : '#cbd5e1'}`,
-                            zIndex: 5
-                          }}
-                          onClick={(e) => { e.stopPropagation(); }}
-                        >
-                          {isBlock ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontWeight: '700', fontSize: '0.85rem' }}>
-                              {app.service_name}
-                            </div>
-                          ) : (
-                            <>
-                              <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                                <span>{serviceName}</span>
-                                <span>{app.start_time.substring(0, 5)}</span>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', opacity: 0.9 }}>
-                                <span>{app.client_name}</span>
-                                <span>{staffName}</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Індикатор поточного часу (червона лінія) */}
-                    {isToday && currentMinutesOffset >= 0 && currentMinutesOffset <= gridTotalHours * 60 && (
-                      <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: '60px', right: 0, borderTop: '2px solid #ef4444', zIndex: 10, pointerEvents: 'none' }}>
-                        <div style={{ position: 'absolute', left: '-5px', top: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }}></div>
+                  {Array.from({length: TOTAL_HOURS}, (_, i) => {
+                    const h = (START_HOUR + i) % 24;
+                    return (
+                      <div
+                        key={i}
+                        className="cal-grid-row"
+                        style={{ height: '60px', cursor: 'pointer' }}
+                        onClick={() => handleQuickAdd(h)}
+                      >
+                        <div className="cal-time-col">{h.toString().padStart(2, '0')}:00</div>
+                        <div className="quick-add-hint"><Icons.Plus /> <span>Додати запис</span></div>
                       </div>
-                    )}
+                    );
+                  })}
 
+                  {/* Штрихування неробочого часу */}
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, left: '60px', right: 0, pointerEvents: 'none' }}>
+                    {renderNonWorkingHours(shifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
                   </div>
+
+                  {/* Рендер записів */}
+                  {filteredAppointments.map(app => {
+                    const { top, height } = getCardPosition(app.start_time, app.end_time);
+
+                    const serviceName = services.find(s => s.id === app.service_id)?.name || 'Послуга';
+                    const staffName = team.find(m => m.id === app.staff_id)?.name || 'Без майстра';
+
+                    const bgColor = calSettings.colorScheme === 'vivid' ? '#3b82f6' : (app.status === 'blocked' ? '#fef2f2' : '#e0e7ff');
+                    const borderColor = calSettings.colorScheme === 'vivid' ? '#2563eb' : (app.status === 'blocked' ? '#f87171' : '#cbd5e1');
+                    const textColor = calSettings.colorScheme === 'vivid' ? '#ffffff' : (app.status === 'blocked' ? '#b91c1c' : '#334155');
+
+                    return (
+                      <div
+                        key={app.id}
+                        className="cal-app-card"
+                        style={{ top: `${top}px`, height: `${height}px`, backgroundColor: bgColor, borderColor: borderColor, color: textColor }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedAppointment(app); }}
+                      >
+                        <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{app.status === 'blocked' ? (app.client_name || 'Неробочий час') : serviceName}</span>
+                          <span>{app.start_time.substring(0, 5)}</span>
+                        </div>
+                        {app.status !== 'blocked' && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', opacity: 0.9 }}>
+                            <span>{app.client_name}</span>
+                            <span>{staffName}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Індикатор поточного часу (червона лінія) */}
+                  {isToday && currentMinutesOffset >= 0 && currentMinutesOffset <= TOTAL_HOURS * 60 && (
+                    <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: '60px', right: 0, borderTop: '2px solid #ef4444', zIndex: 10, pointerEvents: 'none' }}>
+                      <div style={{ position: 'absolute', left: '-5px', top: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }}></div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* --- ТИЖДЕНЬ --- */}
               {calendarView === 'week' && (
-                <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0, position: 'relative', zIndex: 1 }}>
+                <div className="custom-scroll" style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', backgroundColor: '#f8fafc' }}>
+                  <div style={{ minWidth: '900px', display: 'flex', position: 'relative' }}>
 
-                  {/* Шапка днів тижня */}
-                  <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', paddingLeft: '60px', backgroundColor: '#fff', zIndex: 10, flexShrink: 0, position: 'relative' }}>
-                      {weekDays.map((wd, i) => {
-                          const isWdToday = wd.toDateString() === now.toDateString();
-                          const dayAppsCount = appointments.filter(app => {
-                              return checkSameDay(app.booking_date || app.start_time, wd) && app.status !== 'blocked';
-                          }).length;
+                    {/* Ліва шкала з годинами (липка) */}
+                    <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 15 }}>
+                      <div style={{ height: '75px', borderBottom: '1px solid #e2e8f0' }}></div>
+                      <div style={{ position: 'relative', height: `${TOTAL_HOURS * 60}px` }}>
+                        {Array.from({length: TOTAL_HOURS}, (_, j) => {
+                          const h = (START_HOUR + j) % 24;
+                          return (
+                            <div key={j} style={{ height: '60px', padding: '0.5rem', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right', fontWeight: '500' }}>
+                              {h.toString().padStart(2, '0')}:00
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Сітка днів */}
+                    <div style={{ flex: 1, position: 'relative' }}>
+
+                      {/* Стовпчики днів */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', height: '100%' }}>
+                        {Array.from({length: 7}).map((_, i) => {
+                          const weekDay = new Date(currentDate);
+                          weekDay.setDate(currentDate.getDate() - currentDate.getDay() + 1 + i);
+                          const isCurrentDay = weekDay.toDateString() === now.toDateString();
+                          const dayApps = filteredAppointments.filter(app => app.booking_date === toLocalDateStr(weekDay));
+
+                          const dayShift = shifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
 
                           return (
-                            <div key={i} className="week-day-header" onClick={() => { setCurrentDate(wd); setCalendarView('day'); }}>
-                                <div style={{ fontSize: '0.75rem', color: isWdToday ? '#3b82f6' : '#64748b', textTransform: 'uppercase', fontWeight: '600', marginBottom: '2px' }}>{wd.toLocaleDateString('uk-UA', { weekday: 'short' })}</div>
-                                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: isWdToday ? '#3b82f6' : '#0f172a' }}>{wd.getDate()}</div>
-                                <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                                  {dayAppsCount > 0 ? `${dayAppsCount} записів` : 'немає записів'}
+                            <div key={i} style={{ borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+                              {/* Заголовок дня з лічильником */}
+                              <div style={{ height: '75px', fontWeight: '700', color: isCurrentDay ? '#3b82f6' : '#64748b', textAlign: 'center', padding: '0.8rem 0', borderBottom: '1px solid #e2e8f0', backgroundColor: isCurrentDay ? '#eff6ff' : '#ffffff', position: 'sticky', top: 0, zIndex: 10 }}>
+                                <div style={{ fontSize: '0.8rem', textTransform: 'uppercase' }}>{weekDay.toLocaleString('uk-UA', { weekday: 'short' })}</div>
+                                <div style={{ fontSize: '1.3rem' }}>{weekDay.getDate()}</div>
+                                <div style={{ fontSize: '0.75rem', marginTop: '0.2rem', fontWeight: '500', opacity: 0.7 }}>
+                                  {dayApps.length} записів
                                 </div>
-                            </div>
-                          )
-                      })}
-                  </div>
-
-                  {/* Сітка тижня (скролиться) */}
-                  <div className="custom-scroll" style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', backgroundColor: '#f8fafc' }}>
-                    <div style={{ minWidth: '900px', display: 'flex', position: 'relative' }}>
-
-                      {/* Ліва шкала з годинами (та "липка" капсула часу) */}
-                      <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 15 }}>
-                        <div style={{ position: 'relative', height: `${gridTotalHours * 60}px` }}>
-                          {hoursArray.map((hour, j) => {
-                            const displayHour = hour % 24;
-                            const isNextDay = hour >= 24;
-                            return (
-                              <div key={j} style={{ height: '60px', padding: '0.5rem', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right', fontWeight: '500', borderBottom: '1px dashed #e2e8f0' }}>
-                                <div>{displayHour.toString().padStart(2, '0')}:00</div>
-                                {isNextDay && <div style={{ fontSize: '0.55rem', color: '#cbd5e1' }}>+1д</div>}
                               </div>
-                            );
-                          })}
 
-                          {/* Липка капсула поточного часу зліва */}
-                          {isCurrentWeek && currentMinutesOffset >= 0 && currentMinutesOffset <= gridTotalHours * 60 && (
-                            <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, right: '-1px', zIndex: 20, pointerEvents: 'none' }}>
-                              <div style={{ position: 'absolute', right: '5px', top: '-8px', backgroundColor: '#ef4444', color: '#fff', fontSize: '0.75rem', fontWeight: '700', padding: '2px 6px', borderRadius: '10px' }}>
-                                {now.getHours().toString().padStart(2, '0')}:{now.getMinutes().toString().padStart(2, '0')}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                              {/* Сітка одного дня */}
+                              <div style={{ position: 'relative', height: `${TOTAL_HOURS * 60}px`, background: isCurrentDay ? '#ffffff' : 'transparent' }}>
 
-                      {/* Сітка колонок днів */}
-                      <div style={{ flex: 1, position: 'relative' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', height: '100%' }}>
-                          {weekDays.map((weekDay, i) => {
-                            const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, weekDay));
-                            const dayShift = shifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
-                            const isCurrentDay = weekDay.toDateString() === now.toDateString();
-
-                            return (
-                              <div key={i} style={{ borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-                                {/* Сітка одного дня */}
-                                <div style={{ position: 'relative', height: `${gridTotalHours * 60}px`, background: isCurrentDay ? '#ffffff' : 'transparent' }}>
-
-                                  {/* Клікабельні блоки */}
-                                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column' }}>
-                                    {hoursArray.map((hour, j) => {
-                                      const displayHour = hour % 24;
-                                      return (
-                                        <div
-                                          key={j}
-                                          onClick={() => handleQuickAdd(displayHour, weekDay)}
-                                          style={{ height: '60px', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', transition: '0.2s' }}
-                                          onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.05)'}
-                                          onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                        ></div>
-                                      );
-                                    })}
-                                  </div>
-
-                                  {/* Штрихування неробочого часу */}
-                                  {renderNonWorkingHours(dayShift)}
-
-                                  {/* Рендер карток записів */}
-                                  {dayApps.map(app => {
-                                    const { top, height } = getCardPosition(app.start_time, app.duration);
-                                    const bgColor = calSettings.colorScheme === 'vivid' ? '#3b82f6' : '#e0e7ff';
-                                    const isBlock = app.status === 'blocked' || app.color === 'blocked';
-
+                                {/* Клікабельні блоки */}
+                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column' }}>
+                                  {Array.from({length: TOTAL_HOURS}, (_, j) => {
+                                    const h = (START_HOUR + j) % 24;
                                     return (
                                       <div
-                                        key={app.id}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className={isBlock ? 'non-working-bg' : ''}
-                                        style={{
-                                          position: 'absolute', top: `${top}px`, left: '4px', width: 'calc(100% - 8px)', height: `${height}px`,
-                                          backgroundColor: isBlock ? 'transparent' : bgColor,
-                                          borderRadius: '6px', padding: '0.4rem', fontSize: '0.75rem', overflow: 'hidden',
-                                          borderLeft: isBlock ? 'none' : `3px solid ${calSettings.colorScheme === 'vivid' ? '#2563eb' : '#cbd5e1'}`,
-                                          border: isBlock ? '1px solid #cbd5e1' : 'none',
-                                          color: isBlock ? '#64748b' : (calSettings.colorScheme === 'vivid' ? '#fff' : '#0f172a'),
-                                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)', zIndex: 5
-                                        }}
-                                      >
-                                        <div style={{ fontWeight: '700', textAlign: isBlock ? 'center' : 'left', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                          {isBlock ? app.service_name : app.start_time.substring(0, 5)}
-                                        </div>
-                                        {!isBlock && <div style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{app.client_name}</div>}
-                                      </div>
+                                        key={j}
+                                        onClick={() => handleQuickAdd(h, weekDay)}
+                                        style={{ height: '60px', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', transition: '0.2s' }}
+                                        onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.05)'}
+                                        onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      ></div>
                                     );
                                   })}
                                 </div>
+
+                                {/* Штрихування неробочого часу */}
+                                {renderNonWorkingHours(dayShift)}
+
+                                {/* Рендер карток записів */}
+                                {dayApps.map(app => {
+                                  const { top, height } = getCardPosition(app.start_time, app.end_time);
+                                  const bgColor = calSettings.colorScheme === 'vivid' ? '#3b82f6' : (app.status === 'blocked' ? '#fef2f2' : '#e0e7ff');
+                                  const borderColor = calSettings.colorScheme === 'vivid' ? '#2563eb' : (app.status === 'blocked' ? '#f87171' : '#cbd5e1');
+                                  const textColor = calSettings.colorScheme === 'vivid' ? '#fff' : (app.status === 'blocked' ? '#b91c1c' : '#0f172a');
+
+                                  return (
+                                    <div
+                                      key={app.id}
+                                      onClick={(e) => { e.stopPropagation(); setSelectedAppointment(app); }}
+                                      style={{ position: 'absolute', top: `${top}px`, left: '4px', right: '4px', height: `${height}px`, backgroundColor: bgColor, borderRadius: '6px', padding: '0.4rem', fontSize: '0.75rem', overflow: 'hidden', borderLeft: `3px solid ${borderColor}`, color: textColor, boxShadow: '0 2px 4px rgba(0,0,0,0.05)', zIndex: 5, cursor: 'pointer' }}
+                                    >
+                                      <div style={{ fontWeight: '700' }}>{app.start_time.substring(0, 5)}</div>
+                                      <div style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{app.status === 'blocked' ? (app.client_name || 'Неробочий час') : app.client_name}</div>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            )
-                          })}
-                        </div>
-
-                        {/* Глобальна червона лінія на весь тиждень (всередині сітки) */}
-                        {isCurrentWeek && currentMinutesOffset >= 0 && currentMinutesOffset <= gridTotalHours * 60 && (
-                          <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, borderTop: '2px solid #ef4444', zIndex: 8, pointerEvents: 'none' }}>
-                            <div style={{ position: 'absolute', left: '-4px', top: '-4px', width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></div>
-                          </div>
-                        )}
-
+                            </div>
+                          )
+                        })}
                       </div>
+
+                      {/* Глобальна червона лінія на весь тиждень */}
+                      {isCurrentWeek && currentMinutesOffset >= 0 && currentMinutesOffset <= TOTAL_HOURS * 60 && (
+                        <div style={{ position: 'absolute', top: `calc(75px + ${currentMinutesOffset}px)`, left: 0, right: 0, borderTop: '2px solid #ef4444', zIndex: 8, pointerEvents: 'none' }}>
+                          <div style={{ position: 'absolute', left: '-4px', top: '-5px', width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></div>
+                        </div>
+                      )}
+
                     </div>
+
                   </div>
                 </div>
               )}
 
               {/* --- МІСЯЦЬ --- */}
               {calendarView === 'month' && (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: '700', color: '#64748b', fontSize: '0.85rem', padding: '0.75rem 0' }}>
-                     <div>Понеділок</div><div>Вівторок</div><div>Середа</div><div>Четвер</div><div>П'ятниця</div><div>Субота</div><div>Неділя</div>
-                  </div>
-                  <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: '1fr' }}>
-                      {blanks.map(blank => <div key={`blank-${blank}`} style={{ borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafafa' }}></div>)}
-                      {days.map(day => {
-                          const dObj = new Date(currentYear, currentMonth, day);
-                          const isMDayToday = dObj.toDateString() === now.toDateString();
-                          const hasOverdue = hasOverdueTasks(dObj);
+                <div style={{ flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: '#e2e8f0', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', flex: 1 }}>
+                    {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'].map(d => (
+                      <div key={d} style={{ background: '#f8fafc', padding: '0.75rem', fontWeight: '700', textAlign: 'center', color: '#475569', fontSize: '0.9rem' }}>{d}</div>
+                    ))}
+                    {blanks.map(blank => <div key={`mb-${blank}`} style={{ background: '#f8fafc' }}></div>)}
+                    {days.map(day => {
+                      const isRealToday = day === now.getDate() && currentMonth === now.getMonth() && currentYear === now.getFullYear();
+                      const isSelectedDay = day === currentDate.getDate();
 
-                          const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, dObj));
+                      const cellDate = new Date(currentYear, currentMonth, day);
+                      const dayApps = filteredAppointments.filter(app => app.booking_date === toLocalDateStr(cellDate));
 
-                          return (
-                              <div key={day} className="month-view-cell" onClick={() => { setCurrentDate(dObj); setCalendarView('day'); }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                                      <span style={{ fontWeight: '700', color: isMDayToday ? '#3b82f6' : '#0f172a', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isMDayToday ? '#eff6ff' : 'transparent' }}>
-                                        {day}
-                                      </span>
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                                        {hasOverdue && <div style={{ width: '8px', height: '8px', backgroundColor: '#ef4444', borderRadius: '50%' }} title="Є протерміновані завдання"></div>}
-                                        {dayApps.filter(a => a.status !== 'blocked').length > 0 && (
-                                          <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>
-                                            {dayApps.filter(a => a.status !== 'blocked').length} зап.
-                                          </span>
-                                        )}
-                                      </div>
-                                  </div>
+                      return (
+                        <div
+                          key={day}
+                          className="month-day-cell"
+                          onClick={() => {
+                            setCurrentDate(new Date(currentYear, currentMonth, day));
+                            setCalendarView('day');
+                          }}
+                          style={{ background: isRealToday && !isSelectedDay ? '#f8fafc' : '#fff', padding: '0.5rem', minHeight: '100px', position: 'relative', cursor: 'pointer', transition: '0.2s' }}
+                          onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                          onMouseOut={e => e.currentTarget.style.backgroundColor = isRealToday && !isSelectedDay ? '#f8fafc' : '#fff'}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', fontWeight: '600', fontSize: '0.9rem', background: isSelectedDay ? '#0f172a' : 'transparent', color: isSelectedDay ? '#fff' : (isRealToday ? '#3b82f6' : '#0f172a') }}>
+                            {day}
+                          </span>
 
-                                  {dayApps.length > 0 && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                      {dayApps.slice(0, 3).map(app => {
-                                        const isBlock = app.status === 'blocked' || app.color === 'blocked';
-                                        return (
-                                          <div key={app.id} className={isBlock ? 'non-working-bg' : ''} style={{
-                                            fontSize: '0.7rem',
-                                            backgroundColor: isBlock ? 'transparent' : (app.color || '#dcfce7'),
-                                            color: isBlock ? '#64748b' : '#064e3b',
-                                            padding: '0.15rem 0.4rem',
-                                            borderRadius: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                            border: isBlock ? '1px solid #cbd5e1' : 'none'
-                                          }}>
-                                            {app.start_time.substring(0, 5)} {isBlock ? 'Перерва' : app.client_name}
-                                          </div>
-                                        )
-                                      })}
-                                      {dayApps.length > 3 && <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', paddingLeft: '0.2rem' }}>+ ще {dayApps.length - 3}</div>}
-                                    </div>
-                                  )}
-                              </div>
-                          )
-                      })}
+                          {/* Лічильник */}
+                          {dayApps.length > 0 && (
+                            <div style={{ position: 'absolute', bottom: '10px', left: 0, right: 0, textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#3b82f6' }}>
+                              {dayApps.length} записів
+                            </div>
+                          )}
+
+                          <button
+                            className="month-add-btn"
+                            title="Створити запис на цей день"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuickAdd(10, cellDate);
+                            }}
+                          >
+                            <Icons.Plus />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
             </div>
 
-            <button className="fab-button" title="Новий запис" onClick={() => { setIsBlockMode(false); setIsApptModalOpen(true); }}>
+            {/* Загальний FAB (Новий запис) */}
+            <button
+              className="fab-button"
+              title="Новий запис"
+              onClick={() => {
+                setApptForm({...apptForm, date: toLocalDateStr(currentDate)});
+                setApptMode('client');
+                setIsApptModalOpen(true);
+              }}
+            >
               <Icons.Plus />
             </button>
 
@@ -1449,14 +1206,6 @@ export default function BusinessCabinet() {
                           placeholder="Знайти..."
                         />
                       </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.8rem' }}>
-                        {popularTags.map(tag => (
-                          <div key={tag} onClick={() => setServiceSearchQuery(tag)} className="tag-pill">
-                            {tag}
-                          </div>
-                        ))}
-                      </div>
                     </div>
 
                     <div style={{ position: 'relative' }} ref={sortMenuRef}>
@@ -1484,23 +1233,6 @@ export default function BusinessCabinet() {
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Розумна Порада (AI Insight) */}
-                  <div className="client-white-card" style={{ padding: '1.5rem', background: 'linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%)', border: '1px solid #e2e8f0' }}>
-                    <div onClick={() => setIsInsightOpen(!isInsightOpen)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#8b5cf6' }}>
-                        <Icons.Sparkles />
-                        <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Insight</h3>
-                      </div>
-                      <div style={{ color: '#94a3b8', transform: isInsightOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.3s' }}><Icons.ChevronDown /></div>
-                    </div>
-                    {isInsightOpen && (
-                      <div style={{ marginTop: '1rem', animation: 'slideDown 0.3s ease' }}>
-                        <div style={{ fontWeight: '700', color: '#0f172a', marginBottom: '0.3rem', fontSize: '1.05rem' }}>{getSmartAdvice().title}</div>
-                        <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: '1.5', margin: 0 }}>{getSmartAdvice().text}</p>
-                      </div>
-                    )}
                   </div>
 
                 </div>
@@ -1745,7 +1477,7 @@ export default function BusinessCabinet() {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО НОВОГО ЗАПИСУ (КАЛЕНДАР) --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО НОВОГО ЗАПИСУ З СУЧАСНИМ СВІТЧЕРОМ --- */}
       {isApptModalOpen && (
         <div className="modal-overlay" onClick={() => setIsApptModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease' }}>
@@ -1755,16 +1487,16 @@ export default function BusinessCabinet() {
               <button onClick={() => setIsApptModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
 
-            <div style={{ display: 'flex', gap: '1.5rem', borderBottom: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '0.3rem', marginBottom: '1.5rem' }}>
               <button
-                onClick={() => setIsBlockMode(false)}
-                style={{ paddingBottom: '0.5rem', background: 'none', border: 'none', borderBottom: !isBlockMode ? '2px solid #0f172a' : '2px solid transparent', fontWeight: !isBlockMode ? '700' : '500', color: !isBlockMode ? '#0f172a' : '#64748b', cursor: 'pointer', fontSize: '0.95rem' }}
+                onClick={() => setApptMode('client')}
+                style={{ flex: 1, padding: '0.5rem', background: apptMode === 'client' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', fontWeight: apptMode === 'client' ? '700' : '600', color: apptMode === 'client' ? '#0f172a' : '#64748b', cursor: 'pointer', transition: '0.2s', boxShadow: apptMode === 'client' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
               >
                 Новий клієнт
               </button>
               <button
-                onClick={() => setIsBlockMode(true)}
-                style={{ paddingBottom: '0.5rem', background: 'none', border: 'none', borderBottom: isBlockMode ? '2px solid #0f172a' : '2px solid transparent', fontWeight: isBlockMode ? '700' : '500', color: isBlockMode ? '#0f172a' : '#64748b', cursor: 'pointer', fontSize: '0.95rem' }}
+                onClick={() => setApptMode('block')}
+                style={{ flex: 1, padding: '0.5rem', background: apptMode === 'block' ? '#fff' : 'transparent', border: 'none', borderRadius: '6px', fontWeight: apptMode === 'block' ? '700' : '600', color: apptMode === 'block' ? '#0f172a' : '#64748b', cursor: 'pointer', transition: '0.2s', boxShadow: apptMode === 'block' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
               >
                 Блокувати час
               </button>
@@ -1783,61 +1515,138 @@ export default function BusinessCabinet() {
                 />
               </div>
 
-              {!isBlockMode ? (
+              {apptMode === 'client' ? (
                 <>
-                  <div>
-                    <label className="modal-label">Ім'я клієнта</label>
-                    <input type="text" value={apptForm.client_name} onChange={e => setApptForm({...apptForm, client_name: e.target.value})} className="modal-input" placeholder="Наприклад: Іван Іванов" />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="modal-label">Ім'я клієнта</label>
+                      <input type="text" value={apptForm.client_name} onChange={e => setApptForm({...apptForm, client_name: e.target.value})} className="modal-input" placeholder="Наприклад: Іван" />
+                    </div>
+                    <div>
+                      <label className="modal-label">Номер телефону</label>
+                      <input type="text" value={apptForm.client_phone} onChange={e => setApptForm({...apptForm, client_phone: e.target.value})} className="modal-input" placeholder="+380..." />
+                    </div>
                   </div>
-                  <div>
-                    <label className="modal-label">Номер телефону</label>
-                    <input type="text" value={apptForm.client_phone} onChange={e => setApptForm({...apptForm, client_phone: e.target.value})} className="modal-input" placeholder="+380..." />
-                  </div>
+
                   <div>
                     <label className="modal-label">Послуга</label>
-                    <div className="modal-select-wrapper">
-                      <select value={apptForm.service_id} onChange={e => { const selectedService = services.find(s => s.id === e.target.value); setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? selectedService.duration : apptForm.duration }); }}>
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        value={apptForm.service_id}
+                        onChange={e => {
+                          const selectedService = services.find(s => s.id === e.target.value);
+                          setApptForm({
+                            ...apptForm,
+                            service_id: e.target.value,
+                            duration: selectedService ? selectedService.duration : apptForm.duration
+                          });
+                        }}
+                        className="custom-select"
+                      >
                         <option value="" disabled>Оберіть послугу...</option>
-                        {services.map(s => ( <option key={s.id} value={s.id}>{s.name} ({s.price} ₴)</option> ))}
+                        {services.map(s => (
+                          <option key={s.id} value={s.id}>{s.name} ({s.price} ₴)</option>
+                        ))}
                       </select>
-                      <div className="modal-select-icon"><Icons.ChevronDown /></div>
                     </div>
                   </div>
                 </>
               ) : (
-                <>
-                  <div>
-                    <label className="modal-label">Причина блокування</label>
-                    <input type="text" value={apptForm.block_reason} onChange={e => setApptForm({...apptForm, block_reason: e.target.value})} className="modal-input" placeholder="Наприклад: Перерва на обід, раннє закриття..." />
-                  </div>
-                </>
+                <div>
+                  <label className="modal-label">Причина блокування (опціонально)</label>
+                  <input type="text" value={apptForm.block_reason} onChange={e => setApptForm({...apptForm, block_reason: e.target.value})} className="modal-input" placeholder="Наприклад: Перерва на обід" />
+                </div>
               )}
 
               <div>
                 <label className="modal-label">Майстер</label>
-                <div className="modal-select-wrapper">
-                  <select value={apptForm.staff_id} onChange={e => setApptForm({...apptForm, staff_id: e.target.value})}>
-                    <option value="">{isBlockMode ? 'Весь заклад (всі майстри)' : 'Будь-який майстер (Не вказано)'}</option>
-                    {team.map(m => ( <option key={m.id} value={m.id}>{m.name}</option> ))}
+                <div style={{ position: 'relative' }}>
+                  <select
+                    value={apptForm.staff_id}
+                    onChange={e => setApptForm({...apptForm, staff_id: e.target.value})}
+                    className="custom-select"
+                  >
+                    <option value="">Увесь заклад (всі майстри)</option>
+                    {team.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
                   </select>
-                  <div className="modal-select-icon"><Icons.ChevronDown /></div>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label className="modal-label">Час (Початок)</label>
-                  <input type="time" value={apptForm.time} onChange={e => setApptForm({...apptForm, time: e.target.value})} className="modal-input" />
+                  <input
+                    type="time"
+                    value={apptForm.time}
+                    onChange={e => setApptForm({...apptForm, time: e.target.value})}
+                    className="modal-input"
+                  />
                 </div>
                 <div>
                   <label className="modal-label">Тривалість (хв)</label>
-                  <input type="number" value={apptForm.duration} onChange={e => setApptForm({...apptForm, duration: Number(e.target.value)})} className="modal-input" />
+                  <input
+                    type="number"
+                    value={apptForm.duration}
+                    onChange={e => setApptForm({...apptForm, duration: Number(e.target.value)})}
+                    className="modal-input"
+                    readOnly={apptMode === 'client'}
+                    style={{ backgroundColor: apptMode === 'client' ? '#f8fafc' : '#fff', color: apptMode === 'client' ? '#94a3b8' : '#0f172a' }}
+                  />
                 </div>
               </div>
             </div>
 
             <button onClick={handleSaveAppointment} style={{ width: '100%', marginTop: '2.5rem', padding: '0.85rem', backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#1e293b'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#0f172a'}>
-              {isBlockMode ? 'Заблокувати' : 'Створити запис'}
+              {apptMode === 'client' ? 'Створити запис' : 'Заблокувати'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛЬНЕ ВІКНО ПЕРЕГЛЯДУ/СКАСУВАННЯ ІСНУЮЧОГО ЗАПИСУ --- */}
+      {selectedAppointment && (
+        <div className="modal-overlay" onClick={() => setSelectedAppointment(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Деталі запису</h2>
+              <button onClick={() => setSelectedAppointment(null)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+              <div>
+                <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Клієнт / Подія</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>{selectedAppointment.client_name || 'Не вказано'}</div>
+              </div>
+
+              {selectedAppointment.status !== 'blocked' && (
+                <>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Телефон</div>
+                    <div style={{ fontSize: '1rem', fontWeight: '600', color: '#0f172a' }}>{selectedAppointment.client_phone || 'Немає'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Послуга</div>
+                    <div style={{ fontSize: '1rem', fontWeight: '600', color: '#0f172a' }}>{services.find(s => s.id === selectedAppointment.service_id)?.name || 'Видалена послуга'}</div>
+                  </div>
+                </>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Дата та Час</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>{selectedAppointment.booking_date} <br/> {selectedAppointment.start_time.substring(0, 5)} - {selectedAppointment.end_time.substring(0, 5)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Майстер</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>{team.find(m => m.id === selectedAppointment.staff_id)?.name || 'Усі'}</div>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => handleCancelAppointment(selectedAppointment.id)} style={{ width: '100%', padding: '0.85rem', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#fee2e2'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#fef2f2'}>
+              Скасувати {selectedAppointment.status === 'blocked' ? 'блок' : 'запис'}
             </button>
           </div>
         </div>
@@ -1991,7 +1800,7 @@ export default function BusinessCabinet() {
                             setShifts(newShifts);
                           }}
                           className="modal-input"
-                          style={{ width: 'auto', padding: '0.4rem', border: '1px solid #cbd5e1' }}
+                          style={{ width: 'auto', padding: '0.4rem', border: '1px solid #cbd5e1', marginBottom: 0 }}
                         />
                         <span style={{ color: '#94a3b8', fontWeight: '600' }}>-</span>
                         <input
@@ -2003,7 +1812,7 @@ export default function BusinessCabinet() {
                             setShifts(newShifts);
                           }}
                           className="modal-input"
-                          style={{ width: 'auto', padding: '0.4rem', border: '1px solid #cbd5e1' }}
+                          style={{ width: 'auto', padding: '0.4rem', border: '1px solid #cbd5e1', marginBottom: 0 }}
                         />
                       </>
                     ) : (

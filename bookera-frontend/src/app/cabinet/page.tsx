@@ -134,7 +134,12 @@ export default function BusinessCabinet() {
 
   const [services, setServices] = useState<any[]>([]);
   const [team, setTeam] = useState<any[]>([]);
-  const [gallery, setGallery] = useState<string[]>([]);
+
+  // --- СТАНИ ДЛЯ ФОТОГРАФІЙ (Лого, Обкладинка, Інтер'єр) ---
+  const [logo, setLogo] = useState<string | null>(null);
+  const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
+  const [workplacePhotos, setWorkplacePhotos] = useState<string[]>([]);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({ name: '', category: '', address: '', description: '' });
   const [isSaving, setIsSaving] = useState(false);
@@ -169,6 +174,23 @@ export default function BusinessCabinet() {
 
   const [filterMaster, setFilterMaster] = useState('all');
   const [isBlockMode, setIsBlockMode] = useState(false);
+  // --- СТАНИ ДЛЯ КЛІЄНТСЬКОЇ БАЗИ ---
+  const [viewingClient, setViewingClient] = useState<any>(null);
+  const [clientSearch, setClientSearch] = useState('');
+
+  // Імітація бази клієнтів (поки немає підключення до БД)
+  const mockClients = [
+    { id: 1, name: 'Олександр Петренко', phone: '+38 050 123 4567', lastVisit: '6 Липня 2026', visits: 5, spent: 2500, notes: 'Любить каву без цукру. Стрижка кроп, перехід з нуля. Наступного разу запропонувати віск.' },
+    { id: 2, name: 'Марія Коваль', phone: '+38 067 987 6543', lastVisit: '28 Червня 2026', visits: 2, spent: 1200, notes: 'Алергія на лак сильної фіксації. Використовувати тільки пудру.' },
+    { id: 3, name: 'Іван Сидорчук', phone: '+38 063 456 7890', lastVisit: '5 Липня 2026', visits: 12, spent: 6800, notes: 'Завжди спізнюється на 5-10 хв. Попереджати заздалегідь.' },
+    { id: 4, name: 'Андрій Лисенко', phone: '+38 099 111 2233', lastVisit: '15 Травня 2026', visits: 1, spent: 500, notes: 'Був уперше, подарували знижку на наступний візит.' },
+    { id: 5, name: 'Віктор Мороз', phone: '+38 066 333 4455', lastVisit: '4 Липня 2026', visits: 8, spent: 4200, notes: 'Тільки до топ-майстра.' },
+  ];
+
+  const filteredClients = mockClients.filter(c =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+    c.phone.includes(clientSearch)
+  );
 
   const [showCalSettingsModal, setShowCalSettingsModal] = useState(false);
   const [showShiftsModal, setShowShiftsModal] = useState(false);
@@ -201,6 +223,25 @@ export default function BusinessCabinet() {
     if (savedShifts) {
       setShifts(JSON.parse(savedShifts));
     }
+    const savedSortType = localStorage.getItem('bookera_serviceSortType');
+    if (savedSortType) {
+      setServiceSortType(savedSortType);
+    }
+
+    // 👇 ДОДАЙ ЦІ ТРИ РЯДКИ 👇
+    const savedTab = localStorage.getItem('bookera_activeTab');
+    if (savedTab) {
+      setActiveTab(savedTab);
+    }
+
+    // Відновлення фото з localStorage для візуалу
+    const savedLogo = localStorage.getItem('bookera_logo');
+    if(savedLogo) setLogo(savedLogo);
+    const savedCover = localStorage.getItem('bookera_cover');
+    if(savedCover) setCoverPhoto(savedCover);
+    const savedWP = localStorage.getItem('bookera_workplace');
+    if(savedWP) setWorkplacePhotos(JSON.parse(savedWP));
+
   }, []);
 
   const handleSaveCalSettings = () => {
@@ -212,6 +253,36 @@ export default function BusinessCabinet() {
     localStorage.setItem('bookera_shifts', JSON.stringify(shifts));
     setShowShiftsModal(false);
   };
+
+  // --- ОБРОБНИКИ ДЛЯ ЗАВАНТАЖЕННЯ ФОТОГРАФІЙ ---
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'cover' | 'workplace') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      if (type === 'logo') {
+        setLogo(base64String);
+        localStorage.setItem('bookera_logo', base64String);
+      } else if (type === 'cover') {
+        setCoverPhoto(base64String);
+        localStorage.setItem('bookera_cover', base64String);
+      } else if (type === 'workplace') {
+        const newWP = [...workplacePhotos, base64String];
+        setWorkplacePhotos(newWP);
+        localStorage.setItem('bookera_workplace', JSON.stringify(newWP));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeWorkplacePhoto = (indexToRemove: number) => {
+    const newWP = workplacePhotos.filter((_, idx) => idx !== indexToRemove);
+    setWorkplacePhotos(newWP);
+    localStorage.setItem('bookera_workplace', JSON.stringify(newWP));
+  };
+
 
   // --- ФУНКЦІЇ РОБОТИ З ЗАПИСАМИ ---
   const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
@@ -316,7 +387,6 @@ export default function BusinessCabinet() {
             address: bizData.address || '',
             description: bizData.description || '',
           });
-          setGallery(bizData.photos || []);
 
           const { data: srvs } = await supabase.from('services').select('*').eq('business_id', bizData.id).order('created_at', { ascending: true });
           setServices(srvs || []);
@@ -519,12 +589,55 @@ export default function BusinessCabinet() {
     }
   };
 
+  // --- РОЗУМНИЙ INSIGHT ---
   const getSmartAdvice = () => {
-    if (services.length === 0) return { title: "З чого почати?", text: "Додайте 3-4 базові послуги (наприклад, чоловіча стрижка, моделювання бороди), щоб клієнти могли почати записуватись до вас." };
-    const avgPrice = services.reduce((acc, s) => acc + s.price, 0) / services.length;
-    if (services.length < 3) return { title: "Більше вибору", text: "У вас мало послуг. Додайте супутні сервіси (миття голови, камуфляж), щоб стимулювати додаткові продажі." };
-    if (avgPrice < 400) return { title: "Підвищення чеку", text: "Ваш середній чек виглядає низьким. Спробуйте додати преміум-комплекс (наприклад, 'VIP Стрижка + Борода') за вищою ціною." };
-    return { title: "Ідеальний баланс", text: "Ваш прайс-лист виглядає чудово! Слідкуйте за аналітикою, щоб виявити наймаржинальніші послуги." };
+    if (!business || !services) return { title: "Завантаження...", text: "Аналізуємо ваші дані..." };
+    if (services.length === 0) {
+      return {
+        title: "Час заробляти!",
+        text: "Прайс-лист порожній. Додайте перші 3-4 послуги, щоб клієнти могли бронювати час онлайн."
+      };
+    }
+
+    const prices = services.map(s => s.price);
+    const durations = services.map(s => s.duration);
+    const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const maxPrice = Math.max(...prices);
+
+    if (services.length < 3) {
+      return {
+        title: "Розширте асортимент",
+        text: "У вас мало послуг. Спробуйте додати супутні сервіси (наприклад, догляд або стайлінг), щоб збільшити середній чек."
+      };
+    }
+
+    const hasQuickAddons = durations.some(d => d <= 15);
+    if (!hasQuickAddons) {
+      return {
+        title: "Швидкі послуги",
+        text: "У вас немає послуг коротше 15 хвилин. Додайте 'Експрес-догляд' або швидкі додаткові послуги, які клієнт може докупити прямо в кріслі."
+      };
+    }
+
+    if (maxPrice < avgPrice * 1.5) {
+      return {
+        title: "Преміум-сегмент",
+        text: "Ваші ціни дуже схожі. Додайте 'VIP-комплекс' або авторську послугу за вищою ціною. Навіть якщо її братимуть рідше, це підніме цінність базових послуг в очах клієнта."
+      };
+    }
+
+    const hasCombo = services.some(s => s.name.toLowerCase().includes('комплекс') || s.name.toLowerCase().includes('комбо') || s.name.toLowerCase().includes('+'));
+    if (!hasCombo) {
+      return {
+        title: "Продавайте комплексами",
+        text: "Об'єднайте популярні послуги у 'Комплекс' (наприклад, 'Стрижка + Борода') зі знижкою 5-10%. Це найпростіший спосіб підвищити продажі."
+      }
+    }
+
+    return {
+      title: "Ідеальний баланс",
+      text: "Ваш прайс-лист виглядає чудово збалансованим! Рекомендуємо раз на місяць аналізувати статистику, щоб виявляти найбільш прибуткові послуги."
+    };
   };
 
   const getSortedServices = () => {
@@ -769,8 +882,8 @@ export default function BusinessCabinet() {
         .tag-pill { background: #f1f5f9; color: #475569; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
         .tag-pill:hover { background: #e2e8f0; color: #0f172a; }
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: #fff; width: 100%; max-width: 480px; border-radius: 20px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; overflow-y: auto; padding: 2rem 0; }
+        .modal-content { background: #fff; width: 100%; max-width: 480px; border-radius: 20px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); margin: auto; }
         .modal-input { width: 100%; padding: 0.8rem 1rem; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; outline: none; transition: 0.2s; background: #fff; color: #0f172a; font-family: inherit; }
         .modal-input:focus { border-color: #0f172a; box-shadow: 0 0 0 2px rgba(15,23,42,0.1); }
         .modal-label { display: block; font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 0.4rem; }
@@ -825,6 +938,31 @@ export default function BusinessCabinet() {
           position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
           pointer-events: none; color: #64748b;
         }
+
+        /* Стилі для фото-менеджера */
+        .photo-upload-card {
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: 0.2s;
+            background: #f8fafc;
+            position: relative;
+            overflow: hidden;
+        }
+        .photo-upload-card:hover {
+            border-color: #3b82f6;
+            background: #eff6ff;
+            color: #3b82f6;
+        }
+        .photo-remove-btn {
+            position: absolute; top: 0.5rem; right: 0.5rem; background: rgba(15, 23, 42, 0.7); color: #fff; border: none; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s;
+        }
+        .photo-upload-card:hover .photo-remove-btn { opacity: 1; }
       `}</style>
 
       {/* 🔴 САЙДБАР */}
@@ -858,7 +996,7 @@ export default function BusinessCabinet() {
           {navItems.map(item => {
             const isActive = activeTab === item.id;
             return (
-              <button key={item.id} onClick={() => setActiveTab(item.id)} title={isSidebarCollapsed ? item.label : ''} style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', width: '100%', padding: isSidebarCollapsed ? '0.75rem 0' : '0.75rem 1rem', backgroundColor: isActive ? 'rgba(255,255,255,0.04)' : 'transparent', border: 'none', borderRadius: '10px', cursor: 'pointer', position: 'relative', color: isActive ? '#ffffff' : '#8b8d98', transition: 'background-color 0.2s ease, color 0.2s ease, padding 0.3s', textAlign: 'left' }} onMouseOver={e => { if (!isActive) e.currentTarget.style.color = '#ffffff'; }} onMouseOut={e => { if (!isActive) e.currentTarget.style.color = '#8b8d98'; }}>
+              <button key={item.id} onClick={() => { setActiveTab(item.id); localStorage.setItem('bookera_activeTab', item.id); }} title={isSidebarCollapsed ? item.label : ''} style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', width: '100%', padding: isSidebarCollapsed ? '0.75rem 0' : '0.75rem 1rem', backgroundColor: isActive ? 'rgba(255,255,255,0.04)' : 'transparent', border: 'none', borderRadius: '10px', cursor: 'pointer', position: 'relative', color: isActive ? '#ffffff' : '#8b8d98', transition: 'background-color 0.2s ease, color 0.2s ease, padding 0.3s', textAlign: 'left' }} onMouseOver={e => { if (!isActive) e.currentTarget.style.color = '#ffffff'; }} onMouseOut={e => { if (!isActive) e.currentTarget.style.color = '#8b8d98'; }}>
                 <div style={{ flexShrink: 0, color: isActive ? '#ffffff' : '#8b8d98', display: 'flex', transition: '0.2s' }}>
                   <item.icon />
                 </div>
@@ -1096,6 +1234,7 @@ export default function BusinessCabinet() {
                       </div>
                     </div>
 
+                    {/* ДИНАМІЧНИЙ ЛІЧИЛЬНИК */}
                     <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#f1f5f9', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>
                       <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }}></div>
                       Записів: {currentViewAppointmentsCount}
@@ -1304,7 +1443,7 @@ export default function BusinessCabinet() {
                                   {now.getHours().toString().padStart(2, '0')}:{now.getMinutes().toString().padStart(2, '0')}
                                 </span>
                               </div>
-                              <div style={{ position: 'absolute', left: '55px', top: '-4px', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', border: '2px solid #ffffff' }}></div>
+                              <div style={{ position: 'absolute', right: '-5px', top: '-4px', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', border: '2px solid #ffffff' }}></div>
                             </div>
                           )}
                         </div>
@@ -1573,19 +1712,23 @@ export default function BusinessCabinet() {
                       </div>
 
                       {isSortDropdownOpen && (
-                        <div className="custom-select-dropdown">
-                          {sortOptions.map(option => (
-                            <div
-                              key={option.value}
-                              className={`custom-select-option ${serviceSortType === option.value ? 'selected' : ''}`}
-                              onClick={() => { setServiceSortType(option.value); setIsSortDropdownOpen(false); }}
-                            >
-                              <span style={{ color: '#94a3b8' }}>{option.icon}</span>
-                              {option.label}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+  <div className="custom-select-dropdown">
+    {sortOptions.map(option => (
+      <div
+        key={option.value}
+        className={`custom-select-option ${serviceSortType === option.value ? 'selected' : ''}`}
+        onClick={() => {
+          setServiceSortType(option.value);
+          localStorage.setItem('bookera_serviceSortType', option.value); // ДОДАНО ЗБЕРЕЖЕННЯ
+          setIsSortDropdownOpen(false);
+        }}
+      >
+        <span style={{ color: '#94a3b8' }}>{option.icon}</span>
+        {option.label}
+      </div>
+    ))}
+  </div>
+)}
                     </div>
                   </div>
 
@@ -1616,30 +1759,38 @@ export default function BusinessCabinet() {
         /* --- 2. РЕДАКТОР СТОРІНКИ (Онлайн-вітрина) --- */
         : activeTab === 'Storefront' ? (
           <div style={{ padding: '3rem', flex: 1, display: 'flex', justifyContent: 'center' }}>
-            <div style={{ width: '100%', maxWidth: '1100px' }}>
+            <div style={{ width: '100%', maxWidth: '1100px', display: 'flex', flexDirection: 'column', gap: '3rem' }}>
 
-              <div className="editable-block" style={{ marginBottom: '3rem' }}>
-                {gallery.length > 0 ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr', gap: '16px', height: '380px', borderRadius: '16px', overflow: 'hidden' }}>
-                    <img src={gallery[0]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Головне фото" />
-                    <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '16px' }}>
-                      {gallery[1] && <img src={gallery[1]} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '0 16px 0 0' }} alt="Фото 2" />}
-                      {gallery[2] && <img src={gallery[2]} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '0 0 16px 0' }} alt="Фото 3" />}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ height: '280px', backgroundColor: '#ffffff', border: '2px dashed #cbd5e1', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
-                    <div style={{ color: '#94a3b8', marginBottom: '1rem' }}><Icons.Image /></div>
-                    <div style={{ fontWeight: '700', fontSize: '1.2rem', color: '#0f172a' }}>Немає фотографій</div>
-                    <div style={{ fontSize: '0.95rem', marginTop: '0.5rem' }}>Додайте фото інтер'єру та ваших робіт</div>
+              {/* Менеджер фотографій (Візуальне відображення) */}
+              <div
+                className="editable-block"
+                style={{
+                  height: '380px',
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  background: coverPhoto ? `url(${coverPhoto}) center/cover` : '#f1f5f9',
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  padding: '2rem',
+                  border: coverPhoto ? 'none' : '2px dashed #cbd5e1'
+                }}
+              >
+                {!coverPhoto && (
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#94a3b8', textAlign: 'center' }}>
+                    <Icons.Image />
+                    <div style={{ fontWeight: '600', marginTop: '0.5rem' }}>Завантажте обкладинку</div>
                   </div>
                 )}
-                <div className="edit-overlay">
-                  <button className="edit-btn"><Icons.Camera /> Керувати галереєю</button>
+                <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: logo ? `url(${logo}) center/cover` : '#ffffff', border: '4px solid #ffffff', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                  {!logo && <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: '600' }}>Лого</div>}
+                </div>
+
+                <div className="edit-overlay" onClick={() => setIsPhotoModalOpen(true)}>
+                  <button className="edit-btn"><Icons.Camera /> Керувати фотографіями</button>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '3rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1, paddingRight: '2rem' }}>
                   <input
                     name="name" value={formData.name} onChange={handleInputChange}
@@ -1707,9 +1858,9 @@ export default function BusinessCabinet() {
                         <div style={{ fontSize: '0.95rem' }}>Додайте послуги, щоб клієнти могли їх забронювати</div>
                       </div>
                     )}
-                    <div className="edit-overlay" onClick={() => setActiveTab('Services')}>
-                      <button className="edit-btn"><Icons.Edit /> Керувати послугами</button>
-                    </div>
+                    <div className="edit-overlay" onClick={() => { setActiveTab('Services'); localStorage.setItem('bookera_activeTab', 'Services'); }}>
+  <button className="edit-btn"><Icons.Edit /> Керувати послугами</button>
+</div>
                   </div>
                 </div>
 
@@ -1722,8 +1873,8 @@ export default function BusinessCabinet() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', textAlign: 'center' }}>
                           {team.map((staff, idx) => (
                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', color: '#64748b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Icons.User />
+                              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', color: '#64748b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                {staff.avatar_url ? <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar"/> : <Icons.User />}
                               </div>
                               <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap' }}>{staff.name}</div>
                             </div>
@@ -1735,22 +1886,46 @@ export default function BusinessCabinet() {
                           <div style={{ fontSize: '0.95rem', fontWeight: '500' }}>Команда не додана</div>
                         </div>
                       )}
-                      <div className="edit-overlay" onClick={() => setActiveTab('Team')}>
-                        <button className="edit-btn"><Icons.Edit /> Керувати персоналом</button>
-                      </div>
+                      <div className="edit-overlay" onClick={() => { setActiveTab('Team'); localStorage.setItem('bookera_activeTab', 'Team'); }}>
+  <button className="edit-btn"><Icons.Edit /> Керувати персоналом</button>
+</div>
                     </div>
 
-                    <div className="client-white-card editable-block" style={{ padding: 0, overflow: 'hidden' }}>
-                      <div style={{ height: '180px', background: 'radial-gradient(ellipse at center, #f1f5f9 0%, #e2e8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                        <Icons.MapPinBig />
+                    {/* Інтерактивна карта (Google Maps Embed) */}
+                    <div className="client-white-card editable-block" style={{ padding: 0, overflow: 'hidden', height: '250px' }}>
+                      <iframe
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0, pointerEvents: 'none' }}
+                        loading="lazy"
+                        allowFullScreen
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={`https://maps.google.com/maps?q=${encodeURIComponent(formData.address || 'Київ')}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                      ></iframe>
+
+                      <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 10 }}>
+                        <button
+                          onClick={() => {
+                            if (formData.address) {
+                              window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(formData.address)}`, '_blank');
+                            } else {
+                              alert('Спочатку вкажіть адресу закладу');
+                            }
+                          }}
+                          style={{ padding: '0.5rem 0.8rem', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '700', color: '#3b82f6', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                        >
+                          Відкрити на Картах <Icons.Globe />
+                        </button>
                       </div>
-                      <div style={{ padding: '1.5rem' }}>
-                        <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#0f172a', marginBottom: '0.25rem' }}>{formData.name || 'Назва закладу'}</div>
-                        <div style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: '1.5' }}>{formData.address || 'Адреса не вказана'}</div>
-                        <button style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', marginTop: '1.25rem', fontSize: '0.95rem', border: '1px solid #e2e8f0', background: '#fff', fontWeight: '600', color: '#0f172a' }}>Показати маршрут</button>
-                      </div>
-                      <div className="edit-overlay">
-                        <button className="edit-btn"><Icons.Edit /> Змінити пін на карті</button>
+
+                      <div className="edit-overlay" onClick={() => {
+                        const addrInput = document.querySelector('input[name="address"]') as HTMLInputElement;
+                        if (addrInput) {
+                          addrInput.focus();
+                          addrInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }}>
+                        <button className="edit-btn"><Icons.Edit /> Змінити адресу</button>
                       </div>
                     </div>
                   </div>
@@ -1809,6 +1984,75 @@ export default function BusinessCabinet() {
           </div>
         )}
       </main>
+
+      {/* --- МОДАЛЬНЕ ВІКНО КЕРУВАННЯ ФОТОГРАФІЯМИ (ЯК В BOOKSY) --- */}
+      {isPhotoModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsPhotoModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '800px', padding: '0' }}>
+            <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                <button onClick={() => setIsPhotoModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b' }}><Icons.ChevronLeft /></button>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Зображення профілю</h2>
+              </div>
+            </div>
+
+            <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '70vh', overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
+
+              {/* Ліва колонка: Логотип та Обкладинка */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                {/* Блок Логотипу */}
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Логотип</h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem' }}>Завантажте логотип вашого бізнесу, щоб клієнти вас впізнавали.</p>
+
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <label className="photo-upload-card" style={{ width: '120px', height: '120px', borderRadius: '50%', background: logo ? `url(${logo}) center/cover` : '#f8fafc' }}>
+                      {!logo && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}><Icons.Camera /><span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Додати</span></div>}
+                      <input type="file" style={{ display: 'none' }} accept="image/*" onChange={(e) => handlePhotoUpload(e, 'logo')} />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Блок Обкладинки */}
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Обкладинка</h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem' }}>Перше, що бачать клієнти на вашій сторінці.</p>
+
+                  <label className="photo-upload-card" style={{ width: '100%', height: '160px', background: coverPhoto ? `url(${coverPhoto}) center/cover` : '#f8fafc' }}>
+                    {!coverPhoto && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}><Icons.Camera /><span style={{ fontSize: '0.85rem', fontWeight: '600' }}>Додати фото</span></div>}
+                    <input type="file" style={{ display: 'none' }} accept="image/*" onChange={(e) => handlePhotoUpload(e, 'cover')} />
+                  </label>
+                </div>
+              </div>
+
+              {/* Права колонка: Фотографії робочого місця/інтер'єру */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Фото інтер'єру</h3>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem' }}>Покажіть клієнтам свій простір ще до того, як вони до вас завітають.</p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+
+                  {/* Завантажені фото */}
+                  {workplacePhotos.map((photoBase64, idx) => (
+                    <div key={idx} className="photo-upload-card" style={{ width: '100%', aspectRatio: '1/1', background: `url(${photoBase64}) center/cover`, border: 'none' }}>
+                       <button className="photo-remove-btn" onClick={() => removeWorkplacePhoto(idx)}>✕</button>
+                    </div>
+                  ))}
+
+                  {/* Кнопка додавання нового фото */}
+                  <label className="photo-upload-card" style={{ width: '100%', aspectRatio: '1/1' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}><Icons.Camera /><span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Додати фото</span></div>
+                    <input type="file" style={{ display: 'none' }} accept="image/*" onChange={(e) => handlePhotoUpload(e, 'workplace')} />
+                  </label>
+
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ/РЕДАГУВАННЯ ПОСЛУГИ --- */}
       {isServiceModalOpen && (

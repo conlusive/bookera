@@ -87,9 +87,14 @@ export default function HomePage() {
   const loadBusinesses = async () => {
     try {
       const res = await fetch('http://127.0.0.1:8001/businesses/all');
-      if (res.ok) setBusinesses(await res.json());
+      if (!res.ok) {
+        throw new Error(`Помилка API: ${res.status}`);
+      }
+      const data = await res.json();
+      setBusinesses(data);
     } catch (error) {
-      console.error("Помилка завантаження закладів:", error);
+      console.warn("Не вдалося завантажити заклади, відображаємо порожній список:", error);
+      setBusinesses([]); // 🟢 Встановлюємо порожній масив, щоб не було помилок рендеру
     } finally {
       setLoading(false);
     }

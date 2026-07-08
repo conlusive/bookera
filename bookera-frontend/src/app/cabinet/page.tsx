@@ -43,7 +43,14 @@ const Icons = {
   TrendingUp: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>,
   TrendingDown: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"></polyline><polyline points="16 17 22 17 22 11"></polyline></svg>,
   SortAlpha: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 10v-5.5a2.5 2.5 0 0 0-5 0v5.5"></path><path d="M10 8h5"></path><path d="M15 20v-5.5a2.5 2.5 0 0 0-5 0v5.5"></path><path d="M10 18h5"></path><path d="M4 6h4"></path><path d="M4 18h4"></path><path d="M6 4v16"></path></svg>,
-  Filter: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+  Filter: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>,
+  Phone: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>,
+  Mail: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>,
+  Tag: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>,
+  Send: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>,
+  CheckCircle: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>,
+  AlertCircle: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>,
+  XCircle: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
 };
 
 // --- ГЛОБАЛЬНІ КОНСТАНТИ ТА ДАНІ ---
@@ -65,6 +72,13 @@ const sortOptions = [
   { value: 'priceAsc', label: 'Від найдешевших', icon: <Icons.TrendingUp /> },
   { value: 'priceDesc', label: 'Від найдорожчих', icon: <Icons.TrendingDown /> },
   { value: 'nameAsc', label: 'За алфавітом (А-Я)', icon: <Icons.SortAlpha /> },
+];
+
+const clientSortOptions = [
+  { value: 'recent', label: 'За останнім візитом', icon: <Icons.Clock /> },
+  { value: 'spent_desc', label: 'За доходом (Найбільше)', icon: <Icons.TrendingUp /> },
+  { value: 'visits_desc', label: 'За кількістю візитів', icon: <Icons.User /> },
+  { value: 'name_asc', label: 'За алфавітом (А-Я)', icon: <Icons.SortAlpha /> },
 ];
 
 const businessSettingsCards = [
@@ -111,6 +125,13 @@ export default function BusinessCabinet() {
   const router = useRouter();
   const supabase = createClient();
 
+  // --- РЕФЕРЕНСИ ДЛЯ DOM-ЕЛЕМЕНТІВ ---
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+  const clientSortMenuRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+
   // --- СТАНИ ДЛЯ ДАТ І ТАСОК ---
   const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean, date: string}[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -135,7 +156,7 @@ export default function BusinessCabinet() {
   const [services, setServices] = useState<any[]>([]);
   const [team, setTeam] = useState<any[]>([]);
 
-  // --- СТАНИ ДЛЯ ФОТОГРАФІЙ (Лого, Обкладинка, Інтер'єр) ---
+  // --- СТАНИ ДЛЯ ФОТОГРАФІЙ ---
   const [logo, setLogo] = useState<string | null>(null);
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [workplacePhotos, setWorkplacePhotos] = useState<string[]>([]);
@@ -174,23 +195,278 @@ export default function BusinessCabinet() {
 
   const [filterMaster, setFilterMaster] = useState('all');
   const [isBlockMode, setIsBlockMode] = useState(false);
+
+// --- СТАНИ ДЛЯ МЕНЕДЖЕРА ЗАДАЧ ---
+  const [showTaskInfoModal, setShowTaskInfoModal] = useState(false);
+  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [newTaskText, setNewTaskText] = useState(''); // 🟢 ПОВЕРНУЛИ ЦЕЙ РЯДОК
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [editingTaskText, setEditingTaskText] = useState('');
+  const [hasSeenTaskInfo, setHasSeenTaskInfo] = useState(false);
+
+
+  // --- ФУНКЦІЇ МЕНЕДЖЕРА ЗАДАЧ ---
+  const handleAddTaskClick = () => {
+    if (!hasSeenTaskInfo && tasks.length === 0) {
+      setShowTaskInfoModal(true);
+    } else {
+      setIsAddingTask(true);
+    }
+  };
+
+  const confirmTaskInfo = () => {
+    setHasSeenTaskInfo(true);
+    setShowTaskInfoModal(false);
+    setIsAddingTask(true);
+  };
+
+  const saveNewTask = async () => {
+    if (newTaskText.trim() === '') {
+      setIsAddingTask(false);
+      return;
+    }
+    const dateKey = formatDateKey(currentDate);
+    const newTasks = [...tasks, { id: Date.now(), text: newTaskText, completed: false, date: dateKey }];
+    setTasks(newTasks);
+    setNewTaskText('');
+    setIsAddingTask(false);
+    if (business) await supabase.from('businesses').update({ tasks: newTasks }).eq('id', business.id);
+  };
+
+  const toggleTask = async (id: number) => {
+    const newTasks = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+    setTasks(newTasks);
+    if (business) await supabase.from('businesses').update({ tasks: newTasks }).eq('id', business.id);
+  };
+
+  const startEditTask = (task: any) => {
+    setEditingTaskId(task.id);
+    setEditingTaskText(task.text);
+  };
+
+  const saveEditedTask = async (id: number) => {
+    if (!editingTaskText.trim()) {
+      setEditingTaskId(null);
+      return;
+    }
+    const newTasks = tasks.map(t => t.id === id ? { ...t, text: editingTaskText.trim() } : t);
+    setTasks(newTasks);
+    setEditingTaskId(null);
+    if (business) await supabase.from('businesses').update({ tasks: newTasks }).eq('id', business.id);
+  };
+
+  const deleteTask = async (id: number) => {
+    if (!confirm('Видалити цю справу?')) return;
+    const newTasks = tasks.filter(t => t.id !== id);
+    setTasks(newTasks);
+    if (business) await supabase.from('businesses').update({ tasks: newTasks }).eq('id', business.id);
+  };
+
   // --- СТАНИ ДЛЯ КЛІЄНТСЬКОЇ БАЗИ ---
+  const [clientsList, setClientsList] = useState<any[]>([]);
   const [viewingClient, setViewingClient] = useState<any>(null);
   const [clientSearch, setClientSearch] = useState('');
+  const [clientSortType, setClientSortType] = useState('recent');
+  const [isClientSortDropdownOpen, setIsClientSortDropdownOpen] = useState(false);
+  const [editingClientNotes, setEditingClientNotes] = useState('');
+  const [editingClientAllergies, setEditingClientAllergies] = useState(''); // 🟢 Додано стан для алергій
 
-  // Імітація бази клієнтів (поки немає підключення до БД)
-  const mockClients = [
-    { id: 1, name: 'Олександр Петренко', phone: '+38 050 123 4567', lastVisit: '6 Липня 2026', visits: 5, spent: 2500, notes: 'Любить каву без цукру. Стрижка кроп, перехід з нуля. Наступного разу запропонувати віск.' },
-    { id: 2, name: 'Марія Коваль', phone: '+38 067 987 6543', lastVisit: '28 Червня 2026', visits: 2, spent: 1200, notes: 'Алергія на лак сильної фіксації. Використовувати тільки пудру.' },
-    { id: 3, name: 'Іван Сидорчук', phone: '+38 063 456 7890', lastVisit: '5 Липня 2026', visits: 12, spent: 6800, notes: 'Завжди спізнюється на 5-10 хв. Попереджати заздалегідь.' },
-    { id: 4, name: 'Андрій Лисенко', phone: '+38 099 111 2233', lastVisit: '15 Травня 2026', visits: 1, spent: 500, notes: 'Був уперше, подарували знижку на наступний візит.' },
-    { id: 5, name: 'Віктор Мороз', phone: '+38 066 333 4455', lastVisit: '4 Липня 2026', visits: 8, spent: 4200, notes: 'Тільки до топ-майстра.' },
-  ];
+  // --- БАЗА КЛІЄНТІВ (SUPABASE) ---
+  const fetchClientsFromDB = async (bizId: string) => {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('business_id', bizId)
+      .order('last_visit', { ascending: false });
 
-  const filteredClients = mockClients.filter(c =>
-    c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    c.phone.includes(clientSearch)
-  );
+    if (!error && data) {
+      setClientsList(data);
+    }
+  };
+
+  const filteredAndSortedClients = clientsList
+    .filter(c => (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()) || (c.phone || '').includes(clientSearch))
+    .sort((a, b) => {
+      if (clientSortType === 'recent') return new Date(b.last_visit || 0).getTime() - new Date(a.last_visit || 0).getTime();
+      if (clientSortType === 'spent_desc') return (b.spent || 0) - (a.spent || 0);
+      if (clientSortType === 'visits_desc') return (b.visits || 0) - (a.visits || 0);
+      if (clientSortType === 'name_asc') return (a.name || '').localeCompare(b.name || '');
+      return 0;
+    });
+
+  // --- ПАГІНАЦІЯ КЛІЄНТІВ ---
+  const [clientCurrentPage, setClientCurrentPage] = useState(1);
+  const clientsPerPage = 10;
+
+  // --- ДОДАВАННЯ НОВОГО КЛІЄНТА (ОКРЕМО ВІД КАЛЕНДАРЯ) ---
+  const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
+  const [newClientForm, setNewClientForm] = useState({ name: '', phone: '', email: '' });
+  const [isSavingClient, setIsSavingClient] = useState(false);
+
+  const handleSaveNewClient = async () => {
+    if (!newClientForm.name.trim()) return alert("Введіть ім'я клієнта!");
+    setIsSavingClient(true);
+    try {
+      const safeDate = new Date().toISOString().split('T')[0];
+      const newClientData = {
+        business_id: business.id,
+        name: newClientForm.name.trim(),
+        phone: newClientForm.phone.trim() || '',
+        email: newClientForm.email.trim() || null,
+        last_visit: safeDate,
+        visits: 0,
+        spent: 0,
+        tags: ['Новий']
+      };
+
+      const { error: insertError } = await supabase.from('clients').insert([newClientData]);
+      if (insertError) {
+         delete newClientData.tags;
+         await supabase.from('clients').insert([newClientData]);
+      }
+
+      await fetchClientsFromDB(business.id);
+      setIsAddClientModalOpen(false);
+      setNewClientForm({ name: '', phone: '', email: '' });
+    } catch (err) {
+      console.error(err);
+      alert("Помилка при створенні клієнта");
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
+
+  useEffect(() => {
+    setClientCurrentPage(1);
+  }, [clientSearch, clientSortType]);
+
+  const handleDeleteClient = async (clientId: string) => {
+    if (!confirm("Ви впевнені, що хочете назавжди видалити цього клієнта з бази? Усі його дані будуть втрачені.")) return;
+    try {
+      const { error } = await supabase.from('clients').delete().eq('id', clientId);
+      if (error) throw error;
+      setClientsList(prev => prev.filter(c => c.id !== clientId));
+      setViewingClient(null);
+    } catch (err) {
+      console.error("Помилка видалення клієнта:", err);
+      alert("Не вдалося видалити клієнта.");
+    }
+  };
+
+  // --- ЛОГІКА ЗБЕРЕЖЕННЯ НОТАТОК, АЛЕРГІЙ ТА ТЕГІВ ---
+  const handleSaveClientNotes = async () => {
+    if (!viewingClient) return;
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({
+          notes: editingClientNotes,
+          allergies: editingClientAllergies // 🟢 Зберігаємо алергії
+        })
+        .eq('id', viewingClient.id);
+
+      if (error) throw error;
+
+      const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, notes: editingClientNotes, allergies: editingClientAllergies } : c);
+      setClientsList(updatedClients);
+      setViewingClient({ ...viewingClient, notes: editingClientNotes, allergies: editingClientAllergies });
+      alert("Зміни успішно збережено!");
+    } catch (err) {
+      console.error("Помилка збереження:", err);
+      alert("Не вдалося зберегти зміни.");
+    }
+  };
+
+  const openViewingClient = (client: any) => {
+    setViewingClient(client);
+    setEditingClientNotes(client.notes || '');
+    setEditingClientAllergies(client.allergies || ''); // 🟢 Підтягуємо алергії з БД
+  };
+
+  const handleBookAgain = (client: any) => {
+    setViewingClient(null);
+    setApptForm({
+      ...apptForm,
+      client_name: client.name,
+      client_phone: client.phone,
+      date: toLocalDateStr(currentDate)
+    });
+    setIsBlockMode(false);
+    setIsApptModalOpen(true);
+  };
+
+  // 🟢 ФУНКЦІЇ ДЛЯ ТЕГІВ
+  const handleAddTag = async () => {
+    if (!viewingClient) return;
+    const newTag = window.prompt("Введіть новий тег (наприклад: VIP, Знижка 10%, Капризний):");
+    if (!newTag || newTag.trim() === '') return;
+
+    const currentTags = viewingClient.tags || [];
+    if (currentTags.includes(newTag.trim())) return alert("Такий тег вже існує у цього клієнта!");
+
+    const updatedTags = [...currentTags, newTag.trim()];
+
+    try {
+      await supabase.from('clients').update({ tags: updatedTags }).eq('id', viewingClient.id);
+      const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, tags: updatedTags } : c);
+      setClientsList(updatedClients);
+      setViewingClient({ ...viewingClient, tags: updatedTags });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+     if (!confirm(`Видалити тег "${tagToRemove}"?`)) return;
+     const updatedTags = viewingClient.tags.filter((t: string) => t !== tagToRemove);
+     try {
+        await supabase.from('clients').update({ tags: updatedTags }).eq('id', viewingClient.id);
+        const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, tags: updatedTags } : c);
+        setClientsList(updatedClients);
+        setViewingClient({ ...viewingClient, tags: updatedTags });
+     } catch(err) {
+        console.error(err);
+     }
+  };
+
+  const getBadgeClass = (tag: string) => {
+    const t = tag.toLowerCase();
+    if (t.includes('vip') || t.includes('постійний')) return 'vip';
+    if (t.includes('новий') || t.includes('імпорт')) return 'new';
+    if (t.includes('проблемний') || t.includes('алергія')) return 'problem';
+    return 'default';
+  };
+
+  const handleSendMarketing = async () => {
+    if (!marketingForm.message) return alert("Введіть текст повідомлення!");
+    if (clientsList.length === 0) return alert("Ваша база клієнтів порожня.");
+
+    setIsSendingPromo(true);
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      let recipientCount = clientsList.length;
+      if (marketingForm.audience === 'vip') recipientCount = clientsList.filter(c => c.tags?.includes('VIP')).length;
+      if (marketingForm.audience === 'lost') recipientCount = Math.floor(clientsList.length / 3);
+
+      if (recipientCount === 0) {
+        alert("За обраним фільтром не знайдено жодного клієнта.");
+        setIsSendingPromo(false);
+        return;
+      }
+
+      alert(`Успішно! Кампанію "${marketingForm.type.toUpperCase()}" надіслано ${recipientCount} клієнтам.`);
+      setIsMarketingModalOpen(false);
+      setMarketingForm({ audience: 'all', message: '', type: 'sms' });
+
+    } catch (err) {
+      console.error(err);
+      alert("Виникла помилка при створенні розсилки.");
+    } finally {
+      setIsSendingPromo(false);
+    }
+  };
 
   const [showCalSettingsModal, setShowCalSettingsModal] = useState(false);
   const [showShiftsModal, setShowShiftsModal] = useState(false);
@@ -213,161 +489,9 @@ export default function BusinessCabinet() {
   ]);
 
   useEffect(() => {
-    const savedCalSettings = localStorage.getItem('bookera_calSettings');
-    if (savedCalSettings) {
-      const parsed = JSON.parse(savedCalSettings);
-      setCalSettings(parsed);
-      setCalendarView(parsed.defaultView || 'day');
-    }
-    const savedShifts = localStorage.getItem('bookera_shifts');
-    if (savedShifts) {
-      setShifts(JSON.parse(savedShifts));
-    }
-    const savedSortType = localStorage.getItem('bookera_serviceSortType');
-    if (savedSortType) {
-      setServiceSortType(savedSortType);
-    }
-
-    // 👇 ДОДАЙ ЦІ ТРИ РЯДКИ 👇
     const savedTab = localStorage.getItem('bookera_activeTab');
-    if (savedTab) {
-      setActiveTab(savedTab);
-    }
+    if (savedTab) setActiveTab(savedTab);
 
-    // Відновлення фото з localStorage для візуалу
-    const savedLogo = localStorage.getItem('bookera_logo');
-    if(savedLogo) setLogo(savedLogo);
-    const savedCover = localStorage.getItem('bookera_cover');
-    if(savedCover) setCoverPhoto(savedCover);
-    const savedWP = localStorage.getItem('bookera_workplace');
-    if(savedWP) setWorkplacePhotos(JSON.parse(savedWP));
-
-  }, []);
-
-  const handleSaveCalSettings = () => {
-    localStorage.setItem('bookera_calSettings', JSON.stringify(calSettings));
-    setShowCalSettingsModal(false);
-  };
-
-  const handleSaveShifts = () => {
-    localStorage.setItem('bookera_shifts', JSON.stringify(shifts));
-    setShowShiftsModal(false);
-  };
-
-  // --- ОБРОБНИКИ ДЛЯ ЗАВАНТАЖЕННЯ ФОТОГРАФІЙ ---
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'cover' | 'workplace') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      if (type === 'logo') {
-        setLogo(base64String);
-        localStorage.setItem('bookera_logo', base64String);
-      } else if (type === 'cover') {
-        setCoverPhoto(base64String);
-        localStorage.setItem('bookera_cover', base64String);
-      } else if (type === 'workplace') {
-        const newWP = [...workplacePhotos, base64String];
-        setWorkplacePhotos(newWP);
-        localStorage.setItem('bookera_workplace', JSON.stringify(newWP));
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeWorkplacePhoto = (indexToRemove: number) => {
-    const newWP = workplacePhotos.filter((_, idx) => idx !== indexToRemove);
-    setWorkplacePhotos(newWP);
-    localStorage.setItem('bookera_workplace', JSON.stringify(newWP));
-  };
-
-
-  // --- ФУНКЦІЇ РОБОТИ З ЗАПИСАМИ ---
-  const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
-    const displayHour = hour % 24;
-    setApptForm({
-      ...apptForm,
-      date: toLocalDateStr(targetDate),
-      time: `${displayHour.toString().padStart(2, '0')}:00`,
-      staff_id: filterMaster !== 'all' ? filterMaster : ''
-    });
-    setIsBlockMode(false);
-    setIsApptModalOpen(true);
-  };
-
-  const openBookingDetails = (app: any, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedBooking(app);
-    setIsBookingDetailsModalOpen(true);
-  };
-
-  const handleCancelBooking = async () => {
-    if (!selectedBooking) return;
-    const isBlock = selectedBooking.status === 'blocked' || selectedBooking.color === 'blocked';
-
-    if (!confirm(`Ви впевнені, що хочете скасувати ${isBlock ? 'цю перерву' : 'цей запис'}?`)) return;
-
-    try {
-      const { error } = await supabase.from('bookings').delete().eq('id', selectedBooking.id);
-      if (error) throw error;
-
-      setAppointments(prev => prev.filter(a => a.id !== selectedBooking.id));
-      setIsBookingDetailsModalOpen(false);
-      setSelectedBooking(null);
-    } catch (err) {
-      console.error(err);
-      alert("Помилка при скасуванні. Перевірте консоль.");
-    }
-  };
-
-  const filteredAppointments = appointments.filter(app => {
-    if (filterMaster !== 'all' && app.staff_id !== filterMaster) return false;
-    return true;
-  });
-
-  // --- МЕНЕДЖЕР ЗАДАЧ ---
-  const [showTaskInfoModal, setShowTaskInfoModal] = useState(false);
-  const [isAddingTask, setIsAddingTask] = useState(false);
-  const [newTaskText, setNewTaskText] = useState('');
-  const [hasSeenTaskInfo, setHasSeenTaskInfo] = useState(false);
-
-  const handleAddTaskClick = () => {
-    if (!hasSeenTaskInfo && tasks.length === 0) {
-      setShowTaskInfoModal(true);
-    } else {
-      setIsAddingTask(true);
-    }
-  };
-
-  const confirmTaskInfo = () => {
-    setHasSeenTaskInfo(true);
-    setShowTaskInfoModal(false);
-    setIsAddingTask(true);
-  };
-
-  const saveNewTask = () => {
-    if (newTaskText.trim() === '') {
-      setIsAddingTask(false);
-      return;
-    }
-    const dateKey = formatDateKey(currentDate);
-    setTasks([...tasks, { id: Date.now(), text: newTaskText, completed: false, date: dateKey }]);
-    setNewTaskText('');
-    setIsAddingTask(false);
-  };
-
-  const toggleTask = (id: number) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-  };
-
-  const profileMenuRef = useRef<HTMLDivElement>(null);
-  const sortMenuRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const viewMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
     async function loadCabinetData() {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -388,11 +512,27 @@ export default function BusinessCabinet() {
             description: bizData.description || '',
           });
 
-          const { data: srvs } = await supabase.from('services').select('*').eq('business_id', bizData.id).order('created_at', { ascending: true });
-          setServices(srvs || []);
+          if (bizData.cal_settings) setCalSettings(bizData.cal_settings);
+          if (bizData.shifts) setShifts(bizData.shifts);
+          if (bizData.tasks) setTasks(bizData.tasks);
+          if (bizData.logo) setLogo(bizData.logo);
+          if (bizData.cover_photo) setCoverPhoto(bizData.cover_photo);
+          if (bizData.workplace_photos) setWorkplacePhotos(bizData.workplace_photos);
+          if (bizData.service_sort_type) setServiceSortType(bizData.service_sort_type);
+
+          const { data: srvs } = await supabase
+            .from('services')
+            .select('*')
+            .eq('business_id', bizData.id)
+            .order('order_index', { ascending: true })
+            .order('created_at', { ascending: true });
+          const loadedServices = srvs || [];
+          setServices(loadedServices);
 
           const { data: masters } = await supabase.from('staff').select('*').eq('business_id', bizData.id);
           setTeam(masters || []);
+
+          await fetchClientsFromDB(bizData.id);
         }
       } catch (error) {
         console.error("Помилка завантаження даних:", error);
@@ -425,7 +565,34 @@ export default function BusinessCabinet() {
         .lte('booking_date', toLocalDateStr(endFetch));
 
       if (!error && data) {
-        setAppointments(data);
+        const currentTime = new Date();
+
+        const processedData = data.map(app => {
+          // Ігноруємо перерви та записи, які вже мають змінений статус (запізнення, не прийшов тощо)
+          if (app.status === 'blocked' || app.color === 'blocked') return app;
+          if (app.status !== 'confirmed' && app.status !== undefined && app.status !== null) return app;
+
+          if (app.booking_date && app.end_time && app.start_time) {
+            const [year, month, day] = app.booking_date.split('-').map(Number);
+            const [startH] = app.start_time.split(':').map(Number);
+            let [endH, endM] = app.end_time.split(':').map(Number);
+
+            // Якщо запис закінчується наступного дня (переходить через північ)
+            if (endH < startH) endH += 24;
+
+            const endDateTime = new Date(year, month - 1, day, endH, endM);
+
+            // Якщо поточний час більший за час закінчення запису
+            if (currentTime > endDateTime) {
+              // Фоново оновлюємо статус в базі даних, щоб не гальмувати інтерфейс
+              supabase.from('bookings').update({ status: 'completed' }).eq('id', app.id).then();
+              return { ...app, status: 'completed' };
+            }
+          }
+          return app;
+        });
+
+        setAppointments(processedData);
       }
     }
     fetchAppointments();
@@ -446,6 +613,9 @@ export default function BusinessCabinet() {
       if (sortMenuRef.current && !sortMenuRef.current.contains(event.target as Node)) {
         setIsSortDropdownOpen(false);
       }
+      if (clientSortMenuRef.current && !clientSortMenuRef.current.contains(event.target as Node)) {
+        setIsClientSortDropdownOpen(false);
+      }
       if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
         setIsViewDropdownOpen(false);
       }
@@ -458,6 +628,20 @@ export default function BusinessCabinet() {
     await supabase.auth.signOut();
     localStorage.clear();
     router.push('/business');
+  };
+
+  const handleSaveCalSettings = async () => {
+    if (business) {
+      await supabase.from('businesses').update({ cal_settings: calSettings }).eq('id', business.id);
+    }
+    setShowCalSettingsModal(false);
+  };
+
+  const handleSaveShifts = async () => {
+    if (business) {
+      await supabase.from('businesses').update({ shifts: shifts }).eq('id', business.id);
+    }
+    setShowShiftsModal(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -528,15 +712,15 @@ export default function BusinessCabinet() {
   };
 
   const handleSaveAppointment = async () => {
-    if (!isBlockMode && (!apptForm.client_name || !apptForm.client_phone || !apptForm.service_id || !apptForm.date)) {
-      return alert("Заповніть обов'язкові поля: Ім'я, Телефон, Послуга та Дата!");
+    if (!isBlockMode && (!apptForm.client_name || !apptForm.date)) {
+      return alert("Заповніть обов'язкові поля: Ім'я та Дата!");
     }
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return alert("Помилка: Ви не авторизовані (сесія відсутня).");
 
-      const selectedService = services.find(s => s.id === apptForm.service_id);
+      const selectedService = services.find(s => String(s.id) === String(apptForm.service_id));
       if (!isBlockMode && !selectedService) return alert("Оберіть існуючу послугу.");
 
       const [hours, minutes] = apptForm.time.split(':').map(Number);
@@ -578,6 +762,59 @@ export default function BusinessCabinet() {
         console.error("Деталі помилки Supabase:", error);
         alert(`Помилка бази даних: ${error.message}`);
       } else if (data) {
+
+        if (!isBlockMode) {
+          const servicePrice = selectedService ? selectedService.price : 0;
+          const phone = apptForm.client_phone?.trim() || '';
+          const name = apptForm.client_name?.trim() || 'Невідомий';
+          const safeDate = apptForm.date ? apptForm.date.substring(0, 10) : new Date().toISOString().split('T')[0];
+
+          try {
+            // 1. Шукаємо існуючого клієнта безпечно
+            let existingClient = null;
+
+            if (phone !== '') {
+              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('phone', phone).limit(1);
+              if (data && data.length > 0) existingClient = data[0];
+            }
+
+            if (!existingClient && name !== 'Невідомий') {
+              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('name', name).limit(1);
+              if (data && data.length > 0) existingClient = data[0];
+            }
+
+            if (existingClient) {
+              // 2. Клієнт існує -> Оновлюємо візити та дохід
+              await supabase.from('clients').update({
+                last_visit: safeDate,
+                visits: (existingClient.visits || 0) + 1,
+                spent: (existingClient.spent || 0) + servicePrice
+              }).eq('id', existingClient.id);
+            } else {
+              // 3. Клієнт новий -> Створюємо (спрощений об'єкт без масивів)
+              const { error: insertError } = await supabase.from('clients').insert([{
+                business_id: business.id,
+                name: name,
+                phone: phone,
+                last_visit: safeDate,
+                visits: 1,
+                spent: servicePrice
+              }]);
+
+              // 🔴 ЯКЩО БУДЕ ПОМИЛКА БАЗИ ДАНИХ - ВОНА ВИВЕДЕТЬСЯ НА ЕКРАН
+              if (insertError) {
+                 alert("Supabase не дозволив створити клієнта: " + insertError.message);
+                 console.error("Деталі помилки Supabase:", insertError);
+              }
+            }
+
+            // 4. Оновлюємо таблицю клієнтів у кабінеті
+            await fetchClientsFromDB(business.id);
+          } catch (syncErr) {
+            console.error("Помилка коду при синхронізації клієнта:", syncErr);
+          }
+        }
+
         setAppointments([...appointments, data]);
         setIsApptModalOpen(false);
         setApptForm({ client_name: '', client_phone: '', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
@@ -589,7 +826,38 @@ export default function BusinessCabinet() {
     }
   };
 
-  // --- РОЗУМНИЙ INSIGHT ---
+  const handleUpdateBookingStatus = async (newStatus: string) => {
+    if (!selectedBooking) return;
+
+    // 🟢 Якщо клікнули на той самий статус - скидаємо його на базовий ('confirmed')
+    const finalStatus = selectedBooking.status === newStatus ? 'confirmed' : newStatus;
+
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: finalStatus })
+        .eq('id', selectedBooking.id);
+
+      if (error) throw error;
+
+      setAppointments(prev => prev.map(app =>
+        app.id === selectedBooking.id ? { ...app, status: finalStatus } : app
+      ));
+      setSelectedBooking({ ...selectedBooking, status: finalStatus });
+
+    } catch (err) {
+      console.error(err);
+      alert("Помилка при оновленні статусу запису.");
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    if (status === 'completed') return <span title="Завершено" style={{color: '#16a34a', display: 'flex', alignItems: 'center'}}><Icons.CheckCircle /></span>;
+    if (status === 'late') return <span title="Запізнюється" style={{color: '#d97706', display: 'flex', alignItems: 'center'}}><Icons.AlertCircle /></span>;
+    if (status === 'no-show') return <span title="Не прийшов" style={{color: '#dc2626', display: 'flex', alignItems: 'center'}}><Icons.XCircle /></span>;
+    return null;
+  };
+
   const getSmartAdvice = () => {
     if (!business || !services) return { title: "Завантаження...", text: "Аналізуємо ваші дані..." };
     if (services.length === 0) {
@@ -669,12 +937,28 @@ export default function BusinessCabinet() {
     setDragOverIndex(index);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = async () => {
     if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
       const newServices = [...services];
       const [draggedItem] = newServices.splice(draggedIndex, 1);
       newServices.splice(dragOverIndex, 0, draggedItem);
+      // Миттєво оновлюємо інтерфейс
       setServices(newServices);
+
+      // Фоново зберігаємо новий порядок в Supabase
+      if (business) {
+        const updatePromises = newServices.map((srv, idx) =>
+          supabase.from('services').update({ order_index: idx }).eq('id', srv.id)
+        );
+
+        const results = await Promise.all(updatePromises);
+
+        // Перевіряємо, чи не було помилок при збереженні
+        const hasErrors = results.some(res => res.error);
+        if (hasErrors) {
+          console.error("Не вдалося зберегти порядок у базу даних. Перевір SQL-запит.");
+        }
+      }
     }
     setDraggedIndex(null);
     setDragOverIndex(null);
@@ -686,12 +970,84 @@ export default function BusinessCabinet() {
     return parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
   };
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'cover' | 'workplace') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      if (type === 'logo') {
+        setLogo(base64String);
+        if (business) await supabase.from('businesses').update({ logo: base64String }).eq('id', business.id);
+      } else if (type === 'cover') {
+        setCoverPhoto(base64String);
+        if (business) await supabase.from('businesses').update({ cover_photo: base64String }).eq('id', business.id);
+      } else if (type === 'workplace') {
+        const newWP = [...workplacePhotos, base64String];
+        setWorkplacePhotos(newWP);
+        if (business) await supabase.from('businesses').update({ workplace_photos: newWP }).eq('id', business.id);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeWorkplacePhoto = async (indexToRemove: number) => {
+    const newWP = workplacePhotos.filter((_, idx) => idx !== indexToRemove);
+    setWorkplacePhotos(newWP);
+    if (business) {
+      await supabase.from('businesses').update({ workplace_photos: newWP }).eq('id', business.id);
+    }
+  };
+
+  const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
+    const displayHour = hour % 24;
+    setApptForm({
+      client_name: '',
+      client_phone: '',
+      service_id: '',
+      block_reason: '',
+      duration: 60,
+      date: toLocalDateStr(targetDate),
+      time: `${displayHour.toString().padStart(2, '0')}:00`,
+      staff_id: filterMaster !== 'all' ? filterMaster : ''
+    });
+    setIsBlockMode(false);
+    setIsApptModalOpen(true);
+  };
+
+  const openBookingDetails = (app: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedBooking(app);
+    setIsBookingDetailsModalOpen(true);
+  };
+
+  const handleCancelBooking = async () => {
+    if (!selectedBooking) return;
+    const isBlock = selectedBooking.status === 'blocked' || selectedBooking.color === 'blocked';
+
+    if (!confirm(`Ви впевнені, що хочете скасувати ${isBlock ? 'цю перерву' : 'цей запис'}?`)) return;
+
+    try {
+      const { error } = await supabase.from('bookings').delete().eq('id', selectedBooking.id);
+      if (error) throw error;
+
+      setAppointments(prev => prev.filter(a => a.id !== selectedBooking.id));
+      setIsBookingDetailsModalOpen(false);
+      setSelectedBooking(null);
+    } catch (err) {
+      console.error(err);
+      alert("Помилка при скасуванні. Перевірте консоль.");
+    }
+  };
+
   const getPageHeader = () => {
     if (activeTab === 'Settings') return { title: 'Налаштування', desc: 'Керування параметрами та даними вашого бізнесу' };
     if (activeTab === 'Storefront') return { title: 'Редактор профілю закладу', desc: 'Редагуйте інформацію прямо тут. Зміни відобразяться на сторінці вашого закладу.' };
     if (activeTab === 'Stats') return { title: 'Статистика та звіти', desc: 'Детальна аналітика роботи вашого бізнесу.' };
     if (activeTab === 'Services') return { title: 'Прайс-лист послуг', desc: 'Керуйте своїми послугами, цінами та порядком відображення.' };
     if (activeTab === 'Calendar') return { title: 'Журнал записів', desc: 'Керуйте розкладом та переглядайте майбутні візити клієнтів.' };
+    if (activeTab === 'Clients') return { title: 'Клієнтська база', desc: 'Управління вашими клієнтами, нотатками та історією візитів.' };
     return { title: navItems.find(item => item.id === activeTab)?.label || '', desc: `Керування даними закладу "${business?.name}"` };
   };
 
@@ -769,21 +1125,74 @@ export default function BusinessCabinet() {
     )
   };
 
-  const getCardPosition = (timeStr: string, durationStr: any) => {
-    if(!timeStr) return { top: 0, height: 60 };
-    const [h, m] = timeStr.split(':').map(Number);
-    const adjustedH = h < gridStartHour ? h + 24 : h;
-    const topPx = (adjustedH - gridStartHour) * 60 + m;
+  const getCardPosition = (startTimeStr: string, endTimeStr: string, defaultDuration: number = 60) => {
+    if (!startTimeStr) return { top: 0, height: defaultDuration };
+    const [startH, startM] = startTimeStr.split(':').map(Number);
+    const adjustedStartH = startH < gridStartHour ? startH + 24 : startH;
+    const topPx = (adjustedStartH - gridStartHour) * 60 + startM;
 
-    let durationMins = 60;
-    if(durationStr && typeof durationStr === 'string' && durationStr.includes(':')) {
-       const [dh, dm] = durationStr.split(':').map(Number);
-       durationMins = dh * 60 + dm;
-    } else if (durationStr && typeof durationStr === 'number') {
-       durationMins = durationStr;
+    let durationMins = defaultDuration;
+    if (endTimeStr) {
+      const [endH, endM] = endTimeStr.split(':').map(Number);
+      let adjustedEndH = endH < gridStartHour ? endH + 24 : endH;
+      if (adjustedEndH < adjustedStartH || (adjustedEndH === adjustedStartH && endM < startM)) {
+         adjustedEndH += 24;
+      }
+      durationMins = (adjustedEndH - adjustedStartH) * 60 + (endM - startM);
     }
 
     return { top: topPx, height: durationMins };
+  };
+
+  // --- АЛГОРИТМ ДЛЯ ОБЧИСЛЕННЯ НАКЛАДАНЬ ЗАПИСІВ (OVERLAPS) ---
+  const processOverlaps = (appsForDay: any[]) => {
+    const processed = appsForDay.map(app => {
+      const serviceDuration = services.find(s => String(s.id) === String(app.service_id))?.duration || app.duration || 60;
+      const pos = getCardPosition(app.start_time, app.end_time, serviceDuration);
+      return { ...app, startMins: pos.top, endMins: pos.top + pos.height, topPx: pos.top, heightPx: pos.height };
+    }).sort((a, b) => a.startMins - b.startMins || (b.endMins - b.startMins) - (a.endMins - a.startMins));
+
+    const groups: any[][] = [];
+    let currentGroup: any[] = [];
+    let groupEnd = 0;
+
+    processed.forEach(app => {
+      if (app.startMins >= groupEnd) {
+        if (currentGroup.length > 0) groups.push(currentGroup);
+        currentGroup = [app];
+        groupEnd = app.endMins;
+      } else {
+        currentGroup.push(app);
+        groupEnd = Math.max(groupEnd, app.endMins);
+      }
+    });
+    if (currentGroup.length > 0) groups.push(currentGroup);
+
+    groups.forEach(group => {
+      const columns: any[][] = [];
+      group.forEach(app => {
+        let placed = false;
+        for (let i = 0; i < columns.length; i++) {
+          const col = columns[i];
+          const lastApp = col[col.length - 1];
+          if (lastApp.endMins <= app.startMins) {
+            col.push(app);
+            app.colIndex = i;
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          columns.push([app]);
+          app.colIndex = columns.length - 1;
+        }
+      });
+      group.forEach(app => {
+        app.colCount = columns.length;
+      });
+    });
+
+    return processed;
   };
 
   const getMasterColor = (staffId: string) => {
@@ -796,7 +1205,17 @@ export default function BusinessCabinet() {
   const selectedDateStr = formatDateKey(currentDate);
   const tasksForSelectedDay = tasks.filter(t => t.date === selectedDateStr);
 
-  // --- ДИНАМІЧНИЙ ЛІЧИЛЬНИК ЗАПИСІВ ---
+  // --- ФІЛЬТРАЦІЯ ЗАПИСІВ ---
+  const filteredAppointments = appointments.filter(app => {
+    // Якщо це перерва/блокування для всього закладу (без конкретного майстра) - показуємо її завжди
+    const isGlobalBlock = (app.status === 'blocked' || app.color === 'blocked') && !app.staff_id;
+    if (isGlobalBlock) return true;
+
+    // Інакше застосовуємо фільтр по майстру
+    if (filterMaster !== 'all' && String(app.staff_id) !== String(filterMaster)) return false;
+    return true;
+  });
+
   const currentViewAppointmentsCount = filteredAppointments.filter(app => {
     if (app.status === 'blocked' || app.color === 'blocked') return false;
 
@@ -900,6 +1319,11 @@ export default function BusinessCabinet() {
         .cal-app-card { position: absolute; left: 70px; right: 20px; border-radius: 8px; padding: 0.5rem 0.75rem; border-left: 4px solid; box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 0.85rem; overflow: hidden; cursor: pointer; transition: 0.2s; z-index: 5; }
         .cal-app-card:hover { transform: translateX(2px); box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
         
+        /* Стилі статусів візиту */
+        .cal-app-card.status-completed { opacity: 0.6; }
+        .cal-app-card.status-no-show { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; opacity: 0.8; text-decoration: line-through; border-left-color: #ef4444 !important; }
+        .cal-app-card.status-late { border-left-color: #f59e0b !important; border-left-width: 6px !important; }
+        
         /* 🟩 ІДЕАЛЬНА ШТРИХОВКА для неробочих годин */
         .non-working-bg {
           background-image: repeating-linear-gradient(
@@ -920,7 +1344,7 @@ export default function BusinessCabinet() {
 
         .fab-button { position: fixed; bottom: 2rem; right: 3rem; width: 60px; height: 60px; border-radius: 50%; background: #0f172a; color: #fff; border: none; box-shadow: 0 10px 20px rgba(15,23,42,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; z-index: 50; }
         .fab-button:hover { transform: translateY(-4px); box-shadow: 0 15px 25px rgba(15,23,42,0.4); }
-        .quick-add-hint { opacity: 0; transition: 0.2s; color: #94a3b8; font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem; height: 100%; padding-left: 1rem; }
+        .quick-add-hint { opacity: 0; transition: 0.2s; color: #94a3b8; font-size: 0.85rem; position: absolute; right: 20px; top: 50%; transform: translateY(-50%); pointer-events: none; display: flex; align-items: center; gap: 0.3rem; }
         .cal-grid-row:hover .quick-add-hint { opacity: 1; }
 
         /* Стилі для кастомних select у модалці */
@@ -963,6 +1387,18 @@ export default function BusinessCabinet() {
             position: absolute; top: 0.5rem; right: 0.5rem; background: rgba(15, 23, 42, 0.7); color: #fff; border: none; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s;
         }
         .photo-upload-card:hover .photo-remove-btn { opacity: 1; }
+        
+        /* --- СТИЛІ ДЛЯ ТАБЛИЦІ КЛІЄНТІВ --- */
+        .client-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .client-table th { text-align: left; padding: 1.2rem 1.5rem; color: #64748b; font-weight: 700; font-size: 0.85rem; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.05em; background: #fff; position: sticky; top: 0; z-index: 10; }
+        .client-table td { padding: 1.2rem 1.5rem; color: #0f172a; font-size: 0.95rem; border-bottom: 1px solid #f1f5f9; background: #fff; transition: 0.2s; }
+        .client-table tr { cursor: pointer; transition: 0.2s; }
+        .client-table tr:hover td { background: #f8fafc; }
+        .status-badge { padding: 0.3rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-block; white-space: nowrap; }
+        .status-badge.vip { background: #fef08a; color: #854d0e; }
+        .status-badge.new { background: #dcfce7; color: #166534; }
+        .status-badge.problem { background: #fee2e2; color: #991b1b; }
+        .status-badge.default { background: #f1f5f9; color: #475569; }
       `}</style>
 
       {/* 🔴 САЙДБАР */}
@@ -980,10 +1416,10 @@ export default function BusinessCabinet() {
           <div style={{ backgroundColor: '#1a1c23', border: '1px solid #272a30', borderRadius: '10px', padding: isSidebarCollapsed ? '0.6rem 0' : '0.6rem 0.8rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', cursor: 'pointer', transition: 'background-color 0.2s, padding 0.3s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#1f2128'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#1a1c23'}>
             <div style={{ display: 'flex', alignItems: 'center', gap: isSidebarCollapsed ? '0' : '0.75rem', justifyContent: 'center' }}>
               <div style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#272a30', color: '#a1a1aa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: '700' }}>
-                {business.name.charAt(0).toUpperCase()}
+                {business?.name?.charAt(0).toUpperCase() || 'B'}
               </div>
               <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '120px', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-                <span style={{ color: '#ffffff', fontSize: '0.95rem', fontWeight: '600' }}>{business.name}</span>
+                <span style={{ color: '#ffffff', fontSize: '0.95rem', fontWeight: '600' }}>{business?.name || 'Завантаження'}</span>
               </div>
             </div>
             <div style={{ color: '#a1a1aa', flexShrink: 0, opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
@@ -1032,9 +1468,9 @@ export default function BusinessCabinet() {
       {/* 🔴 ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflowY: 'auto', position: 'relative' }}>
 
-        {/* Хедер - показуємо тільки якщо це не Календар */}
-        {activeTab !== 'Calendar' && (
-          <header style={{ padding: '2rem 3rem 1.5rem 3rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff' }}>
+        {/* Хедер - показуємо тільки якщо це не Календар і не Клієнти */}
+        {activeTab !== 'Calendar' && activeTab !== 'Clients' && (
+          <header style={{ padding: '2rem 3rem 1.5rem 3rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', zIndex: 10 }}>
             <div>
               <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>{getPageHeader().title}</h1>
               <p style={{ color: '#64748b', fontSize: '0.95rem', margin: '0.25rem 0 0 0' }}>{getPageHeader().desc}</p>
@@ -1142,6 +1578,8 @@ export default function BusinessCabinet() {
 
                   {tasksForSelectedDay.map(task => {
                     const isOverdue = task.date < realTodayStr && !task.completed;
+                    const isEditing = editingTaskId === task.id;
+
                     return (
                       <div key={task.id} style={{
                         background: task.completed ? '#f8fafc' : (isOverdue ? '#fef2f2' : '#ffffff'),
@@ -1156,10 +1594,36 @@ export default function BusinessCabinet() {
                           onChange={() => toggleTask(task.id)}
                           style={{ marginTop: '0.2rem', accentColor: isOverdue ? '#ef4444' : '#0f172a', cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
                         />
-                        <div style={{ fontSize: '0.85rem', color: task.completed ? '#94a3b8' : (isOverdue ? '#b91c1c' : '#334155'), lineHeight: '1.4', textDecoration: task.completed ? 'line-through' : 'none', flex: 1, wordBreak: 'break-word' }}>
-                          {task.text}
-                          {isOverdue && <span style={{ display: 'block', fontSize: '0.7rem', color: '#ef4444', marginTop: '4px', fontWeight: 'bold' }}>(Протерміновано)</span>}
-                        </div>
+
+                        {isEditing ? (
+                           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 0 }}>
+                             <input
+                               autoFocus
+                               type="text"
+                               value={editingTaskText}
+                               onChange={e => setEditingTaskText(e.target.value)}
+                               onKeyDown={e => { if (e.key === 'Enter') saveEditedTask(task.id); if (e.key === 'Escape') setEditingTaskId(null); }}
+                               style={{ flex: 1, minWidth: 0, border: '1px solid #3b82f6', borderRadius: '4px', padding: '0.25rem 0.4rem', fontSize: '0.85rem', outline: 'none', color: '#0f172a' }}
+                             />
+                             <div style={{ display: 'flex', gap: '0.1rem', flexShrink: 0 }}>
+                               <button onClick={() => saveEditedTask(task.id)} className="action-icon-btn" style={{ padding: '0.2rem', color: '#10b981' }} title="Зберегти"><Icons.CheckCircle /></button>
+                               <button onClick={() => setEditingTaskId(null)} className="action-icon-btn" style={{ padding: '0.2rem', color: '#ef4444' }} title="Скасувати"><Icons.XCircle /></button>
+                             </div>
+                           </div>
+                        ) : (
+                           <>
+                             <div style={{ fontSize: '0.85rem', color: task.completed ? '#94a3b8' : (isOverdue ? '#b91c1c' : '#334155'), lineHeight: '1.4', textDecoration: task.completed ? 'line-through' : 'none', flex: 1, wordBreak: 'break-word' }}>
+                               {task.text}
+                               {isOverdue && <span style={{ display: 'block', fontSize: '0.7rem', color: '#ef4444', marginTop: '4px', fontWeight: 'bold' }}>(Протерміновано)</span>}
+                             </div>
+
+                             {/* Акуратні іконки керування */}
+                             <div style={{ display: 'flex', gap: '0.2rem', opacity: task.completed ? 0.3 : 1 }}>
+                               <button onClick={() => startEditTask(task)} className="action-icon-btn" style={{ padding: '0.3rem' }} title="Редагувати"><Icons.Edit /></button>
+                               <button onClick={() => deleteTask(task.id)} className="action-icon-btn delete" style={{ padding: '0.3rem' }} title="Видалити"><Icons.Trash /></button>
+                             </div>
+                           </>
+                        )}
                       </div>
                     );
                   })}
@@ -1321,12 +1785,10 @@ export default function BusinessCabinet() {
                       {renderNonWorkingHours(shifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
                     </div>
 
-                    {/* Рендер записів */}
-                    {filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, currentDate)).map(app => {
-                      const { top, height } = getCardPosition(app.start_time, app.duration);
-
-                      const serviceName = services.find(s => s.id === app.service_id)?.name || app.service_name;
-                      const staffName = team.find(m => m.id === app.staff_id)?.name || app.master_name || 'Без майстра';
+                    {/* Рендер записів з урахуванням накладань */}
+                    {processOverlaps(filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, currentDate))).map(app => {
+                      const serviceName = services.find(s => String(s.id) === String(app.service_id))?.name || app.service_name;
+                      const staffName = team.find(m => String(m.id) === String(app.staff_id))?.name || app.master_name || 'Без майстра';
 
                       const isBlock = app.status === 'blocked' || app.color === 'blocked';
 
@@ -1335,35 +1797,53 @@ export default function BusinessCabinet() {
                       const borderColor = calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.pastelBorder;
                       const textColor = calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText;
 
+                      const isSmall = app.heightPx <= 45;
+
+                      // 🟢 Розрахунок ширини і відступу зліва для накладань
+                      const widthPercent = 100 / app.colCount;
+                      const leftPercent = app.colIndex * widthPercent;
+
                       return (
                         <div
                           key={app.id}
-                          className={`cal-app-card ${isBlock ? 'non-working-bg' : ''}`}
+                          className={`cal-app-card ${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
                           style={{
-                            top: `${top}px`,
-                            height: `${height}px`,
-                            backgroundColor: isBlock ? 'transparent' : bgColor,
+                            top: `${app.topPx}px`,
+                            height: `${app.heightPx}px`,
+                            left: `calc(70px + (100% - 90px) * ${leftPercent / 100})`, // 🟢 Відштовхуємось від лівої шкали часу
+                            width: `calc((100% - 90px) * ${widthPercent / 100} - 4px)`, // 🟢 Залишаємо мінімальний проміжок
+                            backgroundColor: isBlock ? '#f1f5f9' : bgColor,
                             borderColor: isBlock ? '#cbd5e1' : borderColor,
                             color: isBlock ? '#64748b' : textColor,
                             borderLeft: isBlock ? '1px solid #cbd5e1' : `4px solid ${borderColor}`,
-                            zIndex: 5
+                            padding: isSmall ? '0.2rem 0.6rem' : '0.5rem 0.75rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: isSmall ? 'center' : 'flex-start',
+                            zIndex: 5 + app.colIndex
                           }}
                           onClick={(e) => openBookingDetails(app, e)}
                         >
                           {isBlock ? (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontWeight: '700', fontSize: '0.85rem' }}>
-                              {app.service_name}
+                              {app.service_name || 'Перерва'}
                             </div>
                           ) : (
                             <>
-                              <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}>
-                                <span>{serviceName}</span>
-                                <span>{app.start_time.substring(0, 5)}</span>
+                              <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {serviceName} {isSmall && <span style={{ fontWeight: '400', opacity: 0.8, marginLeft: '0.4rem' }}>{app.client_name}</span>}
+                                </span>
+                                <span style={{display: 'flex', alignItems: 'center', gap: '0.2rem', flexShrink: 0, fontSize: isSmall ? '0.75rem' : '0.85rem'}}>
+                                  {app.start_time.substring(0, 5)} {getStatusIcon(app.status)}
+                                </span>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', opacity: 0.9 }}>
-                                <span>{app.client_name}</span>
-                                <span>{staffName}</span>
-                              </div>
+                              {!isSmall && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', opacity: 0.9, fontSize: '0.8rem' }}>
+                                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '1rem' }}>{app.client_name}</span>
+                                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>{staffName}</span>
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
@@ -1481,9 +1961,8 @@ export default function BusinessCabinet() {
                                   {/* Штрихування неробочого часу */}
                                   {renderNonWorkingHours(dayShift)}
 
-                                  {/* Рендер карток записів */}
-                                  {dayApps.map(app => {
-                                    const { top, height } = getCardPosition(app.start_time, app.duration);
+                                  {/* Рендер карток записів з урахуванням накладань */}
+                                  {processOverlaps(dayApps).map(app => {
                                     const isBlock = app.status === 'blocked' || app.color === 'blocked';
 
                                     const mColors = getMasterColor(app.staff_id);
@@ -1491,25 +1970,45 @@ export default function BusinessCabinet() {
                                     const borderColor = calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.pastelBorder;
                                     const textColor = calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText;
 
+                                    const isSmall = app.heightPx <= 45;
+
+                                    // 🟢 Розрахунок ширини і відступу для тижня
+                                    const widthPercent = 100 / app.colCount;
+                                    const leftPercent = app.colIndex * widthPercent;
+
                                     return (
                                       <div
                                         key={app.id}
                                         onClick={(e) => openBookingDetails(app, e)}
-                                        className={isBlock ? 'non-working-bg' : ''}
+                                        className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
                                         style={{
-                                          position: 'absolute', top: `${top}px`, left: '4px', width: 'calc(100% - 8px)', height: `${height}px`,
-                                          backgroundColor: isBlock ? 'transparent' : bgColor,
-                                          borderRadius: '6px', padding: '0.4rem', fontSize: '0.75rem', overflow: 'hidden',
+                                          position: 'absolute',
+                                          top: `${app.topPx}px`,
+                                          left: `calc(${leftPercent}% + 2px)`,
+                                          width: `calc(${widthPercent}% - 4px)`,
+                                          height: `${app.heightPx}px`,
+                                          backgroundColor: isBlock ? '#f1f5f9' : bgColor,
+                                          borderRadius: '6px',
+                                          padding: isSmall ? '0.1rem 0.4rem' : '0.4rem',
+                                          fontSize: '0.75rem', overflow: 'hidden',
                                           borderLeft: isBlock ? 'none' : `3px solid ${borderColor}`,
                                           border: isBlock ? '1px solid #cbd5e1' : 'none',
                                           color: isBlock ? '#64748b' : textColor,
-                                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)', zIndex: 5, cursor: 'pointer'
+                                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)', zIndex: 5 + app.colIndex, cursor: 'pointer',
+                                          display: 'flex', flexDirection: 'column', justifyContent: isSmall ? 'center' : 'flex-start'
                                         }}
                                       >
-                                        <div style={{ fontWeight: '700', textAlign: isBlock ? 'center' : 'left', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                          {isBlock ? app.service_name : app.start_time.substring(0, 5)}
+                                        <div style={{ fontWeight: '700', textAlign: isBlock ? 'center' : 'left', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          {isBlock ? (app.service_name || 'Перерва') : (
+                                             <>
+                                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                 {app.start_time.substring(0, 5)} {isSmall && <span style={{ fontWeight: '400', opacity: 0.8, marginLeft: '0.3rem' }}>{app.client_name}</span>}
+                                               </span>
+                                               <span style={{ flexShrink: 0 }}>{getStatusIcon(app.status)}</span>
+                                             </>
+                                          )}
                                         </div>
-                                        {!isBlock && <div style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{app.client_name}</div>}
+                                        {!isBlock && !isSmall && <div style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', marginTop: '0.1rem' }}>{app.client_name}</div>}
                                       </div>
                                     );
                                   })}
@@ -1585,15 +2084,18 @@ export default function BusinessCabinet() {
                                         return (
                                           <div key={app.id}
                                             onClick={(e) => openBookingDetails(app, e)}
-                                            className={isBlock ? 'non-working-bg' : ''} style={{
+                                            className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`} style={{
                                             fontSize: '0.7rem',
                                             backgroundColor: isBlock ? 'transparent' : bgColor,
                                             color: isBlock ? '#64748b' : textColor,
                                             padding: '0.15rem 0.4rem',
                                             borderRadius: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                            border: isBlock ? '1px solid #cbd5e1' : `1px solid ${borderColor}`, cursor: 'pointer'
+                                            border: isBlock ? '1px solid #cbd5e1' : `1px solid ${borderColor}`, cursor: 'pointer',
+                                            opacity: app.status === 'completed' ? 0.7 : 1,
+                                            textDecoration: app.status === 'no-show' ? 'line-through' : 'none',
+                                            display: 'flex', alignItems: 'center', gap: '0.2rem'
                                           }}>
-                                            {app.start_time.substring(0, 5)} {isBlock ? 'Перерва' : app.client_name}
+                                            {app.start_time.substring(0, 5)} {isBlock ? 'Перерва' : <>{app.client_name} {getStatusIcon(app.status)}</>}
                                           </div>
                                         )
                                       })}
@@ -1609,7 +2111,11 @@ export default function BusinessCabinet() {
 
             </div>
 
-            <button className="fab-button" title="Новий запис" onClick={() => { setIsBlockMode(false); setIsApptModalOpen(true); }}>
+            <button className="fab-button" title="Новий запис" onClick={() => {
+              setApptForm({ client_name: '', client_phone: '', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
+              setIsBlockMode(false);
+              setIsApptModalOpen(true);
+            }}>
               <Icons.Plus />
             </button>
 
@@ -1712,23 +2218,27 @@ export default function BusinessCabinet() {
                       </div>
 
                       {isSortDropdownOpen && (
-  <div className="custom-select-dropdown">
-    {sortOptions.map(option => (
-      <div
-        key={option.value}
-        className={`custom-select-option ${serviceSortType === option.value ? 'selected' : ''}`}
-        onClick={() => {
-          setServiceSortType(option.value);
-          localStorage.setItem('bookera_serviceSortType', option.value); // ДОДАНО ЗБЕРЕЖЕННЯ
-          setIsSortDropdownOpen(false);
-        }}
-      >
-        <span style={{ color: '#94a3b8' }}>{option.icon}</span>
-        {option.label}
-      </div>
-    ))}
-  </div>
-)}
+                        <div className="custom-select-dropdown">
+                          {sortOptions.map(option => (
+                            <div
+                              key={option.value}
+                              className={`custom-select-option ${serviceSortType === option.value ? 'selected' : ''}`}
+                              onClick={async () => {
+                                setServiceSortType(option.value);
+                                setIsSortDropdownOpen(false);
+                                // Зберігаємо вибір у базу даних
+                                if (business) {
+                                  const { error } = await supabase.from('businesses').update({ service_sort_type: option.value }).eq('id', business.id);
+                                  if (error) console.error("Помилка збереження типу сортування:", error);
+                                }
+                              }}
+                            >
+                              <span style={{ color: '#94a3b8' }}>{option.icon}</span>
+                              {option.label}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1859,8 +2369,8 @@ export default function BusinessCabinet() {
                       </div>
                     )}
                     <div className="edit-overlay" onClick={() => { setActiveTab('Services'); localStorage.setItem('bookera_activeTab', 'Services'); }}>
-  <button className="edit-btn"><Icons.Edit /> Керувати послугами</button>
-</div>
+                      <button className="edit-btn"><Icons.Edit /> Керувати послугами</button>
+                    </div>
                   </div>
                 </div>
 
@@ -1887,8 +2397,8 @@ export default function BusinessCabinet() {
                         </div>
                       )}
                       <div className="edit-overlay" onClick={() => { setActiveTab('Team'); localStorage.setItem('bookera_activeTab', 'Team'); }}>
-  <button className="edit-btn"><Icons.Edit /> Керувати персоналом</button>
-</div>
+                        <button className="edit-btn"><Icons.Edit /> Керувати персоналом</button>
+                      </div>
                     </div>
 
                     {/* Інтерактивна карта (Google Maps Embed) */}
@@ -1955,7 +2465,176 @@ export default function BusinessCabinet() {
           </div>
         )
 
-        /* --- 4. НАЛАШТУВАННЯ БІЗНЕСУ --- */
+        /* --- 4. КЛІЄНТСЬКА БАЗА --- */
+        : activeTab === 'Clients' ? (
+          <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+
+            {/* 1. КОМПАКТНИЙ ХЕДЕР (Мінімалізм, замість великих карток) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem', position: 'relative', zIndex: 20 }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                 <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Клієнти</h2>
+                 <div style={{ padding: '0.3rem 0.8rem', background: '#f1f5f9', color: '#475569', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '700' }}>
+                    {clientsList.length} всього
+                 </div>
+
+                 {/* Акуратна статистика замість 3-х великих блоків */}
+                 <div style={{ display: 'flex', gap: '1rem', marginLeft: '0.5rem', borderLeft: '2px solid #e2e8f0', paddingLeft: '1.5rem' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}><span style={{ fontWeight: '700', color: '#10b981' }}>+{clientsList.filter(c => c.last_visit && new Date(c.last_visit).getMonth() === new Date().getMonth()).length}</span> нових</div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}><span style={{ fontWeight: '700', color: '#eab308' }}>{clientsList.filter(c => c.tags?.includes('VIP')).length}</span> VIP</div>
+                 </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ position: 'relative', width: '280px' }}>
+                  <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', display: 'flex' }}>
+                    <Icons.Search />
+                  </div>
+                  <input
+                    type="text"
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    className="search-input"
+                    style={{ borderRadius: '10px', border: '1px solid #e2e8f0', padding: '0.6rem 1rem 0.6rem 2.4rem', backgroundColor: '#fff', fontSize: '0.9rem' }}
+                    placeholder="Пошук клієнта..."
+                  />
+                </div>
+
+                <div style={{ position: 'relative' }} ref={clientSortMenuRef}>
+                  <div className="custom-select-trigger" onClick={() => setIsClientSortDropdownOpen(!isClientSortDropdownOpen)} style={{ minWidth: '180px', borderRadius: '10px', backgroundColor: '#fff', padding: '0.6rem 1rem', fontSize: '0.9rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {clientSortOptions.find(o => o.value === clientSortType)?.icon}
+                      {clientSortOptions.find(o => o.value === clientSortType)?.label}
+                    </div>
+                    <Icons.ChevronDown />
+                  </div>
+
+                  {isClientSortDropdownOpen && (
+                    <div className="custom-select-dropdown" style={{ minWidth: '180px' }}>
+                      {clientSortOptions.map(option => (
+                        <div
+                          key={option.value}
+                          className={`custom-select-option ${clientSortType === option.value ? 'selected' : ''}`}
+                          onClick={() => {
+                            setClientSortType(option.value);
+                            setIsClientSortDropdownOpen(false);
+                          }}
+                        >
+                          <span style={{ color: '#94a3b8' }}>{option.icon}</span>
+                          {option.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 🔴 ТЕПЕР ВІДКРИВАЄ НОВУ МОДАЛКУ, А НЕ КАЛЕНДАР */}
+                <button
+                  onClick={() => setIsAddClientModalOpen(true)}
+                  style={{ padding: '0.6rem 1.2rem', backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: '0.2s' }}
+                  onMouseOver={e => e.currentTarget.style.backgroundColor = '#1e293b'}
+                  onMouseOut={e => e.currentTarget.style.backgroundColor = '#0f172a'}
+                >
+                  <Icons.Plus /> Додати
+                </button>
+              </div>
+            </div>
+
+            {/* 3. ТАБЛИЦЯ ТА ПАГІНАЦІЯ */}
+
+            {/* 3. ТАБЛИЦЯ ТА ПАГІНАЦІЯ */}
+            <div className="client-white-card custom-scroll" style={{ padding: 0, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', borderRadius: '16px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+              {(() => {
+                const indexOfLastClient = clientCurrentPage * clientsPerPage;
+                const indexOfFirstClient = indexOfLastClient - clientsPerPage;
+                const currentClients = filteredAndSortedClients.slice(indexOfFirstClient, indexOfLastClient);
+                const totalClientPages = Math.ceil(filteredAndSortedClients.length / clientsPerPage);
+
+                return currentClients.length > 0 ? (
+                  <>
+                    <table className="client-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+                      <thead style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
+                        <tr>
+                          <th style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>Клієнт</th>
+                          <th style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>Контакти</th>
+                          <th style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>Останній візит</th>
+                          <th style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>Візити</th>
+                          <th style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>Загальний дохід</th>
+                          <th style={{ color: '#94a3b8', fontSize: '0.75rem', padding: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>Теги</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentClients.map(client => (
+                          <tr key={client.id} onClick={() => openViewingClient(client)} style={{ borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}>
+                            <td style={{ padding: '1rem 1.5rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: '#f8fafc', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.8rem', flexShrink: 0 }}>
+                                  {getUserInitials(client.name)}
+                                </div>
+                                <span style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.95rem' }}>{client.name}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '1rem 1.5rem', color: '#64748b', fontSize: '0.9rem' }}>
+                              {client.phone || 'Не вказано'}
+                            </td>
+                            <td style={{ padding: '1rem 1.5rem', color: '#64748b', fontSize: '0.9rem' }}>
+                              {client.last_visit ? new Date(client.last_visit).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                            </td>
+                            <td style={{ padding: '1rem 1.5rem' }}>
+                              <span style={{ background: '#f1f5f9', padding: '0.2rem 0.6rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#475569' }}>
+                                {client.visits || 0}
+                              </span>
+                            </td>
+                            <td style={{ padding: '1rem 1.5rem', fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>
+                              {client.spent || 0} ₴
+                            </td>
+                            <td style={{ padding: '1rem 1.5rem' }}>
+                              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                {client.tags?.map((tag: string, idx: number) => (
+                                  <span key={idx} className={`status-badge ${getBadgeClass(tag)}`} style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}>{tag}</span>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {totalClientPages > 1 && (
+                      <div style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', background: '#fff', marginTop: 'auto' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Показано {indexOfFirstClient + 1}-{Math.min(indexOfLastClient, filteredAndSortedClients.length)} з {filteredAndSortedClients.length}</span>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            onClick={() => setClientCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={clientCurrentPage === 1}
+                            style={{ padding: '0.4rem 0.8rem', background: clientCurrentPage === 1 ? '#f8fafc' : '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: clientCurrentPage === 1 ? '#cbd5e1' : '#0f172a', cursor: clientCurrentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
+                          >
+                            Попередня
+                          </button>
+                          <button
+                            onClick={() => setClientCurrentPage(prev => Math.min(prev + 1, totalClientPages))}
+                            disabled={clientCurrentPage === totalClientPages}
+                            style={{ padding: '0.4rem 0.8rem', background: clientCurrentPage === totalClientPages ? '#f8fafc' : '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: clientCurrentPage === totalClientPages ? '#cbd5e1' : '#0f172a', cursor: clientCurrentPage === totalClientPages ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
+                          >
+                            Наступна
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '5rem 2rem', color: '#64748b', margin: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', color: '#cbd5e1' }}><Icons.Clients /></div>
+                    <h3 style={{ fontSize: '1.2rem', color: '#0f172a', fontWeight: '700', marginBottom: '0.5rem' }}>Клієнтів не знайдено</h3>
+                    <p style={{ fontSize: '0.95rem' }}>Поки що у вашій базі немає клієнтів за цими параметрами.</p>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )
+
+        /* --- 5. НАЛАШТУВАННЯ БІЗНЕСУ --- */
         : activeTab === 'Settings' ? (
           <div style={{ padding: '3rem', flex: 1 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem', maxWidth: '1200px' }}>
@@ -1972,12 +2651,76 @@ export default function BusinessCabinet() {
           </div>
         )
 
-        /* --- 5. ІНШІ ВКЛАДКИ --- */
+        /* --- 6. МАРКЕТИНГ --- */
+        : activeTab === 'Marketing' ? (
+          <div style={{ padding: '3rem', flex: 1, maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+             <div className="client-white-card" style={{ padding: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.5rem', marginBottom: '2rem' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icons.Sparkles />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.4rem 0' }}>Створити розсилку</h2>
+                    <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0, lineHeight: '1.5' }}>Заохочуйте клієнтів повернутися. Надсилайте повідомлення про акції, знижки або нагадування про візит.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <div onClick={() => setMarketingForm({...marketingForm, type: 'sms'})} style={{ flex: 1, padding: '1rem', border: `2px solid ${marketingForm.type === 'sms' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: marketingForm.type === 'sms' ? '#f8fafc' : '#fff' }}>
+                      <input type="radio" checked={marketingForm.type === 'sms'} readOnly style={{ accentColor: '#0f172a' }} />
+                      <span style={{ fontWeight: '700', color: '#0f172a' }}>SMS-повідомлення</span>
+                    </div>
+                    <div onClick={() => setMarketingForm({...marketingForm, type: 'email'})} style={{ flex: 1, padding: '1rem', border: `2px solid ${marketingForm.type === 'email' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: marketingForm.type === 'email' ? '#f8fafc' : '#fff' }}>
+                      <input type="radio" checked={marketingForm.type === 'email'} readOnly style={{ accentColor: '#0f172a' }} />
+                      <span style={{ fontWeight: '700', color: '#0f172a' }}>Email-лист</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="modal-label">Аудиторія (Кому надсилаємо?)</label>
+                    <div className="modal-select-wrapper">
+                      <select value={marketingForm.audience} onChange={e => setMarketingForm({...marketingForm, audience: e.target.value})}>
+                        <option value="all">Усі клієнти ({clientsList.length})</option>
+                        <option value="vip">Тільки VIP-клієнти</option>
+                        <option value="lost">Не були понад 30 днів (Повернути)</option>
+                      </select>
+                      <div className="modal-select-icon"><Icons.ChevronDown /></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="modal-label">Текст повідомлення</label>
+                    <textarea
+                      value={marketingForm.message}
+                      onChange={e => setMarketingForm({...marketingForm, message: e.target.value})}
+                      className="inline-input"
+                      style={{ width: '100%', minHeight: '120px', padding: '1rem', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '0.95rem', background: '#fff', color: '#0f172a', resize: 'vertical' }}
+                      placeholder="Наприклад: Знижка -20% на стрижку до кінця тижня! Запишіться онлайн: [посилання]"
+                    />
+                    <div style={{ textAlign: 'right', fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.4rem' }}>
+                      {marketingForm.message.length} символів
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSendMarketing}
+                  disabled={isSendingPromo || clientsList.length === 0}
+                  style={{ width: '100%', marginTop: '2rem', padding: '1rem', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1.05rem', cursor: (isSendingPromo || clientsList.length === 0) ? 'not-allowed' : 'pointer', opacity: (isSendingPromo || clientsList.length === 0) ? 0.7 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  {isSendingPromo ? 'Надсилання...' : <><Icons.Send /> Розіслати {marketingForm.type.toUpperCase()}</>}
+                </button>
+             </div>
+          </div>
+        )
+
+        /* --- 7. ІНШІ ВКЛАДКИ (ЗАГЛУШКА) --- */
         : (
           <div style={{ padding: '3rem', flex: 1 }}>
             <div style={{ width: '100%', height: '400px', border: '2px dashed #e2e8f0', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
               <div style={{ color: '#cbd5e1', marginBottom: '1rem' }}>
-                {(() => { const Icon = navItems.find(item => item.id === activeTab)?.icon || Icons.Sales; return <Icon />; })()}
+                {(() => { const Icon = navItems.find(item => item.id === activeTab)?.icon || Icons.Storefront; return <Icon />; })()}
               </div>
               <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#334155', margin: '0 0 0.5rem 0' }}>Розділ у розробці</h3>
             </div>
@@ -1985,7 +2728,259 @@ export default function BusinessCabinet() {
         )}
       </main>
 
-      {/* --- МОДАЛЬНЕ ВІКНО КЕРУВАННЯ ФОТОГРАФІЯМИ (ЯК В BOOKSY) --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ КЛІЄНТА (ОКРЕМО ВІД КАЛЕНДАРЯ) --- */}
+      {isAddClientModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsAddClientModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '450px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Новий клієнт</h2>
+              <button onClick={() => setIsAddClientModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <label className="modal-label">Ім'я та прізвище *</label>
+                <input
+                  type="text"
+                  value={newClientForm.name}
+                  onChange={e => setNewClientForm({...newClientForm, name: e.target.value})}
+                  className="modal-input"
+                  placeholder="Наприклад: Олена Коваленко"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="modal-label">Номер телефону</label>
+                <input
+                  type="text"
+                  value={newClientForm.phone}
+                  onChange={e => setNewClientForm({...newClientForm, phone: e.target.value})}
+                  className="modal-input"
+                  placeholder="+380..."
+                />
+              </div>
+              <div>
+                <label className="modal-label">Email (необов'язково)</label>
+                <input
+                  type="email"
+                  value={newClientForm.email}
+                  onChange={e => setNewClientForm({...newClientForm, email: e.target.value})}
+                  className="modal-input"
+                  placeholder="client@email.com"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveNewClient}
+              disabled={isSavingClient}
+              style={{ width: '100%', marginTop: '2.5rem', padding: '0.85rem', backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', cursor: isSavingClient ? 'not-allowed' : 'pointer', opacity: isSavingClient ? 0.7 : 1, transition: '0.2s' }}
+              onMouseOver={e => {if (!isSavingClient) e.currentTarget.style.backgroundColor = '#1e293b'}}
+              onMouseOut={e => {if (!isSavingClient) e.currentTarget.style.backgroundColor = '#0f172a'}}
+            >
+              {isSavingClient ? 'Збереження...' : 'Додати клієнта в базу'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛЬНЕ ВІКНО КАРТКИ КЛІЄНТА (CRM) --- */}
+      {viewingClient && (
+        <div className="modal-overlay" onClick={() => setViewingClient(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '850px', padding: 0, overflow: 'hidden' }}>
+
+            {/* Header Картки Клієнта */}
+            <div style={{ padding: '2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', backgroundColor: '#f8fafc' }}>
+              <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '1.5rem', flexShrink: 0, boxShadow: '0 4px 10px rgba(15,23,42,0.15)' }}>
+                  {getUserInitials(viewingClient.name)}
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#0f172a', margin: '0 0 0.4rem 0' }}>{viewingClient.name}</h2>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {viewingClient.tags?.map((tag: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className={`status-badge ${getBadgeClass(tag)}`}
+                        onClick={() => handleRemoveTag(tag)}
+                        style={{ cursor: 'pointer' }}
+                        title="Натисніть, щоб видалити"
+                      >
+                        {tag} ✕
+                      </span>
+                    ))}
+                    <button onClick={handleAddTag} style={{ background: 'transparent', border: '1px dashed #cbd5e1', padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.borderColor='#94a3b8'} onMouseOut={e => e.currentTarget.style.borderColor='#cbd5e1'}>
+                      <Icons.Plus /> Тег
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Верхні кнопки керування */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                <button
+                  onClick={() => handleDeleteClient(viewingClient.id)}
+                  title="Видалити клієнта з бази"
+                  style={{ background: '#fff', border: '1px solid #fee2e2', width: '36px', height: '36px', borderRadius: '50%', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}
+                  onMouseOver={e => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                  onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'}
+                >
+                  <Icons.Trash />
+                </button>
+                <button
+                  onClick={() => setViewingClient(null)}
+                  style={{ background: '#ffffff', border: '1px solid #e2e8f0', width: '36px', height: '36px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}
+                  onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                  onMouseOut={e => e.currentTarget.style.backgroundColor = '#ffffff'}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Body Картки */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', padding: '2rem', gap: '2.5rem' }}>
+
+              {/* Ліва колонка: Контакти, Статистика та Дії */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                {/* Контакти */}
+                <div>
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', marginBottom: '1rem' }}>Контактна інформація</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: '#0f172a', fontSize: '0.95rem', fontWeight: '600' }}>
+                      <div style={{ color: '#64748b' }}><Icons.Phone /></div>
+                      {viewingClient.phone || 'Не вказано'}
+                    </div>
+                    {viewingClient.email && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: '#475569', fontSize: '0.95rem', fontWeight: '500' }}>
+                        <div style={{ color: '#64748b' }}><Icons.Mail /></div>
+                        {viewingClient.email}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ height: '1px', backgroundColor: '#e2e8f0' }}></div>
+
+                {/* 🟢 Оновлена, акуратніша статистика */}
+                <div>
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', marginBottom: '1rem' }}>Статистика</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div style={{ background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)', padding: '1.25rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Візити</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: '900', color: '#0f172a', lineHeight: '1' }}>{viewingClient.visits || 0}</div>
+                    </div>
+                    <div style={{ background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)', padding: '1.25rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Дохід (LTV)</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: '900', color: '#10b981', lineHeight: '1', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                        {viewingClient.spent || 0}
+                        <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: '700' }}>₴</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: '1px', backgroundColor: '#e2e8f0' }}></div>
+
+                {/* Швидкі дії */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                  <button onClick={() => handleBookAgain(viewingClient)} className="client-dark-btn" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '100%', padding: '0.9rem', borderRadius: '12px' }}>
+                    <Icons.Calendar /> Створити запис
+                  </button>
+                  {viewingClient.phone && (
+                    <button style={{ padding: '0.9rem', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '12px', color: '#0f172a', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#ffffff'}>
+                      <Icons.Phone /> Зателефонувати
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Права колонка: Нотатки та Історія */}
+              {/* 🟢 Зменшено gap, щоб підняти блок історії */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                {/* Нотатки та Алергії */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                      <h3 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', margin: 0 }}>Особисті нотатки</h3>
+                      {/* 🟢 Перевіряємо обидва поля на зміни */}
+                      {(editingClientNotes !== (viewingClient.notes || '') || editingClientAllergies !== (viewingClient.allergies || '')) && (
+                        <button onClick={handleSaveClientNotes} style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', transition: '0.2s', boxShadow: '0 2px 8px rgba(15,23,42,0.2)' }}>
+                          Зберегти зміни
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={editingClientNotes}
+                      onChange={e => setEditingClientNotes(e.target.value)}
+                      placeholder="Напишіть тут інформацію про клієнта: що любить, які особливості, побажання до послуг..."
+                      className="inline-input custom-scroll"
+                      style={{ width: '100%', height: '100px', padding: '1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '0.95rem', color: '#334155', resize: 'none', lineHeight: '1.5', outline: 'none' }} // 🟢 height: 100px + resize: none
+                    />
+                  </div>
+
+                  {/* 🟢 Блок Алергій / Важливих відміток */}
+                  <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', padding: '1.25rem', borderRadius: '12px', display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                    <div style={{ color: '#ef4444', marginTop: '2px' }}><Icons.AlertCircle /></div>
+                    <div style={{ flex: 1 }}>
+                       <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Алергії та протипоказання</div>
+                       <input
+                         type="text"
+                         value={editingClientAllergies}
+                         onChange={e => setEditingClientAllergies(e.target.value)}
+                         placeholder="Вкажіть особливості (наприклад: алергія на латекс)..."
+                         style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #fca5a5', padding: '0.4rem 0', fontSize: '0.9rem', color: '#7f1d1d', outline: 'none' }}
+                       />
+                       <div style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '0.4rem' }}>*Ця інформація буде підсвічуватись майстру перед візитом</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Коротка історія */}
+                <div>
+                  <h3 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', marginBottom: '0.8rem' }}>Історія записів</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    {viewingClient.last_visit ? (
+                      (() => {
+                        const vDate = new Date(viewingClient.last_visit);
+                        vDate.setHours(0,0,0,0);
+                        const tDate = new Date();
+                        tDate.setHours(0,0,0,0);
+
+                        // 🟢 ЗМІНА ТУТ: >= замість > (щоб сьогоднішні записи теж були "Очікується")
+                        const isFuture = vDate >= tDate;
+
+                        return (
+                          <div style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontWeight: '700', color: '#0f172a', marginBottom: '0.2rem' }}>
+                                {isFuture ? 'Запланований візит' : 'Останній візит'}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                {new Date(viewingClient.last_visit).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              </div>
+                            </div>
+                            <div style={{ fontWeight: '700', color: isFuture ? '#3b82f6' : '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {isFuture ? <><Icons.Clock /> Очікується</> : <><Icons.CheckCircle /> Успішно</>}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div style={{ fontSize: '0.9rem', color: '#64748b' }}>Ще немає історії візитів</div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛЬНЕ ВІКНО КЕРУВАННЯ ФОТОГРАФІЯМИ --- */}
       {isPhotoModalOpen && (
         <div className="modal-overlay" onClick={() => setIsPhotoModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '800px', padding: '0' }}>
@@ -1998,10 +2993,8 @@ export default function BusinessCabinet() {
 
             <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '70vh', overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
 
-              {/* Ліва колонка: Логотип та Обкладинка */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
-                {/* Блок Логотипу */}
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem' }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Логотип</h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem' }}>Завантажте логотип вашого бізнесу, щоб клієнти вас впізнавали.</p>
@@ -2014,7 +3007,6 @@ export default function BusinessCabinet() {
                   </div>
                 </div>
 
-                {/* Блок Обкладинки */}
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem' }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Обкладинка</h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem' }}>Перше, що бачать клієнти на вашій сторінці.</p>
@@ -2026,21 +3018,18 @@ export default function BusinessCabinet() {
                 </div>
               </div>
 
-              {/* Права колонка: Фотографії робочого місця/інтер'єру */}
               <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Фото інтер'єру</h3>
                 <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem' }}>Покажіть клієнтам свій простір ще до того, як вони до вас завітають.</p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
 
-                  {/* Завантажені фото */}
                   {workplacePhotos.map((photoBase64, idx) => (
                     <div key={idx} className="photo-upload-card" style={{ width: '100%', aspectRatio: '1/1', background: `url(${photoBase64}) center/cover`, border: 'none' }}>
                        <button className="photo-remove-btn" onClick={() => removeWorkplacePhoto(idx)}>✕</button>
                     </div>
                   ))}
 
-                  {/* Кнопка додавання нового фото */}
                   <label className="photo-upload-card" style={{ width: '100%', aspectRatio: '1/1' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}><Icons.Camera /><span style={{ fontSize: '0.75rem', fontWeight: '600' }}>Додати фото</span></div>
                     <input type="file" style={{ display: 'none' }} accept="image/*" onChange={(e) => handlePhotoUpload(e, 'workplace')} />
@@ -2192,7 +3181,7 @@ export default function BusinessCabinet() {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО ДЕТАЛЕЙ ЗАПИСУ (СКАСУВАННЯ) --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО ДЕТАЛЕЙ ЗАПИСУ (СТАТУС ТА СКАСУВАННЯ) --- */}
       {isBookingDetailsModalOpen && selectedBooking && (
         <div className="modal-overlay" onClick={() => setIsBookingDetailsModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '400px' }}>
@@ -2203,7 +3192,7 @@ export default function BusinessCabinet() {
               <button onClick={() => setIsBookingDetailsModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
               {selectedBooking.status !== 'blocked' && selectedBooking.color !== 'blocked' ? (
                 <>
                   <div>
@@ -2239,19 +3228,46 @@ export default function BusinessCabinet() {
                 </div>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', display: 'block', textTransform: 'uppercase' }}>Тривалість</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a' }}>{selectedBooking.duration} хв</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a' }}>
+                    {selectedBooking.start_time && selectedBooking.end_time ? (
+                      (() => {
+                        const [sH, sM] = selectedBooking.start_time.split(':').map(Number);
+                        const [eH, eM] = selectedBooking.end_time.split(':').map(Number);
+                        let duration = (eH * 60 + eM) - (sH * 60 + sM);
+                        return duration > 0 ? duration : duration + 24 * 60;
+                      })()
+                    ) : 60} хв
+                  </span>
                 </div>
               </div>
             </div>
 
+            {/* 🔴 КНОПКИ СТАТУСІВ (Тільки для записів клієнтів) - ТЕПЕР З SVG */}
+            {selectedBooking.status !== 'blocked' && selectedBooking.color !== 'blocked' && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '700', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Змінити статус візиту</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
+                  <button onClick={() => handleUpdateBookingStatus('completed')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #86efac', background: selectedBooking.status === 'completed' ? '#dcfce7' : '#fff', color: '#166534', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}>
+                    <Icons.CheckCircle /> Завершено
+                  </button>
+                  <button onClick={() => handleUpdateBookingStatus('late')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #fde047', background: selectedBooking.status === 'late' ? '#fef08a' : '#fff', color: '#854d0e', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}>
+                    <Icons.AlertCircle /> Запізнення
+                  </button>
+                  <button onClick={() => handleUpdateBookingStatus('no-show')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #fca5a5', background: selectedBooking.status === 'no-show' ? '#fee2e2' : '#fff', color: '#991b1b', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}>
+                    <Icons.XCircle /> Не прийшов
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={handleCancelBooking}
-              style={{ width: '100%', padding: '0.85rem', backgroundColor: '#fee2e2', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+              style={{ width: '100%', padding: '0.85rem', backgroundColor: '#fff', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
               onMouseOver={e => e.currentTarget.style.backgroundColor = '#fecaca'}
-              onMouseOut={e => e.currentTarget.style.backgroundColor = '#fee2e2'}
+              onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'}
             >
               <Icons.Trash />
-              {selectedBooking.status === 'blocked' || selectedBooking.color === 'blocked' ? 'Скасувати перерву' : 'Скасувати запис'}
+              {selectedBooking.status === 'blocked' || selectedBooking.color === 'blocked' ? 'Видалити перерву' : 'Скасувати запис повністю'}
             </button>
           </div>
         </div>
@@ -2376,7 +3392,7 @@ export default function BusinessCabinet() {
                 >
                   <Icons.ChevronLeft />
                 </button>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Робочі години</h2>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.4rem 0' }}>Робочі години</h2>
               </div>
               <button
                 onClick={handleSaveShifts}

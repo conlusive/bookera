@@ -73,7 +73,7 @@ export default function BusinessRegisterWizard() {
     else router.push('/business');
   };
 
-  // 🚀 РЕАЛЬНИЙ ЗАПИС У БАЗУ ДАНИХ
+// 🚀 РЕАЛЬНИЙ ЗАПИС У БАЗУ ДАНИХ
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
@@ -106,14 +106,30 @@ export default function BusinessRegisterWizard() {
         await supabase.from('services').insert(servicesToInsert);
       }
 
-      // 3. Зберігаємо команду
+      // 3. Зберігаємо команду (🟢 ТУТ ВИПРАВЛЕНО БАГ З ДАНИМИ)
       if (formData.staff.length > 0) {
-        const staffToInsert = formData.staff.map(s => ({
-          business_id: business.id,
-          name: s.name,
-          specialty: s.role,
-        }));
-        await supabase.from('staff').insert(staffToInsert);
+        const staffToInsert = formData.staff.map(s => {
+          const isOwner = s.name.includes('Власник');
+
+          return {
+            business_id: business.id,
+            name: isOwner ? (userName || 'Власник бізнесу') : s.name, // Ставимо твоє реальне ім'я
+            title: s.role, // Посада для клієнтів (Топ-майстер і тд)
+            email: s.email || null, // 🟢 Тепер email зберігається!
+            phone: s.phone ? `+380${s.phone}` : (isOwner ? `+380${formData.phone}` : null), // 🟢 Тепер телефон зберігається!
+            role: isOwner ? 'owner' : 'master', // Системна роль
+            status: isOwner ? 'active' : 'pending', // Власник активний одразу, інші очікують
+            provides_services: true,
+            commission_rate: 40,
+            fixed_salary: 0
+          };
+        });
+
+        const { error: staffError } = await supabase.from('staff').insert(staffToInsert);
+        if (staffError) {
+           console.error("Помилка додавання команди:", staffError);
+           throw new Error("Не вдалося зберегти команду. Перевірте структуру таблиці staff у Supabase.");
+        }
       }
 
       // 4. Оновлюємо статус користувача на Власника (vendor)

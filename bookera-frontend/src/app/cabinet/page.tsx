@@ -190,8 +190,10 @@ export default function BusinessCabinet() {
   const [isBookingDetailsModalOpen, setIsBookingDetailsModalOpen] = useState(false);
 
   const [apptForm, setApptForm] = useState({
-    client_name: '', client_phone: '', service_id: '', staff_id: '', date: toLocalDateStr(new Date()), time: '10:00', block_reason: '', duration: 60
+    client_name: '', client_phone: '+380', service_id: '', staff_id: '', date: toLocalDateStr(new Date()), time: '10:00', block_reason: '', duration: 60
   });
+
+  const [newClientForm, setNewClientForm] = useState({ name: '', phone: '+380', email: '' });
 
   const [filterMaster, setFilterMaster] = useState('all');
   const [isBlockMode, setIsBlockMode] = useState(false);
@@ -204,6 +206,45 @@ export default function BusinessCabinet() {
   const [editingTaskText, setEditingTaskText] = useState('');
   const [hasSeenTaskInfo, setHasSeenTaskInfo] = useState(false);
 
+// --- СТАНИ ДЛЯ МАРКЕТИНГУ ---
+  const [marketingView, setMarketingView] = useState<'overview' | 'campaigns' | 'promotions'>('overview');
+  const [campaignTab, setCampaignTab] = useState<'automated' | 'mass'>('automated');
+  const [automations, setAutomations] = useState({ welcome: false, crossSell: false, lost: false, reviews: false });
+  const [marketingForm, setMarketingForm] = useState({ type: 'sms', audience: 'all', message: '' });
+  const [isSendingPromo, setIsSendingPromo] = useState(false);
+  const [comingSoonModal, setComingSoonModal] = useState<{ isOpen: boolean, title: string, desc: string }>({ isOpen: false, title: '', desc: '' });
+
+// --- СТАНИ ДЛЯ СТАТИСТИКИ (Повноцінні) ---
+  const [statsTab, setStatsTab] = useState<'overview' | 'appointments' | 'revenue' | 'services' | 'staff' | 'clients'>('overview');
+  const [statsPeriodType, setStatsPeriodType] = useState<'day' | 'week' | 'month' | 'year'>('month');
+  const [statsDate, setStatsDate] = useState(new Date());
+  const [statsCurrentPage, setStatsCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null); // 🟢 Додано для сортування
+
+// --- СТАНИ ДЛЯ ПЕРСОНАЛУ ---
+  const [selectedStaffId, setSelectedStaffId] = useState<string | number | null>(null);
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [staffActiveTab, setStaffActiveTab] = useState<'services' | 'schedule'>('services');
+
+  // 🟢 ГЛОБАЛЬНИЙ СТЕЙТ ДЛЯ ПОСЛУГ МАЙСТРА (Щоб не було помилок Hooks)
+  const [localAssignedServices, setLocalAssignedServices] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (activeTab === 'Team' && selectedStaffId) {
+      const currentM = team.find(t => String(t.id) === String(selectedStaffId)) || team[0];
+      if (currentM) {
+         setLocalAssignedServices(currentM.assigned_services || services.map(s => String(s.id)));
+      }
+    }
+  }, [selectedStaffId, team, activeTab, services]);
+
+  // 🟢 ДОДАЙ ЦЕЙ РЯДОК ДЛЯ ПОШУКУ ПОСЛУГ У ПРОФІЛІ:
+  const [staffServiceSearchQuery, setStaffServiceSearchQuery] = useState('');
+
+  // 🟢 Нові стани для реального додавання персоналу
+  const [isInviteStaffModalOpen, setIsInviteStaffModalOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: '', name: '', role: 'master', phone: '' });
+  const [isInvitingStaff, setIsInvitingStaff] = useState(false);
 
   // --- ФУНКЦІЇ МЕНЕДЖЕРА ЗАДАЧ ---
   const handleAddTaskClick = () => {
@@ -300,19 +341,35 @@ export default function BusinessCabinet() {
 
   // --- ДОДАВАННЯ НОВОГО КЛІЄНТА (ОКРЕМО ВІД КАЛЕНДАРЯ) ---
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
-  const [newClientForm, setNewClientForm] = useState({ name: '', phone: '', email: '' });
   const [isSavingClient, setIsSavingClient] = useState(false);
 
-  const handleSaveNewClient = async () => {
+const handleSaveNewClient = async () => {
     if (!newClientForm.name.trim()) return alert("Введіть ім'я клієнта!");
+    let finalPhone = '';
+    if (newClientForm.phone && newClientForm.phone !== '+380') {
+      const phoneStripped = newClientForm.phone.replace(/\D/g, '');
+      if (phoneStripped.length !== 12) {
+        return alert("Некоректний номер телефону! Введіть 9 цифр після +380.");
+      }
+      finalPhone = '+' + phoneStripped;
+    }
+
+    // 🟢 ЖОРСТКА ВАЛІДАЦІЯ EMAIL
+    const emailTrimmed = newClientForm.email.trim();
+    if (emailTrimmed) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+        return alert("Некоректний формат Email (має бути щось типу: example@mail.com)!");
+      }
+    }
+
     setIsSavingClient(true);
     try {
       const safeDate = new Date().toISOString().split('T')[0];
       const newClientData = {
         business_id: business.id,
         name: newClientForm.name.trim(),
-        phone: newClientForm.phone.trim() || '',
-        email: newClientForm.email.trim() || null,
+        phone: finalPhone, // 👈 ОСЬ ТУТ ЗМІНА
+        email: emailTrimmed || null,
         last_visit: safeDate,
         visits: 0,
         spent: 0,
@@ -437,32 +494,95 @@ export default function BusinessCabinet() {
     return 'default';
   };
 
-  const handleSendMarketing = async () => {
-    if (!marketingForm.message) return alert("Введіть текст повідомлення!");
-    if (clientsList.length === 0) return alert("Ваша база клієнтів порожня.");
+const handleSendMarketing = async () => {
+    // 1. Валідація повідомлення
+    if (!marketingForm.message || marketingForm.message.trim() === '') {
+      return setComingSoonModal({
+        isOpen: true,
+        title: 'Порожнє повідомлення',
+        desc: 'Будь ласка, введіть текст повідомлення перед відправкою розсилки.'
+      });
+    }
+
+    // 2. Перевірка чи є база
+    if (clientsList.length === 0) {
+      return setComingSoonModal({
+        isOpen: true,
+        title: 'База порожня',
+        desc: 'У вашій базі ще немає клієнтів. Немає кому надсилати повідомлення.'
+      });
+    }
 
     setIsSendingPromo(true);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      let recipients = [];
+      const now = new Date();
 
-      let recipientCount = clientsList.length;
-      if (marketingForm.audience === 'vip') recipientCount = clientsList.filter(c => c.tags?.includes('VIP')).length;
-      if (marketingForm.audience === 'lost') recipientCount = Math.floor(clientsList.length / 3);
-
-      if (recipientCount === 0) {
-        alert("За обраним фільтром не знайдено жодного клієнта.");
-        setIsSendingPromo(false);
-        return;
+      // 3. Формуємо цільову аудиторію
+      if (marketingForm.audience === 'vip') {
+        recipients = clientsList.filter(c => {
+           if (!c.tags || !Array.isArray(c.tags)) return false;
+           return c.tags.some((tag: string) => tag.toLowerCase().includes('vip'));
+        });
+      } else if (marketingForm.audience === 'lost') {
+        recipients = clientsList.filter(c => {
+           if (!c.last_visit) return false;
+           const lastVisitDate = new Date(c.last_visit);
+           const diffTime = Math.abs(now.getTime() - lastVisitDate.getTime());
+           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+           return diffDays > 30;
+        });
+      } else {
+        recipients = clientsList;
       }
 
-      alert(`Успішно! Кампанію "${marketingForm.type.toUpperCase()}" надіслано ${recipientCount} клієнтам.`);
-      setIsMarketingModalOpen(false);
+      // 4. 🟢 СТРОГА ФІЛЬТРАЦІЯ (Відсіюємо тих, у кого "биті" дані)
+      const validRecipients = recipients.filter(c => {
+        if (marketingForm.type === 'sms') {
+          if (!c.phone) return false;
+          const phoneStripped = c.phone.replace(/[\s\-\(\)]/g, '');
+          return /^\+?\d{10,15}$/.test(phoneStripped); // Тільки правильні номери
+        } else if (marketingForm.type === 'email') {
+          if (!c.email) return false;
+          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email); // Тільки правильні email
+        }
+        return false;
+      });
+
+      // 5. Перевіряємо чи лишився хтось після фільтрації
+      if (validRecipients.length === 0) {
+        setIsSendingPromo(false);
+        const contactType = marketingForm.type === 'sms' ? 'валідним номером телефону (мін. 10 цифр)' : 'коректною Email-адресою';
+        return setComingSoonModal({
+          isOpen: true,
+          title: 'Немає отримувачів',
+          desc: `Серед обраної аудиторії (${recipients.length} клієнтів) не знайдено жодного з ${contactType}. Очистіть базу від невірних даних.`
+        });
+      }
+
+      // 6. Імітація запиту на сервер / відправки SMS
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // 7. Показуємо скільки відсіяли (якщо такі були)
+      const filteredOut = recipients.length - validRecipients.length;
+      const filterNotice = filteredOut > 0 ? ` (Відсіяно ${filteredOut} контактів з невірними або відсутніми даними).` : '.';
+
+      setComingSoonModal({
+        isOpen: true,
+        title: 'Розсилку успішно відправлено! 🚀',
+        desc: `Кампанію (${marketingForm.type.toUpperCase()}) було надіслано ${validRecipients.length} клієнтам${filterNotice}`
+      });
+
       setMarketingForm({ audience: 'all', message: '', type: 'sms' });
 
     } catch (err) {
-      console.error(err);
-      alert("Виникла помилка при створенні розсилки.");
+      console.error("Помилка відправки розсилки:", err);
+      setComingSoonModal({
+        isOpen: true,
+        title: 'Помилка відправки',
+        desc: 'Виникла системна помилка при створенні розсилки. Спробуйте ще раз.'
+      });
     } finally {
       setIsSendingPromo(false);
     }
@@ -700,20 +820,54 @@ export default function BusinessCabinet() {
     }
   };
 
-  const handleDeleteService = async (id: number) => {
-    if (!confirm("Ви впевнені, що хочете видалити цю послугу?")) return;
+// 🟢 ГЛОБАЛЬНА ЛОГІКА: Запрошення персоналу
+  const handleInviteStaff = async () => {
+    if (!inviteForm.email || !inviteForm.name) return alert("Заповніть обов'язкові поля: Ім'я та Email.");
+    setIsInvitingStaff(true);
     try {
-      const { error } = await supabase.from('services').delete().eq('id', id);
+      const newStaffData = {
+        business_id: business.id,
+        name: inviteForm.name.trim(),
+        email: inviteForm.email.trim(),
+        phone: inviteForm.phone.trim() || null,
+        role: inviteForm.role,
+        status: 'pending',
+        provides_services: inviteForm.role === 'master',
+        assigned_services: inviteForm.role === 'master' ? services.map(s => s.id) : [],
+        commission_rate: 40,
+        fixed_salary: 0,
+        payout_history: [],
+        auto_payout: false,
+        keeps_tips: true,
+        deduct_materials: false,
+        payout_period: 'weekly',
+        payout_day: 'monday'
+      };
+
+      const { data, error } = await supabase.from('staff').insert([newStaffData]).select().single();
       if (error) throw error;
-      setServices(prev => prev.filter(s => s.id !== id));
-    } catch (error) {
-      console.error(error);
+
+      setTeam([...team, data]);
+      setIsInviteStaffModalOpen(false);
+      setInviteForm({ email: '', name: '', role: 'master', phone: '' });
+      alert(`Запрошення успішно надіслано на ${inviteForm.email}!`);
+    } catch (err) {
+      console.error(err);
+      alert("Помилка при додаванні співробітника.");
+    } finally {
+      setIsInvitingStaff(false);
     }
   };
 
   const handleSaveAppointment = async () => {
-    if (!isBlockMode && (!apptForm.client_name || !apptForm.date)) {
-      return alert("Заповніть обов'язкові поля: Ім'я та Дата!");
+    // 🟢 ЖОРСТКА ВАЛІДАЦІЯ ТЕЛЕФОНУ В КАЛЕНДАРІ
+    let finalPhone = '';
+    if (!isBlockMode && apptForm.client_phone && apptForm.client_phone !== '+380') {
+      const phoneStripped = apptForm.client_phone.replace(/\D/g, ''); // Залишаємо лише цифри
+      if (phoneStripped.length !== 12) { // 380 + 9 цифр
+        return alert("Некоректний номер телефону! Введіть 9 цифр після +380.");
+      }
+      finalPhone = '+' + phoneStripped;
     }
 
     try {
@@ -748,7 +902,7 @@ export default function BusinessCabinet() {
           staff_id: apptForm.staff_id || null,
           service_id: apptForm.service_id,
           client_name: apptForm.client_name,
-          client_phone: apptForm.client_phone,
+          client_phone: finalPhone, // 👈 ОСЬ ТУТ ЗМІНА
           client_email: null,
           booking_date: apptForm.date,
           start_time: startTimeStr,
@@ -763,61 +917,48 @@ export default function BusinessCabinet() {
         alert(`Помилка бази даних: ${error.message}`);
       } else if (data) {
 
-        if (!isBlockMode) {
+  if (!isBlockMode) {
           const servicePrice = selectedService ? selectedService.price : 0;
-          const phone = apptForm.client_phone?.trim() || '';
           const name = apptForm.client_name?.trim() || 'Невідомий';
           const safeDate = apptForm.date ? apptForm.date.substring(0, 10) : new Date().toISOString().split('T')[0];
 
           try {
-            // 1. Шукаємо існуючого клієнта безпечно
             let existingClient = null;
-
-            if (phone !== '') {
-              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('phone', phone).limit(1);
+            if (finalPhone !== '') {
+              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('phone', finalPhone).limit(1);
               if (data && data.length > 0) existingClient = data[0];
             }
-
             if (!existingClient && name !== 'Невідомий') {
               const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('name', name).limit(1);
               if (data && data.length > 0) existingClient = data[0];
             }
 
             if (existingClient) {
-              // 2. Клієнт існує -> Оновлюємо візити та дохід
               await supabase.from('clients').update({
                 last_visit: safeDate,
                 visits: (existingClient.visits || 0) + 1,
-                spent: (existingClient.spent || 0) + servicePrice
+                spent: (existingClient.spent || 0) + servicePrice,
+                phone: existingClient.phone || finalPhone // 🟢 Оновлюємо номер, якщо він був порожній
               }).eq('id', existingClient.id);
             } else {
-              // 3. Клієнт новий -> Створюємо (спрощений об'єкт без масивів)
               const { error: insertError } = await supabase.from('clients').insert([{
                 business_id: business.id,
                 name: name,
-                phone: phone,
+                phone: finalPhone, // 🟢 Зберігаємо ВАЛІДНИЙ номер
                 last_visit: safeDate,
                 visits: 1,
                 spent: servicePrice
               }]);
-
-              // 🔴 ЯКЩО БУДЕ ПОМИЛКА БАЗИ ДАНИХ - ВОНА ВИВЕДЕТЬСЯ НА ЕКРАН
-              if (insertError) {
-                 alert("Supabase не дозволив створити клієнта: " + insertError.message);
-                 console.error("Деталі помилки Supabase:", insertError);
-              }
+              if (insertError) console.error("Деталі помилки Supabase:", insertError);
             }
-
-            // 4. Оновлюємо таблицю клієнтів у кабінеті
             await fetchClientsFromDB(business.id);
           } catch (syncErr) {
             console.error("Помилка коду при синхронізації клієнта:", syncErr);
           }
         }
-
         setAppointments([...appointments, data]);
         setIsApptModalOpen(false);
-        setApptForm({ client_name: '', client_phone: '', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
+        setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
         setIsBlockMode(false);
       }
     } catch (err: any) {
@@ -1000,11 +1141,25 @@ export default function BusinessCabinet() {
     }
   };
 
-  const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
+const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
+    // 🟢 ПЕРЕВІРКА НА ВИХІДНИЙ
+    let currentEffectiveShifts = shifts;
+    if (filterMaster !== 'all') {
+       const m = team.find(t => String(t.id) === String(filterMaster));
+       if (m && m.shifts && m.shifts.length === 7) currentEffectiveShifts = m.shifts;
+    }
+
+    const shiftIdx = targetDate.getDay() === 0 ? 6 : targetDate.getDay() - 1;
+    const shift = currentEffectiveShifts[shiftIdx];
+
+    if (!shift.active) {
+       if (!confirm("⚠️ Увага! У цей день у майстра (або закладу) ВИХІДНИЙ.\n\nБажаєте все одно створити запис поза графіком?")) return;
+    }
+
     const displayHour = hour % 24;
     setApptForm({
       client_name: '',
-      client_phone: '',
+      client_phone: '+380',
       service_id: '',
       block_reason: '',
       duration: 60,
@@ -1051,14 +1206,22 @@ export default function BusinessCabinet() {
     return { title: navItems.find(item => item.id === activeTab)?.label || '', desc: `Керування даними закладу "${business?.name}"` };
   };
 
-  // --- ДИНАМІЧНИЙ РОЗРАХУНОК СІТКИ ЧАСУ ---
-  const activeShifts = shifts.filter(s => s.active);
+// --- ДИНАМІЧНИЙ РОЗРАХУНОК СІТКИ ЧАСУ ---
+  const effectiveShifts = (() => {
+    if (filterMaster !== 'all') {
+      const m = team.find(t => String(t.id) === String(filterMaster));
+      if (m && m.shifts && m.shifts.length === 7) return m.shifts;
+    }
+    return shifts; // fallback на загальний графік закладу
+  })();
+
+  const activeShifts = effectiveShifts.filter((s: any) => s.active);
   let gridStartHour = 8;
   let gridEndHour = 20;
 
   if (activeShifts.length > 0) {
-    gridStartHour = Math.min(...activeShifts.map(s => parseInt(s.start.split(':')[0], 10)));
-    gridEndHour = Math.max(...activeShifts.map(s => {
+    gridStartHour = Math.min(...activeShifts.map((s: any) => parseInt(s.start.split(':')[0], 10)));
+    gridEndHour = Math.max(...activeShifts.map((s: any) => {
       let h = parseInt(s.end.split(':')[0], 10);
       return h <= gridStartHour ? h + 24 : h;
     }));
@@ -1468,8 +1631,8 @@ export default function BusinessCabinet() {
       {/* 🔴 ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflowY: 'auto', position: 'relative' }}>
 
-        {/* Хедер - показуємо тільки якщо це не Календар і не Клієнти */}
-        {activeTab !== 'Calendar' && activeTab !== 'Clients' && (
+{/* Хедер - показуємо тільки якщо це не Календар, Клієнти, Статистика, Команда або Маркетинг */}
+        {activeTab !== 'Calendar' && activeTab !== 'Clients' && activeTab !== 'Stats' && activeTab !== 'Team' && activeTab !== 'Marketing' && (
           <header style={{ padding: '2rem 3rem 1.5rem 3rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', zIndex: 10 }}>
             <div>
               <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>{getPageHeader().title}</h1>
@@ -1782,7 +1945,7 @@ export default function BusinessCabinet() {
 
                     {/* Штрихування неробочого часу для поточного дня (Тільки на сітці, не перекриває час) */}
                     <div style={{ position: 'absolute', top: 0, bottom: 0, left: '60px', right: 0, pointerEvents: 'none' }}>
-                      {renderNonWorkingHours(shifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
+                      {renderNonWorkingHours(effectiveShifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
                     </div>
 
                     {/* Рендер записів з урахуванням накладань */}
@@ -1874,171 +2037,101 @@ export default function BusinessCabinet() {
               )}
 
               {/* --- ТИЖДЕНЬ --- */}
-              {calendarView === 'week' && (
-                <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0, position: 'relative', zIndex: 1 }}>
-
-                  {/* Шапка днів тижня */}
-                  <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', paddingLeft: '60px', backgroundColor: '#fff', zIndex: 10, flexShrink: 0, position: 'relative' }}>
-                      {weekDays.map((wd, i) => {
-                          const isWdToday = wd.toDateString() === now.toDateString();
-                          const dayAppsCount = appointments.filter(app => {
-                              return checkSameDay(app.booking_date || app.start_time, wd) && app.status !== 'blocked';
-                          }).length;
-
-                          return (
-                            <div key={i} className="week-day-header" onClick={() => { setCurrentDate(wd); setCalendarView('day'); }}>
-                                <div style={{ fontSize: '0.75rem', color: isWdToday ? '#3b82f6' : '#64748b', textTransform: 'uppercase', fontWeight: '600', marginBottom: '2px' }}>{wd.toLocaleDateString('uk-UA', { weekday: 'short' })}</div>
-                                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: isWdToday ? '#3b82f6' : '#0f172a' }}>{wd.getDate()}</div>
-                                <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                                  {dayAppsCount > 0 ? `${dayAppsCount} записів` : 'немає записів'}
-                                </div>
-                            </div>
-                          )
-                      })}
-                  </div>
-
-                  {/* Сітка тижня (скролиться) */}
-                  <div className="custom-scroll" style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ minWidth: '900px', display: 'flex', position: 'relative', flexShrink: 0 }}>
-
-                      {/* Ліва шкала з годинами */}
-                      <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 15 }}>
-                        <div style={{ position: 'relative', height: `${gridTotalHours * 60}px` }}>
-                          {hoursArray.map((hour, j) => {
-                            const displayHour = hour % 24;
-                            const isNextDay = hour >= 24;
-                            return (
-                              <div key={j} style={{ height: '60px', padding: '0.5rem', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right', fontWeight: '500', borderBottom: '1px dashed #e2e8f0' }}>
-                                <div>{displayHour.toString().padStart(2, '0')}:00</div>
-                                {isNextDay && <div style={{ fontSize: '0.55rem', color: '#cbd5e1' }}>+1д</div>}
-                              </div>
-                            );
-                          })}
-
-                          {/* 🟥 Липка капсула поточного часу зліва для ТИЖНЯ */}
-                          {isCurrentWeek && currentMinutesOffset >= 0 && currentMinutesOffset <= gridTotalHours * 60 && (
-                            <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, zIndex: 20, pointerEvents: 'none' }}>
-                              <div style={{ position: 'absolute', left: 0, width: '60px', top: '-8px', textAlign: 'right', paddingRight: '8px' }}>
-                                <span style={{ color: '#ef4444', fontSize: '0.7rem', fontWeight: '700', backgroundColor: '#ffffff', padding: '0 4px' }}>
-                                  {now.getHours().toString().padStart(2, '0')}:{now.getMinutes().toString().padStart(2, '0')}
-                                </span>
-                              </div>
-                              <div style={{ position: 'absolute', right: '-5px', top: '-4px', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', border: '2px solid #ffffff' }}></div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Сітка колонок днів */}
-                      <div style={{ flex: 1, position: 'relative' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', height: '100%' }}>
-                          {weekDays.map((weekDay, i) => {
-                            const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, weekDay));
-                            const dayShift = shifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
-                            const isCurrentDay = weekDay.toDateString() === now.toDateString();
-
-                            return (
-                              <div key={i} style={{ borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
-                                {/* Сітка одного дня */}
-                                <div style={{ position: 'relative', height: `${gridTotalHours * 60}px`, background: isCurrentDay ? '#ffffff' : 'transparent' }}>
-
-                                  {/* Клікабельні блоки */}
-                                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column' }}>
-                                    {hoursArray.map((hour, j) => {
-                                      const displayHour = hour % 24;
-                                      return (
-                                        <div
-                                          key={j}
-                                          onClick={() => handleQuickAdd(displayHour, weekDay)}
-                                          style={{ height: '60px', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', transition: '0.2s' }}
-                                          onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.05)'}
-                                          onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                        ></div>
-                                      );
-                                    })}
+{/* --- ТИЖДЕНЬ --- */}
+                        {calendarView === 'week' && (
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', flexShrink: 0 }}>
+                              <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0' }}></div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+                                {weekDays.map((day, i) => (
+                                  <div key={i} style={{ padding: '1rem', textAlign: 'center', borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none' }}>
+                                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                      {['Нд', 'Пн', 'Вв', 'Ср', 'Чт', 'Пт', 'Сб'][day.getDay()]}
+                                    </div>
+                                    <div style={{ fontSize: '1.4rem', fontWeight: '900', color: day.toDateString() === now.toDateString() ? '#0f172a' : '#475569' }}>
+                                      {day.getDate()}
+                                    </div>
                                   </div>
+                                ))}
+                              </div>
+                            </div>
 
-                                  {/* Штрихування неробочого часу */}
-                                  {renderNonWorkingHours(dayShift)}
+                            <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                              <div style={{ position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
+                                {/* Колонки годин */}
+                                <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#fff', position: 'sticky', left: 0, zIndex: 10 }}>
+                                  {Array.from({ length: gridEndHour - gridStartHour }).map((_, i) => (
+                                    <div key={i} style={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '0.5rem 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', borderBottom: '1px solid transparent' }}>
+                                      {gridStartHour + i}:00
+                                    </div>
+                                  ))}
+                                </div>
 
-                                  {/* Рендер карток записів з урахуванням накладань */}
-                                  {processOverlaps(dayApps).map(app => {
-                                    const isBlock = app.status === 'blocked' || app.color === 'blocked';
-
-                                    const mColors = getMasterColor(app.staff_id);
-                                    const bgColor = calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg;
-                                    const borderColor = calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.pastelBorder;
-                                    const textColor = calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText;
-
-                                    const isSmall = app.heightPx <= 45;
-
-                                    // 🟢 Розрахунок ширини і відступу для тижня
-                                    const widthPercent = 100 / app.colCount;
-                                    const leftPercent = app.colIndex * widthPercent;
+                                {/* Сітка тижня */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+                                  {weekDays.map((weekDay, i) => {
+                                    const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, weekDay));
+                                    const dayShift = effectiveShifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
+                                    const isCurrentDay = weekDay.toDateString() === now.toDateString();
 
                                     return (
-                                      <div
-                                        key={app.id}
-                                        onClick={(e) => openBookingDetails(app, e)}
-                                        className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
-                                        style={{
-                                          position: 'absolute',
-                                          top: `${app.topPx}px`,
-                                          left: `calc(${leftPercent}% + 2px)`,
-                                          width: `calc(${widthPercent}% - 4px)`,
-                                          height: `${app.heightPx}px`,
-                                          backgroundColor: isBlock ? '#f1f5f9' : bgColor,
-                                          borderRadius: '6px',
-                                          padding: isSmall ? '0.1rem 0.4rem' : '0.4rem',
-                                          fontSize: '0.75rem', overflow: 'hidden',
-                                          borderLeft: isBlock ? 'none' : `3px solid ${borderColor}`,
-                                          border: isBlock ? '1px solid #cbd5e1' : 'none',
-                                          color: isBlock ? '#64748b' : textColor,
-                                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)', zIndex: 5 + app.colIndex, cursor: 'pointer',
-                                          display: 'flex', flexDirection: 'column', justifyContent: isSmall ? 'center' : 'flex-start'
-                                        }}
-                                      >
-                                        <div style={{ fontWeight: '700', textAlign: isBlock ? 'center' : 'left', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                          {isBlock ? (app.service_name || 'Перерва') : (
-                                             <>
-                                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                 {app.start_time.substring(0, 5)} {isSmall && <span style={{ fontWeight: '400', opacity: 0.8, marginLeft: '0.3rem' }}>{app.client_name}</span>}
-                                               </span>
-                                               <span style={{ flexShrink: 0 }}>{getStatusIcon(app.status)}</span>
-                                             </>
-                                          )}
+                                      <div key={i} style={{ borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none', position: 'relative', background: isCurrentDay ? '#f8fafc' : '#fff' }}>
+
+                                        {/* Штрихування неробочого часу */}
+                                        <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, pointerEvents: 'none' }}>
+                                          {renderNonWorkingHours(dayShift)}
                                         </div>
-                                        {!isBlock && !isSmall && <div style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', marginTop: '0.1rem' }}>{app.client_name}</div>}
+
+                                        {/* Горизонтальні лінії сітки */}
+                                        {Array.from({ length: gridEndHour - gridStartHour }).map((_, hIdx) => (
+                                          <div
+                                            key={hIdx}
+                                            onClick={() => handleQuickAdd(gridStartHour + hIdx, weekDay)}
+                                            style={{ height: '60px', borderBottom: '1px solid #f1f5f9', cursor: 'crosshair', position: 'relative', zIndex: 1 }}
+                                          ></div>
+                                        ))}
+
+                                        {/* Записи */}
+                                        {dayApps.map(app => {
+                                          const service = services.find(s => String(s.id) === String(app.service_id));
+                                          const duration = service?.duration || 60;
+                                          let startH = 10, startM = 0;
+
+                                          if (app.start_time) {
+                                            const timeParts = app.start_time.split(':');
+                                            startH = parseInt(timeParts[0], 10);
+                                            startM = parseInt(timeParts[1], 10);
+                                          }
+
+                                          const topPos = ((startH - gridStartHour) * 60) + startM;
+                                          const isBlock = app.status === 'blocked';
+
+                                          return (
+                                            <div
+                                              key={app.id}
+                                              onClick={(e) => { e.stopPropagation(); openAppointmentDetails(app); }}
+                                              style={{
+                                                position: 'absolute', top: `${topPos}px`, left: '4px', right: '4px', height: `${duration}px`,
+                                                background: isBlock ? '#f1f5f9' : '#0f172a', borderRadius: '8px', padding: '0.4rem 0.6rem',
+                                                color: isBlock ? '#64748b' : '#fff', fontSize: '0.75rem', cursor: 'pointer', zIndex: 5,
+                                                border: isBlock ? '1px dashed #cbd5e1' : 'none', overflow: 'hidden', boxShadow: isBlock ? 'none' : '0 2px 4px rgba(15,23,42,0.2)'
+                                              }}
+                                            >
+                                              <div style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {isBlock ? (app.block_reason || 'Заблоковано') : app.client_name}
+                                              </div>
+                                              {!isBlock && <div style={{ opacity: 0.8, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{service?.name}</div>}
+                                            </div>
+                                          );
+                                        })}
                                       </div>
                                     );
                                   })}
                                 </div>
                               </div>
-                            )
-                          })}
-                        </div>
-
-                        {/* 🟥 Глобальна червона лінія на весь тиждень (всередині сітки) */}
-                        {isCurrentWeek && currentMinutesOffset >= 0 && currentMinutesOffset <= gridTotalHours * 60 && (
-                          <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, borderTop: '2px solid #ef4444', zIndex: 8, pointerEvents: 'none', opacity: 0.8 }}></div>
+                            </div>
+                          </div>
                         )}
-
-                      </div>
-                    </div>
-
-                    {/* Заповнювач вільного простору (Штриховка знизу) */}
-                    <div style={{ minWidth: '900px', display: 'flex', flex: 1, minHeight: '4rem' }}>
-                      <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 15 }}></div>
-                      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-                        {Array.from({length: 7}).map((_, i) => (
-                          <div key={i} className="non-working-bg" style={{ borderRight: '1px solid #e2e8f0' }}></div>
-                        ))}
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-              )}
 
               {/* --- МІСЯЦЬ --- */}
               {calendarView === 'month' && (
@@ -2112,7 +2205,7 @@ export default function BusinessCabinet() {
             </div>
 
             <button className="fab-button" title="Новий запис" onClick={() => {
-              setApptForm({ client_name: '', client_phone: '', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
+              setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
               setIsBlockMode(false);
               setIsApptModalOpen(true);
             }}>
@@ -2448,24 +2541,796 @@ export default function BusinessCabinet() {
 
         /* --- 3. СТАТИСТИКА ТА ЗВІТИ --- */
         : activeTab === 'Stats' ? (
-          <div style={{ padding: '3rem', flex: 1, maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
-            <div style={{ display: 'flex', gap: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
-              <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#0f172a', cursor: 'pointer', paddingBottom: '0.5rem', borderBottom: '2px solid #0f172a', whiteSpace: 'nowrap' }}>Огляд</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
-              <div className="client-white-card" style={{ padding: '1.5rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Записи та заповненість</h3>
-                <div style={{ height: '150px', borderBottom: '2px solid #34d399', position: 'relative' }}></div>
-              </div>
-              <div className="client-white-card" style={{ padding: '1.5rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Записи</h3>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>0</div>
-              </div>
-            </div>
-          </div>
-        )
+          <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', maxWidth: '1440px', margin: '0 auto', width: '100%', backgroundColor: '#fafafa' }}>
 
-        /* --- 4. КЛІЄНТСЬКА БАЗА --- */
+            {/* --- ХЕДЕР ТА УПРАВЛІННЯ ЧАСОМ --- */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>Статистика та звіти</h2>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ display: 'flex', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.2rem' }}>
+                  {[
+                    { id: 'day', label: 'День' },
+                    { id: 'week', label: 'Тиждень' },
+                    { id: 'month', label: 'Місяць' },
+                    { id: 'year', label: 'Рік' }
+                  ].map(pt => (
+                    <button
+                      key={pt.id} onClick={() => { setStatsPeriodType(pt.id as any); setStatsDate(new Date()); setStatsCurrentPage(1); setSortConfig(null); }}
+                      style={{ padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: '700', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: '0.2s', background: statsPeriodType === pt.id ? '#0f172a' : 'transparent', color: statsPeriodType === pt.id ? '#ffffff' : '#64748b' }}
+                    >
+                      {pt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                  <button onClick={() => {
+                      const nd = new Date(statsDate);
+                      if (statsPeriodType === 'day') nd.setDate(nd.getDate() - 1);
+                      if (statsPeriodType === 'week') nd.setDate(nd.getDate() - 7);
+                      if (statsPeriodType === 'month') nd.setMonth(nd.getMonth() - 1);
+                      if (statsPeriodType === 'year') nd.setFullYear(nd.getFullYear() - 1);
+                      setStatsDate(nd); setStatsCurrentPage(1); setSortConfig(null);
+                    }} style={{ background: 'transparent', border: 'none', borderRight: '1px solid #e2e8f0', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569' }}
+                  ><Icons.ChevronLeft /></button>
+
+                  <div style={{ padding: '0 1.2rem', fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', minWidth: '160px', textAlign: 'center' }}>
+                    {(() => {
+                      if (statsPeriodType === 'day') return statsDate.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
+                      if (statsPeriodType === 'month') return statsDate.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+                      if (statsPeriodType === 'year') return statsDate.getFullYear();
+                      if (statsPeriodType === 'week') {
+                        const d = new Date(statsDate);
+                        const day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6:1);
+                        const mon = new Date(d.setDate(diff)); const sun = new Date(d.setDate(diff + 6));
+                        return `${mon.getDate()} ${mon.toLocaleDateString('uk-UA',{month:'short'})} - ${sun.getDate()} ${sun.toLocaleDateString('uk-UA',{month:'short'})}`;
+                      }
+                    })()}
+                  </div>
+
+                  <button onClick={() => {
+                      const nd = new Date(statsDate);
+                      if (statsPeriodType === 'day') nd.setDate(nd.getDate() + 1);
+                      if (statsPeriodType === 'week') nd.setDate(nd.getDate() + 7);
+                      if (statsPeriodType === 'month') nd.setMonth(nd.getMonth() + 1);
+                      if (statsPeriodType === 'year') nd.setFullYear(nd.getFullYear() + 1);
+                      setStatsDate(nd); setStatsCurrentPage(1); setSortConfig(null);
+                    }} style={{ background: 'transparent', border: 'none', borderLeft: '1px solid #e2e8f0', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569' }}
+                  ><Icons.ChevronRight /></button>
+                </div>
+              </div>
+            </div>
+
+            {(() => {
+              const STATS_TABS = [
+                { id: 'overview', label: 'Загальний огляд' },
+                { id: 'appointments', label: 'Журнал візитів' },
+                { id: 'revenue', label: 'Фінансовий звіт' },
+                { id: 'services', label: 'Популярність послуг' },
+                { id: 'staff', label: 'Ефективність команди' },
+                { id: 'clients', label: 'Аналітика клієнтів' }
+              ];
+
+              const getStartEnd = (date: Date, type: string) => {
+                const start = new Date(date), end = new Date(date);
+                if (type === 'day') { start.setHours(0,0,0,0); end.setHours(23,59,59,999); }
+                else if (type === 'month') { start.setDate(1); start.setHours(0,0,0,0); end.setMonth(end.getMonth() + 1, 0); end.setHours(23,59,59,999); }
+                else if (type === 'year') { start.setMonth(0, 1); start.setHours(0,0,0,0); end.setMonth(11, 31); end.setHours(23,59,59,999); }
+                else if (type === 'week') {
+                  const day = start.getDay(), diff = start.getDate() - day + (day === 0 ? -6 : 1);
+                  start.setDate(diff); start.setHours(0,0,0,0); end.setDate(diff + 6); end.setHours(23,59,59,999);
+                }
+                return { start, end };
+              };
+
+              const currPeriod = getStartEnd(statsDate, statsPeriodType);
+              const now = new Date();
+
+              const periodApps = appointments.filter(app => {
+                if (app.status === 'blocked' || app.color === 'blocked') return false;
+                const d = new Date(app.booking_date || app.start_time);
+                return d >= currPeriod.start && d <= currPeriod.end;
+              });
+
+              // ГЛИБОКІ ФІНАНСОВІ АГРЕГАЦІЇ
+              const stTotal = periodApps.length;
+              const stCompleted = periodApps.filter(a => a.status === 'completed');
+              const stNoShow = periodApps.filter(a => a.status === 'no-show');
+              const stCancelled = periodApps.filter(a => a.status === 'cancelled');
+              const stUpcoming = periodApps.filter(a => a.status !== 'completed' && a.status !== 'no-show' && a.status !== 'cancelled');
+
+              const totalRev = stCompleted.reduce((sum, app) => sum + (services.find(s => String(s.id) === String(app.service_id))?.price || 0), 0);
+              const lostRev = [...stNoShow, ...stCancelled].reduce((sum, app) => sum + (services.find(s => String(s.id) === String(app.service_id))?.price || 0), 0);
+              const expectedRev = stUpcoming.reduce((sum, app) => sum + (services.find(s => String(s.id) === String(app.service_id))?.price || 0), 0);
+
+              let forecastRev = 0;
+              if (currPeriod.start <= now && currPeriod.end >= now) {
+                const daysPassed = Math.max(1, Math.ceil((now.getTime() - currPeriod.start.getTime()) / (1000 * 60 * 60 * 24)));
+                const totalDays = Math.max(1, Math.ceil((currPeriod.end.getTime() - currPeriod.start.getTime()) / (1000 * 60 * 60 * 24)));
+                forecastRev = Math.round((totalRev / daysPassed) * totalDays);
+              } else if (currPeriod.end < now) { forecastRev = totalRev; }
+              else { forecastRev = expectedRev; }
+
+              const serviceStats: Record<string, any> = {};
+              const staffStats: Record<string, any> = {};
+              const clientStats: Record<string, any> = {};
+
+              periodApps.forEach(app => {
+                const isCompleted = app.status === 'completed';
+                const isCancelledOrNoShow = app.status === 'cancelled' || app.status === 'no-show';
+                const sId = String(app.service_id);
+                const srv = services.find(s => String(s.id) === sId);
+                const price = srv?.price || 0;
+
+                if (isCompleted) {
+                  if (!serviceStats[sId]) serviceStats[sId] = { name: srv?.name || app.service_name, count: 0, rev: 0 };
+                  serviceStats[sId].count++; serviceStats[sId].rev += price;
+                }
+
+                const defaultOwnerName = team.length > 0 ? team[0].name : 'Власник';
+                const m = app.staff_id ? team.find(t => String(t.id) === String(app.staff_id)) : null;
+                const mName = m ? m.name : defaultOwnerName;
+                if (!staffStats[mName]) staffStats[mName] = { name: mName, count: 0, rev: 0, services: 0 };
+                if (!isCancelledOrNoShow) staffStats[mName].count++;
+                if (isCompleted) { staffStats[mName].rev += price; staffStats[mName].services++; }
+
+                if (isCompleted) {
+                  const p = app.client_phone || 'Невідомо';
+                  if (!clientStats[p]) clientStats[p] = { name: app.client_name, phone: p, count: 0, rev: 0 };
+                  clientStats[p].count++; clientStats[p].rev += price;
+                }
+              });
+
+              let topServicesArr = Object.values(serviceStats).sort((a: any, b: any) => b.rev - a.rev);
+              let topStaffArr = Object.values(staffStats).filter((m: any) => m.count > 0 || m.services > 0).sort((a: any, b: any) => b.rev - a.rev);
+              let topClientsArr = Object.values(clientStats).sort((a: any, b: any) => b.rev - a.rev);
+
+              // 🟢 МЕХАНІЗМ СОРТУВАННЯ ДАНИХ
+              const handleSort = (key: string) => {
+                let direction: 'asc' | 'desc' = 'desc';
+                if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') {
+                  direction = 'asc';
+                }
+                setSortConfig({ key, direction });
+              };
+
+              const getSortedData = (data: any[]) => {
+                if (!sortConfig) return data;
+                return [...data].sort((a, b) => {
+                  let valA = a[sortConfig.key];
+                  let valB = b[sortConfig.key];
+
+                  if (sortConfig.key === 'date') {
+                    valA = new Date(a.booking_date || a.start_time).getTime();
+                    valB = new Date(b.booking_date || b.start_time).getTime();
+                  } else if (sortConfig.key === 'client') {
+                    valA = (a.client_name || '').toLowerCase();
+                    valB = (b.client_name || '').toLowerCase();
+                  } else if (sortConfig.key === 'service') {
+                    valA = (services.find(s => String(s.id) === String(a.service_id))?.name || a.service_name || '').toLowerCase();
+                    valB = (services.find(s => String(s.id) === String(b.service_id))?.name || b.service_name || '').toLowerCase();
+                  } else if (sortConfig.key === 'status') {
+                    valA = a.status || ''; valB = b.status || '';
+                  } else if (sortConfig.key === 'price') {
+                    valA = services.find(s => String(s.id) === String(a.service_id))?.price || 0;
+                    valB = services.find(s => String(s.id) === String(b.service_id))?.price || 0;
+                  }
+
+                  if (typeof valA === 'string' && typeof valB === 'string') {
+                     if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+                     if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+                     return 0;
+                  }
+                  return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+                });
+              };
+
+              const sortedApps = getSortedData(periodApps);
+              topServicesArr = getSortedData(topServicesArr);
+              topStaffArr = getSortedData(topStaffArr);
+              topClientsArr = getSortedData(topClientsArr);
+
+              const thStyle = { padding: '1rem 0.5rem', color: '#64748b', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase' as const, letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0' };
+
+              // Клікабельний заголовок (ТІЛЬКИ для динамічних таблиць)
+              const SortableTH = ({ label, sortKey, align = 'left' }: { label: string, sortKey: string, align?: string }) => (
+                <th onClick={() => handleSort(sortKey)} style={{ ...thStyle, textAlign: align as any, cursor: 'pointer', userSelect: 'none', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.color = '#0f172a'} onMouseOut={e => e.currentTarget.style.color = '#64748b'}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start' }}>
+                    {label}
+                    <span style={{ marginLeft: '4px', fontSize: '0.85rem', color: sortConfig?.key === sortKey ? '#0f172a' : '#cbd5e1' }}>
+                      {sortConfig?.key === sortKey ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
+                    </span>
+                  </div>
+                </th>
+              );
+
+              // Деталізація для Фінансів
+              const newClientRev = topClientsArr.filter((c:any) => c.count === 1).reduce((s:number, c:any) => s + c.rev, 0);
+              const returningClientRev = topClientsArr.filter((c:any) => c.count > 1).reduce((s:number, c:any) => s + c.rev, 0);
+              const avgCheckCompleted = stCompleted.length > 0 ? Math.round(totalRev / stCompleted.length) : 0;
+              const bestStaff = topStaffArr.length > 0 ? [...topStaffArr].sort((a:any, b:any) => b.rev - a.rev)[0] : null;
+
+              // ДАНІ ДЛЯ ГРАФІКІВ (Години / Дні)
+              let chartLabels: string[] = []; let appsData: number[] = []; let revData: number[] = []; let expRevData: number[] = []; let lostRevData: number[] = [];
+              if (statsPeriodType === 'day') {
+                chartLabels = Array.from({length: 13}, (_, i) => `${(i+8).toString().padStart(2, '0')}:00`);
+                appsData = Array(13).fill(0); revData = Array(13).fill(0); expRevData = Array(13).fill(0); lostRevData = Array(13).fill(0);
+                periodApps.forEach(app => {
+                  const hour = parseInt(app.start_time.split(':')[0]);
+                  if (hour >= 8 && hour <= 20) {
+                    const idx = hour - 8;
+                    const price = services.find(s => String(s.id) === String(app.service_id))?.price || 0;
+                    appsData[idx]++;
+                    if (app.status === 'completed') revData[idx] += price;
+                    else if (app.status === 'no-show' || app.status === 'cancelled') lostRevData[idx] += price;
+                    else expRevData[idx] += price;
+                  }
+                });
+              } else if (statsPeriodType === 'week') {
+                for(let i=0; i<7; i++) {
+                  const d = new Date(currPeriod.start); d.setDate(d.getDate() + i);
+                  chartLabels.push(`${d.toLocaleDateString('uk-UA', {weekday: 'short'})} ${d.getDate()}`);
+                }
+                appsData = Array(7).fill(0); revData = Array(7).fill(0); expRevData = Array(7).fill(0); lostRevData = Array(7).fill(0);
+                periodApps.forEach(app => {
+                  const d = new Date(app.booking_date || app.start_time); const idx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+                  const price = services.find(s => String(s.id) === String(app.service_id))?.price || 0;
+                  appsData[idx]++;
+                  if (app.status === 'completed') revData[idx] += price;
+                  else if (app.status === 'no-show' || app.status === 'cancelled') lostRevData[idx] += price;
+                  else expRevData[idx] += price;
+                });
+              } else if (statsPeriodType === 'month') {
+                const daysInMonth = currPeriod.end.getDate();
+                chartLabels = Array.from({length: daysInMonth}, (_, i) => (i + 1).toString());
+                appsData = Array(daysInMonth).fill(0); revData = Array(daysInMonth).fill(0); expRevData = Array(daysInMonth).fill(0); lostRevData = Array(daysInMonth).fill(0);
+                periodApps.forEach(app => {
+                  const d = new Date(app.booking_date || app.start_time); const idx = d.getDate() - 1;
+                  const price = services.find(s => String(s.id) === String(app.service_id))?.price || 0;
+                  appsData[idx]++;
+                  if (app.status === 'completed') revData[idx] += price;
+                  else if (app.status === 'no-show' || app.status === 'cancelled') lostRevData[idx] += price;
+                  else expRevData[idx] += price;
+                });
+              } else {
+                chartLabels = ['Січ', 'Лют', 'Бер', 'Кві', 'Тра', 'Чер', 'Лип', 'Сер', 'Вер', 'Жов', 'Лис', 'Гру'];
+                appsData = Array(12).fill(0); revData = Array(12).fill(0); expRevData = Array(12).fill(0); lostRevData = Array(12).fill(0);
+                periodApps.forEach(app => {
+                  const d = new Date(app.booking_date || app.start_time); const idx = d.getMonth();
+                  const price = services.find(s => String(s.id) === String(app.service_id))?.price || 0;
+                  appsData[idx]++;
+                  if (app.status === 'completed') revData[idx] += price;
+                  else if (app.status === 'no-show' || app.status === 'cancelled') lostRevData[idx] += price;
+                  else expRevData[idx] += price;
+                });
+              }
+
+              const maxApp = Math.max(...appsData, 5);
+              const maxRev = Math.max(...revData, ...expRevData, 1000);
+
+              const genLineBase = (data: number[], max: number, baseHeight: number) => {
+                if (data.length === 0) return ''; const step = 1000 / (data.length > 1 ? data.length - 1 : 1);
+                let d = `M 0 ${baseHeight - (data[0]/max)*baseHeight}`;
+                for(let i = 1; i < data.length; i++) { d += ` L ${i * step} ${baseHeight - (data[i]/max)*baseHeight}`; }
+                return d;
+              };
+
+              // ГРАФІК (Огляд)
+              const SimpleChart = ({ title, data, max, labels, color, isCurrency = false }: any) => {
+                const maxVal = Math.max(max, 10);
+                const step = 1000 / (labels.length > 1 ? labels.length - 1 : 1);
+                const isDense = labels.length > 15; // Якщо місяць (багато точок)
+
+                return (
+                  <div style={{ marginBottom: '2.5rem' }}>
+                    <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '1.5rem', letterSpacing: '0.05em' }}>{title}</h3>
+                    <div style={{ height: '140px', width: '100%', position: 'relative' }}>
+                      <svg viewBox="0 -40 1000 180" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                        <line x1="0" y1="120" x2="1000" y2="120" stroke="#f1f5f9" strokeWidth="2" />
+                        <path d={genLineBase(data, maxVal, 120)} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+                        {data.map((val: number, i: number) => {
+                          const x = i * step; const y = 120 - (val/maxVal)*120;
+                          return (
+                            <g key={i} style={{ cursor: 'crosshair' }}
+                               onMouseEnter={(e) => {
+                                 const p = e.currentTarget;
+                                 (p.querySelector('.tooltip-bg') as any).style.opacity = '1';
+                                 (p.querySelector('.tooltip-txt') as any).style.opacity = '1';
+                                 if(p.querySelector('.hover-col')) (p.querySelector('.hover-col') as any).style.opacity = '1';
+                                 const dot = p.querySelector('.dot') as any;
+                                 dot.setAttribute('r', '5');
+                               }}
+                               onMouseLeave={(e) => {
+                                 const p = e.currentTarget;
+                                 (p.querySelector('.tooltip-bg') as any).style.opacity = '0';
+                                 (p.querySelector('.tooltip-txt') as any).style.opacity = '0';
+                                 if(p.querySelector('.hover-col')) (p.querySelector('.hover-col') as any).style.opacity = '0';
+                                 const dot = p.querySelector('.dot') as any;
+                                 dot.setAttribute('r', isDense ? '2.5' : '4');
+                               }}
+                            >
+                              <rect x={x - step/2} y="-40" width={step} height="160" fill="transparent" />
+                              {isDense && <line x1={x} y1="-30" x2={x} y2="120" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" opacity="0" className="hover-col" style={{ pointerEvents: 'none', transition: '0.15s ease' }} />}
+
+                              {/* 🟢 КРАПКА ТЕПЕР ЗАВЖДИ ВИДИМА, АЛЕ МЕНША ДЛЯ МІСЯЦЯ */}
+                              <circle cx={x} cy={y} r={isDense ? 2.5 : 4} fill="#fff" stroke={color} strokeWidth={isDense ? 1.5 : 2.5} className="dot" style={{ pointerEvents: 'none', transition: '0.15s ease' }} />
+
+                              {/* 🟢 ЦИФРИ (ДНІ) ТЕПЕР ПОКАЗУЮТЬСЯ ВСІ (Шрифт менший якщо густо) */}
+                              <text x={x} y="145" fill="#94a3b8" fontSize={isDense ? "9" : "11"} fontWeight="700" textAnchor={i===0?'start':i===labels.length-1?'end':'middle'} style={{ pointerEvents: 'none' }}>{labels[i]}</text>
+
+                              <rect x={x > 800 ? x - 85 : x - 40} y={y - 35} width="85" height="24" rx="6" fill="#0f172a" className="tooltip-bg" opacity="0" style={{ pointerEvents: 'none', transition: '0.15s ease' }} />
+                              <text x={x > 800 ? x - 42 : x + 2} y={y - 18} fill="#fff" fontSize="11" fontWeight="700" textAnchor="middle" className="tooltip-txt" opacity="0" style={{ pointerEvents: 'none', transition: '0.15s ease' }}>
+                                {isCurrency ? `${val.toLocaleString('uk-UA')} ₴` : val}
+                              </text>
+                            </g>
+                          )
+                        })}
+                      </svg>
+                    </div>
+                  </div>
+                )
+              };
+
+              // МУЛЬТИ-ГРАФІК ФІНАНСІВ
+              const FinanceMultiChart = ({ labels, actual, expected, lost, max }: any) => {
+                const step = 1000 / (labels.length > 1 ? labels.length - 1 : 1);
+                const isDense = labels.length > 15;
+                return (
+                  <div style={{ marginBottom: '2.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                      <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Динаміка доходу (₴)</h3>
+                      <div style={{ display: 'flex', gap: '1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: '800', color: '#10b981' }}><span style={{ width: 12, height: 3, background: '#10b981', borderRadius: '2px' }}></span> Фактично</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: '800', color: '#3b82f6' }}><span style={{ width: 12, height: 3, borderTop: '2px dashed #3b82f6' }}></span> Очікується</div>
+                      </div>
+                    </div>
+
+                    <div style={{ height: '170px', width: '100%', position: 'relative' }}>
+                      <svg viewBox="0 -80 1000 220" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                        <line x1="0" y1="120" x2="1000" y2="120" stroke="#f1f5f9" strokeWidth="2" />
+
+                        <path d={genLineBase(actual, max, 120)} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d={genLineBase(expected, max, 120)} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" />
+
+                        {labels.map((lbl: string, i: number) => {
+                          const x = i * step;
+                          const actY = 120 - (actual[i]/max)*120;
+                          const expY = 120 - (expected[i]/max)*120;
+
+                          return (
+                            <g key={i} style={{ cursor: 'crosshair' }}
+                               onMouseEnter={(e) => {
+                                 const p = e.currentTarget;
+                                 (p.querySelector('.fin-tooltip') as any).style.opacity = '1';
+                                 (p.querySelector('.hover-col') as any).style.opacity = '1';
+                                 p.querySelectorAll('.dot').forEach((d:any) => d.setAttribute('r', '5'));
+                               }}
+                               onMouseLeave={(e) => {
+                                 const p = e.currentTarget;
+                                 (p.querySelector('.fin-tooltip') as any).style.opacity = '0';
+                                 (p.querySelector('.hover-col') as any).style.opacity = '0';
+                                 p.querySelectorAll('.dot').forEach((d:any) => d.setAttribute('r', isDense ? '2.5' : '4'));
+                               }}
+                            >
+                              <rect x={x - step/2} y="-80" width={step} height="200" fill="transparent" />
+
+                              <line x1={x} y1="-70" x2={x} y2="120" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" opacity="0" className="hover-col" style={{ pointerEvents: 'none', transition: '0.15s ease' }} />
+
+                              <circle cx={x} cy={actY} r={isDense ? 2.5 : 4} fill="#fff" stroke="#10b981" strokeWidth={isDense ? 1.5 : 2.5} className="dot" style={{ pointerEvents: 'none', transition: '0.15s ease' }} />
+                              <circle cx={x} cy={expY} r={isDense ? 2.5 : 4} fill="#fff" stroke="#3b82f6" strokeWidth={isDense ? 1.5 : 2.5} className="dot" style={{ pointerEvents: 'none', transition: '0.15s ease' }} />
+
+                              {/* 🟢 ЦИФРИ (ДНІ) */}
+                              <text x={x} y="145" fill="#94a3b8" fontSize={isDense ? "9" : "11"} fontWeight="700" textAnchor={i===0?'start':i===labels.length-1?'end':'middle'} style={{ pointerEvents: 'none' }}>{lbl}</text>
+
+                              <foreignObject x={x > 800 ? x - 175 : x + 15} y="-75" width="160" height="110" className="fin-tooltip" opacity="0" style={{ pointerEvents: 'none', transition: 'opacity 0.15s ease' }}>
+                                <div style={{ background: '#0f172a', padding: '0.7rem 0.9rem', borderRadius: '10px', color: '#fff', fontSize: '0.75rem', boxShadow: '0 10px 25px rgba(0,0,0,0.15)' }}>
+                                   <div style={{ fontWeight: '800', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '6px', textAlign: 'center', color: '#cbd5e1' }}>{lbl}</div>
+                                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#10b981', marginBottom: '4px' }}><span>Отримано:</span> <b>{actual[i]} ₴</b></div>
+                                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#60a5fa', marginBottom: '4px' }}><span>Очікується:</span> <b>{expected[i]} ₴</b></div>
+                                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#f87171' }}><span>Втрачено:</span> <b>{lost[i]} ₴</b></div>
+                                </div>
+                              </foreignObject>
+                            </g>
+                          )
+                        })}
+                      </svg>
+                    </div>
+                  </div>
+                )
+              };
+
+              const downloadCSV = () => {
+                let csvContent = "\uFEFF";
+                let friendlyTabName = STATS_TABS.find(t => t.id === statsTab)?.label.replace(/\s+/g, '_') || "Звіт";
+                const today = new Date();
+                const cleanDateStr = `${today.getDate().toString().padStart(2, '0')}-${(today.getMonth()+1).toString().padStart(2, '0')}-${today.getFullYear()}`;
+                let fileName = `BookEra_${friendlyTabName}_${cleanDateStr}.csv`;
+
+                if (statsTab === 'overview' || statsTab === 'appointments') {
+                  csvContent += "Дата,Час,Клієнт,Телефон,Майстер,Послуга,Статус,Сума (UAH)\n";
+                  sortedApps.forEach(app => {
+                    const date = new Date(app.booking_date || app.start_time).toLocaleDateString('uk-UA');
+                    const time = app.start_time.substring(0,5);
+                    const client = `"${app.client_name || 'Невідомо'}"`;
+                    const phone = `"${app.client_phone || ''}"`;
+                    const master = `"${team.find(t => String(t.id) === String(app.staff_id))?.name || 'Власник'}"`;
+                    const srvObj = services.find(s => String(s.id) === String(app.service_id));
+                    const service = `"${srvObj?.name || app.service_name || 'Послуга'}"`;
+                    let statusStr = app.status === 'completed' ? "Завершено" : app.status === 'no-show' ? "Не прийшов" : app.status === 'cancelled' ? "Скасовано" : "Очікується";
+                    const price = app.status === 'completed' ? (srvObj?.price || 0) : 0;
+                    csvContent += `${date},${time},${client},${phone},${master},${service},${statusStr},${price}\n`;
+                  });
+                  csvContent += `\nВсього записів,,,,,,,${stTotal}\nЗагальний дохід,,,,,,,${totalRev}\n`;
+
+                } else if (statsTab === 'services') {
+                  csvContent += "Послуга,Кількість проданих,Дохід (UAH)\n";
+                  topServicesArr.forEach(srv => { csvContent += `"${srv.name}",${srv.count},${srv.rev}\n`; });
+
+                } else if (statsTab === 'staff') {
+                  csvContent += "Майстер,Всього записів,Виконано успішно,Дохід (UAH)\n";
+                  topStaffArr.forEach(m => { csvContent += `"${m.name}",${m.count},${m.services},${m.rev}\n`; });
+
+                } else if (statsTab === 'clients') {
+                  csvContent += "Клієнт,Телефон,Візитів за період,Витрачено (UAH)\n";
+                  topClientsArr.forEach(c => { csvContent += `"${c.name}","${c.phone}",${c.count},${c.rev}\n`; });
+
+                } else if (statsTab === 'revenue') {
+                  csvContent += "Джерело доходу,Сума (UAH)\n";
+                  csvContent += `Від постійних клієнтів,${returningClientRev}\nВід нових клієнтів,${newClientRev}\n\nРазом,${totalRev}\n`;
+                }
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", fileName);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              };
+
+              const ITEMS_PER_PAGE = 10;
+              const paginate = (array: any[]) => array.slice((statsCurrentPage - 1) * ITEMS_PER_PAGE, statsCurrentPage * ITEMS_PER_PAGE);
+
+              const PaginationUI = ({ totalItems }: { totalItems: number }) => {
+                const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+                if (totalPages <= 1) return null;
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>
+                      Показано {((statsCurrentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(statsCurrentPage * ITEMS_PER_PAGE, totalItems)} з {totalItems}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button disabled={statsCurrentPage === 1} onClick={() => setStatsCurrentPage(p => p - 1)} style={{ padding: '0.4rem 1rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: statsCurrentPage === 1 ? 'not-allowed' : 'pointer', opacity: statsCurrentPage === 1 ? 0.5 : 1, fontWeight: '600', color: '#0f172a' }}>Назад</button>
+                      <button disabled={statsCurrentPage === totalPages} onClick={() => setStatsCurrentPage(p => p + 1)} style={{ padding: '0.4rem 1rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: statsCurrentPage === totalPages ? 'not-allowed' : 'pointer', opacity: statsCurrentPage === totalPages ? 0.5 : 1, fontWeight: '600', color: '#0f172a' }}>Вперед</button>
+                    </div>
+                  </div>
+                );
+              };
+
+              const tdStyle = { padding: '1rem 0.5rem', fontSize: '0.9rem', color: '#0f172a', fontWeight: '600', borderBottom: '1px solid #f1f5f9' };
+              const activeReportTitle = STATS_TABS.find(r => r.id === statsTab)?.label || 'Звіт';
+
+              return (
+                <>
+                  {/* --- ВЕРХНІ ВКЛАДКИ --- */}
+                  <div style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid #e2e8f0', marginBottom: '2.5rem' }}>
+                    {STATS_TABS.map(tab => (
+                      <div
+                        key={tab.id}
+                        onClick={() => { setStatsTab(tab.id as any); setStatsCurrentPage(1); setSortConfig(null); }}
+                        style={{ paddingBottom: '0.8rem', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', fontWeight: statsTab === tab.id ? '800' : '600', color: statsTab === tab.id ? '#0f172a' : '#64748b', borderBottom: statsTab === tab.id ? '2px solid #0f172a' : '2px solid transparent' }}
+                      >
+                        {tab.label}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '2.5rem' }}>
+
+                    {/* --- ЛІВА КОЛОНКА --- */}
+                    <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', minHeight: '600px', display: 'flex', flexDirection: 'column' }}>
+
+                      <div style={{ padding: '2.5rem', flex: 1 }}>
+
+                        {statsTab === 'overview' && (
+                          <div>
+                            <SimpleChart title="Динаміка записів (Кількість)" data={appsData.map((v,i)=>v+expRevData[i]/1000+lostRevData[i]/1000)} max={maxApp} labels={chartLabels} color="#0f172a" />
+                            <SimpleChart title="Грошовий потік (Фактичний дохід, ₴)" data={revData} max={Math.max(...revData, 1000)} labels={chartLabels} color="#10b981" isCurrency={true} />
+
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '2rem 0 1.5rem 0' }}>Статуси візитів</h3>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                              <thead>
+                                <tr>
+                                  <th style={thStyle}>Статус</th>
+                                  <th style={{...thStyle, textAlign: 'center'}}>Кількість</th>
+                                  <th style={{...thStyle, textAlign: 'center'}}>Відсоток</th>
+                                  <th style={{...thStyle, textAlign: 'right'}}>Вартість</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td style={tdStyle}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', marginRight: '0.5rem' }}></span>Заплановано</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stUpcoming.length}</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stTotal ? Math.round((stUpcoming.length/stTotal)*100) : 0}%</td>
+                                  <td style={{...tdStyle, textAlign: 'right'}}>{expectedRev.toLocaleString('uk-UA')} ₴</td>
+                                </tr>
+                                <tr>
+                                  <td style={tdStyle}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10b981', marginRight: '0.5rem' }}></span>Завершено</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stCompleted.length}</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stTotal ? Math.round((stCompleted.length/stTotal)*100) : 0}%</td>
+                                  <td style={{...tdStyle, textAlign: 'right', color: '#10b981'}}>{totalRev.toLocaleString('uk-UA')} ₴</td>
+                                </tr>
+                                <tr>
+                                  <td style={tdStyle}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#eab308', marginRight: '0.5rem' }}></span>Не прийшли</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stNoShow.length}</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stTotal ? Math.round((stNoShow.length/stTotal)*100) : 0}%</td>
+                                  <td style={{...tdStyle, textAlign: 'right'}}>0 ₴</td>
+                                </tr>
+                                <tr>
+                                  <td style={tdStyle}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#ef4444', marginRight: '0.5rem' }}></span>Скасовано</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stCancelled.length}</td>
+                                  <td style={{...tdStyle, textAlign: 'center'}}>{stTotal ? Math.round((stCancelled.length/stTotal)*100) : 0}%</td>
+                                  <td style={{...tdStyle, textAlign: 'right'}}>0 ₴</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {statsTab === 'appointments' && (
+                          <div>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1.5rem 0' }}>Журнал візитів за обраний період</h3>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                              <thead>
+                                <tr>
+                                  <SortableTH label="Дата / Час" sortKey="date" />
+                                  <SortableTH label="Клієнт" sortKey="client" />
+                                  <SortableTH label="Послуга" sortKey="service" />
+                                  <SortableTH label="Статус" sortKey="status" />
+                                  <SortableTH label="Вартість" sortKey="price" align="right" />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {sortedApps.length > 0 ? paginate(sortedApps).map(app => {
+                                  const srvObj = services.find(s => String(s.id) === String(app.service_id));
+                                  return (
+                                    <tr key={app.id}>
+                                      <td style={tdStyle}>{new Date(app.booking_date || app.start_time).toLocaleDateString('uk-UA')} <span style={{color:'#64748b', marginLeft:'8px'}}>{app.start_time.substring(0,5)}</span></td>
+                                      <td style={{...tdStyle, fontWeight: '700'}}>{app.client_name}</td>
+                                      <td style={{...tdStyle, color: '#475569'}}>{srvObj?.name || app.service_name}</td>
+                                      <td style={tdStyle}>
+                                        <span style={{ padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700', background: app.status === 'completed' ? '#dcfce7' : app.status === 'no-show' ? '#fee2e2' : app.status === 'cancelled' ? '#f1f5f9' : '#eff6ff', color: app.status === 'completed' ? '#166534' : app.status === 'no-show' ? '#991b1b' : app.status === 'cancelled' ? '#475569' : '#1d4ed8' }}>
+                                          {app.status === 'completed' ? 'Завершено' : app.status === 'no-show' ? 'Не прийшов' : app.status === 'cancelled' ? 'Скасовано' : 'Очікується'}
+                                        </span>
+                                      </td>
+                                      <td style={{...tdStyle, textAlign: 'right', fontWeight: '700'}}>{srvObj?.price || 0} ₴</td>
+                                    </tr>
+                                  )
+                                }) : <tr><td colSpan={5} style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>Немає записів за цей період</td></tr>}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {statsTab === 'revenue' && (
+                          <div>
+                             <FinanceMultiChart labels={chartLabels} actual={revData} expected={expRevData} lost={lostRevData} max={maxRev} />
+
+                             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '3rem 0 1.5rem 0' }}>Фінансові показники</h3>
+                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '3rem' }}>
+                               <div style={{ background: '#fff', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', borderTop: '4px solid #10b981', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                                 <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Фактичний дохід</div>
+                                 <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#10b981' }}>{totalRev.toLocaleString('uk-UA')} ₴</div>
+                               </div>
+                               <div style={{ background: '#fff', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', borderTop: '4px solid #3b82f6', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                                 <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Запланований дохід</div>
+                                 <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#3b82f6' }}>{expectedRev.toLocaleString('uk-UA')} ₴</div>
+                               </div>
+                               <div style={{ background: '#fff', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', borderTop: '4px solid #ef4444', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                                 <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Втрачений дохід</div>
+                                 <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#ef4444' }}>{lostRev.toLocaleString('uk-UA')} ₴</div>
+                               </div>
+                               <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                                 <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                                   {currPeriod.start <= now && currPeriod.end >= now ? 'Прогноз системи' : 'Підсумок'}
+                                 </div>
+                                 <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#0f172a' }}>
+                                   {forecastRev.toLocaleString('uk-UA')} ₴
+                                 </div>
+                               </div>
+                             </div>
+
+                             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1.5rem 0' }}>Джерела доходу (Деталізація)</h3>
+                             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                              <thead><tr><th style={{...thStyle, cursor:'default'}}>Показник</th><th style={{...thStyle, textAlign: 'right', cursor:'default'}}>Сума</th><th style={{...thStyle, width: '40%', cursor:'default'}}>Частка / Інфо</th></tr></thead>
+                              <tbody>
+                                <tr>
+                                  <td style={{...tdStyle, fontWeight: '700'}}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', marginRight: '0.5rem' }}></span>Від постійних клієнтів</td>
+                                  <td style={{...tdStyle, textAlign: 'right', fontWeight: '800'}}>{returningClientRev.toLocaleString('uk-UA')} ₴</td>
+                                  <td style={tdStyle}><div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 3 }}><div style={{ width: totalRev > 0 ? `${(returningClientRev/totalRev)*100}%` : '0%', height: '100%', background: '#3b82f6', borderRadius: 3 }}></div></div></td>
+                                </tr>
+                                <tr>
+                                  <td style={{...tdStyle, fontWeight: '700'}}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10b981', marginRight: '0.5rem' }}></span>Від нових клієнтів</td>
+                                  <td style={{...tdStyle, textAlign: 'right', fontWeight: '800'}}>{newClientRev.toLocaleString('uk-UA')} ₴</td>
+                                  <td style={tdStyle}><div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 3 }}><div style={{ width: totalRev > 0 ? `${(newClientRev/totalRev)*100}%` : '0%', height: '100%', background: '#10b981', borderRadius: 3 }}></div></div></td>
+                                </tr>
+                                <tr>
+                                  <td style={{...tdStyle, fontWeight: '700'}}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#eab308', marginRight: '0.5rem' }}></span>Топ-майстер</td>
+                                  <td style={{...tdStyle, textAlign: 'right', fontWeight: '800'}}>{bestStaff ? bestStaff.rev.toLocaleString('uk-UA') : 0} ₴</td>
+                                  <td style={tdStyle}><span style={{fontSize: '0.85rem', color: '#64748b', fontWeight: '600'}}>{bestStaff ? bestStaff.name : '—'}</span></td>
+                                </tr>
+                                <tr>
+                                  <td style={{...tdStyle, fontWeight: '700'}}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', marginRight: '0.5rem' }}></span>Середній чек (Завершено)</td>
+                                  <td style={{...tdStyle, textAlign: 'right', fontWeight: '800'}}>{avgCheckCompleted.toLocaleString('uk-UA')} ₴</td>
+                                  <td style={tdStyle}><span style={{fontSize: '0.85rem', color: '#64748b', fontWeight: '600'}}>На основі {stCompleted.length} візитів</span></td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {statsTab === 'services' && (
+                          <div>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1.5rem 0' }}>Топ послуг за обраний період</h3>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                              <thead>
+                                <tr>
+                                  <SortableTH label="Назва послуги" sortKey="name" />
+                                  <SortableTH label="Кількість візитів" sortKey="count" align="center" />
+                                  <SortableTH label="Згенерований дохід" sortKey="rev" align="right" />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {topServicesArr.length > 0 ? paginate(topServicesArr).map((srv, idx) => (
+                                  <tr key={idx}>
+                                    <td style={{...tdStyle, fontWeight: '700'}}>{srv.name}</td>
+                                    <td style={{...tdStyle, textAlign: 'center'}}>{srv.count}</td>
+                                    <td style={{...tdStyle, textAlign: 'right', fontWeight: '700', color: '#10b981'}}>{srv.rev.toLocaleString('uk-UA')} ₴</td>
+                                  </tr>
+                                )) : <tr><td colSpan={3} style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>Немає даних за цей період</td></tr>}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {statsTab === 'staff' && (
+                          <div>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1.5rem 0' }}>Ефективність команди</h3>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                              <thead>
+                                <tr>
+                                  <SortableTH label="Майстер" sortKey="name" />
+                                  <SortableTH label="Всього записів" sortKey="count" align="center" />
+                                  <SortableTH label="Виконано послуг" sortKey="services" align="center" />
+                                  <SortableTH label="Загальний дохід" sortKey="rev" align="right" />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {topStaffArr.length > 0 ? paginate(topStaffArr).map((m, idx) => (
+                                  <tr key={idx}>
+                                    <td style={{...tdStyle, display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', color: '#0f172a', fontWeight: '800' }}>{m.name.substring(0,2).toUpperCase()}</div>
+                                      {m.name}
+                                    </td>
+                                    <td style={{...tdStyle, textAlign: 'center'}}>{m.count}</td>
+                                    <td style={{...tdStyle, textAlign: 'center'}}>{m.services}</td>
+                                    <td style={{...tdStyle, textAlign: 'right', color: '#10b981', fontWeight: '700'}}>{m.rev.toLocaleString('uk-UA')} ₴</td>
+                                  </tr>
+                                )) : <tr><td colSpan={4} style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>Немає даних за цей період</td></tr>}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {statsTab === 'clients' && (
+                          <div>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1.5rem 0' }}>Аналітика клієнтської бази</h3>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3rem', marginBottom: '2.5rem', paddingBottom: '2.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                              <div>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Унікальні клієнти</div>
+                                <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#0f172a', lineHeight: '1' }}>{topClientsArr.length}</div>
+                              </div>
+                              <div style={{ width: '1px', height: '35px', background: '#e2e8f0' }}></div>
+                              <div>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Середня частота</div>
+                                <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#0f172a', lineHeight: '1', display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                                  {topClientsArr.length > 0 ? (stCompleted.length / topClientsArr.length).toFixed(1) : '0.0'} <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '600' }}>візитів</span>
+                                </div>
+                              </div>
+                              <div style={{ width: '1px', height: '35px', background: '#e2e8f0' }}></div>
+                              <div>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Повернулись (2+ візити)</div>
+                                <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#10b981', lineHeight: '1' }}>
+                                  {topClientsArr.length > 0 ? Math.round((topClientsArr.filter((c: any) => c.count > 1).length / topClientsArr.length) * 100) : 0}<span style={{ fontSize: '1rem' }}>%</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1.5rem 0' }}>Деталізація візитів</h3>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                              <thead>
+                                <tr>
+                                  <SortableTH label="Клієнт" sortKey="name" />
+                                  <SortableTH label="Телефон" sortKey="phone" />
+                                  <SortableTH label="Візитів" sortKey="count" align="center" />
+                                  <SortableTH label="Дохід" sortKey="rev" align="right" />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {topClientsArr.length > 0 ? paginate(topClientsArr).map((c: any, idx: number) => (
+                                  <tr key={idx}>
+                                    <td style={{...tdStyle, fontWeight: '700'}}>{c.name || 'Без імені'}</td>
+                                    <td style={{...tdStyle, color: '#64748b'}}>{c.phone || '—'}</td>
+                                    <td style={{...tdStyle, textAlign: 'center'}}>{c.count}</td>
+                                    <td style={{...tdStyle, textAlign: 'right', fontWeight: '700', color: '#10b981'}}>{c.rev.toLocaleString('uk-UA')} ₴</td>
+                                  </tr>
+                                )) : <tr><td colSpan={4} style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>Немає даних за цей період</td></tr>}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* --- КОМПОНЕНТ ПАГІНАЦІЇ --- */}
+                      {statsTab === 'appointments' && <PaginationUI totalItems={periodApps.length} />}
+                      {statsTab === 'services' && <PaginationUI totalItems={topServicesArr.length} />}
+                      {statsTab === 'staff' && <PaginationUI totalItems={topStaffArr.length} />}
+                      {statsTab === 'clients' && <PaginationUI totalItems={topClientsArr.length} />}
+
+                    </div>
+
+                    {/* --- ПРАВА КОЛОНКА (НАДІЙНИЙ STICKY) --- */}
+                    <div style={{ height: '100%' }}>
+                      <div style={{ position: 'sticky', top: '2.5rem', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', width: '100%', boxSizing: 'border-box' }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', marginBottom: '1.5rem' }}>Швидкі звіти</h3>
+
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          {STATS_TABS.map((report, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => { setStatsTab(report.id as any); setStatsCurrentPage(1); setSortConfig(null); }}
+                              style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.1rem 0',
+                                borderBottom: idx !== 5 ? '1px solid #f1f5f9' : 'none', cursor: 'pointer', transition: '0.2s',
+                                color: statsTab === report.id ? '#0f172a' : '#64748b',
+                                fontWeight: statsTab === report.id ? '800' : '600'
+                              }}
+                              onMouseOver={e => { e.currentTarget.style.color = '#0f172a' }}
+                              onMouseOut={e => { if (statsTab !== report.id) e.currentTarget.style.color = '#64748b' }}
+                            >
+                              <span style={{ fontSize: '0.9rem' }}>{report.label}</span>
+                              <Icons.ChevronRight />
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0' }}>
+                          <button
+                            onClick={downloadCSV}
+                            style={{
+                              width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', padding: '0.85rem', borderRadius: '8px',
+                              color: '#0f172a', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer', transition: '0.2s',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                            }}
+                            onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'}
+                            onMouseOut={e => e.currentTarget.style.background = '#f8fafc'}
+                          >
+                            Експорт: {activeReportTitle}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )        /* --- 4. КЛІЄНТСЬКА БАЗА --- */
         : activeTab === 'Clients' ? (
           <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
 
@@ -2653,69 +3518,1533 @@ export default function BusinessCabinet() {
 
         /* --- 6. МАРКЕТИНГ --- */
         : activeTab === 'Marketing' ? (
-          <div style={{ padding: '3rem', flex: 1, maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
-             <div className="client-white-card" style={{ padding: '2rem' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.5rem', marginBottom: '2rem' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', maxWidth: '1200px', margin: '0 auto', width: '100%', height: '100%' }}>
+
+            {/* 🟢 1. ГОЛОВНИЙ ДАШБОРД (СУЧАСНИЙ КАРТКОВИЙ СТИЛЬ) */}
+            {marketingView === 'overview' && (
+              <div style={{ animation: 'fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)', display: 'flex', flexDirection: 'column', minHeight: '100%', paddingBottom: '2rem' }}>
+
+                {/* ВЕРХНЯ ЧАСТИНА: Заголовок + Графічний колаж */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '4rem', alignItems: 'center', marginBottom: '3rem', marginTop: '1rem' }}>
+
+                  {/* Ліва колонка: Текст та CTA */}
+                  <div>
+                    <h1 style={{ fontSize: '4rem', fontWeight: '900', color: '#0f172a', lineHeight: '1.05', letterSpacing: '-0.04em', margin: '0 0 1.5rem 0' }}>
+                      Залучай<br/>Утримуй<br/>Зростай
+                    </h1>
+                    <p style={{ fontSize: '1.1rem', color: '#475569', lineHeight: '1.6', margin: '0 0 2.5rem 0', maxWidth: '420px', fontWeight: '500' }}>
+                      BookEra — це не просто календар. Це дизайн-орієнтована система, що дозволяє в реальному часі бачити вплив ваших комунікацій на прибуток.
+                    </p>
+                    <button
+                      onClick={() => setMarketingView('campaigns')}
+                      style={{ background: '#0f172a', color: '#fff', padding: '1rem 2rem', fontSize: '1rem', fontWeight: '800', border: 'none', borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '0.8rem', boxShadow: '0 4px 15px rgba(15, 23, 42, 0.2)' }}
+                      onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                      Відкрити розсилки <span style={{ transition: 'transform 0.2s' }}>→</span>
+                    </button>
+                  </div>
+
+                  {/* Права колонка: Абстрактний колаж-сітка */}
+                  <div style={{ position: 'relative', height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 80px)', gridTemplateRows: 'repeat(4, 80px)', gap: '12px', position: 'relative' }}>
+
+                      {/* Декоративні елементи */}
+                      <div style={{ position: 'absolute', top: '-40px', right: '10px', width: '40px', height: '40px', background: '#e2e8f0', borderRadius: '12px' }}></div>
+                      <div style={{ position: 'absolute', bottom: '20px', left: '-50px', width: '60px', height: '60px', background: '#f1f5f9', borderRadius: '16px' }}></div>
+                      <div style={{ position: 'absolute', top: '100px', left: '-20px', width: '20px', height: '20px', background: '#cbd5e1', borderRadius: '6px' }}></div>
+
+                      <div style={{ gridColumn: '1 / 3', gridRow: '1 / 3', background: '#0f172a', borderRadius: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                         <div style={{ fontSize: '0.55rem', color: '#cbd5e1', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>Утримання</div>
+                         <div style={{ width: '70px', height: '70px', borderRadius: '50%', border: '14px solid #fde047', borderTopColor: '#3b82f6', borderRightColor: '#10b981' }}></div>
+                      </div>
+
+                      <div style={{ gridColumn: '3 / 5', gridRow: '1 / 3', background: '#10b981', borderRadius: '24px', padding: '1.2rem', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 30px rgba(16, 185, 129, 0.2)' }}>
+                        <div style={{ fontSize: '0.65rem', fontWeight: '800', color: '#064e3b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Від акцій</div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '0.5rem', flex: 1, marginTop: '1rem' }}>
+                          <div style={{ width: '30%', height: '40%', background: '#0f172a', borderRadius: '6px' }}></div>
+                          <div style={{ width: '30%', height: '70%', background: '#0f172a', borderRadius: '6px' }}></div>
+                          <div style={{ width: '30%', height: '100%', background: '#0f172a', borderRadius: '6px' }}></div>
+                        </div>
+                      </div>
+
+                      <div style={{ gridColumn: '1 / 2', gridRow: '3 / 4', background: '#fde047', borderRadius: '20px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 4px 15px rgba(253, 224, 71, 0.3)' }}>
+                         <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#854d0e', lineHeight: '1.2' }}>Активні<br/>розсилки</div>
+                         <div style={{ marginTop: 'auto' }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#854d0e" strokeWidth="3"><polyline points="7 17 17 17 17 7"></polyline><line x1="7" y1="17" x2="17" y2="7"></line></svg></div>
+                      </div>
+
+                      <div style={{ gridColumn: '2 / 4', gridRow: '3 / 5', background: '#0f172a', borderRadius: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.05) 10px, rgba(255,255,255,0.05) 20px)' }}></div>
+                        <div style={{ position: 'absolute', bottom: '1.5rem', right: '1.5rem', color: '#fff', fontWeight: '900', fontSize: '1.4rem', textAlign: 'right', lineHeight: '1' }}>99.9%<br/><span style={{fontSize: '0.7rem', color: '#cbd5e1', fontWeight: '600'}}>ВІДКРИТТЯ SMS</span></div>
+                      </div>
+
+                      <div style={{ gridColumn: '4 / 5', gridRow: '3 / 4', background: '#d8b4fe', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#581c87', boxShadow: '0 4px 15px rgba(216, 180, 254, 0.4)' }}>
+                        <Icons.Sparkles />
+                      </div>
+
+                      <div style={{ gridColumn: '1 / 2', gridRow: '4 / 5', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                         <Icons.Mail />
+                      </div>
+
+                      <div style={{ gridColumn: '4 / 5', gridRow: '4 / 5', background: '#0f172a', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                         <Icons.Globe />
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+
+                {/* НИЖНЯ ЧАСТИНА: Список фіч у вигляді повноцінних карток */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginTop: 'auto' }}>
+
+                  {/* Картка 1: Google */}
+                  <div
+                    onClick={() => setComingSoonModal({ isOpen: true, title: 'Інтеграція з Google', desc: 'Можливість бронювати прямо через Google My Business наразі знаходиться на етапі тестування. Ми повідомимо вас, як тільки функція стане доступною!' })}
+                    style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '2rem', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}
+                    onMouseOver={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.06)'; }}
+                    onMouseOut={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.02)'; }}
+                  >
+                    <div style={{ marginBottom: '1.5rem', color: '#0f172a', background: '#f8fafc', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '16px' }}>
+                      <Icons.Globe />
+                    </div>
+                    <h4 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0', letterSpacing: '-0.02em' }}>Записи з Google</h4>
+                    <p style={{ fontSize: '0.95rem', color: '#64748b', margin: '0 0 1.5rem 0', lineHeight: '1.5', flex: 1 }}>Дозвольте знаходити вас на Картах та бронювати час в 1 клік прямо з пошуковика.</p>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Підключити →</span>
+                  </div>
+
+                  {/* Картка 2: Акції */}
+                  <div
+                    onClick={() => setMarketingView('promotions')}
+                    style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '2rem', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}
+                    onMouseOver={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.06)'; }}
+                    onMouseOut={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.02)'; }}
+                  >
+                    <div style={{ marginBottom: '1.5rem', color: '#0f172a', background: '#f8fafc', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '16px' }}>
+                      <Icons.Tag />
+                    </div>
+                    <h4 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0', letterSpacing: '-0.02em' }}>Акції та Знижки</h4>
+                    <p style={{ fontSize: '0.95rem', color: '#64748b', margin: '0 0 1.5rem 0', lineHeight: '1.5', flex: 1 }}>Створюйте гарячі пропозиції, щасливі години та знижки для заповнення розкладу.</p>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Налаштувати →</span>
+                  </div>
+
+                  {/* Картка 3: SMM */}
+                  <div
+                    onClick={() => setComingSoonModal({ isOpen: true, title: 'Інтеграція з Meta (SMM)', desc: 'Ми активно працюємо над прямою інтеграцією з Instagram та Facebook, щоб ваші клієнти могли бронювати прямо з соцмереж.' })}
+                    style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '2rem', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'all 0.3s ease', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}
+                    onMouseOver={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.06)'; }}
+                    onMouseOut={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.02)'; }}
+                  >
+                    <div style={{ marginBottom: '1.5rem', color: '#0f172a', background: '#f8fafc', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '16px' }}>
+                      <Icons.Camera />
+                    </div>
+                    <h4 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0', letterSpacing: '-0.02em' }}>SMM Інтеграції</h4>
+                    <p style={{ fontSize: '0.95rem', color: '#475569', margin: '0 0 1.5rem 0', lineHeight: '1.5', flex: 1 }}>Кнопка "Забронювати" в Instagram. Готові шаблони постів для залучення трафіку.</p>
+                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Прив'язати акаунт →</span>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
+            {/* 🟢 2. SMS ТА EMAIL РОЗСИЛКИ */}
+            {marketingView === 'campaigns' && (
+              <div style={{ animation: 'fadeIn 0.3s ease-in-out', display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '900px' }}>
+
+                {/* Хедер внутрішньої сторінки */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+                  <button onClick={() => setMarketingView('overview')} style={{ background: '#fff', border: '1px solid #e2e8f0', width: '44px', height: '44px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', cursor: 'pointer', transition: '0.2s', flexShrink: 0, boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }} onMouseOver={e => e.currentTarget.style.background = '#f8fafc'} onMouseOut={e => e.currentTarget.style.background = '#fff'}>
+                    <Icons.ChevronLeft />
+                  </button>
+                  <div>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.2rem 0', letterSpacing: '-0.02em' }}>Кампанії та Розсилки</h2>
+                    <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0 }}>Налаштуйте автоматизацію або створіть власну розсилку.</p>
+                  </div>
+                </div>
+
+                {/* Сучасні Таби */}
+                <div style={{ display: 'flex', gap: '0.5rem', background: '#f1f5f9', padding: '0.4rem', borderRadius: '16px', width: 'fit-content', marginBottom: '2.5rem' }}>
+                  <button onClick={() => setCampaignTab('automated')} style={{ background: campaignTab === 'automated' ? '#fff' : 'transparent', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '12px', fontSize: '0.95rem', fontWeight: '700', color: campaignTab === 'automated' ? '#0f172a' : '#64748b', cursor: 'pointer', transition: '0.2s', boxShadow: campaignTab === 'automated' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none' }}>
+                    Сценарії (Авто)
+                  </button>
+                  <button onClick={() => setCampaignTab('mass')} style={{ background: campaignTab === 'mass' ? '#fff' : 'transparent', border: 'none', padding: '0.6rem 1.5rem', borderRadius: '12px', fontSize: '0.95rem', fontWeight: '700', color: campaignTab === 'mass' ? '#0f172a' : '#64748b', cursor: 'pointer', transition: '0.2s', boxShadow: campaignTab === 'mass' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none' }}>
+                    Власна розсилка
+                  </button>
+                </div>
+
+                {/* 2.1 АВТОМАТИЧНІ КАМПАНІЇ */}
+                {campaignTab === 'automated' && (
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {[
+                        { id: 'welcome', title: 'Привітання нового клієнта', desc: 'Надсилається через 2 години після першого візиту з подякою.', badge: 'УТРИМАННЯ' },
+                        { id: 'review', title: 'Запит на відгук', desc: 'Збирайте оцінки автоматично через 1 день після візиту.', badge: 'РЕПУТАЦІЯ' },
+                        { id: 'lost', title: 'Повернення втрачених клієнтів', desc: 'Для тих, хто не був понад 45 днів. Може включати спецпропозицію.', badge: 'TOP ROI' },
+                        { id: 'crossSell', title: 'Пропозиція супутніх послуг', desc: 'Розкажіть клієнтам про інші ваші послуги через 21 день.', badge: '' },
+                      ].map((item, idx) => {
+                        const isActive = (automations as any)[item.id];
+                        return (
+                          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', background: '#fff', borderBottom: idx !== 3 ? '1px solid #f1f5f9' : 'none', transition: '0.2s' }}>
+                            <div style={{ flex: 1, paddingRight: '2rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.4rem' }}>
+                                <h4 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>{item.title}</h4>
+                                {item.badge && <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#3b82f6', background: '#eff6ff', padding: '0.2rem 0.6rem', borderRadius: '6px', letterSpacing: '0.05em' }}>{item.badge}</span>}
+                              </div>
+                              <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0, lineHeight: '1.4' }}>{item.desc}</p>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: isActive ? '#3b82f6' : '#94a3b8' }}>
+                                {isActive ? 'Увімкнено' : 'Вимкнено'}
+                              </span>
+                              {/* 🟢 М'ЯКИЙ iOS ТУМБЛЕР */}
+                              <div
+                                onClick={() => setAutomations({ ...automations, [item.id]: !isActive })}
+                                style={{ width: '44px', height: '24px', borderRadius: '12px', background: isActive ? '#3b82f6' : '#e2e8f0', position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0 }}
+                              >
+                                <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: isActive ? '22px' : '2px', transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}></div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2.2 МАСОВІ РОЗСИЛКИ + 🪄 AI MAGIC */}
+                {campaignTab === 'mass' && (() => {
+                  const handleAIGenerate = () => {
+                    const templates: any = {
+                      all: [
+                        "Скучили за вами! 💇‍♂️ Знижка 15% на будь-яку послугу до кінця тижня. Бронюйте час онлайн: [посилання]",
+                        "Вільне вікно на сьогодні! 🔥 Запишіться протягом години та отримайте догляд у подарунок: [посилання]"
+                      ],
+                      vip: [
+                        "Тільки для своїх 🤫 Забронюйте час цього тижня і отримайте преміум-догляд абсолютно безкоштовно: [посилання]"
+                      ],
+                      lost: [
+                        "Давно не бачились! 👀 Даруємо -20% на ваше наступне відвідування. Чекаємо на вас: [посилання]"
+                      ]
+                    };
+                    const selectedTpl = templates[marketingForm.audience] || templates.all;
+                    let randomText = marketingForm.message;
+                    while (randomText === marketingForm.message) {
+                      randomText = selectedTpl[Math.floor(Math.random() * selectedTpl.length)];
+                    }
+                    setMarketingForm({ ...marketingForm, message: randomText });
+                  };
+
+                  return (
+                  <div style={{ maxWidth: '750px', background: '#fff', padding: '2rem', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                      {/* Вибір типу */}
+                      <div style={{ display: 'flex', gap: '0.5rem', background: '#f8fafc', padding: '0.4rem', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                        <div onClick={() => setMarketingForm({...marketingForm, type: 'sms'})} style={{ flex: 1, padding: '1rem', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', background: marketingForm.type === 'sms' ? '#fff' : 'transparent', color: marketingForm.type === 'sms' ? '#0f172a' : '#64748b', transition: '0.2s', boxShadow: marketingForm.type === 'sms' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none' }}>
+                          <Icons.Phone /> <span style={{ fontWeight: '700' }}>SMS-розсилка</span>
+                        </div>
+                        <div onClick={() => setMarketingForm({...marketingForm, type: 'email'})} style={{ flex: 1, padding: '1rem', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', background: marketingForm.type === 'email' ? '#fff' : 'transparent', color: marketingForm.type === 'email' ? '#0f172a' : '#64748b', transition: '0.2s', boxShadow: marketingForm.type === 'email' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none' }}>
+                          <Icons.Mail /> <span style={{ fontWeight: '700' }}>Email-лист</span>
+                        </div>
+                      </div>
+
+                      {/* Аудиторія */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.5rem' }}>Оберіть аудиторію</label>
+                        <div className="modal-select-wrapper">
+                          <select value={marketingForm.audience} onChange={e => setMarketingForm({...marketingForm, audience: e.target.value})} style={{ padding: '1rem', fontSize: '0.95rem', borderRadius: '12px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                            <option value="all">Усі клієнти ({clientsList.length})</option>
+                            <option value="vip">Тільки VIP-клієнти</option>
+                            <option value="lost">Не були понад 30 днів (Спробувати повернути)</option>
+                          </select>
+                          <div className="modal-select-icon" style={{ right: '1.2rem' }}><Icons.ChevronDown /></div>
+                        </div>
+                      </div>
+
+                      {/* Текст + AI */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.5rem' }}>
+                          <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Текст повідомлення</label>
+                          <button
+                            onClick={handleAIGenerate}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(135deg, #a855f7 0%, #3b82f6 100%)', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '800', cursor: 'pointer', transition: 'transform 0.2s', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)' }}
+                            onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                            onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                            <Icons.Sparkles /> AI-Генератор
+                          </button>
+                        </div>
+                        <div style={{ position: 'relative' }}>
+                          <textarea
+                            value={marketingForm.message}
+                            onChange={e => setMarketingForm({...marketingForm, message: e.target.value})}
+                            className="inline-input custom-scroll"
+                            style={{ width: '100%', minHeight: '160px', padding: '1.25rem', border: '1px solid #cbd5e1', borderRadius: '16px', fontSize: '1rem', background: '#fff', color: '#0f172a', resize: 'vertical', lineHeight: '1.5' }}
+                            placeholder="Напишіть своє повідомлення або скористайтеся AI-генератором..."
+                          />
+                        </div>
+                        <div style={{ textAlign: 'right', fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.4rem', fontWeight: '600' }}>
+                          {marketingForm.message.length} символів
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '2.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '2rem' }}>
+                      <button
+                        onClick={handleSendMarketing}
+                        disabled={isSendingPromo || clientsList.length === 0}
+                        style={{ width: '100%', padding: '1.2rem', backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '1.1rem', cursor: (isSendingPromo || clientsList.length === 0) ? 'not-allowed' : 'pointer', opacity: (isSendingPromo || clientsList.length === 0) ? 0.7 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.6rem', boxShadow: '0 4px 20px rgba(15,23,42,0.15)' }}
+                        onMouseOver={e => { if(!isSendingPromo && clientsList.length > 0) e.currentTarget.style.backgroundColor = '#1e293b' }}
+                        onMouseOut={e => { if(!isSendingPromo && clientsList.length > 0) e.currentTarget.style.backgroundColor = '#0f172a' }}
+                      >
+                        {isSendingPromo ? 'НАДСИЛАННЯ...' : <><Icons.Send /> ВІДПРАВИТИ ({clientsList.length} клієнтів)</>}
+                      </button>
+                    </div>
+                  </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* 🟢 3. АКЦІЇ ТА ЗНИЖКИ (ЗГЛАДЖЕНИЙ СТИЛЬ) */}
+            {marketingView === 'promotions' && (
+              <div style={{ animation: 'fadeIn 0.3s ease-in-out', display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '900px' }}>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                  <button onClick={() => setMarketingView('overview')} style={{ background: '#fff', border: '1px solid #e2e8f0', width: '44px', height: '44px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', cursor: 'pointer', transition: '0.2s', flexShrink: 0, boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }} onMouseOver={e => e.currentTarget.style.background = '#f8fafc'} onMouseOut={e => e.currentTarget.style.background = '#fff'}>
+                    <Icons.ChevronLeft />
+                  </button>
+                  <div>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.2rem 0', letterSpacing: '-0.02em' }}>Промо та Знижки</h2>
+                    <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0 }}>Заповнюйте порожні вікна в календарі за допомогою промокампаній.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+                  {[
+                    { icon: Icons.Sparkles, color: '#3b82f6', bg: '#eff6ff', title: 'Швидкий розпродаж (Flash Sale)', desc: 'Встановіть тимчасову знижку на вибрані послуги. Чудово працює перед святами.' },
+                    { icon: Icons.Clock, color: '#eab308', bg: '#fefce8', title: 'Щасливі години (Happy Hours)', desc: 'Автоматично пропонуйте знижку в "мертві" години (наприклад, з 10:00 до 14:00).' },
+                    { icon: Icons.TrendingDown, color: '#10b981', bg: '#f0fdf4', title: 'Знижка в останню хвилину', desc: 'Знижуйте ціну на вікна, які несподівано звільнилися на сьогодні або на завтра.' },
+                    { icon: Icons.TrendingUp, color: '#ef4444', bg: '#fef2f2', title: 'Преміум години (Націнка)', desc: 'Встановіть націнку (+10-20%) на піковий час (наприклад, вечір п\'ятниці).' }
+                  ].map((promo, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setComingSoonModal({ isOpen: true, title: promo.title, desc: 'Налаштування цієї акції наразі знаходяться в розробці. Слідкуйте за оновленнями!' })}
+                      style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '1.5rem 2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1.5rem', borderRadius: '24px', transition: 'all 0.2s ease', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}
+                      onMouseOver={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.04)'; }}
+                      onMouseOut={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.01)'; }}
+                    >
+                      <div style={{ width: '60px', height: '60px', background: promo.bg, borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: promo.color, flexShrink: 0 }}>
+                        <promo.icon />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.3rem 0' }}>{promo.title}</h4>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0, lineHeight: '1.4' }}>{promo.desc}</p>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', background: '#f1f5f9', padding: '0.4rem 0.8rem', borderRadius: '8px', letterSpacing: '0.05em' }}>ВИМКНЕНО</span>
+                        <div style={{ color: '#cbd5e1' }}><Icons.ChevronRight /></div>
+                      </div>
+                    </div>
+                  ))}
+
+                </div>
+              </div>
+            )}
+
+            {/* 🟢 МОДАЛЬНЕ ВІКНО ДЛЯ "У РОЗРОБЦІ" (Щоб не було сірого алерту) */}
+            {comingSoonModal.isOpen && (
+              <div className="modal-overlay" onClick={() => setComingSoonModal({ isOpen: false, title: '', desc: '' })}>
+                <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '420px', textAlign: 'center', padding: '2.5rem', borderRadius: '24px' }}>
+                  <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
                     <Icons.Sparkles />
                   </div>
-                  <div>
-                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.4rem 0' }}>Створити розсилку</h2>
-                    <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0, lineHeight: '1.5' }}>Заохочуйте клієнтів повернутися. Надсилайте повідомлення про акції, знижки або нагадування про візит.</p>
-                  </div>
+                  <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.8rem' }}>{comingSoonModal.title}</h2>
+                  <p style={{ color: '#64748b', fontSize: '0.95rem', lineHeight: '1.5', marginBottom: '2rem' }}>
+                    {comingSoonModal.desc}
+                  </p>
+                  <button
+                    onClick={() => setComingSoonModal({ isOpen: false, title: '', desc: '' })}
+                    style={{ width: '100%', padding: '0.85rem', backgroundColor: '#0f172a', border: 'none', borderRadius: '16px', fontWeight: '700', fontSize: '1rem', color: '#ffffff', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 15px rgba(15,23,42,0.2)' }}
+                    onMouseOver={e => e.currentTarget.style.background = '#1e293b'}
+                    onMouseOut={e => e.currentTarget.style.background = '#0f172a'}
+                  >
+                    Зрозуміло
+                  </button>
                 </div>
+              </div>
+            )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <div onClick={() => setMarketingForm({...marketingForm, type: 'sms'})} style={{ flex: 1, padding: '1rem', border: `2px solid ${marketingForm.type === 'sms' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: marketingForm.type === 'sms' ? '#f8fafc' : '#fff' }}>
-                      <input type="radio" checked={marketingForm.type === 'sms'} readOnly style={{ accentColor: '#0f172a' }} />
-                      <span style={{ fontWeight: '700', color: '#0f172a' }}>SMS-повідомлення</span>
-                    </div>
-                    <div onClick={() => setMarketingForm({...marketingForm, type: 'email'})} style={{ flex: 1, padding: '1rem', border: `2px solid ${marketingForm.type === 'email' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: marketingForm.type === 'email' ? '#f8fafc' : '#fff' }}>
-                      <input type="radio" checked={marketingForm.type === 'email'} readOnly style={{ accentColor: '#0f172a' }} />
-                      <span style={{ fontWeight: '700', color: '#0f172a' }}>Email-лист</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="modal-label">Аудиторія (Кому надсилаємо?)</label>
-                    <div className="modal-select-wrapper">
-                      <select value={marketingForm.audience} onChange={e => setMarketingForm({...marketingForm, audience: e.target.value})}>
-                        <option value="all">Усі клієнти ({clientsList.length})</option>
-                        <option value="vip">Тільки VIP-клієнти</option>
-                        <option value="lost">Не були понад 30 днів (Повернути)</option>
-                      </select>
-                      <div className="modal-select-icon"><Icons.ChevronDown /></div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="modal-label">Текст повідомлення</label>
-                    <textarea
-                      value={marketingForm.message}
-                      onChange={e => setMarketingForm({...marketingForm, message: e.target.value})}
-                      className="inline-input"
-                      style={{ width: '100%', minHeight: '120px', padding: '1rem', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '0.95rem', background: '#fff', color: '#0f172a', resize: 'vertical' }}
-                      placeholder="Наприклад: Знижка -20% на стрижку до кінця тижня! Запишіться онлайн: [посилання]"
-                    />
-                    <div style={{ textAlign: 'right', fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.4rem' }}>
-                      {marketingForm.message.length} символів
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleSendMarketing}
-                  disabled={isSendingPromo || clientsList.length === 0}
-                  style={{ width: '100%', marginTop: '2rem', padding: '1rem', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1.05rem', cursor: (isSendingPromo || clientsList.length === 0) ? 'not-allowed' : 'pointer', opacity: (isSendingPromo || clientsList.length === 0) ? 0.7 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-                >
-                  {isSendingPromo ? 'Надсилання...' : <><Icons.Send /> Розіслати {marketingForm.type.toUpperCase()}</>}
-                </button>
-             </div>
           </div>
         )
+                                    /* --- 7. ПЕРСОНАЛ (КОМАНДА) --- */
+        : activeTab === 'Team' ? (
+          <div style={{ display: 'flex', height: '100%', width: '100%', backgroundColor: '#fff', overflow: 'hidden' }}>
 
-        /* --- 7. ІНШІ ВКЛАДКИ (ЗАГЛУШКА) --- */
+            {(() => {
+              // 🟢 ЛОГІКА: Вибір майстра
+              let currentStaff = selectedStaffId ? team.find(t => String(t.id) === String(selectedStaffId)) : team[0];
+              if (!selectedStaffId && team.length > 0) setTimeout(() => setSelectedStaffId(team[0].id), 0);
+
+              // 🟢 РОЗУМНЕ ПІДТЯГУВАННЯ ДАНИХ
+              if (currentStaff) {
+                const isOwner = currentStaff.name?.includes('Власник') || currentStaff.role === 'owner';
+                currentStaff = { ...currentStaff };
+
+                if (isOwner) {
+                  if (currentStaff.name === 'Я (Власник)' && userProfile?.full_name && !userProfile.full_name.includes('@')) {
+                    currentStaff.name = userProfile.full_name;
+                  }
+                  if (!currentStaff.phone || currentStaff.phone.trim() === '') currentStaff.phone = userProfile?.phone || business?.phone || '';
+                  if (!currentStaff.email || currentStaff.email.trim() === '') currentStaff.email = userProfile?.email || business?.email || (userProfile?.full_name?.includes('@') ? userProfile.full_name : '') || '';
+                  if (!currentStaff.title || currentStaff.title.trim() === '') currentStaff.title = 'Власник бізнесу';
+                } else {
+                  if (business?.team && Array.isArray(business.team)) {
+                    const sName = currentStaff.name?.trim().toLowerCase() || '';
+                    const regData = business.team.find((t: any) => typeof t === 'object' && t.name && t.name.trim().toLowerCase() === sName);
+
+                    if (regData) {
+                      if (!currentStaff.phone || currentStaff.phone.trim() === '') currentStaff.phone = regData.phone || regData.phoneNumber || regData.phone_number || '';
+                      if (!currentStaff.email || currentStaff.email.trim() === '') currentStaff.email = regData.email || regData.mail || '';
+                      if (!currentStaff.title || currentStaff.title.trim() === '') currentStaff.title = regData.title || regData.role || regData.position || '';
+                    }
+                  }
+                  if (!currentStaff.title || currentStaff.title.trim() === '') {
+                     currentStaff.title = currentStaff.role === 'admin' ? 'Адміністратор' : 'Спеціаліст';
+                  }
+                }
+              }
+
+              const filteredTeam = team.filter(member => member.name.toLowerCase().includes(staffSearchQuery.toLowerCase()));
+              const providesServices = currentStaff?.provides_services !== false;
+              const isOwnerProfile = currentStaff?.name?.includes('Власник') || currentStaff?.role === 'owner';
+
+              // 🟢 ПРАВА ДОСТУПУ (RBAC)
+              const currentUserRole = 'admin'; // 'admin', 'owner' або 'master'
+              const hasAdminRights = currentUserRole === 'admin' || currentUserRole === 'owner';
+
+              const staffShifts = currentStaff?.shifts && currentStaff.shifts.length > 0 ? currentStaff.shifts : shifts;
+
+              // 🟢 ЛОГІКА: ЕКСПОРТ В ГУГЛ / APPLE КАЛЕНДАР (.ics)
+              const handleExportToCalendar = () => {
+                if (!currentStaff) return;
+
+                let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//BookEra//Schedule//UK\n";
+                const daysMap = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+                const baseDates = ['20240101', '20240102', '20240103', '20240104', '20240105', '20240106', '20240107'];
+
+                staffShifts.forEach((shift: any, idx: number) => {
+                  if (shift.active && shift.start && shift.end) {
+                    const [startH, startM] = shift.start.split(':');
+                    const [endH, endM] = shift.end.split(':');
+
+                    icsContent += "BEGIN:VEVENT\n";
+                    icsContent += `SUMMARY:Робоча зміна (${currentStaff.name})\n`;
+                    icsContent += `DTSTART:${baseDates[idx]}T${startH}${startM}00\n`;
+                    icsContent += `DTEND:${baseDates[idx]}T${endH}${endM}00\n`;
+                    icsContent += `RRULE:FREQ=WEEKLY;BYDAY=${daysMap[idx]}\n`;
+                    icsContent += "END:VEVENT\n";
+                  }
+                });
+                icsContent += "END:VCALENDAR";
+
+                const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `grafik_${currentStaff.name.replace(/\s+/g, '_')}.ics`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              };
+
+              // 🟢 ЛОГІКА: Оновлення послуг (Локально)
+              const toggleStaffService = (serviceId: string) => {
+                if (!currentStaff || !providesServices || !hasAdminRights) return;
+                const currentAssigned = currentStaff.assigned_services || services.map(s => s.id);
+                let newAssigned;
+
+                if (currentAssigned.includes(serviceId)) {
+                  newAssigned = currentAssigned.filter((id: string) => id !== serviceId);
+                } else {
+                  newAssigned = [...currentAssigned, serviceId];
+                }
+                handleUpdateLocalStaff({ assigned_services: newAssigned });
+              };
+
+              // 🟢 ЛОГІКА: Оновлення профілю локально
+              const handleUpdateLocalStaff = (updates: any) => {
+                const updatedStaff = { ...currentStaff, ...updates };
+                setTeam(team.map(t => String(t.id) === String(currentStaff.id) ? updatedStaff : t));
+              };
+
+              // 🟢 ЛОГІКА: Збереження Загальної інформації в БД
+              const handleSaveGeneralInfo = async () => {
+                 if (!currentStaff || !hasAdminRights) return;
+                 const { error } = await supabase.from('staff').update({
+                    name: currentStaff.name,
+                    title: currentStaff.title,
+                    phone: currentStaff.phone,
+                    email: currentStaff.email
+                 }).eq('id', currentStaff.id);
+                 if (error) throw error;
+
+                 setTeam(team.map(t => String(t.id) === String(currentStaff.id) ? { ...t, name: currentStaff.name, title: currentStaff.title, phone: currentStaff.phone, email: currentStaff.email } : t));
+              };
+
+              // 🟢 ЛОГІКА: Збереження Налаштувань в БД
+              const handleSaveSettingsDB = async (updates: any) => {
+                if (!currentStaff || !hasAdminRights) return;
+                handleUpdateLocalStaff(updates);
+                const { error } = await supabase.from('staff').update(updates).eq('id', currentStaff.id);
+                if (error) throw error;
+              };
+
+              const handleDeleteStaff = async () => {
+                if (!currentStaff || !hasAdminRights) return;
+                if (isOwnerProfile) return alert("Неможливо видалити профіль власника бізнесу.");
+                if (!confirm(`Ви впевнені, що хочете звільнити ${currentStaff.name}? Усі майбутні записи до цього майстра потрібно буде перенести вручну.`)) return;
+
+                try {
+                  await supabase.from('staff').delete().eq('id', currentStaff.id);
+                  setTeam(team.filter(t => String(t.id) !== String(currentStaff.id)));
+                  setSelectedStaffId(null);
+                  setStaffActiveTab('general');
+                } catch (err) {
+                  console.error("Помилка видалення:", err);
+                  alert("Не вдалося видалити співробітника.");
+                }
+              };
+
+              const getRoleBadge = (staff: any) => {
+                if (staff.name.includes('Власник') || staff.role === 'owner') return { label: 'Власник бізнесу', color: '#8b5cf6', bg: '#f3e8ff' };
+                if (staff.role === 'admin') return { label: 'Адміністратор', color: '#3b82f6', bg: '#eff6ff' };
+                return { label: 'Спеціаліст', color: '#10b981', bg: '#dcfce7' };
+              };
+
+              const activeStaffTab = staffActiveTab === 'settings' ? 'security' : (staffActiveTab || 'general');
+
+              return (
+                <>
+                  {/* --- ЛІВА ПАНЕЛЬ --- */}
+                  <div style={{ width: '300px', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', backgroundColor: '#fcfcfc', zIndex: 10 }}>
+                    <div style={{ padding: '2rem 1.5rem 1rem 1.5rem' }}>
+                      <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1rem 0' }}>Команда</h2>
+
+                      <div style={{ position: 'relative', marginBottom: '1rem' }}>
+                        <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}><Icons.Search /></div>
+                        <input
+                          type="text"
+                          placeholder="Пошук співробітника..."
+                          value={staffSearchQuery}
+                          onChange={(e) => setStaffSearchQuery(e.target.value)}
+                          style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.2rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', outline: 'none', transition: '0.2s', backgroundColor: '#fff', boxSizing: 'border-box' }}
+                        />
+                      </div>
+
+                      {hasAdminRights && (
+                        <button
+                          onClick={() => setIsInviteStaffModalOpen(true)}
+                          style={{ width: '100%', padding: '0.6rem', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                          onMouseOver={e => e.currentTarget.style.background = '#f8fafc'}
+                          onMouseOut={e => e.currentTarget.style.background = '#fff'}
+                        >
+                          <Icons.Plus /> Запросити в команду
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0 1rem 1rem 1rem' }}>
+                      {filteredTeam.map((member) => {
+                        const isSelected = String(selectedStaffId) === String(member.id) || (selectedStaffId === null && member.id === team[0]?.id);
+                        const isPending = member.status === 'pending';
+                        const badge = getRoleBadge(member);
+
+                        if (!hasAdminRights && String(member.id) !== String(currentStaff?.id)) return null;
+
+                        return (
+                          <div
+                            key={member.id}
+                            onClick={() => { setSelectedStaffId(member.id); setStaffActiveTab('general'); }}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.6rem 0.8rem', borderRadius: '8px', cursor: 'pointer', transition: '0.2s', backgroundColor: isSelected ? '#f1f5f9' : 'transparent', marginBottom: '0.2rem' }}
+                            onMouseOver={e => { if(!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc' }}
+                            onMouseOut={e => { if(!isSelected) e.currentTarget.style.backgroundColor = 'transparent' }}
+                          >
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: isSelected ? '#0f172a' : '#e2e8f0', color: isSelected ? '#fff' : '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.8rem', flexShrink: 0 }}>
+                              {getUserInitials(member.name)}
+                            </div>
+                            <div style={{ overflow: 'hidden', flex: 1 }}>
+                              <div style={{ fontWeight: isSelected ? '700' : '600', color: '#0f172a', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{member.name}</div>
+                              <div style={{ fontSize: '0.75rem', color: isPending ? '#f59e0b' : '#64748b', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {isPending ? (
+                                  <><span style={{width: 6, height: 6, borderRadius: '50%', background: '#f59e0b'}}></span> Очікує підтвердження</>
+                                ) : (
+                                  badge.label
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {filteredTeam.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                          Співробітників не знайдено
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* --- ПРАВА ПАНЕЛЬ --- */}
+                  <div className="custom-scroll" style={{ flex: 1, backgroundColor: '#fff', overflowY: 'auto', position: 'relative' }}>
+                    {currentStaff ? (
+                      <div style={{ maxWidth: '850px', margin: '0 auto', padding: '3rem 2rem' }}>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                            <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '2rem', color: '#0f172a' }}>
+                              {getUserInitials(currentStaff.name)}
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0' }}>{currentStaff.name}</h1>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', fontSize: '0.85rem', fontWeight: '600' }}>
+
+                                {currentStaff.status === 'pending' ? (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#b45309', background: '#fef3c7', padding: '0.3rem 0.8rem', borderRadius: '20px' }}>
+                                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }}></span>
+                                    Очікує прийняття
+                                  </span>
+                                ) : (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: getRoleBadge(currentStaff).color, background: getRoleBadge(currentStaff).bg, padding: '0.3rem 0.8rem', borderRadius: '20px' }}>
+                                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: getRoleBadge(currentStaff).color }}></span>
+                                    {getRoleBadge(currentStaff).label}
+                                  </span>
+                                )}
+
+                                {currentStaff.phone && ( <span style={{ color: '#64748b' }}>{currentStaff.phone}</span> )}
+                                {currentStaff.email && (
+                                  <>
+                                    <span style={{ color: '#cbd5e1' }}>•</span>
+                                    <span style={{ color: '#64748b' }}>{currentStaff.email}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {providesServices && (
+                            <button onClick={() => { setActiveTab('Calendar'); setFilterMaster(currentStaff.id); }} style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', background: '#0f172a', fontWeight: '700', fontSize: '0.85rem', color: '#fff', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '0.4rem' }} onMouseOver={e => e.currentTarget.style.background = '#1e293b'} onMouseOut={e => e.currentTarget.style.background = '#0f172a'}>
+                              <Icons.Calendar /> Журнал записів
+                            </button>
+                          )}
+                        </div>
+
+                        {/* НАВІГАЦІЯ ПО ВКЛАДКАХ */}
+                        <div style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid #e2e8f0', marginBottom: '2.5rem', overflowX: 'auto', paddingBottom: '2px' }}>
+                          <div onClick={() => setStaffActiveTab('general')} style={{ paddingBottom: '0.8rem', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', fontWeight: activeStaffTab === 'general' ? '800' : '600', color: activeStaffTab === 'general' ? '#0f172a' : '#64748b', borderBottom: activeStaffTab === 'general' ? '2px solid #0f172a' : '2px solid transparent', whiteSpace: 'nowrap' }}>Загальна інформація</div>
+                          <div onClick={() => setStaffActiveTab('services')} style={{ paddingBottom: '0.8rem', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', fontWeight: activeStaffTab === 'services' ? '800' : '600', color: activeStaffTab === 'services' ? '#0f172a' : '#64748b', borderBottom: activeStaffTab === 'services' ? '2px solid #0f172a' : '2px solid transparent', whiteSpace: 'nowrap' }}>Послуги</div>
+                          <div onClick={() => setStaffActiveTab('schedule')} style={{ paddingBottom: '0.8rem', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', fontWeight: activeStaffTab === 'schedule' ? '800' : '600', color: activeStaffTab === 'schedule' ? '#0f172a' : '#64748b', borderBottom: activeStaffTab === 'schedule' ? '2px solid #0f172a' : '2px solid transparent', whiteSpace: 'nowrap' }}>Графік роботи</div>
+
+                          <div onClick={() => setStaffActiveTab('finance')} style={{ paddingBottom: '0.8rem', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', fontWeight: activeStaffTab === 'finance' ? '800' : '600', color: activeStaffTab === 'finance' ? '#0f172a' : '#64748b', borderBottom: activeStaffTab === 'finance' ? '2px solid #0f172a' : '2px solid transparent', whiteSpace: 'nowrap' }}>Зарплата</div>
+                          {hasAdminRights && <div onClick={() => setStaffActiveTab('security')} style={{ paddingBottom: '0.8rem', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', fontWeight: activeStaffTab === 'security' ? '800' : '600', color: activeStaffTab === 'security' ? '#0f172a' : '#64748b', borderBottom: activeStaffTab === 'security' ? '2px solid #0f172a' : '2px solid transparent', whiteSpace: 'nowrap' }}>Доступ та Безпека</div>}
+                        </div>
+
+                        {/* 1. ЗАГАЛЬНА ІНФОРМАЦІЯ */}
+                        {activeStaffTab === 'general' && (
+                          <div style={{ animation: 'fadeIn 0.3s ease-in-out', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '2rem' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>ПІБ співробітника</label>
+                                  <input
+                                    type="text"
+                                    value={currentStaff.name || ''}
+                                    onChange={e => handleUpdateLocalStaff({ name: e.target.value })}
+                                    disabled={!hasAdminRights}
+                                    style={{ width: '100%', padding: '0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', fontWeight: '600', color: '#0f172a', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Посада (Для клієнтів)</label>
+                                  <input
+                                    type="text"
+                                    value={currentStaff.title || ''}
+                                    placeholder="Наприклад: Топ-Барбер, Стиліст"
+                                    onChange={e => handleUpdateLocalStaff({ title: e.target.value })}
+                                    disabled={!hasAdminRights}
+                                    style={{ width: '100%', padding: '0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', fontWeight: '600', color: '#0f172a', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Телефон</label>
+                                  <input
+                                    type="text"
+                                    value={currentStaff.phone || ''}
+                                    placeholder="+380..."
+                                    onChange={e => handleUpdateLocalStaff({ phone: e.target.value })}
+                                    disabled={!hasAdminRights}
+                                    style={{ width: '100%', padding: '0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', fontWeight: '600', color: '#0f172a', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Email</label>
+                                  <input
+                                    type="email"
+                                    value={currentStaff.email || ''}
+                                    onChange={e => handleUpdateLocalStaff({ email: e.target.value })}
+                                    disabled={!hasAdminRights}
+                                    style={{ width: '100%', padding: '0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.95rem', fontWeight: '600', color: '#0f172a', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            {hasAdminRights && (
+                              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={async (e) => {
+                                    const btn = e.currentTarget;
+                                    const originalText = btn.innerText;
+                                    btn.innerText = 'Збереження...';
+                                    btn.style.opacity = '0.7';
+                                    btn.disabled = true;
+                                    try {
+                                      await handleSaveGeneralInfo();
+                                      btn.innerText = '✓ Збережено';
+                                      btn.style.background = '#10b981';
+                                      btn.style.opacity = '1';
+                                      setTimeout(() => alert("Особисті дані успішно збережено!"), 50);
+                                      setTimeout(() => { btn.innerText = originalText; btn.style.background = '#0f172a'; btn.disabled = false; }, 3000);
+                                    } catch(err) {
+                                      alert("Помилка при збереженні.");
+                                      btn.innerText = originalText;
+                                      btn.style.opacity = '1';
+                                      btn.disabled = false;
+                                    }
+                                  }}
+                                  style={{ padding: '0.75rem 2.5rem', borderRadius: '8px', border: 'none', background: '#0f172a', fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}
+                                >
+                                  Зберегти дані
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 2. ПОСЛУГИ */}
+                        {activeStaffTab === 'services' && (
+                          <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
+                            {!providesServices ? (
+                              <div style={{ textAlign: 'center', padding: '4rem 2rem', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                                <div style={{ color: '#94a3b8', marginBottom: '1rem' }}><Icons.Services /></div>
+                                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Послуги вимкнено</h3>
+                                <p style={{ fontSize: '0.95rem', color: '#64748b' }}>Цей співробітник не працює з клієнтами. Ви можете змінити це у вкладці "Доступ та Безпека".</p>
+                              </div>
+                            ) : (
+                              <>
+                                {(() => {
+                                  const filteredStaffServices = services.filter(srv =>
+                                    srv.name.toLowerCase().includes(staffServiceSearchQuery.toLowerCase()) ||
+                                    (srv.category && srv.category.toLowerCase().includes(staffServiceSearchQuery.toLowerCase()))
+                                  );
+
+                                  const servicesByCategory = filteredStaffServices.reduce((acc: any, srv: any) => {
+                                    const cat = (srv.category && srv.category.trim() !== '') ? srv.category.trim() : 'Інші послуги';
+                                    if (!acc[cat]) acc[cat] = [];
+                                    acc[cat].push(srv);
+                                    return acc;
+                                  }, {});
+
+                                  const categoryKeys = Object.keys(servicesByCategory);
+                                  const showHeaders = !(categoryKeys.length === 1 && categoryKeys[0] === 'Інші послуги');
+
+                                  const allAssigned = localAssignedServices.length === services.length;
+
+                                  const toggleServiceLocally = (id: string) => {
+                                     if (!hasAdminRights) return;
+                                     if (localAssignedServices.includes(String(id))) {
+                                        setLocalAssignedServices(localAssignedServices.filter(sId => sId !== String(id)));
+                                     } else {
+                                        setLocalAssignedServices([...localAssignedServices, String(id)]);
+                                     }
+                                  };
+
+                                  const toggleAllLocally = () => {
+                                     if (!hasAdminRights) return;
+                                     if (allAssigned) setLocalAssignedServices([]);
+                                     else setLocalAssignedServices(services.map(s => String(s.id)));
+                                  };
+
+                                  return (
+                                    <>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Оберіть послуги, які виконує цей спеціаліст.</p>
+                                        <span style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: '700', background: '#f1f5f9', padding: '0.3rem 0.8rem', borderRadius: '20px' }}>
+                                          Вибрано: {localAssignedServices.length} з {services.length}
+                                        </span>
+                                      </div>
+
+                                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                        <div style={{ position: 'relative', flex: 1 }}>
+                                          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}><Icons.Search /></div>
+                                          <input
+                                            type="text"
+                                            placeholder="Знайти послугу..."
+                                            value={staffServiceSearchQuery}
+                                            onChange={(e) => setStaffServiceSearchQuery(e.target.value)}
+                                            style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.2rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem', outline: 'none', transition: '0.2s', background: '#fff' }}
+                                          />
+                                        </div>
+                                        {hasAdminRights && services.length > 0 && (
+                                          <button
+                                            onClick={toggleAllLocally}
+                                            style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#0f172a', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', padding: '0.6rem 1rem', borderRadius: '8px', transition: '0.2s', whiteSpace: 'nowrap' }}
+                                            onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'}
+                                            onMouseOut={e => e.currentTarget.style.background = '#f8fafc'}
+                                          >
+                                            {allAssigned ? 'Зняти всі' : 'Вибрати всі'}
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      <div className="custom-scroll" style={{ maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                        {categoryKeys.map(category => {
+                                          const filteredCatServices = servicesByCategory[category].filter((srv: any) =>
+                                            srv.name.toLowerCase().includes(staffServiceSearchQuery.toLowerCase()) ||
+                                            category.toLowerCase().includes(staffServiceSearchQuery.toLowerCase())
+                                          );
+
+                                          if (filteredCatServices.length === 0) return null;
+
+                                          return (
+                                            <div key={category}>
+                                              {showHeaders && (
+                                                <h4 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.8rem', paddingLeft: '0.5rem', letterSpacing: '0.05em' }}>
+                                                  {category}
+                                                </h4>
+                                              )}
+                                              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                                {filteredCatServices.map((srv: any, idx: number) => {
+                                                  const isAssigned = localAssignedServices.includes(String(srv.id));
+
+                                                  return (
+                                                    <div
+                                                      key={srv.id}
+                                                      onClick={() => toggleServiceLocally(srv.id)}
+                                                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderBottom: idx !== filteredCatServices.length - 1 ? '1px solid #f1f5f9' : 'none', cursor: hasAdminRights ? 'pointer' : 'default', transition: 'background 0.2s' }}
+                                                      onMouseOver={e => { if(hasAdminRights) e.currentTarget.style.backgroundColor = '#f8fafc' }}
+                                                      onMouseOut={e => { if(hasAdminRights) e.currentTarget.style.backgroundColor = 'transparent' }}
+                                                    >
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: isAssigned ? '#10b981' : '#f1f5f9', border: isAssigned ? 'none' : '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', transition: '0.2s', opacity: hasAdminRights ? 1 : 0.5 }}>
+                                                          {isAssigned && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                                                        </div>
+                                                        <div>
+                                                          <div style={{ fontWeight: '700', color: isAssigned ? '#0f172a' : '#94a3b8', fontSize: '0.95rem', transition: 'color 0.2s' }}>{srv.name}</div>
+                                                        </div>
+                                                      </div>
+
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: '3rem', opacity: isAssigned ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+                                                        <div style={{ textAlign: 'right' }}>
+                                                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.1rem' }}>Тривалість</div>
+                                                          <div style={{ fontWeight: '600', color: '#475569', fontSize: '0.85rem' }}>{srv.duration} хв</div>
+                                                        </div>
+                                                        <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                                                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.1rem' }}>Вартість</div>
+                                                          <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '0.9rem' }}>{srv.price} ₴</div>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                          )
+                                        })}
+                                        {services.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Прайс-лист порожній.</div>}
+                                        {services.length > 0 && filteredStaffServices.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Послуг за цим запитом не знайдено.</div>}
+                                      </div>
+
+                                      {/* 🟢 НАДІЙНА КНОПКА ЗБЕРЕЖЕННЯ */}
+                                      {hasAdminRights && (
+                                        <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
+                                          <button
+                                            onClick={async (e) => {
+                                              const btn = e.currentTarget;
+                                              const originalText = btn.innerText;
+                                              btn.innerText = 'Збереження...';
+                                              btn.style.opacity = '0.7';
+                                              btn.disabled = true;
+                                              try {
+                                                await handleSaveSettingsDB({ assigned_services: localAssignedServices });
+                                                btn.innerText = '✓ Збережено';
+                                                btn.style.background = '#10b981';
+                                                btn.style.opacity = '1';
+                                                setTimeout(() => alert("Послуги майстра успішно збережено!"), 50);
+                                                setTimeout(() => { btn.innerText = originalText; btn.style.background = '#0f172a'; btn.disabled = false; }, 3000);
+                                              } catch(err) {
+                                                alert("Помилка при збереженні.");
+                                                btn.innerText = originalText;
+                                                btn.style.opacity = '1';
+                                                btn.disabled = false;
+                                              }
+                                            }}
+                                            style={{ padding: '0.75rem 2.5rem', borderRadius: '8px', border: 'none', background: '#0f172a', fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}
+                                            onMouseOver={e => e.currentTarget.style.background = '#1e293b'}
+                                            onMouseOut={e => e.currentTarget.style.background = '#0f172a'}
+                                          >
+                                            Зберегти послуги
+                                          </button>
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 3. ГРАФІК РОБОТИ */}
+                        {activeStaffTab === 'schedule' && (
+                          <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
+                            {!providesServices ? (
+                              <div style={{ textAlign: 'center', padding: '4rem 2rem', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                                <div style={{ color: '#94a3b8', marginBottom: '1rem' }}><Icons.Clock /></div>
+                                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Графік вимкнено</h3>
+                                <p style={{ fontSize: '0.95rem', color: '#64748b' }}>Цей співробітник не працює з клієнтами.</p>
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                  <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>Регулярні робочі години спеціаліста.</p>
+                                  <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <button
+                                      onClick={handleExportToCalendar}
+                                      style={{ fontSize: '0.8rem', color: '#0f172a', fontWeight: '700', background: '#f1f5f9', border: '1px solid #cbd5e1', cursor: 'pointer', padding: '0.5rem 1rem', borderRadius: '6px', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                      onMouseOver={e => e.currentTarget.style.background = '#e2e8f0'}
+                                      onMouseOut={e => e.currentTarget.style.background = '#f1f5f9'}
+                                    >
+                                      <Icons.Calendar /> Експорт в календар
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  {staffShifts.map((schedule: any, idx: number) => (
+                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderBottom: idx !== 6 ? '1px solid #f1f5f9' : 'none', background: schedule.active ? '#fff' : '#fafafa', borderRadius: '8px', transition: 'background 0.3s' }}>
+
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '200px' }}>
+                                        <div
+                                          onClick={() => {
+                                            if (!hasAdminRights) return;
+                                            const newShifts = [...staffShifts];
+                                            newShifts[idx].active = !schedule.active;
+                                            handleUpdateLocalStaff({ shifts: newShifts });
+                                          }}
+                                          style={{ width: '38px', height: '20px', borderRadius: '10px', background: schedule.active ? (hasAdminRights ? '#10b981' : '#94a3b8') : '#cbd5e1', position: 'relative', cursor: hasAdminRights ? 'pointer' : 'default', transition: 'background 0.3s' }}
+                                        >
+                                          <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
+                                        </div>
+                                        <div style={{ fontWeight: '700', color: schedule.active ? '#0f172a' : '#94a3b8', fontSize: '0.95rem', transition: 'color 0.3s' }}>{schedule.day}</div>
+                                      </div>
+
+                                      {schedule.active ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                          <input
+                                            disabled={!hasAdminRights}
+                                            type="time"
+                                            value={schedule.start}
+                                            onChange={(e) => {
+                                              const newShifts = [...staffShifts];
+                                              newShifts[idx].start = e.target.value;
+                                              handleUpdateLocalStaff({ shifts: newShifts });
+                                            }}
+                                            style={{ padding: '0.4rem 0.8rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', color: '#0f172a', fontSize: '0.85rem', background: '#fff', width: '90px', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                          />
+                                          <div style={{ color: '#cbd5e1', fontWeight: '700' }}>—</div>
+                                          <input
+                                            disabled={!hasAdminRights}
+                                            type="time"
+                                            value={schedule.end}
+                                            onChange={(e) => {
+                                              const newShifts = [...staffShifts];
+                                              newShifts[idx].end = e.target.value;
+                                              handleUpdateLocalStaff({ shifts: newShifts });
+                                            }}
+                                            style={{ padding: '0.4rem 0.8rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', color: '#0f172a', fontSize: '0.85rem', background: '#fff', width: '90px', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div style={{ padding: '0.4rem 1.5rem', fontWeight: '600', color: '#94a3b8', fontSize: '0.85rem' }}>Вихідний</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {hasAdminRights && (
+                                  <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                      onClick={async (e) => {
+                                        const btn = e.currentTarget;
+                                        const originalText = btn.innerText;
+                                        btn.innerText = 'Збереження...';
+                                        btn.style.opacity = '0.7';
+                                        btn.disabled = true;
+                                        try {
+                                          await handleSaveSettingsDB({ shifts: staffShifts });
+                                          btn.innerText = '✓ Збережено';
+                                          btn.style.background = '#10b981';
+                                          btn.style.opacity = '1';
+                                          setTimeout(() => alert("Графік роботи успішно збережено!"), 50);
+                                          setTimeout(() => { btn.innerText = originalText; btn.style.background = '#0f172a'; btn.disabled = false; }, 3000);
+                                        } catch(err) {
+                                          alert("Помилка при збереженні.");
+                                          btn.innerText = originalText;
+                                          btn.style.opacity = '1';
+                                          btn.disabled = false;
+                                        }
+                                      }}
+                                      style={{ padding: '0.75rem 2.5rem', borderRadius: '8px', border: 'none', background: '#0f172a', fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}
+                                    >
+                                      Зберегти графік
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 4. ЗАРПЛАТА ТА КОМІСІЙНІ */}
+                        {activeStaffTab === 'finance' && (
+                          <div style={{ animation: 'fadeIn 0.3s ease-in-out', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                            {/* БЛОК 1: ПОТОЧНИЙ БАЛАНС ТА ВИПЛАТА */}
+                            {(() => {
+                              const lastPayoutDate = currentStaff.last_payout_date ? new Date(currentStaff.last_payout_date) : null;
+
+                              const masterApps = appointments.filter(a => {
+                                 if (String(a.staff_id) !== String(currentStaff.id) || a.status !== 'completed') return false;
+                                 const appDate = new Date(a.booking_date || a.start_time);
+                                 return lastPayoutDate ? appDate > lastPayoutDate : true;
+                              });
+
+                              const masterRevenue = masterApps.reduce((sum, app) => {
+                                const srv = services.find(s => String(s.id) === String(app.service_id));
+                                return sum + (srv ? srv.price : 0);
+                              }, 0);
+
+                              const fixedToPay = currentStaff.fixed_salary || 0;
+                              const commissionEarned = masterRevenue * ((currentStaff.commission_rate || 0) / 100);
+                              const totalPending = Math.round(fixedToPay + commissionEarned);
+
+                              const isPayoutDisabled = totalPending <= 0;
+
+                              const handlePayout = async () => {
+                                 if (isPayoutDisabled) return;
+                                 if (!confirm(`Зафіксувати виплату ${totalPending.toLocaleString('uk-UA')} ₴ для ${currentStaff.name}? Баланс буде обнулено.`)) return;
+
+                                 const newPayout = {
+                                    id: Date.now(),
+                                    date: new Date().toISOString(),
+                                    amount: totalPending,
+                                    services_count: masterApps.length,
+                                    revenue: masterRevenue,
+                                    fixed_part: fixedToPay,
+                                    commission_part: commissionEarned
+                                 };
+
+                                 const newHistory = [newPayout, ...(currentStaff.payout_history || [])];
+
+                                 try {
+                                    await supabase.from('staff').update({
+                                       payout_history: newHistory,
+                                       last_payout_date: new Date().toISOString()
+                                    }).eq('id', currentStaff.id);
+
+                                    handleUpdateLocalStaff({ payout_history: newHistory, last_payout_date: new Date().toISOString() });
+                                 } catch (err) {
+                                    console.error(err);
+                                    alert("Помилка збереження виплати.");
+                                 }
+                              };
+
+                              return (
+                                <div style={{ background: '#eff6ff', border: '1px dashed #3b82f6', borderRadius: '12px', padding: '1.5rem' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                      <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#2563eb', marginBottom: '0.5rem' }}>
+                                          <Icons.TrendingUp />
+                                          <span style={{ fontWeight: '800', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Поточний заробіток майстра</span>
+                                        </div>
+                                        <p style={{ fontSize: '0.85rem', color: '#3b82f6', margin: '0 0 1.5rem 0' }}>
+                                          Невиплачений дохід {lastPayoutDate ? `з ${lastPayoutDate.toLocaleDateString('uk-UA')} ` : 'за весь час '}
+                                          (Виконано послуг: <b>{masterApps.length}</b> на суму <b>{masterRevenue.toLocaleString('uk-UA')} ₴</b>)
+                                        </p>
+
+                                        <div style={{ display: 'flex', gap: '2rem' }}>
+                                          <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: '700' }}>Ставка</div>
+                                            <div style={{ fontSize: '1.2rem', fontWeight: '700', color: '#1d4ed8' }}>{fixedToPay.toLocaleString('uk-UA')} ₴</div>
+                                          </div>
+                                          <div style={{ fontSize: '1.2rem', color: '#93c5fd', marginTop: '0.5rem' }}>+</div>
+                                          <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: '700' }}>Відсоток ({currentStaff.commission_rate || 0}%)</div>
+                                            <div style={{ fontSize: '1.2rem', fontWeight: '700', color: '#1d4ed8' }}>{commissionEarned.toLocaleString('uk-UA')} ₴</div>
+                                          </div>
+                                          <div style={{ fontSize: '1.2rem', color: '#93c5fd', marginTop: '0.5rem' }}>=</div>
+                                          <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: '700' }}>До виплати</div>
+                                            <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#1e3a8a', lineHeight: 1.2 }}>
+                                              {totalPending.toLocaleString('uk-UA')} ₴
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {hasAdminRights && (
+                                        <button
+                                          onClick={handlePayout}
+                                          disabled={isPayoutDisabled}
+                                          style={{ background: isPayoutDisabled ? '#bfdbfe' : '#3b82f6', color: '#fff', border: 'none', padding: '0.8rem 1.5rem', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', cursor: isPayoutDisabled ? 'not-allowed' : 'pointer', transition: '0.2s', boxShadow: isPayoutDisabled ? 'none' : '0 4px 12px rgba(59, 130, 246, 0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                        >
+                                          <Icons.CheckCircle /> {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати виплату'}
+                                        </button>
+                                      )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* БЛОК 2: НАЛАШТУВАННЯ ЗАРПЛАТИ */}
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f8fafc', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icons.Settings /></div>
+                                <div>
+                                  <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.2rem 0' }}>Налаштування зарплати</h3>
+                                  <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>Умови нарахування для {currentStaff.name}.</p>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', padding: '1.5rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.5rem' }}>Комісія від послуг (%)</label>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="number"
+                                      value={currentStaff.commission_rate || 0}
+                                      onChange={e => hasAdminRights && handleUpdateLocalStaff({ commission_rate: Number(e.target.value) })}
+                                      disabled={!hasAdminRights}
+                                      style={{ width: '100%', padding: '0.8rem', paddingRight: '2rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '1rem', fontWeight: '700', color: '#0f172a', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontWeight: '700' }}>%</span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.5rem' }}>Фіксована ставка (₴)</label>
+                                  <div style={{ position: 'relative' }}>
+                                    <input
+                                      type="number"
+                                      value={currentStaff.fixed_salary || 0}
+                                      onChange={e => hasAdminRights && handleUpdateLocalStaff({ fixed_salary: Number(e.target.value) })}
+                                      disabled={!hasAdminRights}
+                                      style={{ width: '100%', padding: '0.8rem', paddingRight: '2rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '1rem', fontWeight: '700', color: '#0f172a', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                    />
+                                    <span style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontWeight: '700' }}>₴</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'flex-start' }}>
+
+                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                   <div>
+                                     <h4 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Додаткові правила</h4>
+                                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.5rem' }}>Періодичність виплат</label>
+                                     <div style={{ position: 'relative' }}>
+                                       <select
+                                          value={currentStaff.payout_period || 'weekly'}
+                                          onChange={e => {
+                                            if (hasAdminRights) {
+                                              const newPeriod = e.target.value;
+                                              const newDay = newPeriod === 'weekly' ? 'monday' : '1';
+                                              handleUpdateLocalStaff({ payout_period: newPeriod, payout_day: newDay });
+                                            }
+                                          }}
+                                          disabled={!hasAdminRights}
+                                          style={{ width: '100%', padding: '0.6rem 2.5rem 0.6rem 0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.9rem', color: '#0f172a', outline: 'none', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7, appearance: 'none', minWidth: '200px' }}
+                                        >
+                                          <option value="daily">Щодня (наприкінці зміни)</option>
+                                          <option value="weekly">Раз на тиждень</option>
+                                          <option value="biweekly">Двічі на місяць</option>
+                                          <option value="monthly">Раз на місяць</option>
+                                        </select>
+                                        <div style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }}><Icons.ChevronDown /></div>
+                                     </div>
+                                   </div>
+
+                                   {currentStaff.payout_period !== 'daily' && (
+                                     <div style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
+                                       <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.5rem' }}>
+                                         {currentStaff.payout_period === 'weekly' ? 'День виплати' : 'Число місяця'}
+                                       </label>
+                                       <div style={{ position: 'relative' }}>
+                                         <select
+                                            value={currentStaff.payout_day || (currentStaff.payout_period === 'weekly' ? 'monday' : '1')}
+                                            onChange={e => hasAdminRights && handleUpdateLocalStaff({ payout_day: e.target.value })}
+                                            disabled={!hasAdminRights}
+                                            style={{ width: '100%', padding: '0.6rem 2.5rem 0.6rem 0.8rem', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.9rem', color: '#0f172a', outline: 'none', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7, appearance: 'none', minWidth: '200px' }}
+                                          >
+                                            {currentStaff.payout_period === 'weekly' && (
+                                              <>
+                                                <option value="monday">Понеділок</option>
+                                                <option value="tuesday">Вівторок</option>
+                                                <option value="wednesday">Середа</option>
+                                                <option value="thursday">Четвер</option>
+                                                <option value="friday">П'ятниця</option>
+                                                <option value="saturday">Субота</option>
+                                                <option value="sunday">Неділя</option>
+                                              </>
+                                            )}
+                                            {currentStaff.payout_period === 'monthly' && (
+                                              [...Array(31)].map((_, i) => (
+                                                <option key={i+1} value={String(i+1)}>{i+1}-е число</option>
+                                              ))
+                                            )}
+                                            {currentStaff.payout_period === 'biweekly' && (
+                                              [...Array(15)].map((_, i) => (
+                                                <option key={i+1} value={String(i+1)}>{i+1}-е та {i+1+15}-е число</option>
+                                              ))
+                                            )}
+                                          </select>
+                                          <div style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }}><Icons.ChevronDown /></div>
+                                       </div>
+                                     </div>
+                                   )}
+                                 </div>
+
+                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '2.5rem' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7 }}>
+                                      <div style={{ position: 'relative', display: 'inline-block', width: '36px', height: '20px', flexShrink: 0 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={currentStaff.auto_payout || false}
+                                          onChange={e => hasAdminRights && handleUpdateLocalStaff({ auto_payout: e.target.checked })}
+                                          style={{ opacity: 0, width: 0, height: 0 }}
+                                        />
+                                        <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: currentStaff.auto_payout ? '#10b981' : '#cbd5e1', transition: '.2s', borderRadius: '24px' }}>
+                                          <span style={{ position: 'absolute', height: '16px', width: '16px', left: currentStaff.auto_payout ? '18px' : '2px', bottom: '2px', backgroundColor: 'white', transition: '.2s', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}></span>
+                                        </span>
+                                      </div>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: currentStaff.auto_payout ? '700' : '600', color: currentStaff.auto_payout ? '#10b981' : '#475569', transition: 'color 0.2s' }}>
+                                        Автоматично обнуляти баланс
+                                      </span>
+                                    </label>
+
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7 }}>
+                                      <div style={{ position: 'relative', display: 'inline-block', width: '36px', height: '20px', flexShrink: 0 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={currentStaff.keeps_tips !== false}
+                                          onChange={e => hasAdminRights && handleUpdateLocalStaff({ keeps_tips: e.target.checked })}
+                                          style={{ opacity: 0, width: 0, height: 0 }}
+                                        />
+                                        <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: currentStaff.keeps_tips !== false ? '#10b981' : '#cbd5e1', transition: '.2s', borderRadius: '24px' }}>
+                                          <span style={{ position: 'absolute', height: '16px', width: '16px', left: currentStaff.keeps_tips !== false ? '18px' : '2px', bottom: '2px', backgroundColor: 'white', transition: '.2s', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}></span>
+                                        </span>
+                                      </div>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: currentStaff.keeps_tips !== false ? '700' : '600', color: currentStaff.keeps_tips !== false ? '#10b981' : '#475569', transition: 'color 0.2s' }}>
+                                        Майстер отримує 100% чайових
+                                      </span>
+                                    </label>
+
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7 }}>
+                                      <div style={{ position: 'relative', display: 'inline-block', width: '36px', height: '20px', flexShrink: 0 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={currentStaff.deduct_materials || false}
+                                          onChange={e => hasAdminRights && handleUpdateLocalStaff({ deduct_materials: e.target.checked })}
+                                          style={{ opacity: 0, width: 0, height: 0 }}
+                                        />
+                                        <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: currentStaff.deduct_materials ? '#10b981' : '#cbd5e1', transition: '.2s', borderRadius: '24px' }}>
+                                          <span style={{ position: 'absolute', height: '16px', width: '16px', left: currentStaff.deduct_materials ? '18px' : '2px', bottom: '2px', backgroundColor: 'white', transition: '.2s', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}></span>
+                                        </span>
+                                      </div>
+                                      <span style={{ fontSize: '0.85rem', fontWeight: currentStaff.deduct_materials ? '700' : '600', color: currentStaff.deduct_materials ? '#10b981' : '#475569', transition: 'color 0.2s' }}>
+                                        Вираховувати вартість матеріалів
+                                      </span>
+                                    </label>
+
+                                 </div>
+                              </div>
+
+                              {hasAdminRights && (
+                                <div style={{ marginTop: '2rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                  <button
+                                    onClick={async (e) => {
+                                      const btn = e.currentTarget;
+                                      const originalText = btn.innerText;
+                                      btn.innerText = 'Збереження...';
+                                      btn.style.opacity = '0.7';
+                                      btn.disabled = true;
+                                      try {
+                                        await handleSaveSettingsDB({
+                                          commission_rate: currentStaff.commission_rate,
+                                          fixed_salary: currentStaff.fixed_salary,
+                                          payout_period: currentStaff.payout_period,
+                                          payout_day: currentStaff.payout_day,
+                                          auto_payout: currentStaff.auto_payout,
+                                          keeps_tips: currentStaff.keeps_tips,
+                                          deduct_materials: currentStaff.deduct_materials
+                                        });
+                                        btn.innerText = '✓ Збережено';
+                                        btn.style.background = '#10b981';
+                                        btn.style.opacity = '1';
+                                        setTimeout(() => alert("Налаштування зарплати успішно збережено!"), 50);
+                                        setTimeout(() => { btn.innerText = originalText; btn.style.background = '#0f172a'; btn.disabled = false; }, 3000);
+                                      } catch(err) {
+                                        alert("Помилка при збереженні.");
+                                        btn.innerText = originalText;
+                                        btn.style.opacity = '1';
+                                        btn.disabled = false;
+                                      }
+                                    }}
+                                    style={{ padding: '0.8rem 2rem', borderRadius: '8px', border: 'none', background: '#0f172a', fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}
+                                  >
+                                    Зберегти налаштування зарплати
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* БЛОК 3: АРХІВ ВИПЛАТ */}
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem' }}>
+                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                 <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Історія виплат</h3>
+                                 {currentStaff.payout_history && currentStaff.payout_history.length > 0 && (
+                                   <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>
+                                     Всього виплат: {currentStaff.payout_history.length}
+                                   </span>
+                                 )}
+                               </div>
+
+                               <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                                 {currentStaff.payout_history && currentStaff.payout_history.length > 0 ? (
+                                   currentStaff.payout_history.map((payout: any, i: number) => (
+                                     <div key={payout.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', borderBottom: i !== currentStaff.payout_history.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#f0fdf4', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icons.CheckCircle /></div>
+                                          <div>
+                                            <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.95rem' }}>
+                                              Виплата • {new Date(payout.date).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                                               {new Date(payout.date).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })} • Ставка: {payout.fixed_part || 0} ₴ • Комісія: {payout.commission_part || 0} ₴
+                                            </div>
+                                          </div>
+                                       </div>
+                                       <div style={{ fontWeight: '800', color: '#10b981', fontSize: '1.1rem', whiteSpace: 'nowrap' }}>
+                                          {payout.amount.toLocaleString('uk-UA')} ₴
+                                       </div>
+                                     </div>
+                                   ))
+                                 ) : (
+                                   <div style={{ textAlign: 'center', padding: '3rem 2rem', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
+                                     <div style={{ color: '#94a3b8', fontSize: '0.95rem', fontWeight: '500' }}>Історія виплат порожня.</div>
+                                     <div style={{ color: '#cbd5e1', fontSize: '0.8rem', marginTop: '0.5rem' }}>Щойно ви зафіксуєте виплату, вона з'явиться тут.</div>
+                                   </div>
+                                 )}
+                               </div>
+                            </div>
+
+                          </div>
+                        )}
+
+                        {/* 5. ДОСТУП ТА БЕЗПЕКА (Тільки для Адмінів) */}
+                        {activeStaffTab === 'security' && hasAdminRights && (
+                          <div style={{ animation: 'fadeIn 0.3s ease-in-out', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                            {/* Налаштування Ролі */}
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem' }}>
+                              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '0 0 1rem 0' }}>Системна роль</h3>
+                              <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem' }}>Визначає рівень доступу співробітника до панелі керування та фінансових звітів.</p>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div
+                                  onClick={() => !isOwnerProfile && handleUpdateLocalStaff({ role: 'master' })}
+                                  style={{ padding: '1rem', border: `2px solid ${currentStaff.role !== 'admin' && !isOwnerProfile ? '#0f172a' : '#e2e8f0'}`, borderRadius: '10px', cursor: isOwnerProfile ? 'not-allowed' : 'pointer', background: currentStaff.role !== 'admin' && !isOwnerProfile ? '#f8fafc' : '#fff', opacity: isOwnerProfile ? 0.5 : 1, transition: '0.2s' }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                                    <input type="radio" checked={currentStaff.role !== 'admin' && !isOwnerProfile} readOnly style={{ accentColor: '#0f172a' }} />
+                                    <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.95rem' }}>Спеціаліст</span>
+                                  </div>
+                                  <div style={{ fontSize: '0.8rem', color: '#64748b', paddingLeft: '1.5rem' }}>Має доступ лише до свого календаря та записів. Не бачить фінанси салону.</div>
+                                </div>
+
+                                <div
+                                  onClick={() => !isOwnerProfile && handleUpdateLocalStaff({ role: 'admin' })}
+                                  style={{ padding: '1rem', border: `2px solid ${currentStaff.role === 'admin' || isOwnerProfile ? '#0f172a' : '#e2e8f0'}`, borderRadius: '10px', cursor: isOwnerProfile ? 'not-allowed' : 'pointer', background: currentStaff.role === 'admin' || isOwnerProfile ? '#f8fafc' : '#fff', opacity: isOwnerProfile && currentStaff.role !== 'admin' ? 0.5 : 1, transition: '0.2s' }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                                    <input type="radio" checked={currentStaff.role === 'admin' || isOwnerProfile} readOnly style={{ accentColor: '#0f172a' }} />
+                                    <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.95rem' }}>Адміністратор</span>
+                                  </div>
+                                  <div style={{ fontSize: '0.8rem', color: '#64748b', paddingLeft: '1.5rem' }}>Має повний доступ до клієнтської бази, розкладу всіх майстрів та налаштувань.</div>
+                                </div>
+                              </div>
+                              {isOwnerProfile && <p style={{ fontSize: '0.8rem', color: '#8b5cf6', marginTop: '1rem', fontWeight: '600' }}>* Ви є власником бізнесу, ваша роль не може бути знижена.</p>}
+                            </div>
+
+                            {/* Налаштування Роботи з Клієнтами */}
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.3rem 0' }}>Приймає записи клієнтів</h3>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>Якщо вимкнено, цей співробітник зникне з онлайн-бронювання та календаря (для чистих адмінів).</p>
+                              </div>
+                              <div
+                                onClick={() => handleUpdateLocalStaff({ provides_services: !providesServices })}
+                                style={{ width: '48px', height: '26px', borderRadius: '13px', background: providesServices ? '#10b981' : '#cbd5e1', position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0 }}
+                              >
+                                <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: providesServices ? '24px' : '2px', transition: 'left 0.3s cubic-bezier(0.25, 1, 0.5, 1)', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }}></div>
+                              </div>
+                            </div>
+
+                            {hasAdminRights && (
+                              <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={async (e) => {
+                                    const btn = e.currentTarget;
+                                    const originalText = btn.innerText;
+                                    btn.innerText = 'Збереження...';
+                                    btn.style.opacity = '0.7';
+                                    btn.disabled = true;
+                                    try {
+                                      await handleSaveSettingsDB({
+                                        role: currentStaff.role,
+                                        provides_services: currentStaff.provides_services
+                                      });
+                                      btn.innerText = '✓ Збережено';
+                                      btn.style.background = '#10b981';
+                                      btn.style.opacity = '1';
+                                      setTimeout(() => alert("Налаштування доступу успішно збережено!"), 50);
+                                      setTimeout(() => { btn.innerText = originalText; btn.style.background = '#0f172a'; btn.disabled = false; }, 3000);
+                                    } catch(err) {
+                                      alert("Помилка при збереженні.");
+                                      btn.innerText = originalText;
+                                      btn.style.opacity = '1';
+                                      btn.disabled = false;
+                                    }
+                                  }}
+                                  style={{ padding: '0.8rem 2rem', borderRadius: '8px', border: 'none', background: '#0f172a', fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}
+                                >
+                                  Зберегти налаштування доступу
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Небезпечна зона (Звільнення) */}
+                            {!isOwnerProfile && (
+                              <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                  <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#991b1b', margin: '0 0 0.3rem 0' }}>Звільнення співробітника</h3>
+                                  <p style={{ fontSize: '0.85rem', color: '#b91c1c', margin: 0 }}>Назавжди видалити доступ цієї особи до системи. Історія записів залишиться в базі.</p>
+                                </div>
+                                <button
+                                  onClick={handleDeleteStaff}
+                                  style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '0.7rem 1.5rem', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 10px rgba(239, 68, 68, 0.2)' }}
+                                  onMouseOver={e => e.currentTarget.style.background = '#dc2626'}
+                                  onMouseOut={e => e.currentTarget.style.background = '#ef4444'}
+                                >
+                                  Видалити з команди
+                                </button>
+                              </div>
+                            )}
+
+                          </div>
+                        )}
+
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1.5rem', opacity: 0.5 }}><Icons.Team /></div>
+                        <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Оберіть співробітника</h3>
+                        <p style={{ fontSize: '1rem', fontWeight: '500' }}>Виберіть людину зі списку ліворуч для перегляду деталей</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* 🟢 МОДАЛЬНЕ ВІКНО ДОДАВАННЯ ПЕРСОНАЛУ (ЗАПРОШЕННЯ) */}
+            {isInviteStaffModalOpen && (
+              <div className="modal-overlay" onClick={() => setIsInviteStaffModalOpen(false)}>
+                <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '420px' }}>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Додати співробітника</h2>
+                    <button onClick={() => setIsInviteStaffModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  </div>
+
+                  <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                    Ми надішлемо запрошення на вказану електронну пошту. Співробітник отримає лист з посиланням для входу в систему.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div>
+                      <label className="modal-label">Ім'я та прізвище *</label>
+                      <input type="text" value={inviteForm.name} onChange={e => setInviteForm({...inviteForm, name: e.target.value})} className="modal-input" placeholder="Наприклад: Анна Коваль" autoFocus />
+                    </div>
+                    <div>
+                      <label className="modal-label">Електронна пошта (Email) *</label>
+                      <input type="email" value={inviteForm.email} onChange={e => setInviteForm({...inviteForm, email: e.target.value})} className="modal-input" placeholder="anna@example.com" />
+                    </div>
+                    <div>
+                      <label className="modal-label">Телефон</label>
+                      <input type="text" value={inviteForm.phone} onChange={e => setInviteForm({...inviteForm, phone: e.target.value})} className="modal-input" placeholder="+380..." />
+                    </div>
+
+                    <div>
+                      <label className="modal-label">Роль у системі</label>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div onClick={() => setInviteForm({...inviteForm, role: 'master'})} style={{ flex: 1, padding: '0.8rem', border: `2px solid ${inviteForm.role === 'master' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: inviteForm.role === 'master' ? '#f8fafc' : '#fff' }}>
+                          <input type="radio" checked={inviteForm.role === 'master'} readOnly style={{ accentColor: '#0f172a' }} />
+                          <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.85rem' }}>Спеціаліст</span>
+                        </div>
+                        <div onClick={() => setInviteForm({...inviteForm, role: 'admin'})} style={{ flex: 1, padding: '0.8rem', border: `2px solid ${inviteForm.role === 'admin' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: inviteForm.role === 'admin' ? '#f8fafc' : '#fff' }}>
+                          <input type="radio" checked={inviteForm.role === 'admin'} readOnly style={{ accentColor: '#0f172a' }} />
+                          <span style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.85rem' }}>Адміністратор</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                       if (!inviteForm.email || !inviteForm.name) return alert("Заповніть обов'язкові поля: Ім'я та Email.");
+                       setIsInvitingStaff(true);
+                       try {
+                         const newStaffData = { business_id: business.id, name: inviteForm.name.trim(), email: inviteForm.email.trim(), phone: inviteForm.phone.trim() || null, role: inviteForm.role, status: 'pending', provides_services: inviteForm.role === 'master', assigned_services: inviteForm.role === 'master' ? services.map(s => s.id) : [], commission_rate: 40, fixed_salary: 0, payout_history: [], auto_payout: false, keeps_tips: true, deduct_materials: false, payout_period: 'weekly', payout_day: 'monday' };
+                         const { data, error } = await supabase.from('staff').insert([newStaffData]).select().single();
+                         if (error) throw error;
+                         setTeam([...team, data]);
+                         setIsInviteStaffModalOpen(false);
+                         setInviteForm({ email: '', name: '', role: 'master', phone: '' });
+                         alert(`Запрошення успішно надіслано на ${inviteForm.email}!`);
+                       } catch (err) { console.error(err); alert("Помилка при додаванні співробітника."); } finally { setIsInvitingStaff(false); }
+                    }}
+                    disabled={isInvitingStaff}
+                    style={{ width: '100%', marginTop: '2rem', padding: '0.85rem', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: isInvitingStaff ? 'not-allowed' : 'pointer', opacity: isInvitingStaff ? 0.7 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                  >
+                    {isInvitingStaff ? 'Відправка...' : <><Icons.Send /> Надіслати запрошення</>}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )/* --- 8. ІНШІ ВКЛАДКИ (ЗАГЛУШКА) --- */
         : (
           <div style={{ padding: '3rem', flex: 1 }}>
             <div style={{ width: '100%', height: '400px', border: '2px dashed #e2e8f0', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
@@ -3127,14 +5456,48 @@ export default function BusinessCabinet() {
                   </div>
                   <div>
                     <label className="modal-label">Номер телефону</label>
-                    <input type="text" value={apptForm.client_phone} onChange={e => setApptForm({...apptForm, client_phone: e.target.value})} className="modal-input" placeholder="+380..." />
+                    <input
+                      type="text"
+                      value={apptForm.client_phone}
+                      onChange={e => {
+                        let val = e.target.value;
+                        if (!val.startsWith('+380')) val = '+380';
+                        const digits = val.slice(4).replace(/\D/g, '');
+                        setApptForm({...apptForm, client_phone: '+380' + digits.slice(0, 9)});
+                      }}
+                      className="modal-input"
+                    />
                   </div>
                   <div>
                     <label className="modal-label">Послуга</label>
                     <div className="modal-select-wrapper">
-                      <select value={apptForm.service_id} onChange={e => { const selectedService = services.find(s => s.id === e.target.value); setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? selectedService.duration : apptForm.duration }); }}>
+                      <select
+                        value={apptForm.service_id}
+                        onChange={e => {
+                          const selectedService = services.find(s => String(s.id) === e.target.value);
+                          setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? selectedService.duration : apptForm.duration });
+                        }}
+                      >
                         <option value="" disabled>Оберіть послугу...</option>
-                        {services.map(s => ( <option key={s.id} value={s.id}>{s.name} ({s.price} ₴)</option> ))}
+                        {(() => {
+                           // 🟢 Фільтруємо послуги залежно від обраного майстра
+                           let availableServices = services;
+                           if (apptForm.staff_id) {
+                              const selectedM = team.find(t => String(t.id) === String(apptForm.staff_id));
+                              if (selectedM && selectedM.assigned_services && selectedM.assigned_services.length > 0) {
+                                 // Показуємо тільки ті послуги, які є в масиві assigned_services майстра
+                                 availableServices = services.filter(s => selectedM.assigned_services.includes(String(s.id)) || selectedM.assigned_services.includes(Number(s.id)));
+                              }
+                           }
+
+                           if (availableServices.length === 0) {
+                              return <option value="" disabled>Майстер не надає жодних послуг</option>
+                           }
+
+                           return availableServices.map(s => (
+                             <option key={s.id} value={s.id}>{s.name} ({s.price} ₴)</option>
+                           ));
+                        })()}
                       </select>
                       <div className="modal-select-icon"><Icons.ChevronDown /></div>
                     </div>
@@ -3154,10 +5517,89 @@ export default function BusinessCabinet() {
                 <div className="modal-select-wrapper">
                   <select value={apptForm.staff_id} onChange={e => setApptForm({...apptForm, staff_id: e.target.value})}>
                     <option value="">{isBlockMode ? 'Весь заклад (всі майстри)' : 'Будь-який майстер (Не вказано)'}</option>
-                    {team.map(m => ( <option key={m.id} value={m.id}>{m.name}</option> ))}
+                    {/* 🟢 ФІЛЬТРУЄМО ТИХ, ХТО НЕ НАДАЄ ПОСЛУГ */}
+                    {team.filter(m => m.provides_services !== false).map(m => ( <option key={m.id} value={m.id}>{m.name}</option> ))}
                   </select>
                   <div className="modal-select-icon"><Icons.ChevronDown /></div>
                 </div>
+
+                {/* 🟢 РОЗУМНЕ ВІЗУАЛЬНЕ ПОПЕРЕДЖЕННЯ ПРО ВИХІДНИЙ/ПОЗА ГРАФІКОМ */}
+                {(() => {
+                   if (apptForm.date && apptForm.time) {
+                      const apptDate = new Date(apptForm.date);
+                      const dayIdx = apptDate.getDay() === 0 ? 6 : apptDate.getDay() - 1;
+                      const [appH, appM] = apptForm.time.split(':').map(Number);
+                      const appTime = appH * 60 + appM;
+
+                      if (apptForm.staff_id) {
+                         // Обрано конкретного майстра
+                         const selectedM = team.find(t => String(t.id) === String(apptForm.staff_id));
+                         if (selectedM && selectedM.shifts && selectedM.shifts.length === 7) {
+                            const shift = selectedM.shifts[dayIdx];
+                            if (!shift.active) {
+                               return (
+                                 <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fff1f2', border: '1px dashed #f87171', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
+                                   <Icons.AlertCircle /> У майстра вихідний на цю дату!
+                                 </div>
+                               );
+                            } else {
+                               const [startH, startM] = shift.start.split(':').map(Number);
+                               const [endH, endM] = shift.end.split(':').map(Number);
+                               if (appTime < startH * 60 + startM || appTime >= endH * 60 + endM) {
+                                  return (
+                                     <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fffbeb', border: '1px dashed #fcd34d', borderRadius: '8px', color: '#b45309', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
+                                       <Icons.AlertCircle /> Час поза графіком майстра ({shift.start} - {shift.end})
+                                     </div>
+                                  );
+                               }
+                            }
+                         }
+                      } else {
+                         // Обрано "Будь-який майстер" або "Весь заклад"
+                         const activeMasters = team.filter(m => m.provides_services !== false);
+
+                         if (activeMasters.length > 0) {
+                            const isAnyoneWorking = activeMasters.some(m => {
+                               if (!m.shifts || m.shifts.length !== 7) return false;
+                               const shift = m.shifts[dayIdx];
+                               if (!shift.active) return false;
+                               const [startH, startM] = shift.start.split(':').map(Number);
+                               const [endH, endM] = shift.end.split(':').map(Number);
+                               return appTime >= startH * 60 + startM && appTime < endH * 60 + endM;
+                            });
+
+                            if (!isAnyoneWorking) {
+                               return (
+                                 <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fff1f2', border: '1px dashed #f87171', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
+                                   <Icons.AlertCircle /> Увага! Жоден майстер не працює в цей час.
+                                 </div>
+                               );
+                            }
+                         } else {
+                            // Немає майстрів, перевіряємо загальний графік
+                            const shift = shifts[dayIdx];
+                            if (shift && !shift.active) {
+                               return (
+                                 <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fff1f2', border: '1px dashed #f87171', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
+                                   <Icons.AlertCircle /> У закладу вихідний на цю дату!
+                                 </div>
+                               );
+                            } else if (shift) {
+                               const [startH, startM] = shift.start.split(':').map(Number);
+                               const [endH, endM] = shift.end.split(':').map(Number);
+                               if (appTime < startH * 60 + startM || appTime >= endH * 60 + endM) {
+                                  return (
+                                     <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fffbeb', border: '1px dashed #fcd34d', borderRadius: '8px', color: '#b45309', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
+                                       <Icons.AlertCircle /> Час поза графіком закладу ({shift.start} - {shift.end})
+                                     </div>
+                                  );
+                               }
+                            }
+                         }
+                      }
+                   }
+                   return null;
+                })()}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: !isBlockMode ? '1fr' : '1fr 1fr', gap: '1rem' }}>

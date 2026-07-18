@@ -82,13 +82,11 @@ const clientSortOptions = [
 ];
 
 const businessSettingsCards = [
-  { id: 'payments', title: 'Платежі та каса', desc: 'Налаштуйте методи оплати, перевірте рахунки.', icon: Icons.CreditCard },
-  { id: 'details', title: 'Деталі бізнесу', desc: 'Редагуйте інформацію про заклад, локацію та правила.', icon: Icons.Storefront },
-  { id: 'services', title: 'Налаштування послуг', desc: 'Додайте деталі послуг та згрупуйте їх.', icon: Icons.Services },
-  { id: 'advanced', title: 'Додаткові опції', desc: 'Доступ до налаштувань бронювання та сповіщень.', icon: Icons.Settings },
-  { id: 'billing', title: 'Підписка та білінг', desc: 'Деталі оплати, підписка та методи оплати.', icon: Icons.Calendar },
-  { id: 'booking', title: 'Онлайн бронювання', desc: 'Вирішіть, які опції будуть доступні клієнтам.', icon: Icons.Globe },
-  { id: 'inventory', title: 'Склад', desc: 'Налаштуйте інвентар для відстеження товарів.', icon: Icons.Box },
+  { id: 'payments', title: 'Платежі та каса', desc: 'Налаштуйте методи оплати, депозити та захист від неявок.', icon: Icons.CreditCard },
+  { id: 'booking', title: 'Онлайн бронювання', desc: 'Вирішіть, які опції запису будуть доступні клієнтам.', icon: Icons.Globe },
+  { id: 'advanced', title: 'Системні правила', desc: 'Авто-підтвердження записів, сповіщення та безпека.', icon: Icons.Settings },
+  { id: 'inventory', title: 'Склад та Матеріали', desc: 'Ведіть облік витратних матеріалів та товарів.', icon: Icons.Box },
+  { id: 'billing', title: 'Підписка та білінг', desc: 'Деталі оплати, поточний тариф та методи платежу.', icon: Icons.Calendar },
 ];
 
 // --- 🎨 КОЛЬОРИ МАЙСТРІВ ---
@@ -131,6 +129,7 @@ export default function BusinessCabinet() {
   const clientSortMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
+  const bizMenuRef = useRef<HTMLDivElement>(null);
 
   // --- СТАНИ ДЛЯ ДАТ І ТАСОК ---
   const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean, date: string}[]>([]);
@@ -181,6 +180,8 @@ export default function BusinessCabinet() {
   const [activeTab, setActiveTab] = useState('Calendar');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isBizMenuOpen, setIsBizMenuOpen] = useState(false); // 🟢 ДОДАНО СТАН МЕНЮ
+  const [myBusinesses, setMyBusinesses] = useState<any[]>([]);
 
   const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -213,6 +214,52 @@ export default function BusinessCabinet() {
   const [marketingForm, setMarketingForm] = useState({ type: 'sms', audience: 'all', message: '' });
   const [isSendingPromo, setIsSendingPromo] = useState(false);
   const [comingSoonModal, setComingSoonModal] = useState<{ isOpen: boolean, title: string, desc: string }>({ isOpen: false, title: '', desc: '' });
+
+// --- СТАНИ ТА ФУНКЦІЇ ДЛЯ НАЛАШТУВАНЬ (100% РОБОЧІ) ---
+  const [settingsView, setSettingsView] = useState<'main' | 'payments' | 'billing' | 'advanced' | 'booking' | 'inventory'>('main');
+  const [isSettingsSaving, setIsSettingsSaving] = useState(false);
+
+  const [bookingSettings, setBookingSettings] = useState({
+    is_active: true, min_advance_hours: 2, max_advance_days: 30, cancellation_policy: 'Безкоштовне скасування за 24 години до візиту.'
+  });
+
+  const [notificationSettings, setNotificationSettings] = useState({
+    notify_client_booking: true, notify_client_reminder: true, notify_staff_booking: true, auto_approve: true
+  });
+
+  const [paymentsSettings, setPaymentsSettings] = useState({
+    require_deposit: false, deposit_amount: 100, cancellation_fee: false, mobile_payments: true
+  });
+
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [newInventoryItem, setNewInventoryItem] = useState({ name: '', qty: 1, price: 0 });
+
+  // Універсальна функція збереження
+  const saveSettingsToDB = async (column: string, data: any, successMsg: string) => {
+    if (!business) return;
+    setIsSettingsSaving(true);
+    try {
+      await supabase.from('businesses').update({ [column]: data }).eq('id', business.id);
+      setComingSoonModal({ isOpen: true, title: 'Успішно!', desc: successMsg });
+    } catch(e) { console.error(e); alert('Помилка збереження!'); } finally { setIsSettingsSaving(false); }
+  };
+
+  const handleAddInventory = async () => {
+    if (!newInventoryItem.name.trim() || newInventoryItem.price < 0 || newInventoryItem.qty <= 0) return alert("Введіть коректні дані");
+    const newInv = [{ ...newInventoryItem, id: Date.now() }, ...inventory];
+    setInventory(newInv);
+    setNewInventoryItem({ name: '', qty: 1, price: 0 });
+    if (business) await supabase.from('businesses').update({ inventory: newInv }).eq('id', business.id);
+  };
+
+  const handleDeleteInventory = async (id: number) => {
+    if (!confirm("Видалити товар зі складу?")) return;
+    const newInv = inventory.filter(i => i.id !== id);
+    setInventory(newInv);
+    if (business) await supabase.from('businesses').update({ inventory: newInv }).eq('id', business.id);
+  };
+
+
 
 // --- СТАНИ ДЛЯ СТАТИСТИКИ (Повноцінні) ---
   const [statsTab, setStatsTab] = useState<'overview' | 'appointments' | 'revenue' | 'services' | 'staff' | 'clients'>('overview');
@@ -519,7 +566,7 @@ const handleSendMarketing = async () => {
       let recipients = [];
       const now = new Date();
 
-      // 3. Формуємо цільову аудиторію
+      // Формуємо цільову аудиторію
       if (marketingForm.audience === 'vip') {
         recipients = clientsList.filter(c => {
            if (!c.tags || !Array.isArray(c.tags)) return false;
@@ -537,20 +584,19 @@ const handleSendMarketing = async () => {
         recipients = clientsList;
       }
 
-      // 4. 🟢 СТРОГА ФІЛЬТРАЦІЯ (Відсіюємо тих, у кого "биті" дані)
+      // СТРОГА ФІЛЬТРАЦІЯ
       const validRecipients = recipients.filter(c => {
         if (marketingForm.type === 'sms') {
           if (!c.phone) return false;
           const phoneStripped = c.phone.replace(/[\s\-\(\)]/g, '');
-          return /^\+?\d{10,15}$/.test(phoneStripped); // Тільки правильні номери
+          return /^\+?\d{10,15}$/.test(phoneStripped);
         } else if (marketingForm.type === 'email') {
           if (!c.email) return false;
-          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email); // Тільки правильні email
+          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email);
         }
         return false;
       });
 
-      // 5. Перевіряємо чи лишився хтось після фільтрації
       if (validRecipients.length === 0) {
         setIsSendingPromo(false);
         const contactType = marketingForm.type === 'sms' ? 'валідним номером телефону (мін. 10 цифр)' : 'коректною Email-адресою';
@@ -561,10 +607,27 @@ const handleSendMarketing = async () => {
         });
       }
 
-      // 6. Імітація запиту на сервер / відправки SMS
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // 🟢 РЕАЛЬНА ВІДПРАВКА НА НАШ БЕКЕНД
+      const response = await fetch('/api/marketing/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: marketingForm.type,
+          message: marketingForm.message,
+          recipients: validRecipients.map(c => ({
+            name: c.name,
+            phone: c.phone,
+            email: c.email
+          }))
+        })
+      });
 
-      // 7. Показуємо скільки відсіяли (якщо такі були)
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Помилка сервера');
+      }
+
+      // Успіх
       const filteredOut = recipients.length - validRecipients.length;
       const filterNotice = filteredOut > 0 ? ` (Відсіяно ${filteredOut} контактів з невірними або відсутніми даними).` : '.';
 
@@ -576,12 +639,12 @@ const handleSendMarketing = async () => {
 
       setMarketingForm({ audience: 'all', message: '', type: 'sms' });
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Помилка відправки розсилки:", err);
       setComingSoonModal({
         isOpen: true,
         title: 'Помилка відправки',
-        desc: 'Виникла системна помилка при створенні розсилки. Спробуйте ще раз.'
+        desc: `Виникла системна помилка: ${err.message}. Перевірте налаштування (API ключі).`
       });
     } finally {
       setIsSendingPromo(false);
@@ -608,6 +671,63 @@ const handleSendMarketing = async () => {
     { day: 'Неділя', active: false, start: '09:00', end: '20:00' },
   ]);
 
+  // 🟢 ФУНКЦІЯ ДЛЯ ЗАВАНТАЖЕННЯ КОНКРЕТНОГО БІЗНЕСУ (Перемикання)
+  const loadSpecificBusiness = async (bizId: string) => {
+    setLoading(true);
+    try {
+      const { data: bizData } = await supabase.from('businesses').select('*').eq('id', bizId).single();
+
+      if (bizData) {
+        setBusiness(bizData);
+        // Зберігаємо вибір, щоб при перезавантаженні сторінки відкривався цей же заклад
+        localStorage.setItem('bookera_active_biz_id', bizData.id);
+
+        setFormData({
+          name: bizData.name || '',
+          category: bizData.category || '',
+          address: bizData.address || '',
+          description: bizData.description || '',
+        });
+
+        if (bizData.cal_settings) setCalSettings(bizData.cal_settings);
+        if (bizData.shifts) setShifts(bizData.shifts);
+        if (bizData.tasks) setTasks(bizData.tasks);
+
+        // Оновлюємо фото та налаштування, якщо їх немає - скидаємо на дефолтні
+        if (bizData.logo) setLogo(bizData.logo); else setLogo(null);
+        if (bizData.cover_photo) setCoverPhoto(bizData.cover_photo); else setCoverPhoto(null);
+        if (bizData.workplace_photos) setWorkplacePhotos(bizData.workplace_photos); else setWorkplacePhotos([]);
+
+        if (bizData.service_sort_type) setServiceSortType(bizData.service_sort_type);
+        if (bizData.booking_settings) setBookingSettings(bizData.booking_settings);
+        if (bizData.notification_settings) setNotificationSettings(bizData.notification_settings);
+        if (bizData.payments_settings) setPaymentsSettings(bizData.payments_settings);
+        if (bizData.inventory) setInventory(bizData.inventory); else setInventory([]);
+
+        const { data: srvs } = await supabase
+          .from('services')
+          .select('*')
+          .eq('business_id', bizData.id)
+          .order('order_index', { ascending: true })
+          .order('created_at', { ascending: true });
+        setServices(srvs || []);
+
+        const { data: masters } = await supabase.from('staff').select('*').eq('business_id', bizData.id);
+        setTeam(masters || []);
+
+        await fetchClientsFromDB(bizData.id);
+
+        // Скидаємо локальні фільтри (щоб не шукало майстра з попереднього закладу)
+        setFilterMaster('all');
+        setSelectedStaffId(null);
+      }
+    } catch (error) {
+      console.error("Помилка завантаження бізнесу:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const savedTab = localStorage.getItem('bookera_activeTab');
     if (savedTab) setActiveTab(savedTab);
@@ -621,42 +741,22 @@ const handleSendMarketing = async () => {
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
         setUserProfile(profile || { full_name: session.user.email });
 
-        const { data: bizData } = await supabase.from('businesses').select('*').eq('owner_id', userId).limit(1).single();
+        // 🟢 Витягуємо ВСІ бізнеси користувача для бокового меню
+        const { data: allBiz } = await supabase.from('businesses').select('id, name, logo').eq('owner_id', userId);
 
-        if (bizData) {
-          setBusiness(bizData);
-          setFormData({
-            name: bizData.name || '',
-            category: bizData.category || '',
-            address: bizData.address || '',
-            description: bizData.description || '',
-          });
+        if (allBiz && allBiz.length > 0) {
+          setMyBusinesses(allBiz);
 
-          if (bizData.cal_settings) setCalSettings(bizData.cal_settings);
-          if (bizData.shifts) setShifts(bizData.shifts);
-          if (bizData.tasks) setTasks(bizData.tasks);
-          if (bizData.logo) setLogo(bizData.logo);
-          if (bizData.cover_photo) setCoverPhoto(bizData.cover_photo);
-          if (bizData.workplace_photos) setWorkplacePhotos(bizData.workplace_photos);
-          if (bizData.service_sort_type) setServiceSortType(bizData.service_sort_type);
+          // Шукаємо останній відкритий заклад у пам'яті (або беремо перший у списку)
+          const savedBizId = localStorage.getItem('bookera_active_biz_id');
+          const targetBizId = savedBizId && allBiz.some(b => String(b.id) === String(savedBizId)) ? savedBizId : allBiz[0].id;
 
-          const { data: srvs } = await supabase
-            .from('services')
-            .select('*')
-            .eq('business_id', bizData.id)
-            .order('order_index', { ascending: true })
-            .order('created_at', { ascending: true });
-          const loadedServices = srvs || [];
-          setServices(loadedServices);
-
-          const { data: masters } = await supabase.from('staff').select('*').eq('business_id', bizData.id);
-          setTeam(masters || []);
-
-          await fetchClientsFromDB(bizData.id);
+          await loadSpecificBusiness(targetBizId);
+        } else {
+          setLoading(false); // У користувача ще немає закладів
         }
       } catch (error) {
         console.error("Помилка завантаження даних:", error);
-      } finally {
         setLoading(false);
       }
     }
@@ -739,11 +839,14 @@ const handleSendMarketing = async () => {
       if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
         setIsViewDropdownOpen(false);
       }
+      // 🟢 ДОДАНО УМОВУ ДЛЯ МЕНЮ БІЗНЕСІВ
+      if (bizMenuRef.current && !bizMenuRef.current.contains(event.target as Node)) {
+        setIsBizMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     localStorage.clear();
@@ -1568,27 +1671,106 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
       <aside style={{ width: isSidebarCollapsed ? '80px' : '280px', backgroundColor: '#0e0e11', borderRight: '1px solid #1f2128', display: 'flex', flexDirection: 'column', flexShrink: 0, transition: 'width 0.4s cubic-bezier(0.25, 1, 0.5, 1)', zIndex: 100 }}>
         <div style={{ padding: '1.5rem 1rem', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', minHeight: '76px' }}>
           <div style={{ opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', whiteSpace: 'nowrap' }}>
-            <span style={{ color: '#8b8d98', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', marginLeft: '0.5rem' }}>Панель керування</span>
+            <Link href="/" style={{ color: '#8b8d98', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', marginLeft: '0.5rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.color = '#fff'} onMouseOut={e => e.currentTarget.style.color = '#8b8d98'}>
+              <Icons.ChevronLeft /> На головну
+            </Link>
           </div>
           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', borderRadius: '8px', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
             <Icons.SidebarToggle collapsed={isSidebarCollapsed} />
           </button>
         </div>
 
-        <div style={{ padding: isSidebarCollapsed ? '0 0.5rem' : '0 1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: '#1a1c23', border: '1px solid #272a30', borderRadius: '10px', padding: isSidebarCollapsed ? '0.6rem 0' : '0.6rem 0.8rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', cursor: 'pointer', transition: 'background-color 0.2s, padding 0.3s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#1f2128'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#1a1c23'}>
+{/* 🟢 ПЕРЕМИКАЧ БІЗНЕСУ (SMART DROPDOWN З АВАТАРАМИ) */}
+        <div style={{ position: 'relative', padding: isSidebarCollapsed ? '0 0.5rem' : '0 1rem', marginBottom: '1.5rem' }} ref={bizMenuRef}>
+          <div
+            onClick={() => setIsBizMenuOpen(!isBizMenuOpen)}
+            style={{ backgroundColor: isBizMenuOpen ? '#1f2128' : '#1a1c23', border: '1px solid #272a30', borderRadius: '10px', padding: isSidebarCollapsed ? '0.6rem 0' : '0.6rem 0.8rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', cursor: 'pointer', transition: 'all 0.2s', position: 'relative', zIndex: 51 }}
+            onMouseOver={e => e.currentTarget.style.backgroundColor = '#1f2128'}
+            onMouseOut={e => { if (!isBizMenuOpen) e.currentTarget.style.backgroundColor = '#1a1c23' }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: isSidebarCollapsed ? '0' : '0.75rem', justifyContent: 'center' }}>
-              <div style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '6px', backgroundColor: '#272a30', color: '#a1a1aa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: '700' }}>
-                {business?.name?.charAt(0).toUpperCase() || 'B'}
+
+              {/* 🟢 ОСЬ ТУТ ЛОГІКА АВАТАРКИ */}
+              <div style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '6px', backgroundColor: logo ? 'transparent' : '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: '800', boxShadow: logo ? 'none' : '0 2px 5px rgba(59,130,246,0.3)', overflow: 'hidden' }}>
+                {logo ? (
+                  <img src={logo} alt="Лого" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  business?.name?.charAt(0).toUpperCase() || 'B'
+                )}
               </div>
+
               <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '120px', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
                 <span style={{ color: '#ffffff', fontSize: '0.95rem', fontWeight: '600' }}>{business?.name || 'Завантаження'}</span>
               </div>
             </div>
-            <div style={{ color: '#a1a1aa', flexShrink: 0, opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
+            <div style={{ color: '#a1a1aa', flexShrink: 0, opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', transform: isBizMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
               <Icons.ChevronDown />
             </div>
           </div>
+
+          {/* Випадаюче меню */}
+          {isBizMenuOpen && (
+            <div className="menu-popup" style={{
+              position: 'absolute',
+              top: isSidebarCollapsed ? '0' : 'calc(100% + 8px)',
+              left: isSidebarCollapsed ? 'calc(100% + 10px)' : '1rem',
+              right: isSidebarCollapsed ? 'auto' : '1rem',
+              width: isSidebarCollapsed ? '240px' : 'calc(100% - 2rem)',
+              backgroundColor: '#1a1c23',
+              border: '1px solid #272a30',
+              borderRadius: '12px',
+              padding: '0.5rem',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+              zIndex: 200
+            }}>
+              <div style={{ padding: '0.4rem 0.8rem 0.6rem 0.8rem', fontSize: '0.7rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Ваші заклади
+              </div>
+
+              {myBusinesses.map(biz => {
+                const isActive = business?.id === biz.id;
+                return (
+                  <button
+                    key={biz.id}
+                    onClick={() => {
+                      setIsBizMenuOpen(false);
+                      if (!isActive) {
+                        loadSpecificBusiness(biz.id); // 🟢 Викликаємо завантаження нового закладу
+                      }
+                    }}
+                    style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: isActive ? 'rgba(255,255,255,0.05)' : 'transparent', border: 'none', color: isActive ? '#fff' : '#a1a1aa', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', textAlign: 'left', transition: '0.2s', marginBottom: '0.2rem' }}
+                    onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'}
+                    onMouseOut={e => e.currentTarget.style.backgroundColor = isActive ? 'rgba(255,255,255,0.05)' : 'transparent'}
+                  >
+                    {/* 🟢 ТУТ ТАКОЖ ДОДАНО ЛОГІКУ АВАТАРКИ ДЛЯ СПИСКУ */}
+                    <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: biz.logo ? 'transparent' : (isActive ? '#3b82f6' : '#272a30'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', flexShrink: 0, overflow: 'hidden' }}>
+                      {biz.logo ? (
+                        <img src={biz.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        biz.name?.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <span style={{ fontWeight: isActive ? '700' : '500', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{biz.name}</span>
+                    {isActive && <div style={{ color: '#3b82f6' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>}
+                  </button>
+                )
+              })}
+
+              <div style={{ height: '1px', backgroundColor: '#272a30', margin: '0.4rem 0' }}></div>
+
+              <button
+                onClick={() => router.push('/business/register')}
+                style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#a1a1aa', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }}
+                onMouseOver={e => { e.currentTarget.style.backgroundColor = '#272a30'; e.currentTarget.style.color = '#fff'; }}
+                onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#a1a1aa'; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', background: '#272a30', borderRadius: '6px' }}>
+                  <Icons.Plus />
+                </div>
+                Створити новий заклад
+              </button>
+            </div>
+          )}
         </div>
 
         <nav className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: isSidebarCollapsed ? '0 0.5rem' : '0 1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -1620,6 +1802,12 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
           </div>
           {isProfileMenuOpen && (
             <div className="menu-popup" style={{ position: 'absolute', bottom: '100%', left: isSidebarCollapsed ? '0.5rem' : '1rem', right: isSidebarCollapsed ? 'auto' : '1rem', marginBottom: '0.5rem', width: isSidebarCollapsed ? '200px' : 'auto', backgroundColor: '#1a1c23', border: '1px solid #272a30', borderRadius: '12px', padding: '0.4rem', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50 }}>
+
+              {/* 🟢 НОВА КНОПКА "НА ГОЛОВНУ" */}
+              <button onClick={() => router.push('/')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#e4e4e7', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#272a30'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                <Icons.Globe /> Головна сторінка
+              </button>
+
               <button onClick={() => router.push('/profile')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#e4e4e7', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#272a30'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}><Icons.User /> Налаштування акаунту</button>
               <div style={{ height: '1px', backgroundColor: '#272a30', margin: '0.3rem 0' }}></div>
               <button onClick={handleLogout} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#f87171', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }} onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(248, 113, 113, 0.1)'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}><Icons.LogOut /> Вийти з системи</button>
@@ -1631,8 +1819,8 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
       {/* 🔴 ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflowY: 'auto', position: 'relative' }}>
 
-{/* Хедер - показуємо тільки якщо це не Календар, Клієнти, Статистика, Команда або Маркетинг */}
-        {activeTab !== 'Calendar' && activeTab !== 'Clients' && activeTab !== 'Stats' && activeTab !== 'Team' && activeTab !== 'Marketing' && (
+{/* Хедер - показуємо тільки якщо це не Календар, Клієнти, Статистика, Команда, Маркетинг АБО НАЛАШТУВАННЯ */}
+        {activeTab !== 'Calendar' && activeTab !== 'Clients' && activeTab !== 'Stats' && activeTab !== 'Team' && activeTab !== 'Marketing' && activeTab !== 'Settings' && (
           <header style={{ padding: '2rem 3rem 1.5rem 3rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', zIndex: 10 }}>
             <div>
               <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>{getPageHeader().title}</h1>
@@ -3499,24 +3687,267 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
           </div>
         )
 
-        /* --- 5. НАЛАШТУВАННЯ БІЗНЕСУ --- */
-        : activeTab === 'Settings' ? (
-          <div style={{ padding: '3rem', flex: 1 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem', maxWidth: '1200px' }}>
-              {businessSettingsCards.map(card => (
-                <div key={card.id} style={{ backgroundColor: '#ffffff', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} onMouseOver={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)'; }} onMouseOut={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'; }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                    <div style={{ color: '#0f172a' }}><card.icon /></div>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: 0 }}>{card.title}</h3>
-                  </div>
-                  <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, paddingLeft: '2.5rem', lineHeight: '1.4' }}>{card.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
 
-        /* --- 6. МАРКЕТИНГ --- */
+/* --- 5. НАЛАШТУВАННЯ БІЗНЕСУ --- */
+        : activeTab === 'Settings' ? (
+          <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
+
+            {/* 🟢 ГОЛОВНЕ МЕНЮ НАЛАШТУВАНЬ */}
+            {settingsView === 'main' && (
+              <div style={{ maxWidth: '1000px', animation: 'fadeIn 0.3s ease-in-out' }}>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
+                  <div>
+                    <h2 style={{ fontSize: '2rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0', letterSpacing: '-0.02em' }}>Налаштування</h2>
+                    <p style={{ color: '#64748b', fontSize: '1rem', margin: 0 }}>Керування параметрами, онлайн-записом та даними вашого бізнесу.</p>
+                  </div>
+
+                  {/* Рядок пошуку */}
+                  <div style={{ position: 'relative', width: '320px' }}>
+                    <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', display: 'flex' }}><Icons.Search /></div>
+                    <input type="text" placeholder="Пошук..." style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.4rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.95rem', outline: 'none', background: '#fff' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '1.5rem' }}>
+                  {businessSettingsCards.map(card => (
+                    <div
+                      key={card.id}
+                      onClick={() => setSettingsView(card.id as any)}
+                      style={{ background: '#fff', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'flex-start', gap: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}
+                      onMouseOver={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                      onMouseOut={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
+                      <div style={{ color: '#0f172a', marginTop: '0.2rem' }}>
+                        <card.icon />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.3rem 0' }}>{card.title}</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: '1.4' }}>{card.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 🟢 СПІЛЬНИЙ ХЕДЕР ДЛЯ ПІДСТОРІНОК */}
+            {settingsView !== 'main' && (
+              <div style={{ marginBottom: '2.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <button onClick={() => setSettingsView('main')} style={{ background: 'transparent', border: 'none', color: '#0f172a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem', fontWeight: '800', transition: '0.2s', padding: 0 }} onMouseOver={e => e.currentTarget.style.opacity = '0.7'} onMouseOut={e => e.currentTarget.style.opacity = '1'}>
+                  <Icons.ChevronLeft /> {businessSettingsCards.find(c => c.id === settingsView)?.title}
+                </button>
+              </div>
+            )}
+
+            {/* 🟢 ПІДСТОРІНКИ */}
+            {settingsView !== 'main' && (
+              <div style={{ maxWidth: '800px', width: '100%', animation: 'fadeIn 0.3s ease-in-out' }}>
+
+              {/* --- ОНЛАЙН БРОНЮВАННЯ --- */}
+              {settingsView === 'booking' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '2rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.3rem 0' }}>Приймати онлайн-записи</h4>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Клієнти зможуть самостійно записуватись через вашу сторінку.</p>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <div style={{ position: 'relative', width: '48px', height: '26px' }}>
+                          <input type="checkbox" checked={bookingSettings.is_active} onChange={e => setBookingSettings({...bookingSettings, is_active: e.target.checked})} style={{ opacity: 0, width: 0, height: 0 }} />
+                          <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: bookingSettings.is_active ? '#0f172a' : '#cbd5e1', borderRadius: '24px', transition: '.2s' }}>
+                            <span style={{ position: 'absolute', height: '22px', width: '22px', left: bookingSettings.is_active ? '24px' : '2px', bottom: '2px', backgroundColor: 'white', borderRadius: '50%', transition: '.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}></span>
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.6rem' }}>Мінімальний час до візиту</label>
+                        <select value={bookingSettings.min_advance_hours} onChange={e => setBookingSettings({...bookingSettings, min_advance_hours: Number(e.target.value)})} style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '0.95rem', outline: 'none' }}>
+                          <option value={0}>Можна записуватись прямо зараз</option>
+                          <option value={1}>За 1 годину до початку</option>
+                          <option value={2}>За 2 години до початку</option>
+                          <option value={24}>За 24 години (1 добу)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.6rem' }}>Максимальний горизонт</label>
+                        <select value={bookingSettings.max_advance_days} onChange={e => setBookingSettings({...bookingSettings, max_advance_days: Number(e.target.value)})} style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '0.95rem', outline: 'none' }}>
+                          <option value={7}>На 1 тиждень вперед</option>
+                          <option value={14}>На 2 тижні вперед</option>
+                          <option value={30}>На 1 місяць вперед</option>
+                          <option value={90}>На 3 місяці вперед</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.6rem' }}>Правила скасування (Відображається клієнту)</label>
+                      <input type="text" value={bookingSettings.cancellation_policy} onChange={e => setBookingSettings({...bookingSettings, cancellation_policy: e.target.value})} style={{ width: '100%', padding: '0.8rem 1rem', border: '1px solid #cbd5e1', borderRadius: '10px', fontSize: '0.95rem', background: '#fff', color: '#0f172a', outline: 'none' }} />
+                    </div>
+                  </div>
+                  <button onClick={() => saveSettingsToDB('booking_settings', bookingSettings, 'Налаштування онлайн-бронювання збережено.')} disabled={isSettingsSaving} style={{ padding: '1rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: isSettingsSaving ? 'not-allowed' : 'pointer', opacity: isSettingsSaving ? 0.7 : 1 }}>
+                    {isSettingsSaving ? 'Збереження...' : 'Зберегти зміни'}
+                  </button>
+                </div>
+              )}
+
+              {/* --- СИСТЕМНІ ПРАВИЛА --- */}
+              {settingsView === 'advanced' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px' }}>
+                    <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: '12px 12px 0 0' }}>
+                      <h3 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Робота з клієнтами</h3>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9' }}>
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.3rem 0' }}>Авто-підтвердження записів</h4>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Записи з інтернету одразу потрапляють в календар.</p>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <div style={{ position: 'relative', width: '48px', height: '26px' }}>
+                          <input type="checkbox" checked={notificationSettings.auto_approve} onChange={e => setNotificationSettings({...notificationSettings, auto_approve: e.target.checked})} style={{ opacity: 0, width: 0, height: 0 }} />
+                          <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: notificationSettings.auto_approve ? '#0f172a' : '#cbd5e1', borderRadius: '24px', transition: '.2s' }}><span style={{ position: 'absolute', height: '22px', width: '22px', left: notificationSettings.auto_approve ? '24px' : '2px', bottom: '2px', backgroundColor: 'white', borderRadius: '50%', transition: '.2s' }}></span></span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9' }}>
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.3rem 0' }}>Сповіщати клієнта про запис</h4>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Надсилати клієнту SMS/Email з підтвердженням.</p>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <div style={{ position: 'relative', width: '48px', height: '26px' }}>
+                          <input type="checkbox" checked={notificationSettings.notify_client_booking} onChange={e => setNotificationSettings({...notificationSettings, notify_client_booking: e.target.checked})} style={{ opacity: 0, width: 0, height: 0 }} />
+                          <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: notificationSettings.notify_client_booking ? '#0f172a' : '#cbd5e1', borderRadius: '24px', transition: '.2s' }}><span style={{ position: 'absolute', height: '22px', width: '22px', left: notificationSettings.notify_client_booking ? '24px' : '2px', bottom: '2px', backgroundColor: 'white', borderRadius: '50%', transition: '.2s' }}></span></span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem' }}>
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.3rem 0' }}>Нагадування за 24 години</h4>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Автоматичне нагадування клієнту для зменшення неявок.</p>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <div style={{ position: 'relative', width: '48px', height: '26px' }}>
+                          <input type="checkbox" checked={notificationSettings.notify_client_reminder} onChange={e => setNotificationSettings({...notificationSettings, notify_client_reminder: e.target.checked})} style={{ opacity: 0, width: 0, height: 0 }} />
+                          <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: notificationSettings.notify_client_reminder ? '#0f172a' : '#cbd5e1', borderRadius: '24px', transition: '.2s' }}><span style={{ position: 'absolute', height: '22px', width: '22px', left: notificationSettings.notify_client_reminder ? '24px' : '2px', bottom: '2px', backgroundColor: 'white', borderRadius: '50%', transition: '.2s' }}></span></span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                  <button onClick={() => saveSettingsToDB('notification_settings', notificationSettings, 'Системні правила збережено.')} disabled={isSettingsSaving} style={{ padding: '1rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: isSettingsSaving ? 'not-allowed' : 'pointer', opacity: isSettingsSaving ? 0.7 : 1 }}>
+                    {isSettingsSaving ? 'Збереження...' : 'Зберегти зміни'}
+                  </button>
+                </div>
+              )}
+
+              {/* --- ПЛАТЕЖІ ТА КАСА --- */}
+              {settingsView === 'payments' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px' }}>
+                    <div style={{ padding: '1.5rem 2rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', borderRadius: '12px 12px 0 0' }}>
+                      <h3 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Захист від неявок</h3>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: paymentsSettings.require_deposit ? '1px solid #f1f5f9' : 'none' }}>
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.3rem 0' }}>Брати передоплату (Депозит)</h4>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>Клієнт повинен сплатити фіксовану суму для підтвердження.</p>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <div style={{ position: 'relative', width: '44px', height: '24px' }}>
+                          <input type="checkbox" checked={paymentsSettings.require_deposit} onChange={e => setPaymentsSettings({...paymentsSettings, require_deposit: e.target.checked})} style={{ opacity: 0, width: 0, height: 0 }} />
+                          <span style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: paymentsSettings.require_deposit ? '#0f172a' : '#cbd5e1', borderRadius: '24px', transition: '.2s' }}><span style={{ position: 'absolute', height: '20px', width: '20px', left: paymentsSettings.require_deposit ? '22px' : '2px', bottom: '2px', backgroundColor: 'white', borderRadius: '50%', transition: '.2s' }}></span></span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {paymentsSettings.require_deposit && (
+                      <div style={{ padding: '1.5rem 2rem', background: '#fafafa' }}>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.6rem' }}>Сума депозиту (₴)</label>
+                        <input type="number" value={paymentsSettings.deposit_amount} onChange={e => setPaymentsSettings({...paymentsSettings, deposit_amount: Number(e.target.value)})} style={{ width: '100%', maxWidth: '200px', padding: '0.8rem 1rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '1rem', outline: 'none' }} />
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => saveSettingsToDB('payments_settings', paymentsSettings, 'Налаштування платежів збережено.')} disabled={isSettingsSaving} style={{ padding: '1rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: isSettingsSaving ? 'not-allowed' : 'pointer', opacity: isSettingsSaving ? 0.7 : 1 }}>
+                    {isSettingsSaving ? 'Збереження...' : 'Зберегти зміни'}
+                  </button>
+                </div>
+              )}
+
+              {/* --- СКЛАД --- */}
+              {settingsView === 'inventory' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                    <div style={{ padding: '1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '1rem', alignItems: 'end' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Назва товару</label>
+                        <input type="text" value={newInventoryItem.name} onChange={e => setNewInventoryItem({...newInventoryItem, name: e.target.value})} placeholder="American Crew Pomade" style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem' }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Кіл-сть</label>
+                        <input type="number" value={newInventoryItem.qty || ''} onChange={e => setNewInventoryItem({...newInventoryItem, qty: Number(e.target.value)})} style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem' }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Ціна (₴)</label>
+                        <input type="number" value={newInventoryItem.price || ''} onChange={e => setNewInventoryItem({...newInventoryItem, price: Number(e.target.value)})} style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem' }} />
+                      </div>
+                      <button onClick={handleAddInventory} style={{ padding: '0.8rem 1.5rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', height: '43px' }}>Додати</button>
+                    </div>
+
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '1rem 1.5rem', color: '#64748b', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0' }}>Назва</th>
+                          <th style={{ padding: '1rem 1.5rem', color: '#64748b', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0' }}>Залишок</th>
+                          <th style={{ padding: '1rem 1.5rem', color: '#64748b', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0' }}>Ціна</th>
+                          <th style={{ borderBottom: '1px solid #e2e8f0' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventory.length > 0 ? inventory.map((item, idx) => (
+                          <tr key={item.id} style={{ borderBottom: idx !== inventory.length - 1 ? '1px solid #f1f5f9' : 'none', transition: 'background 0.2s' }} onMouseOver={e => e.currentTarget.style.background = '#f8fafc'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                            <td style={{ padding: '1rem 1.5rem', fontWeight: '600', color: '#0f172a' }}>{item.name}</td>
+                            <td style={{ padding: '1rem 1.5rem' }}><span style={{ background: item.qty <= 5 ? '#fef2f2' : '#f1f5f9', color: item.qty <= 5 ? '#ef4444' : '#0f172a', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: '700', fontSize: '0.85rem' }}>{item.qty} шт</span></td>
+                            <td style={{ padding: '1rem 1.5rem', color: '#475569' }}>{item.price} ₴</td>
+                            <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
+                              <button onClick={() => handleDeleteInventory(item.id)} style={{ background: 'transparent', border: 'none', color: '#cbd5e1', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.color = '#ef4444'} onMouseOut={e => e.currentTarget.style.color = '#cbd5e1'}>
+                                <Icons.Trash />
+                              </button>
+                            </td>
+                          </tr>
+                        )) : <tr><td colSpan={4} style={{ textAlign: 'center', padding: '4rem 2rem', color: '#94a3b8', fontSize: '1rem' }}>Склад порожній. Додайте перший товар.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* --- ПІДПИСКА (БІЛІНГ) --- */}
+              {settingsView === 'billing' && (
+                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#3b82f6', background: '#eff6ff', padding: '0.3rem 0.6rem', borderRadius: '6px', display: 'inline-block', marginBottom: '1rem' }}>ПОТОЧНИЙ ТАРИФ</div>
+                    <h3 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#0f172a', margin: '0 0 0.2rem 0' }}>Pro Business</h3>
+                    <p style={{ color: '#10b981', fontWeight: '700', margin: 0, fontSize: '1rem' }}>Всі функції активовано</p>
+                  </div>
+                  <button onClick={() => setComingSoonModal({ isOpen: true, title: 'Управління підпискою', desc: 'Цей функціонал зараз знаходиться на стадії тестування.' })} style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#0f172a', padding: '0.8rem 1.5rem', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'} onMouseOut={e => e.currentTarget.style.background = '#f8fafc'}>
+                    Керувати підпискою
+                  </button>
+                </div>
+              )}
+
+              </div>
+            )}
+          </div>
+        )/* --- 6. МАРКЕТИНГ --- */
         : activeTab === 'Marketing' ? (
           <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', maxWidth: '1200px', margin: '0 auto', width: '100%', height: '100%' }}>
 

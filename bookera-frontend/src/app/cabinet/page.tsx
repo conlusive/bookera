@@ -89,15 +89,20 @@ const businessSettingsCards = [
   { id: 'billing', title: 'Підписка та білінг', desc: 'Деталі оплати, поточний тариф та методи платежу.', icon: Icons.Calendar },
 ];
 
-// --- 🎨 КОЛЬОРИ МАЙСТРІВ ---
+// --- 🎨 КОЛЬОРИ МАЙСТРІВ ТА ПОСЛУГ ---
 const MASTER_COLORS = [
-  { pastelBg: '#e0e7ff', pastelBorder: '#818cf8', pastelText: '#312e81', vividBg: '#3b82f6', vividBorder: '#2563eb' },
-  { pastelBg: '#dcfce7', pastelBorder: '#86efac', pastelText: '#14532d', vividBg: '#22c55e', vividBorder: '#16a34a' },
-  { pastelBg: '#fef08a', pastelBorder: '#fde047', pastelText: '#713f12', vividBg: '#eab308', vividBorder: '#ca8a04' },
-  { pastelBg: '#ffedd5', pastelBorder: '#fdba74', pastelText: '#7c2d12', vividBg: '#f97316', vividBorder: '#ea580c' },
-  { pastelBg: '#fce7f3', pastelBorder: '#f472b6', pastelText: '#831843', vividBg: '#ec4899', vividBorder: '#db2777' },
-  { pastelBg: '#f3e8ff', pastelBorder: '#d8b4fe', pastelText: '#581c87', vividBg: '#a855f7', vividBorder: '#9333ea' },
-  { pastelBg: '#cffafe', pastelBorder: '#67e8f9', pastelText: '#164e63', vividBg: '#06b6d4', vividBorder: '#0891b2' },
+  { pastelBg: '#e0e7ff', pastelBorder: '#818cf8', pastelText: '#312e81', vividBg: '#4f46e5', vividBorder: '#3730a3' }, // Indigo
+  { pastelBg: '#dcfce7', pastelBorder: '#86efac', pastelText: '#14532d', vividBg: '#16a34a', vividBorder: '#15803d' }, // Green
+  { pastelBg: '#fef08a', pastelBorder: '#fde047', pastelText: '#713f12', vividBg: '#eab308', vividBorder: '#ca8a04' }, // Yellow
+  { pastelBg: '#ffedd5', pastelBorder: '#fdba74', pastelText: '#7c2d12', vividBg: '#f97316', vividBorder: '#ea580c' }, // Orange
+  { pastelBg: '#fce7f3', pastelBorder: '#f472b6', pastelText: '#831843', vividBg: '#ec4899', vividBorder: '#db2777' }, // Pink
+  { pastelBg: '#f3e8ff', pastelBorder: '#d8b4fe', pastelText: '#581c87', vividBg: '#a855f7', vividBorder: '#9333ea' }, // Purple
+  { pastelBg: '#cffafe', pastelBorder: '#67e8f9', pastelText: '#164e63', vividBg: '#06b6d4', vividBorder: '#0891b2' }, // Cyan
+  { pastelBg: '#ffe4e6', pastelBorder: '#fda4af', pastelText: '#881337', vividBg: '#f43f5e', vividBorder: '#e11d48' }, // Rose
+  { pastelBg: '#ccfbf1', pastelBorder: '#6ee7b7', pastelText: '#064e3b', vividBg: '#10b981', vividBorder: '#059669' }, // Emerald
+  { pastelBg: '#fef3c7', pastelBorder: '#fcd34d', pastelText: '#78350f', vividBg: '#f59e0b', vividBorder: '#d97706' }, // Amber
+  { pastelBg: '#e0f2fe', pastelBorder: '#93c5fd', pastelText: '#1e3a8a', vividBg: '#3b82f6', vividBorder: '#2563eb' }, // Blue
+  { pastelBg: '#f3f4f6', pastelBorder: '#d1d5db', pastelText: '#111827', vividBg: '#6b7280', vividBorder: '#4b5563' }, // Gray
 ];
 
 const toLocalDateStr = (d: Date) => {
@@ -119,6 +124,46 @@ const checkSameDay = (dbDateStr: string, targetDateObj: Date) => {
          d.getDate() === targetDateObj.getDate();
 };
 
+// 🟢 ОКРЕМИЙ КОМПОНЕНТ ДЛЯ ЧЕРВОНОЇ ЛІНІЇ
+const CurrentTimeIndicator = ({ gridStartHour, gridTotalHours, isToday }: { gridStartHour: number, gridTotalHours: number, isToday: boolean }) => {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    if (!isToday) return;
+    // Оновлюємо щосекунди (1000 мс) для ідеальної точності
+    const interval = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, [isToday]);
+
+  if (!isToday) return null;
+
+  const currentHourAdjusted = time.getHours() < gridStartHour ? time.getHours() + 24 : time.getHours();
+  // Розрахунок з секундами для ідеально плавного руху
+  const currentMinutesOffset = (currentHourAdjusted - gridStartHour) * 60 + time.getMinutes() + (time.getSeconds() / 60);
+
+  if (currentMinutesOffset < 0 || currentMinutesOffset > gridTotalHours * 60) return null;
+
+  // 🔴 Змінили transition на 'top 1s linear', щоб рух був ідеально синхронізований із секундами
+  return (
+    <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, zIndex: 20, pointerEvents: 'none', transition: 'top 1s linear' }}>
+
+      {/* 🔴 Крапка на осі (чітко на межі між сірою колонкою і сіткою) */}
+      <div style={{ position: 'absolute', left: '56px', top: '-4px', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', zIndex: 11 }}></div>
+
+      {/* 🔴 Лінія, що тягнеться через всю сітку */}
+      <div style={{ position: 'absolute', left: '60px', right: 0, top: '0', borderTop: '2px solid #ef4444', opacity: 0.8, zIndex: 9 }}></div>
+
+      {/* 🔴 Сучасна плашка з часом */}
+      <div style={{ position: 'absolute', left: '68px', top: '-11px', backgroundColor: '#ef4444', color: '#ffffff', padding: '2px 6px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(239, 68, 68, 0.3)', zIndex: 12 }}>
+        <span style={{ fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.05em' }}>
+          {time.getHours().toString().padStart(2, '0')}:{time.getMinutes().toString().padStart(2, '0')}
+        </span>
+      </div>
+
+    </div>
+  );
+};
+
 export default function BusinessCabinet() {
   const router = useRouter();
   const supabase = createClient();
@@ -134,7 +179,6 @@ export default function BusinessCabinet() {
   // --- СТАНИ ДЛЯ ДАТ І ТАСОК ---
   const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean, date: string}[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
-
   const now = new Date();
 
   const formatDateKey = (date: Date) => {
@@ -184,6 +228,12 @@ export default function BusinessCabinet() {
   const [myBusinesses, setMyBusinesses] = useState<any[]>([]);
 
   const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
+  // 🟢 НОВІ СТАНИ ДЛЯ ФІЧ
+  const [waitlist, setWaitlist] = useState<any[]>([]);
+  const [sidebarTab, setSidebarTab] = useState<'todo' | 'waitlist'>('todo');
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [clipboardApp, setClipboardApp] = useState<any>(null);
+  const [contextMenu, setContextMenu] = useState<{x: number, y: number, app: any} | null>(null);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [isApptModalOpen, setIsApptModalOpen] = useState(false);
 
@@ -198,6 +248,8 @@ export default function BusinessCabinet() {
 
   const [filterMaster, setFilterMaster] = useState('all');
   const [isBlockMode, setIsBlockMode] = useState(false);
+  const [isMasterFilterOpen, setIsMasterFilterOpen] = useState(false);
+  const masterFilterRef = useRef<HTMLDivElement>(null);
 
 // --- СТАНИ ДЛЯ МЕНЕДЖЕРА ЗАДАЧ ---
   const [showTaskInfoModal, setShowTaskInfoModal] = useState(false);
@@ -659,6 +711,7 @@ const handleSendMarketing = async () => {
     defaultView: 'day',
     displayMode: 'fit',
     colorScheme: 'pastel',
+    colorMode: 'master', // 🟢 ДОДАНО СТАН ДЛЯ КОЛІРНОГО РЕЖИМУ
   });
 
   const [shifts, setShifts] = useState([
@@ -731,6 +784,9 @@ const handleSendMarketing = async () => {
   useEffect(() => {
     const savedTab = localStorage.getItem('bookera_activeTab');
     if (savedTab) setActiveTab(savedTab);
+
+    const savedView = localStorage.getItem('bookera_calendarView');
+    if (savedView) setCalendarView(savedView as any);
 
     async function loadCabinetData() {
       try {
@@ -843,6 +899,9 @@ const handleSendMarketing = async () => {
       if (bizMenuRef.current && !bizMenuRef.current.contains(event.target as Node)) {
         setIsBizMenuOpen(false);
       }
+      if (masterFilterRef.current && !masterFilterRef.current.contains(event.target as Node)) {
+        setIsMasterFilterOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -852,6 +911,61 @@ const handleSendMarketing = async () => {
     localStorage.clear();
     router.push('/business');
   };
+
+  // 🟢 ГАРЯЧІ КЛАВІШІ (PRO SHORTCUTS)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return; // Не спрацьовує, якщо юзер щось друкує
+
+      if (activeTab === 'Calendar') {
+         if (e.key === 'ArrowLeft') {
+            const d = new Date(currentDate);
+            if (calendarView === 'day') d.setDate(d.getDate() - 1);
+            else if (calendarView === 'week') d.setDate(d.getDate() - 7);
+            else d.setMonth(d.getMonth() - 1);
+            setCurrentDate(d);
+         } else if (e.key === 'ArrowRight') {
+            const d = new Date(currentDate);
+            if (calendarView === 'day') d.setDate(d.getDate() + 1);
+            else if (calendarView === 'week') d.setDate(d.getDate() + 7);
+            else d.setMonth(d.getMonth() + 1);
+            setCurrentDate(d);
+         // Використовуємо e.code, щоб шорткати працювали на будь-якій розкладці (Укр/Англ)
+         } else if (e.code === 'KeyD') {
+            setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day');
+         } else if (e.code === 'KeyW') {
+            setCalendarView('week'); localStorage.setItem('bookera_calendarView', 'week');
+         } else if (e.code === 'KeyM') {
+            setCalendarView('month'); localStorage.setItem('bookera_calendarView', 'month');
+         } else if (e.code === 'KeyN') {
+            setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
+            setIsBlockMode(false); setIsApptModalOpen(true);
+         }
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyK') {
+         e.preventDefault();
+         setIsGlobalSearchOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentDate, calendarView, activeTab, filterMaster]);
+
+  // Закриття контекстного меню при кліку будь-де
+  useEffect(() => {
+    const closeMenu = () => setContextMenu(null);
+    document.addEventListener("click", closeMenu);
+    document.addEventListener("contextmenu", closeMenu); // 🟢 Додав закриття і при правому кліку в іншому місці
+    return () => {
+      document.removeEventListener("click", closeMenu);
+      document.removeEventListener("contextmenu", closeMenu);
+    };
+  }, []);
+
+
 
   const handleSaveCalSettings = async () => {
     if (business) {
@@ -1247,6 +1361,23 @@ const handleSendMarketing = async () => {
 const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
     // 🟢 ПЕРЕВІРКА НА ВИХІДНИЙ
     let currentEffectiveShifts = shifts;
+    // 🟢 ЯКЩО АКТИВНЕ КОПІЮВАННЯ ВІЗИТУ
+    if (clipboardApp) {
+       setApptForm({
+         client_name: clipboardApp.client_name,
+         client_phone: clipboardApp.client_phone || '+380',
+         service_id: clipboardApp.service_id,
+         staff_id: filterMaster !== 'all' ? filterMaster : clipboardApp.staff_id,
+         date: toLocalDateStr(targetDate),
+         time: `${hour.toString().padStart(2, '0')}:00`,
+         block_reason: '',
+         duration: clipboardApp.duration || 60
+       });
+       setIsBlockMode(false);
+       setIsApptModalOpen(true);
+       setClipboardApp(null);
+       return;
+    }
     if (filterMaster !== 'all') {
        const m = team.find(t => String(t.id) === String(filterMaster));
        if (m && m.shifts && m.shifts.length === 7) currentEffectiveShifts = m.shifts;
@@ -1278,6 +1409,116 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
     e.stopPropagation();
     setSelectedBooking(app);
     setIsBookingDetailsModalOpen(true);
+  };
+
+// 🟢 СТАН ДЛЯ DRAG-AND-DROP ТА АНІМАЦІЙ
+  const [dragConfirmData, setDragConfirmData] = useState<{app: any, targetDate: Date, newStart: string, newEnd: string} | null>(null);
+
+  // 🟢 ЛОГІКА DRAG-AND-DROP (Розумний снайпінг по 15 хв)
+  const handleDropAppointment = (e: React.DragEvent, targetDate: Date, targetHour?: number) => {
+    e.preventDefault();
+
+    const appId = e.dataTransfer.getData('text/plain');
+    if (!appId) return;
+
+    const app = appointments.find(a => String(a.id) === appId);
+    if (!app || app.status === 'blocked' || app.color === 'blocked') return;
+
+    let newStartH = parseInt(app.start_time.split(':')[0], 10);
+    let newStartM = parseInt(app.start_time.split(':')[1], 10);
+
+    if (targetHour !== undefined) {
+       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+       const y = e.clientY - rect.top;
+       const snappedM = Math.floor(y / 15) * 15; // Дасть 0, 15, 30 або 45
+
+       newStartH = targetHour;
+       newStartM = snappedM;
+    }
+
+    const [oldStartH, oldStartM] = app.start_time.split(':').map(Number);
+    const [oldEndH, oldEndM] = app.end_time.split(':').map(Number);
+    let duration = (oldEndH * 60 + oldEndM) - (oldStartH * 60 + oldStartM);
+    if (duration < 0) duration += 24 * 60;
+
+    // Захист: якщо тривалість була зламана (NaN), беремо стандартну
+    if (isNaN(duration) || duration <= 0) {
+        const srv = services.find(s => String(s.id) === String(app.service_id));
+        duration = srv ? srv.duration : 60;
+    }
+
+    const totalNewStartMins = newStartH * 60 + newStartM;
+    const totalNewEndMins = totalNewStartMins + duration;
+
+    const newEndH = Math.floor(totalNewEndMins / 60) % 24;
+    const newEndM = totalNewEndMins % 60;
+
+    const newStartStr = `${String(newStartH).padStart(2, '0')}:${String(newStartM).padStart(2, '0')}:00`;
+    const newEndStr = `${String(newEndH).padStart(2, '0')}:${String(newEndM).padStart(2, '0')}:00`;
+
+    if (app.start_time === newStartStr && checkSameDay(app.booking_date || app.start_time, targetDate)) return;
+
+    setDragConfirmData({ app, targetDate, newStart: newStartStr, newEnd: newEndStr });
+  };
+
+  // 🟢 ПІДТВЕРДЖЕННЯ ПЕРЕНЕСЕННЯ
+  const confirmDragDrop = async () => {
+    if (!dragConfirmData) return;
+    const { app, targetDate, newStart, newEnd } = dragConfirmData;
+    const newDateStr = toLocalDateStr(targetDate);
+
+    let newStatus = app.status;
+    if (newDateStr === app.booking_date && newStart > app.start_time && app.status !== 'completed') {
+       newStatus = 'late';
+    }
+
+    setAppointments(prev => prev.map(a =>
+       String(a.id) === String(app.id)
+       ? { ...a, booking_date: newDateStr, start_time: newStart, end_time: newEnd, status: newStatus }
+       : a
+    ));
+    setDragConfirmData(null);
+
+    if (business) {
+       await supabase.from('bookings').update({ booking_date: newDateStr, start_time: newStart, end_time: newEnd, status: newStatus }).eq('id', app.id);
+    }
+  };
+
+  // 🟢 ЗМІНА ЧАСУ З ДЕТАЛЕЙ ЗАПИСУ (ЗАХИСТ ВІД NaN)
+  const handleUpdateBookingTime = async (newStartTime: string) => {
+     // Чекаємо, поки користувач введе час повністю (формат HH:MM)
+     if (!selectedBooking || !newStartTime || newStartTime.length !== 5 || !newStartTime.includes(':')) return;
+
+     const [h, m] = newStartTime.split(':').map(Number);
+     if (isNaN(h) || isNaN(m)) return;
+
+     const [oldStartH, oldStartM] = selectedBooking.start_time.split(':').map(Number);
+     const [oldEndH, oldEndM] = selectedBooking.end_time.split(':').map(Number);
+
+     let duration = (oldEndH * 60 + oldEndM) - (oldStartH * 60 + oldStartM);
+     if (duration < 0) duration += 24 * 60;
+
+     // Якщо тривалість вже зламана (NaN), відновлюємо її з послуги
+     if (isNaN(duration) || duration <= 0) {
+        const srv = services.find(s => String(s.id) === String(selectedBooking.service_id));
+        duration = srv ? srv.duration : 60;
+     }
+
+     const totalEnd = h * 60 + m + duration;
+     const newEndStr = `${String(Math.floor(totalEnd / 60) % 24).padStart(2, '0')}:${String(totalEnd % 60).padStart(2, '0')}:00`;
+     const newStartStr = `${newStartTime}:00`;
+
+     let newStatus = selectedBooking.status;
+     if (newStartStr > selectedBooking.start_time && selectedBooking.status !== 'completed') newStatus = 'late';
+
+     const updatedApp = { ...selectedBooking, start_time: newStartStr, end_time: newEndStr, status: newStatus };
+
+     setSelectedBooking(updatedApp);
+     setAppointments(prev => prev.map(a => a.id === updatedApp.id ? updatedApp : a));
+
+     if (business) {
+       await supabase.from('bookings').update({ start_time: newStartStr, end_time: newEndStr, status: newStatus }).eq('id', updatedApp.id);
+     }
   };
 
   const handleCancelBooking = async () => {
@@ -1356,9 +1597,6 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   const isToday = currentDate.toDateString() === now.toDateString();
-
-  const currentHourAdjusted = now.getHours() < gridStartHour ? now.getHours() + 24 : now.getHours();
-  const currentMinutesOffset = (currentHourAdjusted - gridStartHour) * 60 + now.getMinutes();
 
   const currentDayIndex = currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1;
   const weekDays = Array.from({length: 7}).map((_, i) => {
@@ -1463,9 +1701,28 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
 
   const getMasterColor = (staffId: string) => {
     if (!staffId) return { pastelBg: '#f1f5f9', pastelBorder: '#cbd5e1', pastelText: '#475569', vividBg: '#64748b', vividBorder: '#475569' };
-    const masterIndex = team.findIndex(m => m.id === staffId);
+    const masterIndex = team.findIndex(m => String(m.id) === String(staffId));
     if (masterIndex === -1) return MASTER_COLORS[0];
     return MASTER_COLORS[masterIndex % MASTER_COLORS.length];
+  };
+
+  // 🟢 НОВА ЛОГІКА КОЛІРНОГО КОДУВАННЯ (Master або Category/Service)
+  const getCardColor = (staffId: string, serviceId?: string) => {
+    if (calSettings.colorMode === 'category' && serviceId) {
+      const srv = services.find(s => String(s.id) === String(serviceId));
+      // Хешуємо за категорією, а якщо її немає - за назвою послуги або ID
+      const identifier = srv?.category?.trim() || srv?.name?.trim() || String(serviceId);
+      let hash = 0;
+      for (let i = 0; i < identifier.length; i++) hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+      const index = Math.abs(hash) % MASTER_COLORS.length;
+      return MASTER_COLORS[index];
+    }
+    return getMasterColor(staffId);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, app: any) => {
+    e.preventDefault(); e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, app });
   };
 
   const selectedDateStr = formatDateKey(currentDate);
@@ -1517,6 +1774,10 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <style>{`
+        .cal-app-card { transition: top 0.3s cubic-bezier(0.25, 1, 0.5, 1), left 0.3s cubic-bezier(0.25, 1, 0.5, 1), height 0.3s ease; }
+        .cal-app-card:active { transform: scale(0.98); opacity: 0.9; transition: transform 0.1s; }
+        @keyframes fadeSlide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+        .animated-calendar { animation: fadeSlide 0.3s ease-out; }
         .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
@@ -1578,12 +1839,20 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
         .cal-mini-day { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; border-radius: 50%; cursor: pointer; transition: 0.2s; color: #475569; }
         .cal-mini-day:hover { background: #f1f5f9; }
         .cal-mini-day.selected { background: #0f172a; color: #fff; font-weight: 700; }
-        .cal-grid-row { display: flex; border-bottom: 1px dashed #e2e8f0; position: relative; cursor: pointer; transition: 0.2s; }
-        .cal-grid-row:hover { background-color: #f8fafc; }
-        .cal-time-col { width: 60px; padding: 0.5rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; text-align: right; border-right: 1px solid #e2e8f0; flex-shrink: 0; position: relative; z-index: 10; background: #ffffff !important; }
         
-        .cal-app-card { position: absolute; left: 70px; right: 20px; border-radius: 8px; padding: 0.5rem 0.75rem; border-left: 4px solid; box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 0.85rem; overflow: hidden; cursor: pointer; transition: 0.2s; z-index: 5; }
-        .cal-app-card:hover { transform: translateX(2px); box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
+        .cal-grid-row { display: flex; border-bottom: 1px dashed #e2e8f0; position: relative; cursor: pointer; transition: background-color 0.2s; -webkit-tap-highlight-color: transparent; user-select: none; }
+        .cal-grid-row:hover { background-color: #f8fafc; }
+        .cal-grid-row:active { background-color: #f1f5f9; transition: none; }
+        
+        .cal-week-cell { height: 60px; border-bottom: 1px solid #f1f5f9; cursor: pointer; position: relative; z-index: 1; transition: background-color 0.2s; -webkit-tap-highlight-color: transparent; user-select: none; }
+        .cal-week-cell:hover { background-color: #f8fafc; }
+        .cal-week-cell:active { background-color: #f1f5f9; transition: none; }
+
+        .month-view-cell { border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 0.5rem; cursor: pointer; transition: background-color 0.2s; background-color: #ffffff; position: relative; -webkit-tap-highlight-color: transparent; user-select: none; }
+        .month-view-cell:hover { background-color: #f8fafc; }
+        .month-view-cell:active { background-color: #f1f5f9; transition: none; }
+        
+        .cal-time-col { width: 60px; padding: 0.5rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; text-align: right; border-right: 1px solid #e2e8f0; flex-shrink: 0; position: relative; z-index: 10; background: #ffffff !important; }
         
         /* Стилі статусів візиту */
         .cal-app-card.status-completed { opacity: 0.6; }
@@ -1667,159 +1936,142 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
         .status-badge.default { background: #f1f5f9; color: #475569; }
       `}</style>
 
-      {/* 🔴 САЙДБАР */}
-      <aside style={{ width: isSidebarCollapsed ? '80px' : '280px', backgroundColor: '#0e0e11', borderRight: '1px solid #1f2128', display: 'flex', flexDirection: 'column', flexShrink: 0, transition: 'width 0.4s cubic-bezier(0.25, 1, 0.5, 1)', zIndex: 100 }}>
-        <div style={{ padding: '1.5rem 1rem', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', minHeight: '76px' }}>
-          <div style={{ opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', whiteSpace: 'nowrap' }}>
-            <Link href="/" style={{ color: '#8b8d98', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', marginLeft: '0.5rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.color = '#fff'} onMouseOut={e => e.currentTarget.style.color = '#8b8d98'}>
-              <Icons.ChevronLeft /> На головну
-            </Link>
-          </div>
-          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', borderRadius: '8px', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-            <Icons.SidebarToggle collapsed={isSidebarCollapsed} />
-          </button>
-        </div>
 
-{/* 🟢 ПЕРЕМИКАЧ БІЗНЕСУ (SMART DROPDOWN З АВАТАРАМИ) */}
-        <div style={{ position: 'relative', padding: isSidebarCollapsed ? '0 0.5rem' : '0 1rem', marginBottom: '1.5rem' }} ref={bizMenuRef}>
+      {/* 🔴 САЙДБАР (Світлий, повітряний Apple/SaaS Стиль) */}
+      <aside style={{ width: isSidebarCollapsed ? '80px' : '260px', backgroundColor: '#ffffff', borderRight: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', flexShrink: 0, transition: 'width 0.3s cubic-bezier(0.25, 1, 0.5, 1)', zIndex: 100 }}>
+
+        {/* 1. ВИБІР БІЗНЕСУ (На самому верху, як у референсі) */}
+        <div style={{ position: 'relative', padding: isSidebarCollapsed ? '1rem 0.5rem' : '1rem' }} ref={bizMenuRef}>
           <div
             onClick={() => setIsBizMenuOpen(!isBizMenuOpen)}
-            style={{ backgroundColor: isBizMenuOpen ? '#1f2128' : '#1a1c23', border: '1px solid #272a30', borderRadius: '10px', padding: isSidebarCollapsed ? '0.6rem 0' : '0.6rem 0.8rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', cursor: 'pointer', transition: 'all 0.2s', position: 'relative', zIndex: 51 }}
-            onMouseOver={e => e.currentTarget.style.backgroundColor = '#1f2128'}
-            onMouseOut={e => { if (!isBizMenuOpen) e.currentTarget.style.backgroundColor = '#1a1c23' }}
+            style={{ backgroundColor: isBizMenuOpen ? '#f8fafc' : 'transparent', borderRadius: '10px', padding: isSidebarCollapsed ? '0.5rem 0' : '0.5rem 0.8rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', cursor: 'pointer', transition: 'all 0.2s', position: 'relative', zIndex: 51 }}
+            onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+            onMouseOut={e => { if (!isBizMenuOpen) e.currentTarget.style.backgroundColor = 'transparent' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: isSidebarCollapsed ? '0' : '0.75rem', justifyContent: 'center' }}>
-
-              {/* 🟢 ОСЬ ТУТ ЛОГІКА АВАТАРКИ */}
-              <div style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '6px', backgroundColor: logo ? 'transparent' : '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: '800', boxShadow: logo ? 'none' : '0 2px 5px rgba(59,130,246,0.3)', overflow: 'hidden' }}>
-                {logo ? (
-                  <img src={logo} alt="Лого" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  business?.name?.charAt(0).toUpperCase() || 'B'
-                )}
+              {/* Аватарка Бізнесу */}
+              <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', backgroundColor: logo ? 'transparent' : '#0f172a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: '800', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                {logo ? <img src={logo} alt="Лого" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : business?.name?.charAt(0).toUpperCase() || 'B'}
               </div>
-
+              {/* Назва Бізнесу */}
               <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '120px', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-                <span style={{ color: '#ffffff', fontSize: '0.95rem', fontWeight: '600' }}>{business?.name || 'Завантаження'}</span>
+                <div style={{ color: '#0f172a', fontSize: '0.95rem', fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden' }}>{business?.name || 'Завантаження'}</div><div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '500' }}>{userProfile?.role === 'vendor' ? 'Pro Plan' : 'Майстер'}</div>
               </div>
             </div>
-            <div style={{ color: '#a1a1aa', flexShrink: 0, opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', transform: isBizMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+            <div style={{ color: '#94a3b8', flexShrink: 0, opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', transform: isBizMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
               <Icons.ChevronDown />
             </div>
           </div>
 
-          {/* Випадаюче меню */}
+          {/* Випадаюче меню бізнесів */}
           {isBizMenuOpen && (
             <div className="menu-popup" style={{
-              position: 'absolute',
-              top: isSidebarCollapsed ? '0' : 'calc(100% + 8px)',
-              left: isSidebarCollapsed ? 'calc(100% + 10px)' : '1rem',
-              right: isSidebarCollapsed ? 'auto' : '1rem',
-              width: isSidebarCollapsed ? '240px' : 'calc(100% - 2rem)',
-              backgroundColor: '#1a1c23',
-              border: '1px solid #272a30',
-              borderRadius: '12px',
-              padding: '0.5rem',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-              zIndex: 200
+              position: 'absolute', top: 'calc(100% + 4px)', left: isSidebarCollapsed ? 'calc(100% + 10px)' : '1rem', right: isSidebarCollapsed ? 'auto' : '1rem', width: isSidebarCollapsed ? '240px' : 'calc(100% - 2rem)',
+              backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '0.5rem', boxShadow: '0 12px 40px rgba(0,0,0,0.08)', zIndex: 200
             }}>
-              <div style={{ padding: '0.4rem 0.8rem 0.6rem 0.8rem', fontSize: '0.7rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Ваші заклади
-              </div>
-
+              <div style={{ padding: '0.4rem 0.8rem 0.6rem 0.8rem', fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ваші заклади</div>
               {myBusinesses.map(biz => {
                 const isActive = business?.id === biz.id;
                 return (
                   <button
                     key={biz.id}
-                    onClick={() => {
-                      setIsBizMenuOpen(false);
-                      if (!isActive) {
-                        loadSpecificBusiness(biz.id); // 🟢 Викликаємо завантаження нового закладу
-                      }
-                    }}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: isActive ? 'rgba(255,255,255,0.05)' : 'transparent', border: 'none', color: isActive ? '#fff' : '#a1a1aa', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', textAlign: 'left', transition: '0.2s', marginBottom: '0.2rem' }}
-                    onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'}
-                    onMouseOut={e => e.currentTarget.style.backgroundColor = isActive ? 'rgba(255,255,255,0.05)' : 'transparent'}
+                    onClick={() => { setIsBizMenuOpen(false); if (!isActive) loadSpecificBusiness(biz.id); }}
+                    style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: isActive ? '#f8fafc' : 'transparent', border: 'none', color: '#0f172a', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', textAlign: 'left', transition: '0.2s', marginBottom: '0.2rem' }}
+                    onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                    onMouseOut={e => e.currentTarget.style.backgroundColor = isActive ? '#f8fafc' : 'transparent'}
                   >
-                    {/* 🟢 ТУТ ТАКОЖ ДОДАНО ЛОГІКУ АВАТАРКИ ДЛЯ СПИСКУ */}
-                    <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: biz.logo ? 'transparent' : (isActive ? '#3b82f6' : '#272a30'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', flexShrink: 0, overflow: 'hidden' }}>
-                      {biz.logo ? (
-                        <img src={biz.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        biz.name?.charAt(0).toUpperCase()
-                      )}
+                    <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: biz.logo ? 'transparent' : (isActive ? '#0f172a' : '#f1f5f9'), color: isActive ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', flexShrink: 0, overflow: 'hidden' }}>
+                      {biz.logo ? <img src={biz.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : biz.name?.charAt(0).toUpperCase()}
                     </div>
                     <span style={{ fontWeight: isActive ? '700' : '500', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{biz.name}</span>
-                    {isActive && <div style={{ color: '#3b82f6' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>}
+                    {isActive && <div style={{ color: '#0f172a' }}><Icons.CheckCircle /></div>}
                   </button>
                 )
               })}
-
-              <div style={{ height: '1px', backgroundColor: '#272a30', margin: '0.4rem 0' }}></div>
-
+              <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.4rem 0' }}></div>
               <button
                 onClick={() => router.push('/business/register')}
-                style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#a1a1aa', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }}
-                onMouseOver={e => { e.currentTarget.style.backgroundColor = '#272a30'; e.currentTarget.style.color = '#fff'; }}
-                onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#a1a1aa'; }}
+                style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '600' }}
+                onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }}
+                onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', background: '#272a30', borderRadius: '6px' }}>
-                  <Icons.Plus />
-                </div>
-                Створити новий заклад
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', background: '#f1f5f9', borderRadius: '6px' }}><Icons.Plus /></div>
+                Створити заклад
               </button>
             </div>
           )}
         </div>
 
-        <nav className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: isSidebarCollapsed ? '0 0.5rem' : '0 1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        {/* 2. НАВІГАЦІЯ (Повітряна, світло-сірий Active State) */}
+        <nav className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: isSidebarCollapsed ? '0 0.5rem' : '0 0.8rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {!isSidebarCollapsed && <div style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.05em', textTransform: 'uppercase', padding: '0.5rem 0.8rem', marginTop: '0.5rem' }}>Робоче середовище</div>}
+
           {navItems.map(item => {
             const isActive = activeTab === item.id;
             return (
-              <button key={item.id} onClick={() => { setActiveTab(item.id); localStorage.setItem('bookera_activeTab', item.id); }} title={isSidebarCollapsed ? item.label : ''} style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', width: '100%', padding: isSidebarCollapsed ? '0.75rem 0' : '0.75rem 1rem', backgroundColor: isActive ? 'rgba(255,255,255,0.04)' : 'transparent', border: 'none', borderRadius: '10px', cursor: 'pointer', position: 'relative', color: isActive ? '#ffffff' : '#8b8d98', transition: 'background-color 0.2s ease, color 0.2s ease, padding 0.3s', textAlign: 'left' }} onMouseOver={e => { if (!isActive) e.currentTarget.style.color = '#ffffff'; }} onMouseOut={e => { if (!isActive) e.currentTarget.style.color = '#8b8d98'; }}>
-                <div style={{ flexShrink: 0, color: isActive ? '#ffffff' : '#8b8d98', display: 'flex', transition: '0.2s' }}>
+              <button key={item.id} onClick={() => { setActiveTab(item.id); localStorage.setItem('bookera_activeTab', item.id); }} title={isSidebarCollapsed ? item.label : ''} style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', width: '100%', padding: isSidebarCollapsed ? '0.75rem 0' : '0.6rem 0.8rem', backgroundColor: isActive ? '#f1f5f9' : 'transparent', border: 'none', borderRadius: '10px', cursor: 'pointer', color: isActive ? '#0f172a' : '#64748b', transition: 'all 0.2s ease', textAlign: 'left' }} onMouseOver={e => { if (!isActive) { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; } }} onMouseOut={e => { if (!isActive) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b'; } }}>
+                <div style={{ flexShrink: 0, color: isActive ? '#0f172a' : '#94a3b8', display: 'flex', transition: '0.2s' }}>
                   <item.icon />
                 </div>
-                <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '100%', marginLeft: isSidebarCollapsed ? 0 : '1rem', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-                  <span style={{ fontSize: '0.95rem', fontWeight: isActive ? '600' : '500' }}>{item.label}</span>
+                <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '100%', marginLeft: isSidebarCollapsed ? 0 : '0.8rem', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: isActive ? '700' : '500' }}>{item.label}</span>
                 </div>
-                {isActive && <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: '4px', height: '60%', borderRadius: '4px 0 0 4px', backgroundColor: '#ffffff', boxShadow: '-2px 0 10px rgba(255, 255, 255, 0.3)' }}></div>}
               </button>
             );
           })}
         </nav>
 
-        <div style={{ position: 'relative' }} ref={profileMenuRef}>
-          <div onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} style={{ padding: isSidebarCollapsed ? '1.25rem 0' : '1.25rem 1.5rem', borderTop: '1px solid #1f2128', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', gap: isSidebarCollapsed ? '0' : '0.85rem', cursor: 'pointer', transition: 'background-color 0.2s, padding 0.3s', backgroundColor: isProfileMenuOpen ? '#1a1c23' : 'transparent' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#1a1c23'} onMouseOut={e => { if(!isProfileMenuOpen) e.currentTarget.style.backgroundColor = 'transparent' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#272a30', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.9rem', flexShrink: 0 }}>
-              {getUserInitials(userProfile?.full_name)}
+        {/* 3. ПРОФІЛЬ ТА КНОПКА ЗГОРТАННЯ (Внизу) */}
+        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: 'auto' }}>
+
+          {/* Кнопка згортання */}
+          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', padding: '0.6rem', borderRadius: '8px', transition: '0.2s', gap: '0.8rem', width: '100%' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+            <Icons.SidebarToggle collapsed={isSidebarCollapsed} />
+            {!isSidebarCollapsed && <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>Згорнути меню</span>}
+          </button>
+
+          <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.2rem 0' }}></div>
+
+          {/* ПРОФІЛЬ КОРИСТУВАЧА */}
+          <div style={{ position: 'relative' }} ref={profileMenuRef}>
+            <div onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} style={{ padding: isSidebarCollapsed ? '0.6rem 0' : '0.5rem', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', gap: isSidebarCollapsed ? '0' : '0.75rem', cursor: 'pointer', transition: '0.2s', backgroundColor: isProfileMenuOpen ? '#f8fafc' : 'transparent' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => { if(!isProfileMenuOpen) e.currentTarget.style.backgroundColor = 'transparent' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.85rem', flexShrink: 0 }}>
+                {getUserInitials(userProfile?.full_name)}
+              </div>
+              <div style={{ flex: isSidebarCollapsed ? 'none' : 1, overflow: 'hidden', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '100%', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
+                <div style={{ color: '#0f172a', fontSize: '0.9rem', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userProfile?.full_name || 'Користувач'}</div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{userProfile?.role === 'vendor' ? 'Власник' : 'Майстер'}</div>
+              </div>
             </div>
-            <div style={{ flex: isSidebarCollapsed ? 'none' : 1, overflow: 'hidden', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '100%', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-              <div style={{ color: '#ffffff', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userProfile?.full_name || 'Користувач'}</div>
-              <div style={{ color: '#8b8d98', fontSize: '0.8rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{userProfile?.role === 'vendor' ? 'Власник бізнесу' : 'Майстер'}</div>
-            </div>
+
+            {/* Випадаюче меню профілю (Відкривається вгору) */}
+            {isProfileMenuOpen && (
+              <div className="menu-popup" style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: isSidebarCollapsed ? 'calc(100% + 10px)' : '0', width: isSidebarCollapsed ? '220px' : '100%', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '0.5rem', boxShadow: '0 12px 40px rgba(0,0,0,0.08)', zIndex: 200 }}>
+                <div style={{ padding: '0.4rem 0.8rem 0.6rem 0.8rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '800' }}>Акаунт</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', marginTop: '2px', wordWrap: 'break-word' }}>{userProfile?.full_name}</div>
+                </div>
+                <button onClick={() => router.push('/')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
+                  <Icons.Globe /> Головна сторінка
+                </button>
+                <button onClick={() => router.push('/profile')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
+                  <Icons.User /> Налаштування
+                </button>
+                <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.4rem 0' }}></div>
+                <button onClick={handleLogout} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '600' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                  <Icons.LogOut /> Вийти з системи
+                </button>
+              </div>
+            )}
           </div>
-          {isProfileMenuOpen && (
-            <div className="menu-popup" style={{ position: 'absolute', bottom: '100%', left: isSidebarCollapsed ? '0.5rem' : '1rem', right: isSidebarCollapsed ? 'auto' : '1rem', marginBottom: '0.5rem', width: isSidebarCollapsed ? '200px' : 'auto', backgroundColor: '#1a1c23', border: '1px solid #272a30', borderRadius: '12px', padding: '0.4rem', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 50 }}>
 
-              {/* 🟢 НОВА КНОПКА "НА ГОЛОВНУ" */}
-              <button onClick={() => router.push('/')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#e4e4e7', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#272a30'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                <Icons.Globe /> Головна сторінка
-              </button>
-
-              <button onClick={() => router.push('/profile')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#e4e4e7', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#272a30'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}><Icons.User /> Налаштування акаунту</button>
-              <div style={{ height: '1px', backgroundColor: '#272a30', margin: '0.3rem 0' }}></div>
-              <button onClick={handleLogout} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#f87171', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '8px', transition: '0.2s', textAlign: 'left' }} onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(248, 113, 113, 0.1)'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}><Icons.LogOut /> Вийти з системи</button>
-            </div>
-          )}
         </div>
       </aside>
 
       {/* 🔴 ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflowY: 'auto', position: 'relative' }}>
 
-{/* Хедер - показуємо тільки якщо це не Календар, Клієнти, Статистика, Команда, Маркетинг АБО НАЛАШТУВАННЯ */}
+        {/* Хедер - показуємо тільки якщо це не Календар, Клієнти, Статистика, Команда, Маркетинг АБО НАЛАШТУВАННЯ */}
         {activeTab !== 'Calendar' && activeTab !== 'Clients' && activeTab !== 'Stats' && activeTab !== 'Team' && activeTab !== 'Marketing' && activeTab !== 'Settings' && (
           <header style={{ padding: '2rem 3rem 1.5rem 3rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', zIndex: 10 }}>
             <div>
@@ -1872,19 +2124,29 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
 
             {/* Ліва панель: Міні-календар та віджети */}
             <div className="custom-scroll" style={{ width: '320px', borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', flexShrink: 0, zIndex: 10 }}>
-
-              {/* Міні-календар */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1.05rem', textTransform: 'capitalize' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', padding: '0 0.2rem' }}>
+                  <div style={{ fontWeight: '800', color: '#111827', fontSize: '1.15rem', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
                     {currentDate.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth - 1, 1))}><Icons.ChevronLeft /></button>
-                    <button className="action-icon-btn" onClick={() => setCurrentDate(new Date(currentYear, currentMonth + 1, 1))}><Icons.ChevronRight /></button>
+                  <div style={{ display: 'flex', gap: '0.8rem' }}>
+                    <button onClick={() => {
+                        const d = new Date(currentDate);
+                        if (calendarView === 'day') d.setDate(d.getDate() - 1);
+                        else if (calendarView === 'week') d.setDate(d.getDate() - 7);
+                        else d.setMonth(d.getMonth() - 1);
+                        setCurrentDate(d);
+                    }} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.color='#111827'} onMouseOut={e=>e.currentTarget.style.color='#94a3b8'}><Icons.ChevronLeft /></button>
+                    <button onClick={() => {
+                        const d = new Date(currentDate);
+                        if (calendarView === 'day') d.setDate(d.getDate() + 1);
+                        else if (calendarView === 'week') d.setDate(d.getDate() + 7);
+                        else d.setMonth(d.getMonth() + 1);
+                        setCurrentDate(d);
+                    }} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', padding: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.color='#111827'} onMouseOut={e=>e.currentTarget.style.color='#94a3b8'}><Icons.ChevronRight /></button>
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.2rem', textAlign: 'center', marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: '600', color: '#94a3b8' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.2rem', textAlign: 'center', marginBottom: '0.8rem', fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8' }}>
                   <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.2rem' }}>
@@ -1897,7 +2159,7 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                     return (
                       <div
                         key={day}
-                        onClick={() => { setCurrentDate(dObj); setCalendarView('day'); }}
+                        onClick={() => { setCurrentDate(dObj); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
                         className={`cal-mini-day ${isSelected ? 'selected' : ''}`}
                         style={{ position: 'relative' }}
                       >
@@ -1939,26 +2201,13 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                         borderRadius: '8px', padding: '0.75rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start',
                         transition: '0.2s', opacity: task.completed ? 0.6 : 1
                       }}>
-                        <input
-                          type="checkbox"
-                          checked={task.completed}
-                          onChange={() => toggleTask(task.id)}
-                          style={{ marginTop: '0.2rem', accentColor: isOverdue ? '#ef4444' : '#0f172a', cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
-                        />
-
+                        <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id)} style={{ marginTop: '0.2rem', accentColor: isOverdue ? '#ef4444' : '#0f172a', cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }} />
                         {isEditing ? (
                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 0 }}>
-                             <input
-                               autoFocus
-                               type="text"
-                               value={editingTaskText}
-                               onChange={e => setEditingTaskText(e.target.value)}
-                               onKeyDown={e => { if (e.key === 'Enter') saveEditedTask(task.id); if (e.key === 'Escape') setEditingTaskId(null); }}
-                               style={{ flex: 1, minWidth: 0, border: '1px solid #3b82f6', borderRadius: '4px', padding: '0.25rem 0.4rem', fontSize: '0.85rem', outline: 'none', color: '#0f172a' }}
-                             />
+                             <input autoFocus type="text" value={editingTaskText} onChange={e => setEditingTaskText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEditedTask(task.id); if (e.key === 'Escape') setEditingTaskId(null); }} style={{ flex: 1, minWidth: 0, border: '1px solid #3b82f6', borderRadius: '4px', padding: '0.25rem 0.4rem', fontSize: '0.85rem', outline: 'none', color: '#0f172a' }} />
                              <div style={{ display: 'flex', gap: '0.1rem', flexShrink: 0 }}>
-                               <button onClick={() => saveEditedTask(task.id)} className="action-icon-btn" style={{ padding: '0.2rem', color: '#10b981' }} title="Зберегти"><Icons.CheckCircle /></button>
-                               <button onClick={() => setEditingTaskId(null)} className="action-icon-btn" style={{ padding: '0.2rem', color: '#ef4444' }} title="Скасувати"><Icons.XCircle /></button>
+                               <button onClick={() => saveEditedTask(task.id)} className="action-icon-btn" style={{ padding: '0.2rem', color: '#10b981' }}><Icons.CheckCircle /></button>
+                               <button onClick={() => setEditingTaskId(null)} className="action-icon-btn" style={{ padding: '0.2rem', color: '#ef4444' }}><Icons.XCircle /></button>
                              </div>
                            </div>
                         ) : (
@@ -1967,11 +2216,9 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                                {task.text}
                                {isOverdue && <span style={{ display: 'block', fontSize: '0.7rem', color: '#ef4444', marginTop: '4px', fontWeight: 'bold' }}>(Протерміновано)</span>}
                              </div>
-
-                             {/* Акуратні іконки керування */}
                              <div style={{ display: 'flex', gap: '0.2rem', opacity: task.completed ? 0.3 : 1 }}>
-                               <button onClick={() => startEditTask(task)} className="action-icon-btn" style={{ padding: '0.3rem' }} title="Редагувати"><Icons.Edit /></button>
-                               <button onClick={() => deleteTask(task.id)} className="action-icon-btn delete" style={{ padding: '0.3rem' }} title="Видалити"><Icons.Trash /></button>
+                               <button onClick={() => startEditTask(task)} className="action-icon-btn" style={{ padding: '0.3rem' }}><Icons.Edit /></button>
+                               <button onClick={() => deleteTask(task.id)} className="action-icon-btn delete" style={{ padding: '0.3rem' }}><Icons.Trash /></button>
                              </div>
                            </>
                         )}
@@ -1981,15 +2228,7 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
 
                   {isAddingTask && (
                     <div style={{ background: '#ffffff', border: '1px solid #3b82f6', borderRadius: '8px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}>
-                      <input
-                        autoFocus
-                        type="text"
-                        value={newTaskText}
-                        onChange={e => setNewTaskText(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveNewTask(); if (e.key === 'Escape') setIsAddingTask(false); }}
-                        placeholder="Що потрібно зробити?"
-                        style={{ border: 'none', outline: 'none', fontSize: '0.85rem', width: '100%', color: '#0f172a' }}
-                      />
+                      <input autoFocus type="text" value={newTaskText} onChange={e => setNewTaskText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveNewTask(); if (e.key === 'Escape') setIsAddingTask(false); }} placeholder="Що потрібно зробити?" style={{ border: 'none', outline: 'none', fontSize: '0.85rem', width: '100%', color: '#0f172a' }} />
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                         <button onClick={() => setIsAddingTask(false)} style={{ background: 'transparent', border: 'none', fontSize: '0.75rem', color: '#64748b', cursor: 'pointer', fontWeight: '600' }}>Скасувати</button>
                         <button onClick={saveNewTask} style={{ background: '#3b82f6', border: 'none', fontSize: '0.75rem', color: '#fff', cursor: 'pointer', borderRadius: '4px', padding: '0.3rem 0.6rem', fontWeight: '600' }}>Зберегти</button>
@@ -1998,25 +2237,31 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                   )}
                 </div>
               </div>
-
             </div>
 
             {/* Права панель: Сітка розкладу */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
 
-              {/* Топ бар календаря (З позиціонуванням поверх усього) */}
-              <div style={{ padding: '0.75rem 2rem', borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', position: 'relative', zIndex: 100 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <button onClick={() => setCurrentDate(new Date())} className="client-dark-btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>Сьогодні</button>
-                  <div style={{ display: 'flex', gap: '0.2rem' }}>
-                    <button className="action-icon-btn" onClick={() => {
+              {/* Топ бар календаря */}
+              <div style={{ padding: '1rem 2rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', position: 'relative', zIndex: 100 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                  <button
+                    onClick={() => { setCurrentDate(new Date()); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
+                    style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: '600', backgroundColor: '#f1f5f9', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }}
+                    onMouseOver={e=>e.currentTarget.style.backgroundColor='#e2e8f0'}
+                    onMouseOut={e=>e.currentTarget.style.backgroundColor='#f1f5f9'}
+                  >
+                    Сьогодні
+                  </button>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button className="action-icon-btn" style={{ padding: '0.4rem' }} onClick={() => {
                         const d = new Date(currentDate);
                         if (calendarView === 'day') d.setDate(d.getDate() - 1);
                         else if (calendarView === 'week') d.setDate(d.getDate() - 7);
                         else d.setMonth(d.getMonth() - 1);
                         setCurrentDate(d);
                     }}><Icons.ChevronLeft /></button>
-                    <button className="action-icon-btn" onClick={() => {
+                    <button className="action-icon-btn" style={{ padding: '0.4rem' }} onClick={() => {
                         const d = new Date(currentDate);
                         if (calendarView === 'day') d.setDate(d.getDate() + 1);
                         else if (calendarView === 'week') d.setDate(d.getDate() + 7);
@@ -2024,7 +2269,7 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                         setCurrentDate(d);
                     }}><Icons.ChevronRight /></button>
                   </div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', marginLeft: '0.5rem', textTransform: 'capitalize' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
                     {calendarView === 'week'
                       ? `${weekDays[0].getDate()} - ${weekDays[6].getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
                       : calendarView === 'month'
@@ -2032,378 +2277,340 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                         : currentDate.toLocaleString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })
                     }
                   </div>
+                </div>
 
-                  {/* Акуратний фільтр по майстрах */}
-                  <div style={{ marginLeft: '1.5rem', paddingLeft: '1.5rem', borderLeft: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <select
-                        value={filterMaster}
-                        onChange={e => setFilterMaster(e.target.value)}
-                        style={{ appearance: 'none', background: 'transparent', border: 'none', fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', cursor: 'pointer', paddingRight: '1.5rem', outline: 'none' }}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {/* Менше виділяється: прибрали зайві рамки та тіні */}
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={masterFilterRef}>
+                      <div
+                        onClick={() => setIsMasterFilterOpen(!isMasterFilterOpen)}
+                        // 🟢 ОНОВЛЕНО: Прибрали minWidth та space-between. Трохи зменшили gap і збільшили бокові padding для клікабельності.
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', padding: '0.4rem 0.8rem', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', color: '#475569', cursor: 'pointer', transition: '0.2s' }}
+                        onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                        onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
-                        <option value="all">Усі майстри</option>
-                        {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                      <div style={{ position: 'absolute', right: 0, pointerEvents: 'none', color: '#94a3b8' }}>
-                        <Icons.ChevronDown />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {filterMaster !== 'all' && (
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#0f172a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: '800' }}>
+                              {getUserInitials(team.find(m => String(m.id) === String(filterMaster))?.name || '')}
+                            </div>
+                          )}
+                          {filterMaster === 'all' ? 'Усі майстри' : team.find(m => String(m.id) === String(filterMaster))?.name || 'Усі майстри'}
+                        </div>
+                        <div style={{ color: '#94a3b8', display: 'flex', transform: isMasterFilterOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s' }}>
+                          <Icons.ChevronDown />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* ДИНАМІЧНИЙ ЛІЧИЛЬНИК */}
-                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#f1f5f9', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }}></div>
+                      {isMasterFilterOpen && (
+                        <div className="custom-scroll custom-select-dropdown" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, width: '100%', minWidth: '220px', maxHeight: '300px', overflowY: 'auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.08)', zIndex: 200, padding: '0.4rem' }}>
+                          <div
+                            onClick={() => { setFilterMaster('all'); setIsMasterFilterOpen(false); }}
+                            style={{ padding: '0.6rem 0.8rem', fontSize: '0.9rem', fontWeight: filterMaster === 'all' ? '700' : '500', color: filterMaster === 'all' ? '#0f172a' : '#475569', cursor: 'pointer', borderRadius: '8px', background: filterMaster === 'all' ? '#f1f5f9' : 'transparent', marginBottom: '0.2rem' }}
+                          >
+                            Усі майстри
+                          </div>
+                          {team.map(m => (
+                            <div
+                              key={m.id}
+                              onClick={() => { setFilterMaster(m.id); setIsMasterFilterOpen(false); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', fontSize: '0.9rem', fontWeight: String(filterMaster) === String(m.id) ? '700' : '500', color: String(filterMaster) === String(m.id) ? '#0f172a' : '#475569', cursor: 'pointer', borderRadius: '8px', background: String(filterMaster) === String(m.id) ? '#f1f5f9' : 'transparent', marginBottom: '0.1rem' }}
+                            >
+                              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: String(filterMaster) === String(m.id) ? '#0f172a' : '#e2e8f0', color: String(filterMaster) === String(m.id) ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: '800', flexShrink: 0 }}>
+                                {getUserInitials(m.name)}
+                              </div>
+                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', backgroundColor: '#f8fafc', padding: '0.2rem 0.6rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
                       Записів: {currentViewAppointmentsCount}
                     </div>
                   </div>
-                </div>
 
-                {/* Права частина: Перемикачі та Налаштування */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <button
-                    onClick={() => setShowCalSettingsModal(true)}
-                    style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s', padding: '0.4rem', borderRadius: '8px' }}
-                    onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.color = '#0f172a'; }}
-                    onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b'; }}
-                    title="Налаштування календаря"
-                  >
-                    <Icons.Settings />
-                  </button>
-
-                  {/* 🎨 Кнопка вибору вигляду (День, Тиждень, Місяць) */}
-                  <div style={{ position: 'relative' }} ref={viewMenuRef}>
-                    <button
-                      onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 1rem', background: 'rgba(241, 245, 249, 0.6)', border: '1px solid transparent', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#0f172a', cursor: 'pointer', transition: '0.2s' }}
-                      onMouseOver={e => e.currentTarget.style.borderColor = '#cbd5e1'}
-                      onMouseOut={e => e.currentTarget.style.borderColor = 'transparent'}
-                    >
-                      {calendarView === 'day' ? 'День' : calendarView === 'week' ? 'Тиждень' : 'Місяць'}
-                      <Icons.ChevronDown />
-                    </button>
-
-                    {isViewDropdownOpen && (
-                      <div className="menu-popup" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: '130px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.3rem', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', zIndex: 200 }}>
-                        {['day', 'week', 'month'].map(view => {
-                          const labels: any = { day: 'День', week: 'Тиждень', month: 'Місяць' };
-                          const isActive = calendarView === view;
-                          return (
-                            <div
-                              key={view}
-                              onClick={() => { setCalendarView(view as any); setIsViewDropdownOpen(false); }}
-                              style={{ padding: '0.6rem 0.8rem', fontSize: '0.9rem', color: isActive ? '#0f172a' : '#475569', fontWeight: isActive ? '700' : '500', cursor: 'pointer', borderRadius: '6px', backgroundColor: isActive ? '#f1f5f9' : 'transparent', transition: '0.2s' }}
-                              onMouseOver={e => { if (!isActive) e.currentTarget.style.backgroundColor = '#f8fafc' }}
-                              onMouseOut={e => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent' }}
-                            >
-                              {labels[view]}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                  {/* Компактний список-перемикач видів без важкого фону */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'transparent' }}>
+                    {['day', 'week', 'month'].map(view => {
+                      const labels: any = { day: 'День', week: 'Тиждень', month: 'Місяць' };
+                      const isActive = calendarView === view;
+                      return (
+                        <button
+                          key={view}
+                          onClick={() => { setCalendarView(view as any); localStorage.setItem('bookera_calendarView', view); }}
+                          style={{
+                            padding: '0.35rem 0.8rem', fontSize: '0.85rem', fontWeight: isActive ? '700' : '500',
+                            color: isActive ? '#0f172a' : '#64748b', background: isActive ? '#f1f5f9' : 'transparent',
+                            border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s ease'
+                          }}
+                          onMouseOver={e => { if(!isActive) e.currentTarget.style.color = '#0f172a'; }}
+                          onMouseOut={e => { if(!isActive) e.currentTarget.style.color = '#64748b'; }}
+                        >
+                          {labels[view]}
+                        </button>
+                      )
+                    })}
                   </div>
 
+                  <button onClick={() => setShowCalSettingsModal(true)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.color = '#0f172a'} onMouseOut={e => e.currentTarget.style.color = '#94a3b8'} title="Налаштування">
+                    <Icons.Settings />
+                  </button>
                 </div>
               </div>
 
-              {/* --- ДЕНЬ --- */}
-              {calendarView === 'day' && (
-                <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minWidth: '600px' }}>
+              {/* 🟢 ОБГОРТКА ДЛЯ АНІМАЦІЇ */}
+              <div className="animated-calendar" key={currentDate.toISOString() + calendarView} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-                  {/* Основна сітка */}
-                  <div style={{ position: 'relative', height: `${gridTotalHours * 60}px`, flexShrink: 0, zIndex: 1 }}>
-
-                    {hoursArray.map((hour, i) => {
-                      const displayHour = hour % 24;
-                      const isNextDay = hour >= 24;
-                      return (
-                        <div
-                          key={i}
-                          className="cal-grid-row"
-                          style={{ height: '60px', cursor: 'pointer' }}
-                          onClick={() => handleQuickAdd(displayHour)}
-                        >
-                          <div className="cal-time-col">
-                            <div>{displayHour.toString().padStart(2, '0')}:00</div>
-                            {isNextDay && <div style={{ fontSize: '0.55rem', color: '#cbd5e1' }}>+1д</div>}
+                {/* --- ДЕНЬ --- */}
+                {calendarView === 'day' && (
+                  <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minWidth: '600px' }}>
+                    <div style={{ position: 'relative', height: `${gridTotalHours * 60}px`, flexShrink: 0, zIndex: 1 }}>
+                      {hoursArray.map((hour, i) => {
+                        const displayHour = hour % 24;
+                        return (
+                          <div
+                            key={i} className="cal-grid-row" style={{ height: '60px', cursor: 'pointer' }} onClick={() => handleQuickAdd(displayHour)}
+                            onDragOver={e => e.preventDefault()} onDrop={e => handleDropAppointment(e, currentDate, displayHour)}
+                          >
+                            <div className="cal-time-col">
+                              <div>{displayHour.toString().padStart(2, '0')}:00</div>
+                              {hour >= 24 && <div style={{ fontSize: '0.55rem', color: '#cbd5e1' }}>+1д</div>}
+                            </div>
+                            <div className="quick-add-hint"><Icons.Plus /> <span>Додати запис</span></div>
                           </div>
-                          <div className="quick-add-hint"><Icons.Plus /> <span>Додати запис</span></div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
 
-                    {/* Штрихування неробочого часу для поточного дня (Тільки на сітці, не перекриває час) */}
-                    <div style={{ position: 'absolute', top: 0, bottom: 0, left: '60px', right: 0, pointerEvents: 'none' }}>
-                      {renderNonWorkingHours(effectiveShifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
+                      <div style={{ position: 'absolute', top: 0, bottom: 0, left: '60px', right: 0, pointerEvents: 'none' }}>
+                        {renderNonWorkingHours(effectiveShifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
+                      </div>
+
+                      {/* Записи ДЕНЬ з Drag-and-Drop */}
+                      {processOverlaps(filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, currentDate))).map(app => {
+                        const serviceName = services.find(s => String(s.id) === String(app.service_id))?.name || app.service_name;
+                        const staffName = team.find(m => String(m.id) === String(app.staff_id))?.name || app.master_name || 'Без майстра';
+                        const isBlock = app.status === 'blocked' || app.color === 'blocked';
+                        const mColors = getCardColor(app.staff_id, app.service_id);
+                        const isCompact = app.heightPx <= 45;
+                        const isTiny = app.heightPx <= 25;
+                        const widthPercent = 100 / (app.colCount || 1);
+                        const leftPercent = (app.colIndex || 0) * widthPercent;
+
+                        return (
+                          <div
+                            key={app.id}
+                            draggable={!isBlock}
+                            onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(app.id)); }}
+                            onContextMenu={(e) => handleContextMenu(e, app)}
+                            className={`cal-app-card ${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
+                            style={{
+                              position: 'absolute', top: `${app.topPx}px`, height: `${app.heightPx}px`,
+                              left: `calc(68px + (100% - 76px) * ${leftPercent / 100})`, width: `calc((100% - 76px) * ${widthPercent / 100} - 6px)`,
+                              backgroundColor: isBlock ? 'transparent' : (calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg),
+                              color: isBlock ? '#64748b' : (calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText),
+                              borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.vividBg}`,
+                              borderRadius: '8px',
+                              padding: isTiny ? '0.1rem 0.5rem' : (isCompact ? '0.3rem 0.6rem' : '0.5rem 0.75rem'),
+                              display: 'flex', flexDirection: isCompact ? 'row' : 'column', alignItems: isCompact ? 'center' : 'flex-start',
+                              gap: isCompact ? '0.5rem' : '2px', fontSize: isTiny ? '0.7rem' : '0.8rem',
+                              cursor: isBlock ? 'pointer' : 'grab', zIndex: 5 + (app.colIndex || 0), overflow: 'hidden', boxShadow: isBlock ? 'none' : '0 1px 4px rgba(0,0,0,0.03)', boxSizing: 'border-box'
+                            }}
+                            onClick={(e) => openBookingDetails(app, e)}
+                          >
+                            {isBlock ? (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCompact?'flex-start':'center', height: '100%', fontWeight: '600', fontSize: '0.85rem', width: '100%' }}>
+                                {app.block_reason || app.service_name || 'Перерва'}
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', width: '100%', minWidth: 0 }}>
+                                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{serviceName} {isCompact && <span style={{ fontWeight: '500', opacity: 0.8, marginLeft: '0.4rem' }}>{app.client_name}</span>}</span>
+                                  <span style={{display: 'flex', alignItems: 'center', gap: '0.2rem', flexShrink: 0, fontSize: isTiny ? '0.65rem' : '0.75rem', fontWeight: '700', opacity: 0.7}}>{app.start_time.substring(0, 5)} {getStatusIcon(app.status)}</span>
+                                </div>
+                                {!isCompact && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '0.1rem', opacity: 0.8, fontSize: '0.75rem', fontWeight: '500', minWidth: 0 }}>
+                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '1rem', minWidth: 0 }}>{app.client_name}</span>
+                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>{staffName}</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={isToday} />
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', minHeight: '4rem' }}><div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}></div><div className="non-working-bg" style={{ flex: 1 }}></div></div>
+                  </div>
+                )}
+
+                {/* --- ТИЖДЕНЬ --- */}
+                {calendarView === 'week' && (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0 }}>
+                      <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0' }}></div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+                        {weekDays.map((day, i) => (
+                          <div key={i} style={{ padding: '1rem', textAlign: 'center', borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>{['Нд', 'Пн', 'Вв', 'Ср', 'Чт', 'Пт', 'Сб'][day.getDay()]}</div>
+                            <div style={{ fontSize: '1.4rem', fontWeight: '900', color: day.toDateString() === now.toDateString() ? '#0f172a' : '#475569' }}>{day.getDate()}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
-                    {/* Рендер записів з урахуванням накладань */}
-                    {processOverlaps(filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, currentDate))).map(app => {
-                      const serviceName = services.find(s => String(s.id) === String(app.service_id))?.name || app.service_name;
-                      const staffName = team.find(m => String(m.id) === String(app.staff_id))?.name || app.master_name || 'Без майстра';
-
-                      const isBlock = app.status === 'blocked' || app.color === 'blocked';
-
-                      const mColors = getMasterColor(app.staff_id);
-                      const bgColor = calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg;
-                      const borderColor = calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.pastelBorder;
-                      const textColor = calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText;
-
-                      const isSmall = app.heightPx <= 45;
-
-                      // 🟢 Розрахунок ширини і відступу зліва для накладань
-                      const widthPercent = 100 / app.colCount;
-                      const leftPercent = app.colIndex * widthPercent;
-
-                      return (
-                        <div
-                          key={app.id}
-                          className={`cal-app-card ${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
-                          style={{
-                            top: `${app.topPx}px`,
-                            height: `${app.heightPx}px`,
-                            left: `calc(70px + (100% - 90px) * ${leftPercent / 100})`, // 🟢 Відштовхуємось від лівої шкали часу
-                            width: `calc((100% - 90px) * ${widthPercent / 100} - 4px)`, // 🟢 Залишаємо мінімальний проміжок
-                            backgroundColor: isBlock ? '#f1f5f9' : bgColor,
-                            borderColor: isBlock ? '#cbd5e1' : borderColor,
-                            color: isBlock ? '#64748b' : textColor,
-                            borderLeft: isBlock ? '1px solid #cbd5e1' : `4px solid ${borderColor}`,
-                            padding: isSmall ? '0.2rem 0.6rem' : '0.5rem 0.75rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: isSmall ? 'center' : 'flex-start',
-                            zIndex: 5 + app.colIndex
-                          }}
-                          onClick={(e) => openBookingDetails(app, e)}
-                        >
-                          {isBlock ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontWeight: '700', fontSize: '0.85rem' }}>
-                              {app.service_name || 'Перерва'}
-                            </div>
-                          ) : (
-                            <>
-                              <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {serviceName} {isSmall && <span style={{ fontWeight: '400', opacity: 0.8, marginLeft: '0.4rem' }}>{app.client_name}</span>}
-                                </span>
-                                <span style={{display: 'flex', alignItems: 'center', gap: '0.2rem', flexShrink: 0, fontSize: isSmall ? '0.75rem' : '0.85rem'}}>
-                                  {app.start_time.substring(0, 5)} {getStatusIcon(app.status)}
-                                </span>
-                              </div>
-                              {!isSmall && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.2rem', opacity: 0.9, fontSize: '0.8rem' }}>
-                                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '1rem' }}>{app.client_name}</span>
-                                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>{staffName}</span>
-                                </div>
-                              )}
-                            </>
-                          )}
+                    <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                      <div style={{ position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
+                        <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#fff', position: 'sticky', left: 0, zIndex: 10 }}>
+                          {Array.from({ length: gridEndHour - gridStartHour }).map((_, i) => (
+                            <div key={i} style={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '0.5rem 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', borderBottom: '1px solid transparent' }}>{gridStartHour + i}:00</div>
+                          ))}
                         </div>
-                      );
-                    })}
 
-                    {/* 🟥 Ідеальна лінія поточного часу для ДНЯ (стиль Booksy) */}
-                    {isToday && currentMinutesOffset >= 0 && currentMinutesOffset <= gridTotalHours * 60 && (
-                      <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, zIndex: 20, pointerEvents: 'none' }}>
-                        <div style={{ position: 'absolute', left: 0, width: '60px', top: '-8px', textAlign: 'right', paddingRight: '8px' }}>
-                          <span style={{ color: '#ef4444', fontSize: '0.7rem', fontWeight: '700', backgroundColor: '#ffffff', padding: '0 4px' }}>
-                            {now.getHours().toString().padStart(2, '0')}:{now.getMinutes().toString().padStart(2, '0')}
-                          </span>
-                        </div>
-                        <div style={{ position: 'absolute', left: '55px', top: '-4px', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', border: '2px solid #ffffff' }}></div>
-                        <div style={{ position: 'absolute', left: '60px', right: 0, top: '0', borderTop: '2px solid #ef4444', opacity: 0.8 }}></div>
-                      </div>
-                    )}
-                  </div>
+                        {/* 🟢 ЧЕРВОНА ЛІНІЯ НА ВЕСЬ ТИЖДЕНЬ */}
+                        {isCurrentWeek && <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={true} />}
 
-                  {/* Заповнювач вільного простору (Штриховка знизу) */}
-                  <div style={{ flex: 1, display: 'flex', minHeight: '4rem' }}>
-                    <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}></div>
-                    <div className="non-working-bg" style={{ flex: 1 }}></div>
-                  </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+                          {weekDays.map((weekDay, i) => {
+                            const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, weekDay));
+                            const dayShift = effectiveShifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
+                            const isCurrentDay = weekDay.toDateString() === now.toDateString();
 
-                </div>
-              )}
+                            return (
+                              <div key={i} style={{ borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none', position: 'relative', background: isCurrentDay ? '#f8fafc' : '#fff' }}>
+                                <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, pointerEvents: 'none' }}>{renderNonWorkingHours(dayShift)}</div>
 
-              {/* --- ТИЖДЕНЬ --- */}
-{/* --- ТИЖДЕНЬ --- */}
-                        {calendarView === 'week' && (
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', flexShrink: 0 }}>
-                              <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0' }}></div>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
-                                {weekDays.map((day, i) => (
-                                  <div key={i} style={{ padding: '1rem', textAlign: 'center', borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none' }}>
-                                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
-                                      {['Нд', 'Пн', 'Вв', 'Ср', 'Чт', 'Пт', 'Сб'][day.getDay()]}
-                                    </div>
-                                    <div style={{ fontSize: '1.4rem', fontWeight: '900', color: day.toDateString() === now.toDateString() ? '#0f172a' : '#475569' }}>
-                                      {day.getDate()}
-                                    </div>
-                                  </div>
+                                {Array.from({ length: gridEndHour - gridStartHour }).map((_, hIdx) => (
+                                  <div key={hIdx} onClick={() => handleQuickAdd(gridStartHour + hIdx, weekDay)} className="cal-week-cell" style={{ height: '60px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', position: 'relative', zIndex: 1 }}
+                                       onDragOver={e => e.preventDefault()} onDrop={e => handleDropAppointment(e, weekDay, gridStartHour + hIdx)}></div>
                                 ))}
-                              </div>
-                            </div>
 
-                            <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                              <div style={{ position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
-                                {/* Колонки годин */}
-                                <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#fff', position: 'sticky', left: 0, zIndex: 10 }}>
-                                  {Array.from({ length: gridEndHour - gridStartHour }).map((_, i) => (
-                                    <div key={i} style={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '0.5rem 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', borderBottom: '1px solid transparent' }}>
-                                      {gridStartHour + i}:00
-                                    </div>
-                                  ))}
-                                </div>
+                                {/* Записи ТИЖДЕНЬ з Drag-and-Drop */}
+                                {processOverlaps(dayApps).map(app => {
+                                  const service = services.find(s => String(s.id) === String(app.service_id));
+                                  const isBlock = app.status === 'blocked' || app.color === 'blocked';
+                                  const mColors = getCardColor(app.staff_id, app.service_id);
+                                  const isCompact = app.heightPx <= 45;
+                                  const isTiny = app.heightPx <= 25;
+                                  const widthPercent = 100 / (app.colCount || 1);
+                                  const leftPercent = (app.colIndex || 0) * widthPercent;
 
-                                {/* Сітка тижня */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
-                                  {weekDays.map((weekDay, i) => {
-                                    const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, weekDay));
-                                    const dayShift = effectiveShifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
-                                    const isCurrentDay = weekDay.toDateString() === now.toDateString();
-
-                                    return (
-                                      <div key={i} style={{ borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none', position: 'relative', background: isCurrentDay ? '#f8fafc' : '#fff' }}>
-
-                                        {/* Штрихування неробочого часу */}
-                                        <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, pointerEvents: 'none' }}>
-                                          {renderNonWorkingHours(dayShift)}
+                                  return (
+                                    <div
+                                      key={app.id}
+                                      draggable={!isBlock}
+                                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(app.id)); }}
+                                      className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
+                                      onClick={(e) => { e.stopPropagation(); openBookingDetails(app, e); }}
+                                      style={{
+                                        position: 'absolute', top: `${app.topPx}px`, left: `calc(${leftPercent}% + 2px)`, width: `calc(${widthPercent}% - 4px)`, height: `${app.heightPx}px`,
+                                        background: isBlock ? 'transparent' : (calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg),
+                                        borderRadius: '8px',
+                                        padding: isTiny ? '0.1rem 0.4rem' : (isCompact ? '0.2rem 0.5rem' : '0.4rem 0.6rem'),
+                                        display: 'flex', flexDirection: isCompact ? 'row' : 'column', alignItems: isCompact ? 'center' : 'flex-start',
+                                        gap: isCompact ? '0.3rem' : '2px',
+                                        color: isBlock ? '#64748b' : (calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText),
+                                        fontSize: isTiny ? '0.65rem' : '0.75rem',
+                                        cursor: isBlock ? 'pointer' : 'grab', zIndex: 5 + (app.colIndex || 0),
+                                        borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.vividBg}`,
+                                        overflow: 'hidden', boxShadow: isBlock ? 'none' : '0 1px 3px rgba(0,0,0,0.03)', boxSizing: 'border-box'
+                                      }}
+                                    >
+                                      <div style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flexShrink: 1, width: '100%' }}>
+                                        {isBlock ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
+                                      </div>
+                                      {!isBlock && (
+                                        <div style={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: '500', fontSize: isTiny ? '0.6rem' : '0.7rem', minWidth: 0, flexShrink: 1, width: '100%' }}>
+                                          {isCompact ? `• ${service?.name || ''}` : service?.name}
                                         </div>
-
-                                        {/* Горизонтальні лінії сітки */}
-                                        {Array.from({ length: gridEndHour - gridStartHour }).map((_, hIdx) => (
-                                          <div
-                                            key={hIdx}
-                                            onClick={() => handleQuickAdd(gridStartHour + hIdx, weekDay)}
-                                            style={{ height: '60px', borderBottom: '1px solid #f1f5f9', cursor: 'crosshair', position: 'relative', zIndex: 1 }}
-                                          ></div>
-                                        ))}
-
-                                        {/* Записи */}
-                                        {dayApps.map(app => {
-                                          const service = services.find(s => String(s.id) === String(app.service_id));
-                                          const duration = service?.duration || 60;
-                                          let startH = 10, startM = 0;
-
-                                          if (app.start_time) {
-                                            const timeParts = app.start_time.split(':');
-                                            startH = parseInt(timeParts[0], 10);
-                                            startM = parseInt(timeParts[1], 10);
-                                          }
-
-                                          const topPos = ((startH - gridStartHour) * 60) + startM;
-                                          const isBlock = app.status === 'blocked';
-
-                                          return (
-                                            <div
-                                              key={app.id}
-                                              onClick={(e) => { e.stopPropagation(); openAppointmentDetails(app); }}
-                                              style={{
-                                                position: 'absolute', top: `${topPos}px`, left: '4px', right: '4px', height: `${duration}px`,
-                                                background: isBlock ? '#f1f5f9' : '#0f172a', borderRadius: '8px', padding: '0.4rem 0.6rem',
-                                                color: isBlock ? '#64748b' : '#fff', fontSize: '0.75rem', cursor: 'pointer', zIndex: 5,
-                                                border: isBlock ? '1px dashed #cbd5e1' : 'none', overflow: 'hidden', boxShadow: isBlock ? 'none' : '0 2px 4px rgba(15,23,42,0.2)'
-                                              }}
-                                            >
-                                              <div style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                {isBlock ? (app.block_reason || 'Заблоковано') : app.client_name}
-                                              </div>
-                                              {!isBlock && <div style={{ opacity: 0.8, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{service?.name}</div>}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-              {/* --- МІСЯЦЬ --- */}
-              {calendarView === 'month' && (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontWeight: '700', color: '#64748b', fontSize: '0.85rem', padding: '0.75rem 0' }}>
-                     <div>Понеділок</div><div>Вівторок</div><div>Середа</div><div>Четвер</div><div>П'ятниця</div><div>Субота</div><div>Неділя</div>
-                  </div>
-                  <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: '1fr' }}>
-                      {blanks.map(blank => <div key={`blank-${blank}`} style={{ borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafafa' }}></div>)}
-                      {days.map(day => {
-                          const dObj = new Date(currentYear, currentMonth, day);
-                          const isMDayToday = dObj.toDateString() === now.toDateString();
-                          const hasOverdue = hasOverdueTasks(dObj);
-
-                          const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, dObj));
-
-                          return (
-                              <div key={day} className="month-view-cell" onClick={() => { setCurrentDate(dObj); setCalendarView('day'); }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                                      <span style={{ fontWeight: '700', color: isMDayToday ? '#3b82f6' : '#0f172a', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isMDayToday ? '#eff6ff' : 'transparent' }}>
-                                        {day}
-                                      </span>
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                                        {hasOverdue && <div style={{ width: '8px', height: '8px', backgroundColor: '#ef4444', borderRadius: '50%' }} title="Є протерміновані завдання"></div>}
-                                        {dayApps.filter(a => a.status !== 'blocked').length > 0 && (
-                                          <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>
-                                            {dayApps.filter(a => a.status !== 'blocked').length} зап.
-                                          </span>
-                                        )}
-                                      </div>
-                                  </div>
-
-                                  {dayApps.length > 0 && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                      {dayApps.slice(0, 3).map(app => {
-                                        const isBlock = app.status === 'blocked' || app.color === 'blocked';
-
-                                        const mColors = getMasterColor(app.staff_id);
-                                        const bgColor = calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg;
-                                        const borderColor = calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.pastelBorder;
-                                        const textColor = calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText;
-
-                                        return (
-                                          <div key={app.id}
-                                            onClick={(e) => openBookingDetails(app, e)}
-                                            className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`} style={{
-                                            fontSize: '0.7rem',
-                                            backgroundColor: isBlock ? 'transparent' : bgColor,
-                                            color: isBlock ? '#64748b' : textColor,
-                                            padding: '0.15rem 0.4rem',
-                                            borderRadius: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                            border: isBlock ? '1px solid #cbd5e1' : `1px solid ${borderColor}`, cursor: 'pointer',
-                                            opacity: app.status === 'completed' ? 0.7 : 1,
-                                            textDecoration: app.status === 'no-show' ? 'line-through' : 'none',
-                                            display: 'flex', alignItems: 'center', gap: '0.2rem'
-                                          }}>
-                                            {app.start_time.substring(0, 5)} {isBlock ? 'Перерва' : <>{app.client_name} {getStatusIcon(app.status)}</>}
-                                          </div>
-                                        )
-                                      })}
-                                      {dayApps.length > 3 && <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', paddingLeft: '0.2rem' }}>+ ще {dayApps.length - 3}</div>}
+                                      )}
                                     </div>
-                                  )}
+                                  );
+                                })}
                               </div>
-                          )
-                      })}
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
+                {/* --- МІСЯЦЬ --- */}
+                {calendarView === 'month' && (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+
+                    {/* 🟢 ДОДАНО: flexShrink: 0, щоб шапка ніколи не сплющувалась */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #f1f5f9', textAlign: 'center', fontWeight: '600', color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '1rem 0', flexShrink: 0 }}>
+                       <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
+                    </div>
+
+                    {/* 🟢 ОНОВЛЕНО: Додано className="custom-scroll", overflowY: 'auto' та gridAutoRows: 'minmax(130px, 1fr)' */}
+                    <div className="custom-scroll" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(130px, 1fr)', overflowY: 'auto' }}>
+                        {blanks.map(blank => <div key={`blank-${blank}`} style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}></div>)}
+
+                        {days.map(day => {
+                            const dObj = new Date(currentYear, currentMonth, day);
+                            // ... далі йде твій старий код без змін ...
+                            const isMDayToday = dObj.toDateString() === now.toDateString();
+                            const hasOverdue = hasOverdueTasks(dObj);
+                            const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, dObj));
+
+                            return (
+                                <div key={day} className="month-view-cell" onClick={() => { setCurrentDate(dObj); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
+                                     onDragOver={e => e.preventDefault()} onDrop={e => handleDropAppointment(e, dObj)}
+                                     style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: '0.5rem', display: 'flex', flexDirection: 'column' }}>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingTop: '4px' }}>
+                                          {hasOverdue && <div style={{ width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%' }}></div>}
+                                          {dayApps.filter(a => a.status !== 'blocked').length > 0 && (
+                                            <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>{dayApps.filter(a => a.status !== 'blocked').length} зап.</span>
+                                          )}
+                                        </div>
+                                        <span style={{ fontWeight: isMDayToday ? '700' : '500', color: isMDayToday ? '#ffffff' : '#0f172a', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isMDayToday ? '#0f172a' : 'transparent', fontSize: '0.9rem' }}>{day}</span>
+                                    </div>
+
+                                    {dayApps.length > 0 && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1, overflow: 'hidden', width: '100%' }}>
+                                        {dayApps.slice(0, 4).map(app => {
+                                          const isBlock = app.status === 'blocked' || app.color === 'blocked';
+                                          const mColors = getCardColor(app.staff_id, app.service_id);
+                                          return (
+                                            <div key={app.id} draggable={!isBlock} onDragStart={(e) => { e.stopPropagation(); setIsDragging(true); e.dataTransfer.setData('text/plain', String(app.id)); }} onDragEnd={() => setIsDragging(false)} onClick={(e) => openBookingDetails(app, e)}
+                                              className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`} style={{
+                                              fontSize: '0.7rem',
+                                              backgroundColor: isBlock ? 'transparent' : (calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg),
+                                              color: isBlock ? '#64748b' : (calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText),
+                                              padding: '0.25rem 0.5rem', borderRadius: '6px', border: isBlock ? '1px dashed #cbd5e1' : 'none', cursor: isBlock ? 'pointer' : 'grab', opacity: app.status === 'completed' ? 0.6 : 1, textDecoration: app.status === 'no-show' ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: '600', width: '100%', boxSizing: 'border-box', overflow: 'hidden'
+                                            }}>
+                                              <span style={{ opacity: 0.7, fontWeight: '700', flexShrink: 0 }}>{app.start_time.substring(0, 5)}</span>
+                                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>{isBlock ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}</span>
+                                            </div>
+                                          )
+                                        })}
+                                        {dayApps.length > 4 && <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '500', paddingLeft: '0.2rem', marginTop: 'auto' }}>+ ще {dayApps.length - 4}</div>}
+                                      </div>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <button className="fab-button" title="Новий запис" onClick={() => {
-              setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
-              setIsBlockMode(false);
-              setIsApptModalOpen(true);
-            }}>
+            <button className="fab-button" title="Новий запис" onClick={() => { setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 }); setIsBlockMode(false); setIsApptModalOpen(true); }}>
               <Icons.Plus />
             </button>
 
           </div>
         )
-
-        /* --- 1. КЕРУВАННЯ ПОСЛУГАМИ --- */
+            /* --- 1. КЕРУВАННЯ ПОСЛУГАМИ --- */
         : activeTab === 'Services' ? (
           <div style={{ padding: '2rem 3rem', flex: 1, maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
 
@@ -4861,11 +5068,11 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                                   </div>
                                 </div>
 
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                   {staffShifts.map((schedule: any, idx: number) => (
-                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderBottom: idx !== 6 ? '1px solid #f1f5f9' : 'none', background: schedule.active ? '#fff' : '#fafafa', borderRadius: '8px', transition: 'background 0.3s' }}>
+                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: '#fff', borderRadius: '12px', border: '1px solid #f1f5f9', transition: '0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
 
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '200px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '150px' }}>
                                         <div
                                           onClick={() => {
                                             if (!hasAdminRights) return;
@@ -4873,42 +5080,34 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                                             newShifts[idx].active = !schedule.active;
                                             handleUpdateLocalStaff({ shifts: newShifts });
                                           }}
-                                          style={{ width: '38px', height: '20px', borderRadius: '10px', background: schedule.active ? (hasAdminRights ? '#10b981' : '#94a3b8') : '#cbd5e1', position: 'relative', cursor: hasAdminRights ? 'pointer' : 'default', transition: 'background 0.3s' }}
+                                          style={{ width: '40px', height: '22px', borderRadius: '11px', background: schedule.active ? (hasAdminRights ? '#10b981' : '#94a3b8') : '#cbd5e1', position: 'relative', cursor: hasAdminRights ? 'pointer' : 'default', transition: '0.3s', flexShrink: 0 }}
                                         >
-                                          <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
+                                          <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: '0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
                                         </div>
-                                        <div style={{ fontWeight: '700', color: schedule.active ? '#0f172a' : '#94a3b8', fontSize: '0.95rem', transition: 'color 0.3s' }}>{schedule.day}</div>
+                                        <div style={{ fontWeight: '700', color: schedule.active ? '#0f172a' : '#94a3b8', fontSize: '0.95rem' }}>{schedule.day}</div>
                                       </div>
 
-                                      {schedule.active ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                          <input
-                                            disabled={!hasAdminRights}
-                                            type="time"
-                                            value={schedule.start}
-                                            onChange={(e) => {
-                                              const newShifts = [...staffShifts];
-                                              newShifts[idx].start = e.target.value;
-                                              handleUpdateLocalStaff({ shifts: newShifts });
-                                            }}
-                                            style={{ padding: '0.4rem 0.8rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', color: '#0f172a', fontSize: '0.85rem', background: '#fff', width: '90px', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
-                                          />
-                                          <div style={{ color: '#cbd5e1', fontWeight: '700' }}>—</div>
-                                          <input
-                                            disabled={!hasAdminRights}
-                                            type="time"
-                                            value={schedule.end}
-                                            onChange={(e) => {
-                                              const newShifts = [...staffShifts];
-                                              newShifts[idx].end = e.target.value;
-                                              handleUpdateLocalStaff({ shifts: newShifts });
-                                            }}
-                                            style={{ padding: '0.4rem 0.8rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: '600', color: '#0f172a', fontSize: '0.85rem', background: '#fff', width: '90px', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div style={{ padding: '0.4rem 1.5rem', fontWeight: '600', color: '#94a3b8', fontSize: '0.85rem' }}>Вихідний</div>
-                                      )}
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                        {schedule.active ? (
+                                          <>
+                                            <input
+                                              disabled={!hasAdminRights}
+                                              type="time" value={schedule.start}
+                                              onChange={(e) => { const newShifts = [...staffShifts]; newShifts[idx].start = e.target.value; handleUpdateLocalStaff({ shifts: newShifts }); }}
+                                              style={{ padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', color: '#0f172a', fontSize: '0.9rem', background: '#f8fafc', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                            />
+                                            <span style={{ color: '#cbd5e1', fontWeight: '800' }}>—</span>
+                                            <input
+                                              disabled={!hasAdminRights}
+                                              type="time" value={schedule.end}
+                                              onChange={(e) => { const newShifts = [...staffShifts]; newShifts[idx].end = e.target.value; handleUpdateLocalStaff({ shifts: newShifts }); }}
+                                              style={{ padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', color: '#0f172a', fontSize: '0.9rem', background: '#f8fafc', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }}
+                                            />
+                                          </>
+                                        ) : (
+                                          <div style={{ padding: '0.4rem 2rem', color: '#94a3b8', fontWeight: '600', fontSize: '0.9rem', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #e2e8f0' }}>Вихідний</div>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -4927,13 +5126,9 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                                           btn.innerText = '✓ Збережено';
                                           btn.style.background = '#10b981';
                                           btn.style.opacity = '1';
-                                          setTimeout(() => alert("Графік роботи успішно збережено!"), 50);
-                                          setTimeout(() => { btn.innerText = originalText; btn.style.background = '#0f172a'; btn.disabled = false; }, 3000);
+                                          setTimeout(() => { btn.innerText = originalText; btn.style.background = '#0f172a'; btn.disabled = false; }, 1500);
                                         } catch(err) {
-                                          alert("Помилка при збереженні.");
-                                          btn.innerText = originalText;
-                                          btn.style.opacity = '1';
-                                          btn.disabled = false;
+                                          btn.innerText = originalText; btn.style.opacity = '1'; btn.disabled = false;
                                         }
                                       }}
                                       style={{ padding: '0.75rem 2.5rem', borderRadius: '8px', border: 'none', background: '#0f172a', fontWeight: '700', color: '#fff', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}
@@ -5486,7 +5681,49 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
             </div>
           </div>
         )}
+        {/* 🟢 БУФЕР ОБМІНУ (КОПІЮВАННЯ) */}
+        {clipboardApp && (
+           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, background: '#eff6ff', borderBottom: '1px solid #bfdbfe', padding: '0.6rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 101, animation: 'slideDown 0.2s ease-out' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#1d4ed8', fontWeight: '600' }}>
+                 <Icons.Edit />
+                 <span><b>Скопійовано:</b> {clipboardApp.client_name}. Клікніть на будь-яку вільну годину на сітці, щоб вставити.</span>
+              </div>
+              <button onClick={() => setClipboardApp(null)} style={{ background: '#dbeafe', border: 'none', color: '#1e3a8a', padding: '0.3rem 0.8rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer' }}>Скасувати</button>
+           </div>
+        )}
+
+        {/* 🟢 КОНТЕКСТНЕ МЕНЮ (ПРАВИЙ КЛІК) */}
+        {contextMenu && (
+          <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, background: '#fff', borderRadius: '12px', boxShadow: '0 10px 40px rgba(0,0,0,0.15)', zIndex: 3000, overflow: 'hidden', border: '1px solid #e2e8f0', width: '220px', animation: 'slideUp 0.1s ease-out' }}>
+            <div style={{ padding: '0.8rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+               {contextMenu.app.status === 'blocked' ? 'Перерва' : contextMenu.app.client_name}
+            </div>
+            {contextMenu.app.status !== 'blocked' && (
+              <>
+                <button onClick={() => handleUpdateBookingStatus('completed', contextMenu.app)} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#16a34a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.CheckCircle /> Завершено</button>
+                <button onClick={() => handleUpdateBookingStatus('late', contextMenu.app)} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#d97706', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.AlertCircle /> Запізнення</button>
+                <button onClick={() => handleUpdateBookingStatus('no-show', contextMenu.app)} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#dc2626', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f1f5f9' }}><Icons.XCircle /> Не прийшов</button>
+                <button onClick={() => setClipboardApp(contextMenu.app)} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#0f172a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.Edit /> Скопіювати візит</button>
+              </>
+            )}
+            <button onClick={() => { setSelectedBooking(contextMenu.app); handleCancelBooking(); }} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#ef4444', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.Trash /> Скасувати запис</button>
+          </div>
+        )}
+
       </main>
+
+      {/* 🟢 МОДАЛКА ГЛОБАЛЬНОГО ПОШУКУ (CMD+K) */}
+      {isGlobalSearchOpen && (
+         <div className="modal-overlay" style={{ alignItems: 'flex-start', paddingTop: '10vh' }} onClick={() => setIsGlobalSearchOpen(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ padding: '0', maxWidth: '600px', overflow: 'hidden', background: '#fff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+               <div style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                  <Icons.Search />
+                  <input autoFocus type="text" placeholder="Пошук клієнтів (ім'я або телефон)..." onChange={(e) => { const val = e.target.value.toLowerCase(); if (val) setClientSearch(val); }} onKeyDown={(e) => { if (e.key === 'Enter') { setActiveTab('Clients'); localStorage.setItem('bookera_activeTab', 'Clients'); setIsGlobalSearchOpen(false); } if (e.key === 'Escape') setIsGlobalSearchOpen(false); }} style={{ flex: 1, border: 'none', outline: 'none', fontSize: '1.1rem', padding: '0 1rem', background: 'transparent' }} />
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: '700' }}>ESC</div>
+               </div>
+            </div>
+         </div>
+      )}
 
       {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ КЛІЄНТА (ОКРЕМО ВІД КАЛЕНДАРЯ) --- */}
       {isAddClientModalOpen && (
@@ -6054,7 +6291,7 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО ДЕТАЛЕЙ ЗАПИСУ (СТАТУС ТА СКАСУВАННЯ) --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО ДЕТАЛЕЙ ЗАПИСУ (З РЕДАГУВАННЯМ ЧАСУ ТА ДІЯМИ) --- */}
       {isBookingDetailsModalOpen && selectedBooking && (
         <div className="modal-overlay" onClick={() => setIsBookingDetailsModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '400px' }}>
@@ -6097,29 +6334,39 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
               <div style={{ display: 'flex', gap: '2rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', display: 'block', textTransform: 'uppercase' }}>Час початку</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#3b82f6' }}>{selectedBooking.start_time.substring(0, 5)}</span>
+                  <input
+                    type="time"
+                    value={selectedBooking.start_time.substring(0, 5)}
+                    onChange={(e) => handleUpdateBookingTime(e.target.value)}
+                    style={{ fontSize: '1.1rem', fontWeight: '800', color: '#3b82f6', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
+                  />
                 </div>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', display: 'block', textTransform: 'uppercase' }}>Тривалість</span>
                   <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a' }}>
-                    {selectedBooking.start_time && selectedBooking.end_time ? (
+                    {selectedBooking.start_time && selectedBooking.end_time && !selectedBooking.start_time.includes('NaN') ? (
                       (() => {
                         const [sH, sM] = selectedBooking.start_time.split(':').map(Number);
                         const [eH, eM] = selectedBooking.end_time.split(':').map(Number);
                         let duration = (eH * 60 + eM) - (sH * 60 + sM);
-                        return duration > 0 ? duration : duration + 24 * 60;
+                        if (duration < 0) duration += 24 * 60;
+                        return isNaN(duration) ? '...' : duration;
                       })()
-                    ) : 60} хв
+                    ) : (
+                      services.find(s => String(s.id) === String(selectedBooking.service_id))?.duration || 60
+                    )} хв
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* 🔴 КНОПКИ СТАТУСІВ (Тільки для записів клієнтів) - ТЕПЕР З SVG */}
+            {/* 🟢 МЕНЮ ДІЙ (ОПТИМІЗОВАНЕ) */}
             {selectedBooking.status !== 'blocked' && selectedBooking.color !== 'blocked' && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '700', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Змінити статус візиту</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
+              <div style={{ marginBottom: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
+                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '700', display: 'block', marginBottom: '0.8rem', textTransform: 'uppercase' }}>Дії з візитом</span>
+
+                {/* 1. Статуси */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', marginBottom: '0.6rem' }}>
                   <button onClick={() => handleUpdateBookingStatus('completed')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #86efac', background: selectedBooking.status === 'completed' ? '#dcfce7' : '#fff', color: '#166534', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}>
                     <Icons.CheckCircle /> Завершено
                   </button>
@@ -6130,18 +6377,98 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
                     <Icons.XCircle /> Не прийшов
                   </button>
                 </div>
+
+                {/* 2. Швидкі інструменти */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                   <button onClick={() => {
+                      setApptForm({ ...apptForm, client_name: selectedBooking.client_name, client_phone: selectedBooking.client_phone || '+380', service_id: selectedBooking.service_id, staff_id: selectedBooking.staff_id, duration: services.find(s=>String(s.id)===String(selectedBooking.service_id))?.duration || 60, date: toLocalDateStr(currentDate) });
+                      setIsBookingDetailsModalOpen(false);
+                      setIsBlockMode(false);
+                      setIsApptModalOpen(true);
+                   }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.6rem', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f1f5f9'} onMouseOut={e=>e.currentTarget.style.background='#f8fafc'}>
+                      <Icons.Calendar /> Повторити
+                   </button>
+
+                   <button onClick={() => {
+                      setClipboardApp(selectedBooking);
+                      setIsBookingDetailsModalOpen(false);
+                   }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.6rem', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f1f5f9'} onMouseOut={e=>e.currentTarget.style.background='#f8fafc'}>
+                      <Icons.Edit /> Копіювати
+                   </button>
+                </div>
               </div>
             )}
 
-            <button
-              onClick={handleCancelBooking}
-              style={{ width: '100%', padding: '0.85rem', backgroundColor: '#fff', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-              onMouseOver={e => e.currentTarget.style.backgroundColor = '#fecaca'}
-              onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'}
-            >
+            <button onClick={handleCancelBooking} style={{ width: '100%', padding: '0.85rem', backgroundColor: '#fff', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#fecaca'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'}>
               <Icons.Trash />
-              {selectedBooking.status === 'blocked' || selectedBooking.color === 'blocked' ? 'Видалити перерву' : 'Скасувати запис повністю'}
+              {selectedBooking?.status === 'blocked' || selectedBooking?.color === 'blocked' ? 'Видалити перерву' : 'Скасувати запис повністю'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛЬНЕ ВІКНО ПІДТВЕРДЖЕННЯ ПЕРЕНЕСЕННЯ (DRAG & DROP) --- */}
+      {dragConfirmData && (
+        <div className="modal-overlay" onClick={() => setDragConfirmData(null)} style={{ zIndex: 2000 }}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)', maxWidth: '420px', textAlign: 'center', padding: '2.5rem' }}>
+
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 9l4-4 4 4"/><path d="M9 5v14"/><path d="M19 15l-4 4-4-4"/><path d="M15 19V5"/></svg>
+            </div>
+
+            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.8rem' }}>Перенести запис?</h2>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '1.5rem' }}>Будь ласка, перевірте новий час візиту перед підтвердженням.</p>
+
+            <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '16px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: '800', color: '#0f172a', marginBottom: '0.8rem', fontSize: '1.05rem' }}>
+                {dragConfirmData.app.client_name}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', background: '#fff', padding: '0.8rem', borderRadius: '12px', border: '1px solid #cbd5e1' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '2px' }}>Було</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: '600', color: '#475569', textDecoration: 'line-through' }}>{dragConfirmData.app.start_time.substring(0, 5)}</span>
+                </div>
+
+                <div style={{ color: '#cbd5e1' }}><Icons.ChevronRight /></div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#3b82f6', fontWeight: '800', textTransform: 'uppercase', marginBottom: '2px' }}>Стане</span>
+
+                  {/* 🟢 ІНТЕРАКТИВНА ЗМІНА ЧАСУ ПРЯМО ТУТ */}
+                  <input
+                    type="time"
+                    value={dragConfirmData.newStart.substring(0, 5)}
+                    onChange={e => {
+                        const newStartTime = e.target.value;
+                        const [h, m] = newStartTime.split(':').map(Number);
+                        const [oldStartH, oldStartM] = dragConfirmData.app.start_time.split(':').map(Number);
+                        const [oldEndH, oldEndM] = dragConfirmData.app.end_time.split(':').map(Number);
+                        let duration = (oldEndH * 60 + oldEndM) - (oldStartH * 60 + oldStartM);
+                        if (duration < 0) duration += 24 * 60;
+                        const totalEnd = h * 60 + m + duration;
+                        const newEndStr = `${String(Math.floor(totalEnd / 60) % 24).padStart(2, '0')}:${String(totalEnd % 60).padStart(2, '0')}:00`;
+                        setDragConfirmData({...dragConfirmData, newStart: `${newStartTime}:00`, newEnd: newEndStr});
+                    }}
+                    style={{ fontSize: '1.2rem', fontWeight: '800', color: '#3b82f6', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
+                  />
+
+                </div>
+              </div>
+
+              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '1rem', fontWeight: '600' }}>
+                Дата: {dragConfirmData.targetDate.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button onClick={() => setDragConfirmData(null)} style={{ flex: 1, padding: '0.9rem', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.background = '#e2e8f0'} onMouseOut={e => e.currentTarget.style.background = '#f1f5f9'}>
+                Скасувати
+              </button>
+              <button onClick={confirmDragDrop} style={{ flex: 1, padding: '0.9rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 15px rgba(15,23,42,0.15)' }} onMouseOver={e => e.currentTarget.style.background = '#1e293b'} onMouseOut={e => e.currentTarget.style.background = '#0f172a'}>
+                Перенести
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -6165,81 +6492,133 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
         </div>
       )}
 
-      {/* --- МОДАЛКА: НАЛАШТУВАННЯ КАЛЕНДАРЯ --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО: НАЛАШТУВАННЯ КАЛЕНДАРЯ --- */}
       {showCalSettingsModal && (
         <div className="modal-overlay" onClick={() => setShowCalSettingsModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '600px', padding: '0' }}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '750px', padding: '0' }}>
             <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                 <button onClick={() => setShowCalSettingsModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b' }}><Icons.ChevronLeft /></button>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Налаштування календаря</h2>
               </div>
               <button
-                onClick={handleSaveCalSettings}
-                style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                onClick={async (e) => {
+                  const btn = e.currentTarget;
+                  const originalText = btn.innerText;
+                  btn.innerText = 'Збереження...';
+                  btn.style.opacity = '0.7';
+                  btn.disabled = true;
+
+                  if (business) {
+                    await supabase.from('businesses').update({ cal_settings: calSettings }).eq('id', business.id);
+                    setCalendarView(calSettings.defaultView as any);
+                    localStorage.setItem('bookera_calendarView', calSettings.defaultView);
+                  }
+
+                  btn.innerText = '✓ Збережено';
+                  btn.style.background = '#10b981';
+                  btn.style.opacity = '1';
+
+                  setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = '#0f172a';
+                    btn.disabled = false;
+                    setShowCalSettingsModal(false);
+                  }, 600);
+                }}
+                style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '0.6rem 1.25rem', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', transition: '0.2s' }}
               >
                 Зберегти
               </button>
             </div>
 
-            <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '60vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+            <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '80vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Вигляд за замовчуванням</label>
-                <div style={{ display: 'flex', gap: '1.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: '#475569' }}>
-                    <input type="radio" checked={calSettings.defaultView === 'day'} onChange={() => setCalSettings({...calSettings, defaultView: 'day'})} style={{ accentColor: '#0f172a' }} /> День
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: '#475569' }}>
-                    <input type="radio" checked={calSettings.defaultView === 'week'} onChange={() => setCalSettings({...calSettings, defaultView: 'week'})} style={{ accentColor: '#0f172a' }} /> Тиждень
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: '#475569' }}>
-                    <input type="radio" checked={calSettings.defaultView === 'month'} onChange={() => setCalSettings({...calSettings, defaultView: 'month'})} style={{ accentColor: '#0f172a' }} /> Місяць
-                  </label>
+                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Вигляд за замовчуванням</label>
+                <div style={{ display: 'flex', gap: '2rem' }}>
+                  {['day', 'week', 'month'].map(view => (
+                    <label key={view} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
+                      <input type="radio" checked={calSettings.defaultView === view} onChange={() => setCalSettings({...calSettings, defaultView: view})} style={{ display: 'none' }} />
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.defaultView === view ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
+                      {view === 'day' ? 'День' : view === 'week' ? 'Тиждень' : 'Місяць'}
+                    </label>
+                  ))}
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Кольорова схема</label>
-                <div style={{ display: 'flex', gap: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Кольорова схема</label>
+                <div style={{ display: 'flex', gap: '1.5rem' }}>
                   <div
                     onClick={() => setCalSettings({...calSettings, colorScheme: 'pastel'})}
-                    style={{ flex: 1, border: `2px solid ${calSettings.colorScheme === 'pastel' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', padding: '1rem', cursor: 'pointer', transition: '0.2s', position: 'relative' }}
+                    style={{ flex: 1, border: `2px solid ${calSettings.colorScheme === 'pastel' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', padding: '1.2rem', cursor: 'pointer', transition: '0.2s', position: 'relative' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                      <input type="radio" checked={calSettings.colorScheme === 'pastel'} readOnly style={{ accentColor: '#0f172a' }} />
-                      <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>Пастельні</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.5rem' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.colorScheme === 'pastel' ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
+                      <span style={{ fontWeight: '700', fontSize: '1rem', color: '#0f172a' }}>Пастельні</span>
                     </div>
                     <div style={{ borderTop: '1px dashed #e2e8f0', borderLeft: '1px dashed #e2e8f0', height: '60px', position: 'relative' }}>
                       <div style={{ position: 'absolute', top: '10px', left: '10px', width: '80%', height: '15px', background: '#e0e7ff', borderLeft: '3px solid #cbd5e1', borderRadius: '4px' }}></div>
-                      <div style={{ position: 'absolute', top: '30px', left: '30px', width: '60%', height: '20px', background: '#dcfce7', borderLeft: '3px solid #cbd5e1', borderRadius: '4px' }}></div>
+                      <div style={{ position: 'absolute', top: '35px', left: '30px', width: '60%', height: '20px', background: '#dcfce7', borderLeft: '3px solid #cbd5e1', borderRadius: '4px' }}></div>
                     </div>
                   </div>
 
                   <div
                     onClick={() => setCalSettings({...calSettings, colorScheme: 'vivid'})}
-                    style={{ flex: 1, border: `2px solid ${calSettings.colorScheme === 'vivid' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', padding: '1rem', cursor: 'pointer', transition: '0.2s', position: 'relative' }}
+                    style={{ flex: 1, border: `2px solid ${calSettings.colorScheme === 'vivid' ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', padding: '1.2rem', cursor: 'pointer', transition: '0.2s', position: 'relative' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                      <input type="radio" checked={calSettings.colorScheme === 'vivid'} readOnly style={{ accentColor: '#0f172a' }} />
-                      <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>Яскраві</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.5rem' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.colorScheme === 'vivid' ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
+                      <span style={{ fontWeight: '700', fontSize: '1rem', color: '#0f172a' }}>Яскраві</span>
                     </div>
                     <div style={{ borderTop: '1px dashed #e2e8f0', borderLeft: '1px dashed #e2e8f0', height: '60px', position: 'relative' }}>
                       <div style={{ position: 'absolute', top: '10px', left: '10px', width: '80%', height: '15px', background: '#3b82f6', borderRadius: '4px' }}></div>
-                      <div style={{ position: 'absolute', top: '30px', left: '30px', width: '60%', height: '20px', background: '#10b981', borderRadius: '4px' }}></div>
+                      <div style={{ position: 'absolute', top: '35px', left: '30px', width: '60%', height: '20px', background: '#10b981', borderRadius: '4px' }}></div>
                     </div>
                   </div>
                 </div>
               </div>
 
+              <div>
+                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Відображення кольорів у розкладі</label>
+                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
+                    <input
+                      type="radio"
+                      checked={calSettings.colorMode === 'master' || !calSettings.colorMode}
+                      onChange={() => setCalSettings({...calSettings, colorMode: 'master'})}
+                      style={{ display: 'none' }}
+                    />
+                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: (calSettings.colorMode === 'master' || !calSettings.colorMode) ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
+                    Колір за майстром
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
+                    <input
+                      type="radio"
+                      checked={calSettings.colorMode === 'category'}
+                      onChange={() => setCalSettings({...calSettings, colorMode: 'category'})}
+                      style={{ display: 'none' }}
+                    />
+                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.colorMode === 'category' ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
+                    Колір за послугою
+                  </label>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.8rem', lineHeight: '1.4' }}>
+                  {calSettings.colorMode === 'category' ? 'Записи будуть забарвлені автоматично на основі категорії послуги.' : 'Кожен майстер матиме свій індивідуальний колір.'}
+                </p>
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '0.95rem' }}>Робочі години та перерви</div>
+                <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1rem' }}>Робочі години та перерви</div>
                 <button
                   onClick={() => {
                     setShowCalSettingsModal(false);
                     setShowShiftsModal(true);
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', color: '#0f172a' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', color: '#0f172a', transition: '0.2s' }}
+                  onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                  onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'}
                 >
                   <Icons.Clock /> Налаштувати зміни
                 </button>
@@ -6253,76 +6632,56 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
       {/* --- МОДАЛКА: НАЛАШТУВАННЯ РОБОЧИХ ЗМІН --- */}
       {showShiftsModal && (
         <div className="modal-overlay" onClick={() => setShowShiftsModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '500px', padding: '0' }}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '600px', padding: '0' }}>
             <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                 <button
-                  onClick={() => {
-                    setShowShiftsModal(false);
-                    setShowCalSettingsModal(true);
-                  }}
+                  onClick={() => { setShowShiftsModal(false); setShowCalSettingsModal(true); }}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b' }}
                 >
                   <Icons.ChevronLeft />
                 </button>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.4rem 0' }}>Робочі години</h2>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.2rem 0' }}>Робочі години</h2>
               </div>
-              <button
-                onClick={handleSaveShifts}
-                style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
-              >
+              <button onClick={handleSaveShifts} style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '0.6rem 1.25rem', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#1e293b'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#0f172a'}>
                 Зберегти
               </button>
             </div>
 
-            <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '60vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {shifts.map((shift, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', transition: '0.2s', opacity: shift.active ? 1 : 0.6 }}>
-                  <div style={{ width: '100px', fontWeight: '600', color: shift.active ? '#0f172a' : '#94a3b8' }}>
-                    {shift.day}
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', transition: '0.2s', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', width: '160px' }}>
+                    <div
+                      onClick={() => { const newShifts = [...shifts]; newShifts[idx].active = !shift.active; setShifts(newShifts); }}
+                      style={{ width: '44px', height: '24px', borderRadius: '12px', background: shift.active ? '#10b981' : '#cbd5e1', position: 'relative', cursor: 'pointer', transition: '0.3s', flexShrink: 0 }}
+                    >
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: shift.active ? '22px' : '2px', transition: '0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
+                    </div>
+                    <div style={{ fontWeight: '700', color: shift.active ? '#0f172a' : '#94a3b8', fontSize: '1rem' }}>{shift.day}</div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '240px' }}>
                     {shift.active ? (
-                      <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', width: '100%', justifyContent: 'space-between' }}>
                         <input
-                          type="time"
-                          value={shift.start}
-                          onChange={(e) => {
-                            const newShifts = [...shifts];
-                            newShifts[idx].start = e.target.value;
-                            setShifts(newShifts);
-                          }}
-                          className="modal-input"
-                          style={{ width: 'auto', padding: '0.4rem', border: '1px solid #cbd5e1' }}
+                          type="time" value={shift.start}
+                          onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].start = e.target.value; setShifts(newShifts); }}
+                          style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '100px', textAlign: 'center' }}
                         />
-                        <span style={{ color: '#94a3b8', fontWeight: '600' }}>-</span>
+                        <span style={{ color: '#94a3b8', fontWeight: '800' }}>—</span>
                         <input
-                          type="time"
-                          value={shift.end}
-                          onChange={(e) => {
-                            const newShifts = [...shifts];
-                            newShifts[idx].end = e.target.value;
-                            setShifts(newShifts);
-                          }}
-                          className="modal-input"
-                          style={{ width: 'auto', padding: '0.4rem', border: '1px solid #cbd5e1' }}
+                          type="time" value={shift.end}
+                          onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].end = e.target.value; setShifts(newShifts); }}
+                          style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '100px', textAlign: 'center' }}
                         />
-                      </>
+                      </div>
                     ) : (
-                      <div style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem', marginRight: '1rem' }}>Вихідний</div>
+                      <div style={{ padding: '0.5rem 0', width: '100%', textAlign: 'center', color: '#94a3b8', fontWeight: '700', fontSize: '0.95rem', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                        Вихідний
+                      </div>
                     )}
-
-                    <input
-                      type="checkbox"
-                      checked={shift.active}
-                      onChange={() => {
-                        const newShifts = [...shifts];
-                        newShifts[idx].active = !shift.active;
-                        setShifts(newShifts);
-                      }}
-                      style={{ accentColor: '#0f172a', width: '20px', height: '20px', cursor: 'pointer' }}
-                    />
                   </div>
                 </div>
               ))}
@@ -6330,6 +6689,8 @@ const handleQuickAdd = (hour: number, targetDate: Date = currentDate) => {
           </div>
         </div>
       )}
+
+
 
     </div>
   );

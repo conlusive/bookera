@@ -1,13 +1,26 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 
+// 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
+// щоб вони не перестворювалися при кожному рендері
+const faqs = [
+  { q: "Що таке BookEra Business?", a: "Це комплексний сервіс для автоматизації: онлайн-запис 24/7, клієнтська база та фінанси." },
+  { q: "Чи дійсно базовий функціонал безкоштовний?", a: "Так! Ви можете створити сторінку, додати послуги та приймати записи абсолютно безкоштовно." },
+  { q: "Як клієнти можуть записатися?", a: "Ви отримуєте персональне посилання (bookera.com/ваш-бізнес), яке легко додати в Instagram." },
+  { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам та всім, хто працює за попереднім записом." }
+];
+
 export default function BusinessLandingPage() {
   const router = useRouter();
-  const supabase = createClient();
+
+  // 2. ОПТИМІЗАЦІЯ: Кешуємо Supabase-клієнт!
+  // Без useMemo він створював би нове з'єднання при кожному мікро-рендері (наприклад, при скролі)
+  const supabase = useMemo(() => createClient(), []);
+
   const [scrollState, setScrollState] = useState('top');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -27,19 +40,13 @@ export default function BusinessLandingPage() {
 
   const [percent, setPercent] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-
   const [activeFeature, setActiveFeature] = useState(0);
 
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const faqs = [
-    { q: "Що таке BookEra Business?", a: "Це комплексний сервіс для автоматизації: онлайн-запис 24/7, клієнтська база та фінанси." },
-    { q: "Чи дійсно базовий функціонал безкоштовний?", a: "Так! Ви можете створити сторінку, додати послуги та приймати записи абсолютно безкоштовно." },
-    { q: "Як клієнти можуть записатися?", a: "Ви отримуєте персональне посилання (bookera.com/ваш-бізнес), яке легко додати в Instagram." },
-    { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам та всім, хто працює за попереднім записом." }
-  ];
-
-  const exploreFeatures = [
+  // 3. ОПТИМІЗАЦІЯ: Мемоїзація важкого JSX.
+  // Масив перераховується ЛИШЕ коли змінюється `percent`, а не при кожному скролі.
+  const exploreFeatures = useMemo(() => [
     {
       title: "Ваша онлайн-вітрина",
       desc: "Отримайте власну сторінку для запису, яка виглядає ідеально на будь-якому пристрої. Додайте послуги, ціни та портфоліо в пару кліків.",
@@ -115,7 +122,7 @@ export default function BusinessLandingPage() {
         </div>
       )
     }
-  ];
+  ], [percent]);
 
   const handleNextFeature = () => {
     setActiveFeature((prev) => (prev + 1) % exploreFeatures.length);
@@ -140,7 +147,6 @@ export default function BusinessLandingPage() {
 
       if (storedName) {
         setIsLoggedIn(true);
-        // 🟢 Запобігаємо відображенню імейлу
         const displayName = storedName.includes('@') ? 'Василь Циган' : storedName;
         setUserName(displayName);
         setUserRole(storedRole);
@@ -270,7 +276,6 @@ export default function BusinessLandingPage() {
         const metadataName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name;
         let finalName = profile?.full_name || metadataName || 'Василь Циган';
 
-        // 🟢 Запобігаємо відображенню імейлу
         if (finalName.includes('@')) {
           finalName = 'Василь Циган';
         }
@@ -367,7 +372,6 @@ export default function BusinessLandingPage() {
         .btn-secondary { background-color: #ffffff; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1rem 2.4rem; border-radius: 999px; border: 1px solid #e2e8f0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease; will-change: transform; }
         .btn-secondary:hover { background-color: #f8fafc; border-color: #cbd5e1; transform: translateY(-2px); }
 
-        /* ОНОВЛЕНИЙ ХЕДЕР */
         .main-header { position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000; display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent; will-change: transform, background-color; }
         .main-header.top { transform: translateY(0); }
         .main-header.scrolled { position: fixed; background-color: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05); animation: slideDown 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
@@ -375,7 +379,6 @@ export default function BusinessLandingPage() {
         @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
         @keyframes slideUp { from { transform: translateY(0); } to { transform: translateY(-100%); } }
 
-        /* BENTO GRID */
         .bento-grid { display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-rows: 380px; gap: 1.5rem; margin-top: 3rem; }
         @media (max-width: 992px) { .bento-grid { grid-template-columns: 1fr; grid-auto-rows: auto; } }
 
@@ -486,11 +489,10 @@ export default function BusinessLandingPage() {
         </div>
       )}
 
-      {/* 🟢 ОНОВЛЕНИЙ ХЕДЕР (ІДЕНТИЧНИЙ ДО ГОЛОВНОЇ СТОРІНКИ) */}
+      {/* ОНОВЛЕНИЙ ХЕДЕР */}
       <header className={`main-header ${scrollState}`}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '100%', gap: '2rem' }}>
 
-          {/* ЛОГОТИП */}
           <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
             <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline' }}>
               <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', transition: 'color 0.3s ease' }}>
@@ -500,7 +502,6 @@ export default function BusinessLandingPage() {
             </Link>
           </div>
 
-          {/* НАВІГАЦІЯ ТА ПРОФІЛЬ */}
           <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
             <Link href="/" style={{ whiteSpace: 'nowrap', color: '#475569', textDecoration: 'none', fontSize: '0.95rem', fontWeight: '600', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.color='#8fae92'} onMouseOut={e=>e.currentTarget.style.color='#475569'}>Для клієнтів</Link>
 
@@ -577,7 +578,7 @@ export default function BusinessLandingPage() {
         </div>
       </section>
 
-      {/* BENTO GRID SECTION (БАЗОВИЙ АРСЕНАЛ) */}
+      {/* BENTO GRID SECTION */}
       <section id="bento" style={{ paddingBottom: '40px' }}>
         <div className="container">
           <div className="reveal-on-scroll">
@@ -585,7 +586,6 @@ export default function BusinessLandingPage() {
           </div>
 
           <div className="bento-grid">
-            {/* Card 1: Large (Schedule) */}
             <div className="bento-card bento-large reveal-on-scroll">
               <div className="text-content">
                 <span className="bento-tag">Календар</span>
@@ -609,7 +609,6 @@ export default function BusinessLandingPage() {
               </div>
             </div>
 
-            {/* Card 2: Small (CRM) */}
             <div className="bento-card bento-small reveal-on-scroll delay-100" style={{ background: '#111827' }}>
               <span className="bento-tag" style={{ background: 'rgba(255,255,255,0.1)', color: '#C2D8C4', border: 'none' }}>База клієнтів</span>
               <h3 className="bento-title" style={{ color: '#ffffff' }}>Всі клієнти<br/>як на долоні.</h3>
@@ -622,7 +621,6 @@ export default function BusinessLandingPage() {
               </div>
             </div>
 
-            {/* Card 3: Small (Reminders) */}
             <div className="bento-card bento-small reveal-on-scroll">
               <span className="bento-tag">Сповіщення</span>
               <h3 className="bento-title">Автоматичні <br/>нагадування.</h3>
@@ -635,7 +633,6 @@ export default function BusinessLandingPage() {
               </div>
             </div>
 
-            {/* Card 4: Large (Payments) */}
             <div className="bento-card bento-large reveal-on-scroll delay-100 finance-card-trigger" style={{ background: '#f0fdf4', borderColor: '#dcfce7' }}>
               <div className="text-content">
                 <span className="bento-tag" style={{ background: '#ffffff', color: '#166534', borderColor: '#bbf7d0' }}>Фінанси</span>
@@ -661,7 +658,7 @@ export default function BusinessLandingPage() {
         </div>
       </section>
 
-      {/* БЛОК ДЛЯ РОСТУ: EXPLORE FEATURES */}
+      {/* EXPLORE FEATURES */}
       <section className="reveal-on-scroll" style={{ padding: '6rem 0 8rem 0', textAlign: 'center', backgroundColor: '#ffffff' }}>
         <div className="container">
           <h2 style={{ fontSize: 'clamp(2.5rem, 4vw, 3.2rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', marginBottom: '0.5rem' }}>Можливості для росту</h2>
@@ -671,7 +668,6 @@ export default function BusinessLandingPage() {
 
           <div className="explore-slider-container">
 
-            {/* Ліва сторона - Текст */}
             <div className="slider-text-area" style={{ textAlign: 'left' }}>
               <div style={{ minHeight: '180px' }}>
                  <h3 style={{ fontSize: '2rem', fontWeight: '900', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.03em', lineHeight: '1.1' }}>
@@ -686,22 +682,18 @@ export default function BusinessLandingPage() {
               </div>
             </div>
 
-            {/* Права сторона - Сірий контейнер з Мокапами */}
             <div className="slider-image-area">
                {exploreFeatures.map((f, i) => (
                   <div key={i} style={{ position: 'absolute', opacity: activeFeature === i ? 1 : 0, transition: 'opacity 0.4s ease', transform: activeFeature === i ? 'scale(1)' : 'scale(0.95)', pointerEvents: activeFeature === i ? 'auto' : 'none', willChange: 'opacity, transform' }}>
                     {f.mockup}
                   </div>
                ))}
-
-               {/* Кнопки Навігації */}
                <button onClick={handleNextFeature} className="slider-nav-btn" style={{ position: 'absolute', right: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>→</button>
                <button onClick={handlePrevFeature} className="slider-nav-btn" style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>←</button>
             </div>
 
           </div>
 
-          {/* Індикатор прогресу (Лінія знизу) */}
           <div className="slider-progress-track">
              <div className="slider-progress-fill" style={{ width: `${((activeFeature + 1) / exploreFeatures.length) * 100}%` }}></div>
           </div>
@@ -709,10 +701,8 @@ export default function BusinessLandingPage() {
         </div>
       </section>
 
-      {/* ФІНАЛЬНИЙ HERO / CTA (Зелений фон + Гіперреалістичний iPhone без помилки риски) */}
+      {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-
-        {/* Контейнер для фонових плям з overflow: hidden, щоб уникнути горизонтального скролу */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', top: '-10%', right: '5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, rgba(255,255,255,0) 70%)', filter: 'blur(50px)' }}></div>
         </div>
@@ -720,7 +710,6 @@ export default function BusinessLandingPage() {
         <div className="container" style={{ position: 'relative', zIndex: 10 }}>
           <div className="dark-hero-grid">
 
-            {/* Текст зліва */}
             <div className="dark-hero-content" style={{ padding: '8rem 0' }}>
               <h2 style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', fontWeight: '900', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.04em', lineHeight: '1.05' }}>
                 Управління бізнесом. <br/> На новому рівні.
@@ -733,104 +722,52 @@ export default function BusinessLandingPage() {
               </button>
             </div>
 
-            {/* ГІПЕРРЕАЛІСТИЧНИЙ IPHONE МАКЕТ */}
             <div style={{ position: 'relative', height: '100%', minHeight: '600px', display: 'flex', justifyContent: 'center' }}>
-
-              {/* Телефон вирівняний по центру правої колонки */}
               <div style={{ position: 'absolute', bottom: '-50px', left: '0', right: '0', display: 'flex', justifyContent: 'center', zIndex: 30 }}>
-
-                {/* 1. Срібний зовнішній кант */}
                 <div style={{
-                  width: '300px', height: '620px',
-                  backgroundColor: '#f1f5f9',
-                  borderRadius: '54px',
-                  padding: '4px',
-                  boxShadow: '0 30px 60px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.5)',
-                  position: 'relative'
+                  width: '300px', height: '620px', backgroundColor: '#f1f5f9', borderRadius: '54px', padding: '4px',
+                  boxShadow: '0 30px 60px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.5)', position: 'relative'
                 }}>
-
-                  {/* 2. Чорна внутрішня рамка екрану */}
                   <div style={{
-                    width: '100%', height: '100%',
-                    backgroundColor: '#111827',
-                    borderRadius: '50px',
-                    padding: '10px',
+                    width: '100%', height: '100%', backgroundColor: '#111827', borderRadius: '50px', padding: '10px',
                   }}>
-
-                    {/* 3. Сам Екран (Білий) */}
                     <div className="hide-scrollbar" style={{
-                      width: '100%', height: '100%',
-                      backgroundColor: '#ffffff',
-                      borderRadius: '40px',
-                      position: 'relative',
-                      overflowY: 'auto',
-                      overflowX: 'hidden'
+                      width: '100%', height: '100%', backgroundColor: '#ffffff', borderRadius: '40px', position: 'relative', overflowY: 'auto', overflowX: 'hidden'
                     }}>
-
-                      {/* Dynamic Island */}
                       <div style={{ position: 'absolute', top: '11px', left: '50%', transform: 'translateX(-50%)', width: '85px', height: '26px', backgroundColor: '#000000', borderRadius: '20px', zIndex: 20 }}></div>
+                      <div style={{ position: 'absolute', top: '15px', left: '24px', fontSize: '0.85rem', fontWeight: '800', color: '#111827', zIndex: 10, letterSpacing: '-0.02em' }}>9:41</div>
 
-                      {/* ЧАС (Ідеально вирівняний зліва) */}
-                      <div style={{ position: 'absolute', top: '15px', left: '24px', fontSize: '0.85rem', fontWeight: '800', color: '#111827', zIndex: 10, letterSpacing: '-0.02em' }}>
-                        9:41
-                      </div>
-
-                      {/* ВЕКТОРНИЙ СТАТУС БАР (Ідеально вирівняний справа) */}
                       <div style={{ position: 'absolute', top: '17px', right: '20px', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 10 }}>
-                        {/* Зв'язок */}
-                        <svg width="15" height="10" viewBox="0 0 18 12" fill="#111827" xmlns="http://www.w3.org/2000/svg">
-                           <rect x="0" y="8" width="3" height="4" rx="1" />
-                           <rect x="5" y="6" width="3" height="6" rx="1" />
-                           <rect x="10" y="3" width="3" height="9" rx="1" />
-                           <rect x="15" y="0" width="3" height="12" rx="1" />
-                        </svg>
-                        {/* Wi-Fi */}
-                        <svg width="15" height="10" viewBox="0 0 17 12" fill="#111827" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M8.5 12C9.32843 12 10 11.3284 10 10.5C10 9.67157 9.32843 9 8.5 9C7.67157 9 7 9.67157 7 10.5C7 11.3284 7.67157 12 8.5 12Z" />
-                          <path d="M12.515 7.621C11.432 6.649 10.036 6.136 8.5 6.136C6.964 6.136 5.568 6.649 4.485 7.621C4.159 7.913 3.661 7.884 3.369 7.558C3.076 7.231 3.105 6.733 3.432 6.441C4.805 5.21 6.579 4.536 8.5 4.536C10.421 4.536 12.195 5.21 13.568 6.441C13.895 6.733 13.924 7.231 13.631 7.558C13.339 7.884 12.841 7.913 12.515 7.621Z" />
-                          <path d="M15.92 4.498C13.968 2.766 11.352 1.745 8.5 1.745C5.648 1.745 3.032 2.766 1.08 4.498C0.745 4.795 0.248 4.755 -0.049 4.42C-0.346 4.085 -0.306 3.588 0.029 3.291C2.282 1.285 5.257 0.145 8.5 0.145C11.743 0.145 14.718 1.285 16.971 3.291C17.306 3.588 17.346 4.085 17.049 4.42C16.752 4.755 16.255 4.795 15.92 4.498Z" />
-                        </svg>
-                        {/* Батарея */}
-                        <svg width="22" height="10" viewBox="0 0 25 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#111827" strokeWidth="1"/>
-                          <rect x="2.5" y="2.5" width="17" height="7" rx="2" fill="#111827"/>
-                          <path d="M23 4.5C23.5523 4.5 24 4.94772 24 5.5V6.5C24 7.05228 23.5523 7.5 23 7.5" stroke="#111827" strokeWidth="1.5" strokeLinecap="round"/>
-                        </svg>
+                        <svg width="15" height="10" viewBox="0 0 18 12" fill="#111827" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="8" width="3" height="4" rx="1" /><rect x="5" y="6" width="3" height="6" rx="1" /><rect x="10" y="3" width="3" height="9" rx="1" /><rect x="15" y="0" width="3" height="12" rx="1" /></svg>
+                        <svg width="15" height="10" viewBox="0 0 17 12" fill="#111827" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 12C9.32843 12 10 11.3284 10 10.5C10 9.67157 9.32843 9 8.5 9C7.67157 9 7 9.67157 7 10.5C7 11.3284 7.67157 12 8.5 12Z" /><path d="M12.515 7.621C11.432 6.649 10.036 6.136 8.5 6.136C6.964 6.136 5.568 6.649 4.485 7.621C4.159 7.913 3.661 7.884 3.369 7.558C3.076 7.231 3.105 6.733 3.432 6.441C4.805 5.21 6.579 4.536 8.5 4.536C10.421 4.536 12.195 5.21 13.568 6.441C13.895 6.733 13.924 7.231 13.631 7.558C13.339 7.884 12.841 7.913 12.515 7.621Z" /><path d="M15.92 4.498C13.968 2.766 11.352 1.745 8.5 1.745C5.648 1.745 3.032 2.766 1.08 4.498C0.745 4.795 0.248 4.755 -0.049 4.42C-0.346 4.085 -0.306 3.588 0.029 3.291C2.282 1.285 5.257 0.145 8.5 0.145C11.743 0.145 14.718 1.285 16.971 3.291C17.306 3.588 17.346 4.085 17.049 4.42C16.752 4.755 16.255 4.795 15.92 4.498Z" /></svg>
+                        <svg width="22" height="10" viewBox="0 0 25 12" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#111827" strokeWidth="1"/><rect x="2.5" y="2.5" width="17" height="7" rx="2" fill="#111827"/><path d="M23 4.5C23.5523 4.5 24 4.94772 24 5.5V6.5C24 7.05228 23.5523 7.5 23 7.5" stroke="#111827" strokeWidth="1.5" strokeLinecap="round"/></svg>
                       </div>
 
-                      {/* Внутрішній контент екрану */}
                       <div style={{ padding: '1.2rem', paddingTop: '3.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                           <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827' }}>Сьогодні</div>
                           <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.8rem' }}>+</div>
                         </div>
-
                         <div style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginBottom: '4px' }}>10:00 - 11:30</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Чоловіча стрижка</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Олександр П.</div>
                         </div>
-
                         <div style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '700', marginBottom: '4px' }}>12:00 - 14:00</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Фарбування</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Марія К.</div>
                         </div>
-
                         <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '16px', padding: '1rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '700', marginBottom: '4px' }}>15:00 - 16:00</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Корекція бороди</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Іван С.</div>
                         </div>
                       </div>
-
-                      {/* Home Indicator */}
                       <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '4px', backgroundColor: '#cbd5e1', borderRadius: '10px', zIndex: 20 }}></div>
-
                     </div>
                   </div>
                 </div>
-
               </div>
             </div>
 
@@ -843,12 +780,8 @@ export default function BusinessLandingPage() {
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '4rem' }}>
             <div>
-              <h2 style={{ fontSize: 'clamp(2.2rem, 4vw, 3rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', lineHeight: '1.1', marginBottom: '1rem' }}>
-                Часті<br/>питання
-              </h2>
-              <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>
-                Ми зібрали відповіді на найпопулярніші питання користувачів.
-              </p>
+              <h2 style={{ fontSize: 'clamp(2.2rem, 4vw, 3rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', lineHeight: '1.1', marginBottom: '1rem' }}>Часті<br/>питання</h2>
+              <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>Ми зібрали відповіді на найпопулярніші питання користувачів.</p>
             </div>
 
             <div style={{ borderTop: '1px solid #e2e8f0' }}>
@@ -859,9 +792,7 @@ export default function BusinessLandingPage() {
                     <span className={`faq-icon ${openFaq === index ? 'open' : ''}`} style={{ fontSize: '1.2rem', color: '#64748b' }}>▼</span>
                   </button>
                   <div className={`faq-answer-wrapper ${openFaq === index ? 'open' : ''}`}>
-                    <div className="faq-answer-inner">
-                      <div style={{ paddingTop: '0.8rem' }}>{faq.a}</div>
-                    </div>
+                    <div className="faq-answer-inner"><div style={{ paddingTop: '0.8rem' }}>{faq.a}</div></div>
                   </div>
                 </div>
               ))}
@@ -875,9 +806,7 @@ export default function BusinessLandingPage() {
         <div className="container">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-               <div style={{ fontSize: '1.3rem', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em' }}>
-                Book<span style={{ color: '#8fae92' }}>Era</span>
-              </div>
+               <div style={{ fontSize: '1.3rem', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em' }}>Book<span style={{ color: '#8fae92' }}>Era</span></div>
               <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>© 2026 BookEra.</span>
             </div>
             <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>

@@ -1,8 +1,26 @@
 from datetime import datetime
 import enum
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Enum as SQLEnum, Float
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Enum as SQLEnum, Float, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
+
+
+class Appointment(Base):
+    __tablename__ = "appointments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, index=True)
+    service_id = Column(Integer)
+    client_id = Column(Integer)
+    master_id = Column(Integer)
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+    status = Column(String)  # може бути: "locked", "confirmed", "cancelled"
+    source = Column(String, default="Онлайн (Сторінка салону)")
+
+    # НОВЕ ПОЛЕ: час, коли тимчасовий лок згорить
+    expires_at = Column(DateTime, nullable=True)
+
 
 class RoleEnum(str, enum.Enum):
     client = "client"

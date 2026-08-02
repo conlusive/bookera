@@ -11,6 +11,7 @@ import { Icons } from '@/components/shared';
 const SERVICES_PER_PAGE = 5;
 const REVIEWS_PER_PAGE = 5;
 const REVIEW_MAX_LENGTH = 500;
+const LOCK_TIMEOUT_MINUTES = 10;
 
 const sortOptionsList = [
   { value: 'default', label: 'За замовчуванням' },
@@ -64,6 +65,9 @@ export default function SalonProfile() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isLoginView, setIsLoginView] = useState(true);
+
   // --- Стейт для хедера (Локальний пошук) ---
   const [headerSearchWhat, setHeaderSearchWhat] = useState('');
   const [headerSearchWhere, setHeaderSearchWhere] = useState('Львів');
@@ -96,7 +100,9 @@ export default function SalonProfile() {
   const [selectedService, setSelectedService] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+
   const [selectedMasterId, setSelectedMasterId] = useState<number | string>(0);
+  const [pendingBookingId, setPendingBookingId] = useState<number | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
 
   // --- Календар та дні ---
@@ -150,6 +156,98 @@ export default function SalonProfile() {
     if (slug) void loadDataFromSupabase();
   }, [slug]);
 
+  // 🟢 ОНОВЛЕНО: Функція точкового завантаження тільки розкладу
+  const fetchBookings = async (bizId: number) => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('business_id', bizId)
+      .neq('status', 'cancelled');
+
+    if (error) {
+      console.error("Помилка оновлення розкладу:", error);
+      return;
+    }
+
+    if (data) {
+      const now = Date.now();
+      const validBookings = data.filter((b: any) => {
+        if (b.status === 'blocked' && b.created_at) {
+          const lockTime = new Date(b.created_at).getTime();
+          if (now - lockTime > LOCK_TIMEOUT_MINUTES * 60000) return false;
+        }
+        return true;
+      });
+      setBookedAppointments(validBookings);
+    }
+  };
+
+  // 🟢 ОНОВЛЕНО: Надійна підписка на Supabase Realtime
+  useEffect(() => {
+    if (!salon?.id) return;
+
+    console.log("📡 Підключення до Supabase Realtime...");
+
+    const channel = supabase
+      .channel(`room_${salon.id}`)
+      .on(
+        'postgres_changes',
+        // ПРИБРАЛИ ФІЛЬТР ТУТ, слухаємо всю таблицю
+        { event: '*', schema: 'public', table: 'bookings' },
+        (payload) => {
+          console.log("🔥 Прилетіло оновлення бази:", payload);
+
+          // Фільтруємо зміни вже на фронтенді
+          const newRecord = payload.new;
+          const oldRecord = payload.old;
+
+          if (
+            (newRecord && newRecord.business_id === salon.id) ||
+            (oldRecord && oldRecord.business_id === salon.id) ||
+            // Якщо раптом id салону немає в payload (буває при DELETE), все одно оновлюємо
+            (!newRecord?.business_id && !oldRecord?.business_id)
+          ) {
+             console.log("🔄 Оновлюємо сітку годин...");
+             fetchBookings(salon.id);
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        console.log("⚡ Статус Realtime:", status);
+        if (err) console.error("❌ Помилка Realtime:", err);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [salon?.id]);
+
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (pendingBookingId && !bookingSuccess) {
+        const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/bookings?id=eq.${pendingBookingId}&status=eq.blocked`;
+        fetch(url, {
+          method: 'DELETE',
+          headers: {
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+          },
+          keepalive: true
+        }).catch(console.error);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (pendingBookingId && !bookingSuccess) {
+        supabase.from('bookings').delete().eq('id', pendingBookingId).eq('status', 'blocked').then();
+      }
+    };
+  }, [pendingBookingId, bookingSuccess]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -186,9 +284,10 @@ export default function SalonProfile() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentImageIndex, galleryPhotos.length]);
 
-  // --- Завантаження даних ---
+  // --- Завантаження початкових даних ---
   const loadDataFromSupabase = async () => {
-    setLoading(true);
+    if (!salon) setLoading(true);
+
     try {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug as string);
       let query = supabase.from('businesses').select('*');
@@ -214,17 +313,18 @@ export default function SalonProfile() {
 
         setSalon(bizData);
 
-        const [srvRes, staffRes, bookRes, revRes] = await Promise.all([
+        const [srvRes, staffRes, revRes] = await Promise.all([
           supabase.from('services').select('*').eq('business_id', bizData.id).order('order_index', { ascending: true }),
           supabase.from('staff').select('*').eq('business_id', bizData.id),
-          supabase.from('bookings').select('*').eq('business_id', bizData.id).neq('status', 'cancelled'),
           supabase.from('reviews').select('*').eq('business_id', bizData.id).order('created_at', { ascending: false })
         ]);
 
         if (srvRes.data) setServices(srvRes.data);
         if (staffRes.data) setTeam(staffRes.data);
-        if (bookRes.data) setBookedAppointments(bookRes.data);
         if (revRes.data) setReviews(revRes.data);
+
+        // Окремо вантажимо розклад
+        await fetchBookings(bizData.id);
       }
     } catch (error) {
       console.error("Непередбачена помилка:", error);
@@ -364,62 +464,111 @@ export default function SalonProfile() {
     setIsModalOpen(true);
   };
 
-  const closeModal = () => {
+  const closeModal = async () => {
     setIsModalOpen(false);
+
+    if (pendingBookingId && !bookingSuccess) {
+      await supabase.from('bookings').delete().eq('id', pendingBookingId).eq('status', 'blocked');
+    }
+
     setTimeout(() => {
       setBookingStage('selection');
       setBookingSuccess(false);
+      setPendingBookingId(null);
     }, 300);
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (!selectedTime) return alert("Оберіть час!");
     if (!isLoggedIn) {
        alert("Будь ласка, увійдіть в акаунт для бронювання.");
        return router.push('/login');
     }
+
+    const duration = selectedService?.duration || selectedService?.duration_minutes || 60;
+    const reqStart = parseTime(selectedTime!);
+    const reqEnd = reqStart + duration;
+
+    const { data: doubleCheckData } = await supabase.from('bookings')
+      .select('*')
+      .eq('business_id', salon.id)
+      .eq('booking_date', selectedDate);
+
+    if (doubleCheckData) {
+        const now = Date.now();
+        const conflict = doubleCheckData.some(b => {
+           if (b.status === 'cancelled') return false;
+           if (b.status === 'blocked' && b.created_at) {
+              if (now - new Date(b.created_at).getTime() > LOCK_TIMEOUT_MINUTES * 60000) return false;
+           }
+           if (String(b.staff_id) !== String(selectedMasterId) && selectedMasterId !== 0 && selectedMasterId !== '0') return false;
+
+           const bStart = parseTime(b.start_time.substring(0, 5));
+           const bEnd = parseTime(b.end_time.substring(0, 5));
+           return isTimeOverlapping(reqStart, reqEnd, bStart, bEnd);
+        });
+
+        if (conflict) {
+           alert("Вибачте, цей час щойно зайняв інший користувач. Будь ласка, оберіть інший.");
+           fetchBookings(salon.id);
+           return;
+        }
+    }
+
+    const finalMasterId = getAvailableMasterForSlot(selectedDate, reqStart, reqEnd, selectedMasterId);
+    if (finalMasterId === null) {
+      alert("Вибачте, цей час щойно зайняли. Будь ласка, оберіть інший.");
+      return;
+    }
+
+    const endTimeStr = formatTime(reqEnd) + ':00';
+
+    const { data, error } = await supabase.from('bookings').insert([{
+      business_id: salon.id,
+      service_id: selectedService.id,
+      staff_id: finalMasterId,
+      client_name: userName || 'Клієнт BookEra',
+      client_phone: '+380000000000',
+      booking_date: selectedDate,
+      start_time: `${selectedTime}:00`,
+      end_time: endTimeStr,
+      status: 'blocked',
+      source: 'DIRECT'
+    }]).select().single();
+
+    if (error) {
+      console.error("Помилка блокування:", error);
+      alert("Цей час щойно почав бронювати інший клієнт. Будь ласка, оберіть інший час.");
+      void fetchBookings(salon.id);
+      return;
+    }
+
+    setPendingBookingId(data.id);
+    setSelectedMasterId(finalMasterId);
     setBookingStage('confirmation');
   };
 
   const handleConfirmBooking = async () => {
     try {
-      const duration = selectedService?.duration || selectedService?.duration_minutes || 60;
-      const reqStart = parseTime(selectedTime!);
-      const reqEnd = reqStart + duration;
+      const bookingSource = localStorage.getItem('booking_source') || 'DIRECT';
 
-      const finalMasterId = getAvailableMasterForSlot(selectedDate, reqStart, reqEnd, selectedMasterId);
-
-      if (finalMasterId === null) {
-        alert("Вибачте, цей час щойно зайняли. Будь ласка, оберіть інший.");
-        setBookingStage('selection');
-        return;
-      }
-
-      const endTimeStr = formatTime(reqEnd) + ':00';
-
-      const bookingData = {
-        business_id: salon.id,
-        service_id: selectedService.id,
-        staff_id: finalMasterId,
-        client_name: userName || 'Клієнт BookEra',
-        client_phone: '+380000000000',
-        booking_date: selectedDate,
-        start_time: `${selectedTime}:00`,
-        end_time: endTimeStr,
-        status: 'confirmed',
-        source: 'Онлайн (Сторінка салону)'
-      };
-
-      const { error } = await supabase.from('bookings').insert([bookingData]);
+      const { error } = await supabase.from('bookings')
+        .update({
+          status: 'confirmed',
+          source: bookingSource
+        })
+        .eq('id', pendingBookingId);
 
       if (error) {
-        console.error("Помилка бази даних:", error);
+        console.error("Помилка підтвердження:", error);
         alert("Помилка бронювання: " + error.message);
         return;
       }
 
+      localStorage.removeItem('booking_source');
+
       setBookingSuccess(true);
-      void loadDataFromSupabase();
+      void fetchBookings(salon.id);
       setTimeout(() => {
         closeModal();
       }, 2500);
@@ -495,7 +644,6 @@ export default function SalonProfile() {
   }, [reviews, salon]);
   const totalReviewsCount = reviews.length > 0 ? reviews.length : (salon?.reviews_count ? parseInt(salon.reviews_count) : 0);
 
-  // Хелпер для рендеру календаря в хедері
   const renderCalendarDays = () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -559,117 +707,80 @@ export default function SalonProfile() {
       <style dangerouslySetInnerHTML={{ __html: `
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; }
         .anim { transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); }
-        
-        /* КНОПКИ В СТИЛІ DUSTY COAL */
         .btn-dark { background-color: #222222 !important; color: #ffffff !important; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
         .btn-dark:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); }
-        
-        /* ХОВЕРИ ХЕДЕРА (Як на головній) */
         .header-link { color: #475569; font-weight: 600; font-size: 0.95rem; text-decoration: none; transition: 0.2s; }
         .header-link:hover { color: #8fae92; }
         .header-user-wrapper { cursor: pointer; display: flex; align-items: center; gap: 0.6rem; transition: 0.2s; }
         .header-user-name { color: #222222; font-weight: 700; font-size: 0.95rem; transition: 0.2s; }
         .header-user-wrapper:hover .header-user-name { color: #8fae92; }
-        
         .section-card { background-color: #ffffff; border-radius: 24px; padding: 2.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; }
         .section-title { font-size: 1.5rem; font-weight: 800; color: #222222; margin: 0; letter-spacing: -0.02em; }
-        
         .service-pill { background-color: transparent; border-bottom: 1px solid #f1f5f9; padding: 1.5rem 0; display: flex; flex-direction: column; gap: 0.8rem; transition: all 0.2s ease; }
         .service-pill:last-child { border-bottom: none; }
         .service-pill-top { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-        
-        /* ДИНАМІЧНИЙ КОЛІР ДЛЯ БЕЙДЖА */
         .service-availability { display: flex; align-items: center; gap: 0.4rem; color: var(--dynamic-accent); font-size: 0.85rem; font-weight: 700; background: #f8fafc; padding: 0.4rem 0.8rem; border-radius: 8px; width: fit-content; }
         .service-availability.no-slots { background: #fef2f2; color: #ef4444; }
-        
         .service-btn { background: #222222; border: 1px solid #222222; color: #ffffff; padding: 0.5rem 1.25rem; border-radius: 10px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease; }
         .service-btn:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); }
-        
         .load-more-btn { width: 100%; background: transparent; border: 1px dashed #cbd5e1; color: #475569; padding: 1rem; border-radius: 16px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease; display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 1rem; }
         .load-more-btn:hover { background: #f8fafc; border-color: #94a3b8; color: #222222; }
-        
         .review-filter-btn { background: transparent; border: 1px solid #e2e8f0; color: #64748b; padding: 0.4rem 1rem; border-radius: 99px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
         .review-filter-btn:hover { border-color: #cbd5e1; color: #222222; }
         .review-filter-btn.active { background: #222222; color: #ffffff; border-color: #222222; }
-        
         .page-btn { width: 36px; height: 36px; border-radius: 10px; background: transparent; border: 1px solid #e2e8f0; color: #64748b; font-weight: 700; cursor: pointer; transition: 0.2s; display: flex; justify-content: center; align-items: center; }
         .page-btn:hover { border-color: #cbd5e1; color: #222222; }
         .page-btn.active { background: #222222; color: #ffffff; border-color: #222222; }
-        
         .star-btn { background: transparent; border: none; cursor: pointer; font-size: 1.8rem; line-height: 1; padding: 0 2px; transition: 0.2s; color: #e2e8f0; outline: none; }
         .star-btn.active { color: #f59e0b; }
-        
         .review-textarea { width: 100%; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem 1rem 2rem 1rem; font-size: 0.95rem; font-family: inherit; resize: vertical; min-height: 100px; max-height: 200px; outline: none; transition: 0.2s; background: #ffffff; box-sizing: border-box; }
         .review-textarea:focus { border-color: #222222; box-shadow: 0 0 0 3px rgba(34,34,34,0.05); }
         .review-expand-btn { background: none; border: none; padding: 0; color: #222222; font-weight: 700; font-size: 0.95rem; cursor: pointer; margin-left: 6px; }
         .review-expand-btn:hover { text-decoration: underline; }
-        
         .sort-trigger { display: flex; align-items: center; gap: 0.4rem; background: transparent; border: none; font-size: 0.95rem; color: #64748b; cursor: pointer; padding: 0.5rem 0; transition: color 0.2s; font-family: inherit; font-weight: 500; }
         .sort-trigger:hover { color: #222222; }
         .sort-trigger span { color: #222222; font-weight: 700; }
         .search-dropdown { position: absolute; top: calc(100% + 8px); right: 0; width: 220px; background: #ffffff; border-radius: 16px; box-shadow: 0 16px 40px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; z-index: 50; max-height: 280px; overflow-y: auto; padding: 0.5rem; }
         .search-dropdown-item { padding: 0.6rem 0.75rem; cursor: pointer; border-radius: 8px; font-size: 0.9rem; color: #334155; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%; border: none; background: transparent; }
         .search-dropdown-item:hover { background: #f8fafc; color: #222222; font-weight: 600; }
-        
         .action-btn { display: flex; align-items: center; gap: 0.4rem; background: #ffffff; border: 1px solid #e2e8f0; color: #222222; padding: 0.6rem 1.2rem; border-radius: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease; }
         .action-btn:hover { background: #f8fafc; border-color: #cbd5e1; transform: translateY(-1px); }
         .icon-btn:hover { background: #f8fafc !important; border-color: #cbd5e1 !important; transform: translateY(-1px); }
-        
         .team-avatar { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #64748b; margin-bottom: 0.75rem; overflow: hidden; background: #f1f5f9; transition: 0.2s; }
         .gallery-main { width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: 0.3s; }
         .gallery-main:hover { filter: brightness(0.95); }
-        
-        /* Стрілки для галереї */
         .gallery-nav-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.15); border: none; color: white; width: 56px; height: 56px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.2s; backdrop-filter: blur(4px); font-size: 2rem; z-index: 2010; font-weight: 300; padding-bottom: 4px; }
         .gallery-nav-btn:hover { background: rgba(255,255,255,0.3); transform: translateY(-50%) scale(1.1); }
-        
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* Ховаємо складний пошук на малих екранах */
-        @media (max-width: 900px) {
-          .search-loc, .search-date, .search-divider-responsive { display: none !important; }
-        }
-        
-        /* --- APPLE-STYLE MODAL CSS --- */
+        @media (max-width: 900px) { .search-loc, .search-date, .search-divider-responsive { display: none !important; } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes modalEntrance { 
-          from { opacity: 0; transform: translateY(20px) scale(0.98); } 
-          to { opacity: 1; transform: translateY(0) scale(1); } 
-        }
+        @keyframes modalEntrance { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
         .modal-backdrop { animation: fadeIn 0.25s ease-out forwards; }
         .modal-content { animation: modalEntrance 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        
         .modal-label { font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.75rem; display: block; }
-        
         .master-card { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0.8rem 0.5rem; border-radius: 16px; border: 1.5px solid transparent; background: #f8fafc; cursor: pointer; transition: all 0.2s ease; min-width: 85px; flex-shrink: 0; }
         .master-card:hover:not(.active) { background: #f1f5f9; }
         .master-card.active { border-color: #222222; background-color: #222222; }
         .master-card.active .master-name { color: #ffffff !important; }
         .master-card.active .team-avatar { background-color: #333 !important; color: #fff !important; }
-        
         .date-card { padding: 0.8rem 0.5rem; border-radius: 16px; border: 1.5px solid transparent; background: #f8fafc; cursor: pointer; text-align: center; min-width: 65px; transition: all 0.2s ease; flex-shrink: 0; }
         .date-card:hover:not(.active) { background: #f1f5f9; }
         .date-card.active { background-color: #222222; color: #ffffff !important; border-color: #222222; box-shadow: 0 6px 16px rgba(34, 34, 34, 0.15); }
         .date-card.active .date-name { opacity: 1 !important; color: #ffffff !important; }
-        
         .time-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; max-height: 200px; overflow-y: auto; padding-right: 4px; padding-bottom: 8px; }
         .time-pill { border: none; background-color: #f8fafc; padding: 0.6rem 0.2rem; border-radius: 12px; cursor: pointer; font-size: 0.9rem; font-weight: 700; transition: all 0.2s; color: #475569; width: 100%; border: 1px dashed transparent; }
         .time-pill:hover:not(.busy):not(.active) { background-color: #f1f5f9; border-color: #cbd5e1; }
         .time-pill.active { background-color: #222222 !important; color: #ffffff !important; box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); border-color: #222222; }
         .time-pill.busy { background-color: transparent !important; color: #cbd5e1 !important; cursor: not-allowed !important; border: 1px dashed #e2e8f0; text-decoration: line-through; }
-        
         .details-row { display: flex; align-items: flex-end; margin-bottom: 1rem; }
         .details-label { color: #64748b; font-size: 0.85rem; padding-right: 8px; font-weight: 600; }
         .details-value { color: #222222; font-size: 0.95rem; font-weight: 800; text-align: right; padding-left: 8px; }
         .details-dots { flex-grow: 1; border-bottom: 1px dashed #cbd5e1; margin-bottom: 4px; opacity: 0.6; }
-
-        /* Чиста анімація успіху з динамічним кольором */
         .success-circle { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #ffffff; margin: 0 auto; border: 2px solid #e2e8f0; }
         .success-svg { width: 32px; height: 32px; }
         .success-check { stroke: var(--dynamic-accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: drawCheck 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; }
         @keyframes drawCheck { to { stroke-dashoffset: 0; } }
-
         .mobile-sticky-btn { display: none; }
         @media (max-width: 768px) {
           .mobile-sticky-btn { display: block; position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 1rem 1.5rem; z-index: 900; box-shadow: 0 -10px 30px rgba(0,0,0,0.1); border-top: 1px solid #f1f5f9; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
@@ -681,7 +792,6 @@ export default function SalonProfile() {
       <header style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '72px', backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #f1f5f9', zIndex: 100, display: 'flex', alignItems: 'center' }}>
         <div className="container" style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '1rem' }}>
 
-          {/* ЛОГОТИП (ФІКСОВАНА ШИРИНА) */}
           <div style={{ width: '180px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
             <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline' }}>
               <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', transition: 'color 0.3s ease' }}>
@@ -690,105 +800,48 @@ export default function SalonProfile() {
             </Link>
           </div>
 
-          {/* 🟢 НОВИЙ КОМПАКТНИЙ ПОШУК (ПОСУНУТИЙ ЛІВІШЕ, КВАДРАТНІ КУТИ) */}
-          <div style={{
-            flex: 1,
-            display: 'flex',
-            justifyContent: 'flex-start', // Притискаємо до лівого краю
-            marginLeft: '1rem' // Відступ від логотипу
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: '#ffffff',
-              border: '1px solid #e2e8f0', // Тонкий стильний бордер
-              borderRadius: '12px', // 🟢 Квадратніші кути
-              padding: '4px', // 🟢 Ідеальні відступи
-              boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
-              width: '100%',
-              maxWidth: '650px', // Обмеження ширини щоб не налізало на меню
-              position: 'relative',
-              height: '42px' // Фіксована висота
-            }}>
-
-              {/* ЩО */}
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', marginLeft: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', width: '100%', maxWidth: '650px', position: 'relative', height: '42px' }}>
               <div style={{ flex: 1.3, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.5rem 0 1rem', height: '100%' }}>
                 <div style={{ width: '16px', height: '16px', color: '#94a3b8', marginRight: '0.6rem', flexShrink: 0, display: 'flex' }}><Icons.Search /></div>
-                <input
-                  type="text" placeholder="Послуга, бренд або салон"
-                  value={headerSearchWhat} onChange={(e) => setHeaderSearchWhat(e.target.value)}
-                  style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', backgroundColor: 'transparent' }}
-                />
+                <input type="text" placeholder="Послуга, бренд або салон" value={headerSearchWhat} onChange={(e) => setHeaderSearchWhat(e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', backgroundColor: 'transparent' }} />
               </div>
-
               <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
-
-              {/* ДЕ */}
               <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.5rem', height: '100%' }}>
                 <div style={{ width: '16px', height: '16px', color: '#94a3b8', marginRight: '0.6rem', flexShrink: 0, display: 'flex' }}><Icons.MapPin /></div>
-                <input
-                  type="text" placeholder="Місто"
-                  value={headerSearchWhere} onChange={(e) => setHeaderSearchWhere(e.target.value)}
-                  style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', fontWeight: '600', backgroundColor: 'transparent' }}
-                />
+                <input type="text" placeholder="Місто" value={headerSearchWhere} onChange={(e) => setHeaderSearchWhere(e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', fontWeight: '600', backgroundColor: 'transparent' }} />
               </div>
-
               <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
-
-              {/* КОЛИ */}
               <div ref={headerDateRef} onClick={() => setIsDateOpen(!isDateOpen)} style={{ flex: 0.8, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 1.25rem 0 0.5rem', height: '100%', cursor: 'pointer' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 <span style={{ color: headerSearchDate ? '#222222' : '#64748b', fontSize: '0.95rem', fontWeight: headerSearchDate ? '600' : '400', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {headerSearchDate ? new Date(headerSearchDate).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' }) : 'Будь-коли'}
                 </span>
-
                 {isDateOpen && (
                   <div className="search-dropdown anim" style={{ position: 'absolute', maxHeight: 'none', overflowY: 'visible', padding: '1.5rem', width: '320px', right: 0, left: 'auto', top: 'calc(100% + 14px)', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', background: '#fff' }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                      </button>
-                      <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '0.95rem', textTransform: 'capitalize' }}>
-                        {currentMonth.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}
-                      </div>
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                      </button>
+                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                      <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '0.95rem', textTransform: 'capitalize' }}>{currentMonth.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}</div>
+                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.8rem', textTransform: 'uppercase' }}>
-                      <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
-                      {renderCalendarDays()}
-                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.8rem', textTransform: 'uppercase' }}><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>{renderCalendarDays()}</div>
                   </div>
                 )}
               </div>
-
-              {/* КНОПКА ПОШУКУ */}
-              <button onClick={() => router.push('/')} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
-                <div style={{ display: 'flex', width: '16px', height: '16px', color: '#ffffff' }}><Icons.Search /></div>
-              </button>
-
+              <button onClick={() => router.push('/')} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}><div style={{ display: 'flex', width: '16px', height: '16px', color: '#ffffff' }}><Icons.Search /></div></button>
             </div>
           </div>
 
-          {/* ПРОФІЛЬ ТА МЕНЮ (ФІКСОВАНА ШИРИНА) */}
           <div style={{ width: '280px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
             <Link href={userRole === 'vendor' ? "/cabinet" : "/business"} className="nav-link" style={{ whiteSpace: 'nowrap', color: '#475569', fontWeight: '600', textDecoration: 'none' }}>Для бізнесу</Link>
-
             {isLoggedIn ? (
               <div style={{ position: 'relative' }} ref={profileRef}>
                 <div onClick={() => setIsProfileOpen(!isProfileOpen)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', userSelect: 'none', padding: '0.3rem', borderRadius: '20px', transition: '0.2s' }}>
                   <span style={{ color: '#111827', transition: '0.2s', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }}>{userName}</span>
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                    fontWeight: '800', fontSize: '0.9rem', transition: '0.2s', flexShrink: 0
-                  }}>{initials}</div>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827', fontWeight: '800', fontSize: '0.9rem', transition: '0.2s', flexShrink: 0 }}>{initials}</div>
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}><path d="M1 1L5 5L9 1" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: '0.2s' }}/></svg>
                 </div>
-
                 {isProfileOpen && (
                   <div className="anim" style={{ position: 'absolute', top: '150%', right: 0, width: '230px', background: '#ffffff', borderRadius: '16px', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.5rem', zIndex: 1001, border: '1px solid #e2e8f0' }}>
                     <div style={{ padding: '0.5rem 1rem 0.75rem 1rem', borderBottom: '1px solid #e2e8f0', marginBottom: '0.5rem' }}>

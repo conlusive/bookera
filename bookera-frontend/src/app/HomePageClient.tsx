@@ -920,7 +920,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
           {/* ПРОФІЛЬ ТА МЕНЮ */}
           <div style={{ width: '280px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
-            <Link href={userRole === 'vendor' ? "/cabinet" : "/business"} className="nav-link" style={{ whiteSpace: 'nowrap' }}>Для бізнесу</Link>
+            <Link href="/business" className="nav-link" style={{ whiteSpace: 'nowrap' }}>Для бізнесу</Link>
 
             {isLoggedIn ? (
               <div style={{ position: 'relative' }} ref={profileRef}>
@@ -1362,7 +1362,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 BookEra Business — це повноцінна екосистема для власників салонів та приватних майстрів. Залучайте нових клієнтів, керуйте розкладом та ведіть фінансову аналітику в одній програмі.
               </p>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2.5rem' }}>
-                <Link href={userRole === 'vendor' ? "/cabinet" : "/business"} style={{ textDecoration: 'none' }}>
+                <Link href="/business" style={{ textDecoration: 'none' }}>
                   <button className="btn-theme anim" style={{ padding: '1rem 2.5rem', borderRadius: '30px', fontSize: '1rem' }}>Створити профіль</button>
                 </Link>
               </div>

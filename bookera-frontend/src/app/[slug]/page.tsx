@@ -171,7 +171,7 @@ export default function SalonProfile() {
       .neq('status', 'cancelled');
 
     if (error) {
-      console.error("Помилка оновлення розкладу:", error);
+      console.warn("Помилка оновлення розкладу (можливо пуста таблиця):", error);
       return;
     }
 

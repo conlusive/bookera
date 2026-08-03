@@ -141,11 +141,19 @@ export default function BusinessRegisterWizard() {
         end: value.close
       }));
 
+      // 1. Створюємо бізнес
+      const generatedSlug = formData.businessName
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\sа-їієґ-]/g, '')
+        .replace(/[\s_-]+/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+
       const { data: business, error: bizError } = await supabase
         .from('businesses')
         .insert({
           owner_id: userId,
           name: formData.businessName,
+          slug: generatedSlug,
           category: formData.businessCategory,
           business_type: formData.businessType,
           workspace_type: formData.workspace,
@@ -153,13 +161,15 @@ export default function BusinessRegisterWizard() {
              ? formData.city.trim()
              : `${formData.city}, ${formData.street} ${formData.addressDetails}`.trim(),
           phone: `+380${formData.phone}`,
-          shifts: mappedShifts
+          shifts: mappedShifts,
+          created_at: new Date().toISOString()
         })
         .select()
         .single();
 
       if (bizError) throw bizError;
 
+      // 2. Зберігаємо послуги
       if (formData.services.length > 0) {
         const servicesToInsert = formData.services.map((s, index) => ({
           business_id: business.id,
@@ -171,29 +181,29 @@ export default function BusinessRegisterWizard() {
         await supabase.from('services').insert(servicesToInsert);
       }
 
+      // 3. ВІДПРАВЛЯЄМО ЗАПРОШЕННЯ КОМАНДІ ЧЕРЕЗ FASTAPI
       if (formData.staff.length > 0) {
-        const staffToInsert = formData.staff.map(s => {
-          const isOwner = s.name.includes('Власник');
-          return {
-            business_id: business.id,
-            name: isOwner ? (userName || 'Власник бізнесу') : s.name,
-            title: s.role,
-            email: s.email || null,
-            phone: s.phone ? `+380${s.phone}` : (isOwner ? `+380${formData.phone}` : null),
-            role: isOwner ? 'owner' : 'master',
-            status: isOwner ? 'active' : 'pending',
-            provides_services: true,
-            commission_rate: 40,
-            fixed_salary: 0
-          };
-        });
+        for (const member of formData.staff) {
+          const isOwner = member.name.includes('Власник');
 
-        const { error: staffError } = await supabase.from('staff').insert(staffToInsert);
-        if (staffError) throw new Error("Не вдалося зберегти команду.");
+          if (!isOwner && member.email) {
+            // Звертаємося до нашого бекенду, який відправить реальний email
+            await fetch(`http://127.0.0.1:8000/businesses/${business.id}/invites`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: member.email,
+                role: member.role.toLowerCase().includes('адмін') ? 'admin' : 'master'
+              })
+            });
+          }
+        }
       }
 
-      await supabase.from('profiles').update({ role: 'vendor' }).eq('id', userId);
-      localStorage.setItem('userRole', 'vendor');
+      // 4. Оновлюємо роль власника
+      await supabase.from('profiles').update({ role: 'owner' }).eq('id', userId);
+      localStorage.setItem('userRole', 'owner');
+
       router.push('/cabinet');
 
     } catch (error: any) {

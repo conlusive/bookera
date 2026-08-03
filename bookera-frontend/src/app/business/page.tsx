@@ -155,11 +155,6 @@ export default function BusinessLandingPage() {
         setInitials(init.toUpperCase());
       }
 
-      if (storedRole === 'vendor') {
-        setTimeout(() => {
-          router.replace('/cabinet');
-        }, 50);
-      }
     }
 
     let ticking = false;
@@ -338,11 +333,32 @@ export default function BusinessLandingPage() {
     }
   };
 
-  const handleStartBusinessClick = () => {
-    if (userRole === 'vendor') {
-      router.push('/cabinet');
-    } else if (isLoggedIn) {
-      router.push('/business/register');
+  const handleStartBusinessClick = async () => {
+    if (isLoggedIn) {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setIsLoginView(false);
+        setIsAuthModalOpen(true);
+        return;
+      }
+
+      // 🔍 ПЕРЕВІРЯЄМО: чи є у цього власника реальний бізнес в БД
+      const { data: existingBusiness } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('owner_id', userId)
+        .maybeSingle();
+
+      if (existingBusiness) {
+        // Якщо бізнес є — сміливо пускаємо в кабінет
+        router.push('/cabinet');
+      } else {
+        // Якщо бізнес був видалений — оновлюємо статус назад на клієнта і ведемо на реєстрацію нового
+        await supabase.from('profiles').update({ role: 'client' }).eq('id', userId);
+        localStorage.setItem('userRole', 'client');
+        setUserRole('client');
+        router.push('/business/register');
+      }
     } else {
       setIsLoginView(false);
       setIsAuthModalOpen(true);

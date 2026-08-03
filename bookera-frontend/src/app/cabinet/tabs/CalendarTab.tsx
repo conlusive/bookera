@@ -69,7 +69,16 @@ export default function CalendarTab({ business, team, services, refreshClients }
     if (business) {
       if (business.tasks) setTasks(business.tasks);
       if (business.cal_settings) setCalSettings(business.cal_settings);
-      if (business.shifts) setShifts(business.shifts);
+      if (business.shifts) {
+        if (Array.isArray(business.shifts)) {
+          setShifts(business.shifts);
+        } else if (typeof business.shifts === 'string') {
+          try {
+            const parsed = JSON.parse(business.shifts);
+            if (Array.isArray(parsed)) setShifts(parsed);
+          } catch (e) {}
+        }
+      }
     }
   }, [business]);
 
@@ -427,14 +436,23 @@ export default function CalendarTab({ business, team, services, refreshClients }
 
   // --- РОЗРАХУНКИ СІТКИ ---
   const effectiveShifts = (() => {
+    let targetShifts = shifts;
     if (filterMaster !== 'all') {
       const m = team.find((t: any) => String(t.id) === String(filterMaster));
-      if (m && m.shifts && m.shifts.length === 7) return m.shifts;
+      if (m && m.shifts) {
+        if (Array.isArray(m.shifts)) {
+          targetShifts = m.shifts;
+        } else if (typeof m.shifts === 'string') {
+          try {
+            targetShifts = JSON.parse(m.shifts);
+          } catch (e) {}
+        }
+      }
     }
-    return shifts;
+    return Array.isArray(targetShifts) ? targetShifts : shifts;
   })();
 
-  const activeShifts = effectiveShifts.filter((s: any) => s.active);
+  const activeShifts = Array.isArray(effectiveShifts) ? effectiveShifts.filter((s: any) => s.active) : [];
   let gridStartHour = 8;
   let gridEndHour = 20;
 

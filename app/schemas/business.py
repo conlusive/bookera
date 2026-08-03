@@ -1,4 +1,12 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+from app.models.user import RoleEnum
+
+class InviteCreate(BaseModel):
+    email: EmailStr
+    role: RoleEnum
+
+class InviteAccept(BaseModel):
+    token: str
 
 class BusinessBase(BaseModel):
     name: str

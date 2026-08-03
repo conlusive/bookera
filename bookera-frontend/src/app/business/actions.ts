@@ -2,7 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 
-export async function signUpUser(formData: { email: string; password: username } & any) {
+export async function signUpUser(formData: { email: string; password: string; fullName?: string } & any) {
   const supabase = createClient()
 
   // 1. Реєстрація користувача в системі Supabase Auth

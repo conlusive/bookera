@@ -56,6 +56,7 @@ export default function SalonProfile() {
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   // --- Стейт юзера ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -65,13 +66,19 @@ export default function SalonProfile() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
+  // --- Стейт авторизації (Модалка) ---
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isLoginView, setIsLoginView] = useState(true);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [regFirstName, setRegFirstName] = useState('');
+  const [regLastName, setRegLastName] = useState('');
 
   // --- Стейт для хедера (Локальний пошук) ---
   const [headerSearchWhat, setHeaderSearchWhat] = useState('');
   const [headerSearchWhere, setHeaderSearchWhere] = useState('Львів');
   const [headerSearchDate, setHeaderSearchDate] = useState('');
+  const [searchTime, setSearchTime] = useState(''); // 🔥 Додано стейт для часу як на головній
   const [isDateOpen, setIsDateOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const headerDateRef = useRef<HTMLDivElement>(null);
@@ -156,7 +163,6 @@ export default function SalonProfile() {
     if (slug) void loadDataFromSupabase();
   }, [slug]);
 
-  // 🟢 ОНОВЛЕНО: Функція точкового завантаження тільки розкладу
   const fetchBookings = async (bizId: number) => {
     const { data, error } = await supabase
       .from('bookings')
@@ -182,40 +188,29 @@ export default function SalonProfile() {
     }
   };
 
-  // 🟢 ОНОВЛЕНО: Надійна підписка на Supabase Realtime
+  // 🔥 Виправлений useEffect для Realtime (БЕЗ синтаксичних помилок)
   useEffect(() => {
     if (!salon?.id) return;
-
-    console.log("📡 Підключення до Supabase Realtime...");
 
     const channel = supabase
       .channel(`room_${salon.id}`)
       .on(
         'postgres_changes',
-        // ПРИБРАЛИ ФІЛЬТР ТУТ, слухаємо всю таблицю
         { event: '*', schema: 'public', table: 'bookings' },
-        (payload) => {
-          console.log("🔥 Прилетіло оновлення бази:", payload);
-
-          // Фільтруємо зміни вже на фронтенді
+        (payload: any) => { // Додано : any
           const newRecord = payload.new;
           const oldRecord = payload.old;
 
           if (
             (newRecord && newRecord.business_id === salon.id) ||
             (oldRecord && oldRecord.business_id === salon.id) ||
-            // Якщо раптом id салону немає в payload (буває при DELETE), все одно оновлюємо
             (!newRecord?.business_id && !oldRecord?.business_id)
           ) {
-             console.log("🔄 Оновлюємо сітку годин...");
              fetchBookings(salon.id);
           }
         }
       )
-      .subscribe((status, err) => {
-        console.log("⚡ Статус Realtime:", status);
-        if (err) console.error("❌ Помилка Realtime:", err);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -284,6 +279,17 @@ export default function SalonProfile() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentImageIndex, galleryPhotos.length]);
 
+  const handleHeaderSearch = () => {
+    const params = new URLSearchParams();
+    if (headerSearchWhat) params.append('what', headerSearchWhat);
+    if (headerSearchWhere) params.append('where', headerSearchWhere);
+    if (headerSearchDate) params.append('date', headerSearchDate);
+    if (searchTime) params.append('time', searchTime);
+
+    // Перекидаємо на головну з усіма параметрами в URL
+    router.push(`/?${params.toString()}`);
+  };
+
   // --- Завантаження початкових даних ---
   const loadDataFromSupabase = async () => {
     if (!salon) setLoading(true);
@@ -299,8 +305,9 @@ export default function SalonProfile() {
 
       const { data: bizData, error: bizErr } = await query.single();
 
-      if (bizErr) {
-        console.error("Помилка завантаження закладу:", bizErr);
+      if (bizErr || !bizData) {
+        console.error("Салон не знайдено або помилка:", bizErr);
+        setNotFound(true);
         setLoading(false);
         return;
       }
@@ -323,11 +330,11 @@ export default function SalonProfile() {
         if (staffRes.data) setTeam(staffRes.data);
         if (revRes.data) setReviews(revRes.data);
 
-        // Окремо вантажимо розклад
         await fetchBookings(bizData.id);
       }
     } catch (error) {
       console.error("Непередбачена помилка:", error);
+      setNotFound(true);
     } finally {
       setLoading(false);
     }
@@ -455,7 +462,88 @@ export default function SalonProfile() {
 
   const totalReviewPages = Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE);
 
-  // --- Обробники подій модалки ---
+  // --- Функції Модалки Авторизації ---
+  const handleModalAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (isLoginView) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword,
+        });
+
+        if (error) {
+          alert(`Помилка входу: ${error.message}`);
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, role')
+          .eq('id', data.user.id)
+          .single();
+
+        const metadataName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name;
+        let finalName = profile?.full_name || metadataName || 'Гість';
+
+        if (finalName.includes('@')) {
+          finalName = 'Користувач';
+        }
+
+        const finalRole = profile?.role || 'client';
+
+        localStorage.setItem('userName', finalName);
+        localStorage.setItem('userRole', finalRole);
+        localStorage.setItem('userId', data.user.id);
+
+        setUserName(finalName);
+        setUserRole(finalRole);
+        const nameParts = finalName.split(' ');
+        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
+        setInitials(init.toUpperCase());
+
+        setIsLoggedIn(true);
+        setIsAuthModalOpen(false);
+
+        if (finalRole === 'vendor') {
+          router.push('/cabinet');
+        }
+      } else {
+        const targetEmail = loginEmail.trim().toLowerCase();
+        const targetFullName = `${regFirstName} ${regLastName}`.trim();
+
+        const { data, error } = await supabase.auth.signUp({
+          email: targetEmail,
+          password: loginPassword,
+          options: {
+            data: { full_name: targetFullName }
+          }
+        });
+
+        if (error) {
+          alert(`Помилка реєстрації: ${error.message}`);
+          return;
+        }
+
+        localStorage.setItem('userName', targetFullName);
+        localStorage.setItem('userRole', 'client');
+        if (data?.session?.user) {
+          localStorage.setItem('userId', data.session.user.id);
+        }
+
+        setUserName(targetFullName);
+        setUserRole('client');
+        setInitials((regFirstName[0] + (regLastName[0] || '')).toUpperCase());
+
+        setIsLoggedIn(true);
+        setIsAuthModalOpen(false);
+      }
+    } catch (error) {
+      alert("Відбулася непередбачувана помилка при з'єднанні з сервером.");
+    }
+  };
+
+  // --- Обробники подій модалки бронювання ---
   const openModal = (service: any) => {
     setSelectedService(service);
     setBookingStage('selection');
@@ -481,8 +569,8 @@ export default function SalonProfile() {
   const handleNextStep = async () => {
     if (!selectedTime) return alert("Оберіть час!");
     if (!isLoggedIn) {
-       alert("Будь ласка, увійдіть в акаунт для бронювання.");
-       return router.push('/login');
+       setIsAuthModalOpen(true);
+       return;
     }
 
     const duration = selectedService?.duration || selectedService?.duration_minutes || 60;
@@ -580,7 +668,10 @@ export default function SalonProfile() {
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoggedIn) return router.push('/login');
+    if (!isLoggedIn) {
+       setIsAuthModalOpen(true);
+       return;
+    }
     if (reviewRating === 0) return alert("Будь ласка, оберіть кількість зірок.");
 
     setIsSubmittingReview(true);
@@ -624,7 +715,7 @@ export default function SalonProfile() {
     setIsProfileOpen(false);
     setUserName(null);
     setUserRole('client');
-    router.push('/login');
+    router.push('/');
   };
 
   const handleShare = () => {
@@ -643,6 +734,13 @@ export default function SalonProfile() {
     return total / reviews.length;
   }, [reviews, salon]);
   const totalReviewsCount = reviews.length > 0 ? reviews.length : (salon?.reviews_count ? parseInt(salon.reviews_count) : 0);
+
+  const getDisplayDateTime = () => {
+    if (!headerSearchDate && !searchTime) return 'Будь-коли';
+    const datePart = headerSearchDate ? new Date(headerSearchDate).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' }) : 'Будь-який день';
+    if (!searchTime) return datePart;
+    return `${datePart}, ${searchTime.toLowerCase()}`;
+  };
 
   const renderCalendarDays = () => {
     const year = currentMonth.getFullYear();
@@ -669,7 +767,6 @@ export default function SalonProfile() {
             e.stopPropagation();
             if (!isPast) {
               setHeaderSearchDate(isSelected ? '' : dateStr);
-              setIsDateOpen(false);
             }
           }}
           style={{
@@ -695,6 +792,16 @@ export default function SalonProfile() {
     return days;
   };
 
+  if (notFound) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <h1 style={{ fontSize: '3rem', fontWeight: '900', color: '#111827' }}>404</h1>
+        <p style={{ fontSize: '1.2rem', color: '#64748b', marginTop: '1rem', marginBottom: '2rem' }}>Салон не знайдено.</p>
+        <button onClick={() => router.push('/')} className="btn-dark" style={{ padding: '1rem 2rem', borderRadius: '12px' }}>На головну</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       backgroundColor: '#ffffff',
@@ -709,8 +816,11 @@ export default function SalonProfile() {
         .anim { transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); }
         .btn-dark { background-color: #222222 !important; color: #ffffff !important; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
         .btn-dark:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); }
+        
+        /* 🔥 ХОВЕР ДЛЯ ЛІНКУ "ДЛЯ БІЗНЕСУ" ТА ІНШИХ */
         .header-link { color: #475569; font-weight: 600; font-size: 0.95rem; text-decoration: none; transition: 0.2s; }
-        .header-link:hover { color: #8fae92; }
+        .header-link:hover, .nav-link:hover { color: #8fae92 !important; }
+        
         .header-user-wrapper { cursor: pointer; display: flex; align-items: center; gap: 0.6rem; transition: 0.2s; }
         .header-user-name { color: #222222; font-weight: 700; font-size: 0.95rem; transition: 0.2s; }
         .header-user-wrapper:hover .header-user-name { color: #8fae92; }
@@ -781,12 +891,42 @@ export default function SalonProfile() {
         .success-svg { width: 32px; height: 32px; }
         .success-check { stroke: var(--dynamic-accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: drawCheck 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; }
         @keyframes drawCheck { to { stroke-dashoffset: 0; } }
-        .mobile-sticky-btn { display: none; }
-        @media (max-width: 768px) {
-          .mobile-sticky-btn { display: block; position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 1rem 1.5rem; z-index: 900; box-shadow: 0 -10px 30px rgba(0,0,0,0.1); border-top: 1px solid #f1f5f9; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
-          .main-content-wrapper { padding-bottom: 120px !important; }
-        }
+        
+        .modal-input { width: 100%; padding: 0.85rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box; margin-bottom: 1rem; transition: 0.2s; }
+        .modal-input:focus { outline: none; border-color: #222222; box-shadow: 0 0 0 3px rgba(34, 34, 34, 0.1); }
+        
+        .social-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.85rem; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; font-weight: 600; color: #475569; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
+        .social-btn:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
       `}} />
+
+      {/* 🔥 МОДАЛКА ЛОГІНУ/РЕЄСТРАЦІЇ (як на головній) */}
+      {isAuthModalOpen && (
+        <div onClick={() => setIsAuthModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
+          <div className="anim" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <button onClick={() => { setIsAuthModalOpen(false); setIsLoginView(true); }} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1.2rem', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>×</button>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: '800', textAlign: 'center', marginBottom: '0.5rem', color: '#111827', letterSpacing: '-0.02em' }}>{isLoginView ? 'З поверненням' : 'Почати роботу'}</h2>
+            <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.95rem', marginBottom: '2rem', lineHeight: '1.4' }}>{isLoginView ? 'Увійдіть, щоб керувати розкладом.' : 'Створіть акаунт для бронювання.'}</p>
+            <form onSubmit={handleModalAuth}>
+              {!isLoginView && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0rem' }}>
+                  <input type="text" placeholder="Ім'я" value={regFirstName} onChange={(e) => setRegFirstName(e.target.value)} className="modal-input" required />
+                  <input type="text" placeholder="Прізвище" value={regLastName} onChange={(e) => setRegLastName(e.target.value)} className="modal-input" required />
+                </div>
+              )}
+              <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="modal-input" required />
+              <input type="password" placeholder="Пароль" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="modal-input" required />
+              <button type="submit" style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: '#fff', borderRadius: '12px', fontWeight: '700', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', marginTop: '0.5rem', fontSize: '1rem', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#0f172a'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>{isLoginView ? 'Продовжити' : 'Зареєструватись'}</button>
+            </form>
+            <div style={{ display: 'flex', alignItems: 'center', margin: '1rem 0', color: '#94a3b8', fontSize: '0.85rem' }}>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div>
+              <span style={{ padding: '0 1rem' }}>АБО</span>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div>
+            </div>
+            <button className="social-btn" onClick={() => alert('Ця функція з\'явиться пізніше')}>Google</button>
+            <p style={{ textAlign: 'center', fontSize: '0.9rem', color: '#64748b', marginTop: '1.5rem' }}>{isLoginView ? (<>Немає акаунту? <span onClick={() => setIsLoginView(false)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Створити</span></>) : (<>Вже маєте акаунт? <span onClick={() => setIsLoginView(true)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Увійти</span></>)}</p>
+          </div>
+        </div>
+      )}
 
       {/* --- HEADER --- */}
       <header style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '72px', backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #f1f5f9', zIndex: 100, display: 'flex', alignItems: 'center' }}>
@@ -814,27 +954,59 @@ export default function SalonProfile() {
               <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
               <div ref={headerDateRef} onClick={() => setIsDateOpen(!isDateOpen)} style={{ flex: 0.8, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 1.25rem 0 0.5rem', height: '100%', cursor: 'pointer' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                <span style={{ color: headerSearchDate ? '#222222' : '#64748b', fontSize: '0.95rem', fontWeight: headerSearchDate ? '600' : '400', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {headerSearchDate ? new Date(headerSearchDate).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' }) : 'Будь-коли'}
+                <span style={{ color: headerSearchDate || searchTime ? '#222222' : '#64748b', fontSize: '0.95rem', fontWeight: headerSearchDate || searchTime ? '600' : '400', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {getDisplayDateTime()}
                 </span>
+
                 {isDateOpen && (
-                  <div className="search-dropdown anim" style={{ position: 'absolute', maxHeight: 'none', overflowY: 'visible', padding: '1.5rem', width: '320px', right: 0, left: 'auto', top: 'calc(100% + 14px)', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', background: '#fff' }} onClick={(e) => e.stopPropagation()}>
+                  <div className="search-dropdown anim" style={{ position: 'absolute', maxHeight: 'none', overflowY: 'visible', padding: '1.5rem', width: '360px', right: 0, left: 'auto', top: 'calc(100% + 14px)', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 24px 50px rgba(0,0,0,0.1)', background: '#fff' }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                       <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                      <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '0.95rem', textTransform: 'capitalize' }}>{currentMonth.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}</div>
+                      <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '1rem', textTransform: 'capitalize' }}>{currentMonth.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}</div>
                       <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.8rem', textTransform: 'uppercase' }}><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>{renderCalendarDays()}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '1.25rem' }}>{renderCalendarDays()}</div>
+
+                    {/* 🔥 Блок часу як на головній */}
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1.25rem', display: 'flex', gap: '6px', justifyContent: 'space-between' }}>
+                      {['Ранок', 'Обід', 'Вечір', 'Будь-коли'].map(period => {
+                        const isSelected = searchTime === period || (period === 'Будь-коли' && searchTime === '');
+                        return (
+                          <button
+                            key={period}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSearchTime(period === 'Будь-коли' ? '' : period);
+                            }}
+                            style={{
+                              flex: 1, padding: '10px 4px', borderRadius: '12px', border: '1px solid',
+                              borderColor: isSelected ? '#0f172a' : '#e2e8f0',
+                              background: isSelected ? '#0f172a' : '#fff',
+                              color: isSelected ? '#fff' : '#475569',
+                              fontWeight: '600', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s ease',
+                              whiteSpace: 'nowrap'
+                            }}
+                            onMouseOver={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = '#fff'; }}
+                          >
+                            {period}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
-              <button onClick={() => router.push('/')} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}><div style={{ display: 'flex', width: '16px', height: '16px', color: '#ffffff' }}><Icons.Search /></div></button>
+              <button onClick={handleHeaderSearch} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
+                <div style={{ display: 'flex', width: '16px', height: '16px', color: '#ffffff' }}><Icons.Search /></div>
+              </button>
             </div>
           </div>
 
           <div style={{ width: '280px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
             <Link href={userRole === 'vendor' ? "/cabinet" : "/business"} className="nav-link" style={{ whiteSpace: 'nowrap', color: '#475569', fontWeight: '600', textDecoration: 'none' }}>Для бізнесу</Link>
+
             {isLoggedIn ? (
               <div style={{ position: 'relative' }} ref={profileRef}>
                 <div onClick={() => setIsProfileOpen(!isProfileOpen)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', userSelect: 'none', padding: '0.3rem', borderRadius: '20px', transition: '0.2s' }}>
@@ -842,6 +1014,7 @@ export default function SalonProfile() {
                   <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827', fontWeight: '800', fontSize: '0.9rem', transition: '0.2s', flexShrink: 0 }}>{initials}</div>
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}><path d="M1 1L5 5L9 1" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: '0.2s' }}/></svg>
                 </div>
+
                 {isProfileOpen && (
                   <div className="anim" style={{ position: 'absolute', top: '150%', right: 0, width: '230px', background: '#ffffff', borderRadius: '16px', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.5rem', zIndex: 1001, border: '1px solid #e2e8f0' }}>
                     <div style={{ padding: '0.5rem 1rem 0.75rem 1rem', borderBottom: '1px solid #e2e8f0', marginBottom: '0.5rem' }}>
@@ -1011,7 +1184,7 @@ export default function SalonProfile() {
                 {!isLoggedIn ? (
                   <div style={{ textAlign: 'center', padding: '1rem 0' }}>
                     <p style={{ color: '#475569', fontSize: '1rem', fontWeight: '600', marginBottom: '1rem' }}>Увійдіть, щоб поділитися враженнями</p>
-                    <button onClick={() => router.push('/login')} className="btn-dark" style={{ padding: '0.7rem 2rem', borderRadius: '12px' }}>Увійти в акаунт</button>
+                    <button onClick={() => setIsAuthModalOpen(true)} className="btn-dark" style={{ padding: '0.7rem 2rem', borderRadius: '12px' }}>Увійти в акаунт</button>
                   </div>
                 ) : (
                   <form onSubmit={handleReviewSubmit}>
@@ -1130,15 +1303,10 @@ export default function SalonProfile() {
       {/* --- ГАЛЕРЕЯ (З ПОВЕРНЕНИМИ СТРІЛКАМИ) --- */}
       {currentImageIndex !== null && galleryPhotos.length > 0 && (
         <div onClick={() => setCurrentImageIndex(null)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
-
            <button style={{ position: 'absolute', top: '2rem', right: '2rem', background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', width: '48px', height: '48px', borderRadius: '50%', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2010 }} onClick={() => setCurrentImageIndex(null)}>✕</button>
-
            <button className="gallery-nav-btn" style={{ left: '2rem' }} onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev === 0 ? galleryPhotos.length - 1 : (prev || 0) - 1); }}>‹</button>
-
            <img src={galleryPhotos[currentImageIndex]} alt="Gallery fullscreen view" style={{ maxWidth: '85%', maxHeight: '85%', objectFit: 'contain', borderRadius: '16px', zIndex: 2005 }} onClick={e => e.stopPropagation()} />
-
            <button className="gallery-nav-btn" style={{ right: '2rem' }} onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev === galleryPhotos.length - 1 ? 0 : (prev || 0) + 1); }}>›</button>
-
         </div>
       )}
 

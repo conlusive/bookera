@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
+import { useSearchParams } from 'next/navigation';
 
 const categoriesData = [
   { name: 'Рекомендовані', slug: 'all' },
@@ -86,6 +87,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [searchDate, setSearchDate] = useState('');
   const [searchTime, setSearchTime] = useState(''); // Зберігає 'Ранок', 'Обід', 'Вечір' або ''
   const [appliedSearch, setAppliedSearch] = useState('');
+  const [availableBizIds, setAvailableBizIds] = useState<number[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   const [isWhatOpen, setIsWhatOpen] = useState(false);
   const [isWhereOpen, setIsWhereOpen] = useState(false);
@@ -320,9 +323,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
   };
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     const term = searchWhat.trim().toLowerCase();
 
+    // ... (твій старий код визначення activeCategory) ...
     if (term === '') {
       setActiveCategory('all');
       setAppliedSearch('');
@@ -348,6 +352,39 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     setIsExpanded(true);
     setActiveSearch(null);
 
+    // 🔥 НОВА ЛОГІКА: Якщо обрано Дату, робимо запит на наш FastAPI
+    if (searchDate) {
+      setIsSearching(true);
+      try {
+        // Формуємо URL з параметрами
+        const queryParams = new URLSearchParams({
+          city: searchWhere,
+          target_date: searchDate,
+        });
+        if (searchTime && searchTime !== 'Будь-коли') queryParams.append('time_period', searchTime);
+        if (activeCategory !== 'all') queryParams.append('category', activeCategory);
+
+        // Додаємо обробку мережевих помилок
+        const res = await fetch(`http://localhost:8000/businesses/search-available?${queryParams.toString()}`);
+
+        if (res.ok) {
+          const availableBizs = await res.json();
+          setAvailableBizIds(availableBizs.map((b: any) => b.id));
+        } else {
+          setAvailableBizIds([]); // Нічого не знайдено
+        }
+      } catch (error) {
+        console.error("Помилка мережі (швидше за все бекенд вимкнено):", error);
+        // Не ламаємо додаток, просто показуємо, що нічого не знайдено
+        setAvailableBizIds([]);
+      } finally {
+        setIsSearching(false);
+      }
+    } else {
+      // Якщо дати немає, скидаємо фільтр по ID
+      setAvailableBizIds(null);
+    }
+
     document.getElementById('salons-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -366,6 +403,33 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     document.addEventListener('keydown', handleGlobalEnter);
     return () => document.removeEventListener('keydown', handleGlobalEnter);
   }, [searchWhat, searchWhere, searchDate, searchTime, activeCategory, isAuthModalOpen, businesses]);
+
+  const searchParams = useSearchParams();
+  const isAutoSearchRun = useRef(false);
+
+  // 1. Зчитуємо параметри з URL і заповнюємо інпути
+  useEffect(() => {
+    const what = searchParams.get('what');
+    const where = searchParams.get('where');
+    const date = searchParams.get('date');
+    const time = searchParams.get('time');
+
+    if (what) setSearchWhat(what);
+    if (where) setSearchWhere(where);
+    if (date) setSearchDate(date);
+    if (time) setSearchTime(time);
+  }, [searchParams]);
+
+  // 2. Автоматично запускаємо пошук, як тільки дата підтягнулась у стейт
+  useEffect(() => {
+    const dateParam = searchParams.get('date');
+
+    // Якщо в URL є дата, ми ще не шукали, і стейт вже оновився — робимо пошук
+    if (!isAutoSearchRun.current && dateParam && searchDate === dateParam) {
+      isAutoSearchRun.current = true;
+      handleSearch(); // Викликаємо твою функцію перевірки через FastAPI
+    }
+  }, [searchDate, searchParams]);
 
   const handleCategorySelect = (slug: string) => {
     setActiveCategory(slug);
@@ -400,6 +464,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const filteredBusinesses = useMemo(() => {
     return businesses
       .filter(biz => {
+        // 🔥 НОВА ПЕРЕВІРКА: Якщо ми шукали по даті, пропускаємо тільки ті ID, що повернув бекенд
+        if (availableBizIds !== null && !availableBizIds.includes(biz.id)) {
+          return false;
+        }
         let matchesCategory = true;
         if (activeCategory !== 'all' && !appliedSearch) {
           const searchTerms: Record<string, string[]> = {

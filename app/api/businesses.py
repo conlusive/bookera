@@ -1,113 +1,70 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_, func
+from datetime import date, datetime, time, timedelta
+from typing import Optional
+
 from app.api.deps import get_db
+from app.models.user import Business, Appointment
 
-# 🔥 ТЕПЕР УСІ МОДЕЛІ З USER
-from app.models.user import Business, User, Service
-from app.schemas.business import BusinessCreate, BusinessResponse
-from app.schemas.service import ServiceCreate, ServiceResponse
+# 🔥 ОСЬ ЦЕЙ РЯДОК БУВ ВТРАЧЕНИЙ. Він створює router!
+router = APIRouter()
 
-router = APIRouter(tags=["Businesses"])
+@router.get("/search-available")
+async def search_available_businesses(
+    city: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    target_date: Optional[date] = Query(None),
+    time_period: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Базовий пошук салонів (по місту та категорії)
+    query = select(Business)
+    if city:
+        # Використовуємо address, бо в нашій моделі Business немає окремого поля city
+        query = query.where(Business.address.ilike(f"%{city}%"))
+    if category and category != "all":
+        query = query.where(Business.category.ilike(f"%{category}%"))
 
-@router.get("/all", response_model=List[BusinessResponse])
-async def get_all_businesses(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Business))
-    return result.scalars().all()
+    result = await db.execute(query)
+    businesses = result.scalars().all()
 
-@router.get("/{slug}", response_model=BusinessResponse)
-async def get_business(slug: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Business).where(Business.slug == slug))
-    business = result.scalars().first()
-    if not business:
-        raise HTTPException(status_code=404, detail="Салон не знайдено")
-    return business
+    # Якщо дату не передали — просто повертаємо знайдені салони
+    if not target_date:
+        return businesses
 
-@router.post("", response_model=BusinessResponse)
-async def create_business(business_in: BusinessCreate, db: AsyncSession = Depends(get_db)):
-    user_result = await db.execute(select(User).where(User.id == business_in.owner_id))
-    user = user_result.scalars().first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Користувача не знайдено")
+    period_start = time(0, 0)
+    period_end = time(23, 59)
+    if time_period == "Ранок":
+        period_start, period_end = time(8, 0), time(12, 0)
+    elif time_period == "Обід":
+        period_start, period_end = time(12, 0), time(16, 0)
+    elif time_period == "Вечір":
+        period_start, period_end = time(16, 0), time(22, 0)
 
-    slug_result = await db.execute(select(Business).where(Business.slug == business_in.slug))
-    if slug_result.scalars().first():
-        raise HTTPException(status_code=400, detail="Цей URL (slug) вже зайнятий")
+    available_businesses = []
 
-    new_business = Business(
-        owner_id=business_in.owner_id,
-        name=business_in.name,
-        slug=business_in.slug,
-        address=business_in.address
-    )
+    # 3. Перевіряємо КОЖНИЙ салон
+    for biz in businesses:
+        start_datetime = datetime.combine(target_date, period_start)
+        end_datetime = datetime.combine(target_date, period_end)
 
-    db.add(new_business)
-    await db.commit()
-    await db.refresh(new_business)
-    return new_business
+        # Шукаємо всі зайняті слоти в цей період
+        bookings_query = select(Appointment).where(
+            Appointment.business_id == biz.id,
+            Appointment.status.in_(['confirmed', 'locked']),  # У тебе статус locked
+            Appointment.start_time < end_datetime,
+            Appointment.end_time > start_datetime
+        )
+        bookings_result = await db.execute(bookings_query)
+        bookings = bookings_result.scalars().all()
 
-@router.post("/services", response_model=ServiceResponse, tags=["Services"])
-async def create_service(service_in: ServiceCreate, db: AsyncSession = Depends(get_db)):
-    business_result = await db.execute(select(Business).where(Business.id == service_in.business_id))
-    if not business_result.scalars().first():
-        raise HTTPException(status_code=404, detail="Салон не знайдено")
+        # Для MVP: припускаємо, що в салоні є хоча б 2 майстри, якщо таблиці Staff немає.
+        # Або рахуємо унікальних майстрів, які вже мають записи.
+        assumed_masters_count = 2
+        max_slots_per_master = 4
 
-    new_service = Service(
-        business_id=service_in.business_id,
-        name=service_in.name,
-        duration_minutes=service_in.duration_minutes,
-        price=service_in.price
-    )
-    db.add(new_service)
-    await db.commit()
-    await db.refresh(new_service)
-    return new_service
+        if len(bookings) < (assumed_masters_count * max_slots_per_master):
+            available_businesses.append(biz)
 
-@router.get("/{business_id}/services", response_model=List[ServiceResponse], tags=["Services"])
-async def get_business_services(business_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Service).where(Service.business_id == business_id))
-    return result.scalars().all()
-
-@router.put("/services/{service_id}", response_model=ServiceResponse, tags=["Services"])
-async def update_service(service_id: int, service_in: ServiceCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Service).where(Service.id == service_id))
-    db_service = result.scalars().first()
-    if not db_service:
-        raise HTTPException(status_code=404, detail="Послугу не знайдено")
-
-    db_service.name = service_in.name
-    db_service.duration_minutes = service_in.duration_minutes
-    db_service.price = service_in.price
-    db_service.business_id = service_in.business_id
-
-    await db.commit()
-    await db.refresh(db_service)
-    return db_service
-
-@router.delete("/services/{service_id}", tags=["Services"])
-async def delete_service(service_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Service).where(Service.id == service_id))
-    db_service = result.scalars().first()
-    if not db_service:
-        raise HTTPException(status_code=404, detail="Послугу не знайдено")
-
-    await db.delete(db_service)
-    await db.commit()
-    return {"detail": "Послугу успішно видалено з бази даних"}
-
-@router.put("/{business_id}", response_model=BusinessResponse)
-async def update_business_profile(business_id: int, business_in: BusinessCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Business).where(Business.id == business_id))
-    db_business = result.scalars().first()
-    if not db_business:
-        raise HTTPException(status_code=404, detail="Заклад не знайдено")
-
-    db_business.name = business_in.name
-    db_business.address = business_in.address
-    db_business.slug = business_in.slug
-    db_business.owner_id = business_in.owner_id
-
-    await db.commit()
-    await db.refresh(db_business)
-    return db_business
+    return available_businesses

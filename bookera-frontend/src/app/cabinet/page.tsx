@@ -3,20 +3,20 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import dynamic from 'next/dynamic';
+import { Business } from '@/types';
 
 // 🟢 ІМПОРТУЄМО ІКОНКИ ТА КОНСТАНТИ З ТВОГО ОКРЕМОГО ФАЙЛУ
 import { Icons, navItems, toLocalDateStr } from '@/components/shared';
 
-const CalendarTab = dynamic<any>(() => import('./tabs/CalendarTab'));
-const ClientsTab = dynamic<any>(() => import('./tabs/ClientsTab'));
-const StatsTab = dynamic<any>(() => import('./tabs/StatsTab'));
-const TeamTab = dynamic<any>(() => import('./tabs/TeamTab'));
-const ServicesTab = dynamic<any>(() => import('./tabs/ServicesTab'));
-const InventoryTab = dynamic<any>(() => import('./tabs/InventoryTab'));
-const StorefrontTab = dynamic<any>(() => import('./tabs/StorefrontTab'));
-const MarketingTab = dynamic<any>(() => import('./tabs/MarketingTab'));
-const SettingsTab = dynamic<any>(() => import('./tabs/SettingsTab'));
+import CalendarTab from '@/components/cabinet/CalendarTab';
+import StatsTab from '@/components/cabinet/StatsTab';
+import ClientsTab from '@/components/cabinet/ClientsTab';
+import ServicesTab from '@/components/cabinet/ServicesTab';
+import TeamTab from '@/components/cabinet/TeamTab';
+import InventoryTab from '@/components/cabinet/InventoryTab';
+import MarketingTab from '@/components/cabinet/MarketingTab';
+import SettingsTab from '@/components/cabinet/SettingsTab';
+import StorefrontTab from '@/components/cabinet/StorefrontTab';
 
 export default function BusinessCabinet() {
   const router = useRouter();
@@ -29,7 +29,7 @@ export default function BusinessCabinet() {
 
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [business, setBusiness] = useState<any>(null);
+  const [business, setBusiness] = useState<Business | null>(null);
 
   const [services, setServices] = useState<any[]>([]);
   const [team, setTeam] = useState<any[]>([]);
@@ -67,7 +67,8 @@ export default function BusinessCabinet() {
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
   const [isSavingClient, setIsSavingClient] = useState(false);
 
-  const fetchClientsFromDB = async (bizId: string) => {
+  // 🟢 Змінено тип параметра bizId на number | string
+  const fetchClientsFromDB = async (bizId: number | string) => {
     const { data, error } = await supabase
       .from('clients')
       .select('*')
@@ -80,7 +81,9 @@ export default function BusinessCabinet() {
   };
 
   const handleSaveNewClient = async () => {
+    if (!business) return alert("Помилка: закладу не обрано!");
     if (!newClientForm.name.trim()) return alert("Введіть ім'я клієнта!");
+
     let finalPhone = '';
     if (newClientForm.phone && newClientForm.phone !== '+380') {
       const phoneStripped = newClientForm.phone.replace(/\D/g, '');
@@ -237,13 +240,12 @@ export default function BusinessCabinet() {
     { day: 'Неділя', active: false, start: '09:00', end: '20:00' },
   ]);
 
-  // ОПТИМІЗАЦІЯ 1: При зміні закладу, ми тепер не робимо водоспад запитів
-  const loadSpecificBusiness = async (bizId: string) => {
+  // 🟢 Змінено тип параметра bizId на number | string
+  const loadSpecificBusiness = async (bizId: number | string) => {
     setLoading(true);
     try {
       let targetBiz = myBusinesses.find(b => String(b.id) === String(bizId));
 
-      // Якщо бізнес не знайдено в локальному масиві (наприклад, після перезавантаження), завантажимо його
       if (!targetBiz) {
         const { data } = await supabase.from('businesses').select('*').eq('id', bizId).single();
         if (data) targetBiz = data;
@@ -251,12 +253,11 @@ export default function BusinessCabinet() {
 
       if (targetBiz) {
         setBusiness(targetBiz);
-        localStorage.setItem('bookera_active_biz_id', targetBiz.id);
+        localStorage.setItem('bookera_active_biz_id', String(targetBiz.id));
 
         if (targetBiz.cal_settings) setCalSettings(targetBiz.cal_settings);
         if (targetBiz.shifts) setShifts(targetBiz.shifts);
 
-        // Паралельно завантажуємо усі залежні дані
         const [srvsRes, mastersRes, clientsRes] = await Promise.all([
           supabase.from('services').select('*').eq('business_id', targetBiz.id).order('order_index', { ascending: true }),
           supabase.from('staff').select('*').eq('business_id', targetBiz.id),
@@ -275,7 +276,6 @@ export default function BusinessCabinet() {
     }
   };
 
-  // ОПТИМІЗАЦІЯ 2: Швидке первинне завантаження без водоспаду
   useEffect(() => {
     const savedTab = localStorage.getItem('bookera_activeTab');
     if (savedTab) setActiveTab(savedTab);
@@ -295,7 +295,6 @@ export default function BusinessCabinet() {
 
         const userId = session.user.id;
 
-        // ПАРАЛЕЛЬНИЙ ЗАПИТ 1: Профіль + Всі бізнеси (усі колонки одразу)
         const [profileRes, bizRes] = await Promise.all([
           supabase.from('profiles').select('*').eq('id', userId).single(),
           supabase.from('businesses').select('*').eq('owner_id', userId)
@@ -315,12 +314,11 @@ export default function BusinessCabinet() {
             : allBiz[0];
 
           setBusiness(targetBiz);
-          localStorage.setItem('bookera_active_biz_id', targetBiz.id);
+          localStorage.setItem('bookera_active_biz_id', String(targetBiz.id));
 
           if (targetBiz.cal_settings) setCalSettings(targetBiz.cal_settings);
           if (targetBiz.shifts) setShifts(targetBiz.shifts);
 
-          // ПАРАЛЕЛЬНИЙ ЗАПИТ 2: Послуги + Команда + Клієнти
           const [srvsRes, mastersRes, clientsRes] = await Promise.all([
             supabase.from('services').select('*').eq('business_id', targetBiz.id).order('order_index', { ascending: true }),
             supabase.from('staff').select('*').eq('business_id', targetBiz.id),
@@ -336,12 +334,11 @@ export default function BusinessCabinet() {
       } catch (error) {
         console.error("Помилка завантаження даних:", error);
       } finally {
-        // Завдяки finally, скелет завантаження гарантовано зникне
         if (isMounted) setLoading(false);
       }
     }
 
-    loadCabinetData();
+    void loadCabinetData();
 
     return () => { isMounted = false; };
   }, []);
@@ -474,6 +471,8 @@ export default function BusinessCabinet() {
   };
 
   const handleSaveAppointment = async () => {
+    if (!business) return alert("Помилка: бізнес не обрано.");
+
     let finalPhone = '';
     if (!isBlockMode && apptForm.client_phone && apptForm.client_phone !== '+380') {
       const phoneStripped = apptForm.client_phone.replace(/\D/g, '');
@@ -1335,7 +1334,7 @@ export default function BusinessCabinet() {
             clientsList={clientsList}
             Icons={Icons}
             marketingStats={marketingStats}
-            availableSlots={availableSlots}
+            availableSlots={availableSlots as any}
             averageTicketPrice={averageTicketPrice}
           />
         )}

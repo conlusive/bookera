@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
-import { useSearchParams } from 'next/navigation';
 
 const categoriesData = [
   { name: 'Рекомендовані', slug: 'all' },
@@ -59,18 +58,20 @@ const topCities = [
 
 export default function HomePageClient({ initialBusinesses }: { initialBusinesses: any[] }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
   const [mounted, setMounted] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [scrollState, setScrollState] = useState('top');
 
-  const [businesses, setBusinesses] = useState<any[]>(initialBusinesses);
-  const [loading, setLoading] = useState(false);
+  // Стан для хедера: 'top' (прозорий), 'scrolled' (білий), 'hiding' (зникає)
+  const [scrollState, setScrollState] = useState<'top' | 'scrolled' | 'hiding'>('top');
 
+  const [businesses] = useState<any[]>(initialBusinesses);
+
+  // --- Стейт авторизації ---
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isLoginView, setIsLoginView] = useState(true);
-
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [regFirstName, setRegFirstName] = useState('');
@@ -81,19 +82,17 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [userRole, setUserRole] = useState<string>('client');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // Стан для пошуку
+  // --- Стан для пошуку ---
   const [searchWhat, setSearchWhat] = useState('');
   const [searchWhere, setSearchWhere] = useState('Львів');
   const [searchDate, setSearchDate] = useState('');
-  const [searchTime, setSearchTime] = useState(''); // Зберігає 'Ранок', 'Обід', 'Вечір' або ''
+  const [searchTime, setSearchTime] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [availableBizIds, setAvailableBizIds] = useState<number[] | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
 
   const [isWhatOpen, setIsWhatOpen] = useState(false);
   const [isWhereOpen, setIsWhereOpen] = useState(false);
   const [isDateOpen, setIsDateOpen] = useState(false);
-
   const [activeSearch, setActiveSearch] = useState<'hero' | 'header' | null>(null);
 
   const [isMoreCategoriesOpen, setIsMoreCategoriesOpen] = useState(false);
@@ -105,7 +104,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [isExpanded, setIsExpanded] = useState(false);
 
   const profileRef = useRef<HTMLDivElement>(null);
-
   const heroWhatRef = useRef<HTMLDivElement>(null);
   const heroWhereRef = useRef<HTMLDivElement>(null);
   const heroDateRef = useRef<HTMLDivElement>(null);
@@ -116,8 +114,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   const sortRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
+  const isAutoSearchRun = useRef(false);
 
-  // Автоматичне визначення геолокації при завантаженні
+  // Геолокація
   useEffect(() => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -126,32 +125,27 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             const { latitude, longitude } = position.coords;
             const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=uk`);
             const data = await res.json();
-
             const city = data.address?.city || data.address?.town || data.address?.village || data.address?.state;
-            if (city) {
-              setSearchWhere(city);
-            }
+            if (city) setSearchWhere(city);
           } catch (error) {
             console.error('Не вдалося визначити локацію:', error);
           }
         },
-        (error) => {
-          console.log('Доступ до локації заборонено або помилка:', error.message);
-        }
+        (error) => console.log('Локація:', error.message)
       );
     }
   }, []);
 
+  // Ініціалізація та логіка скролу хедера
   useEffect(() => {
     setMounted(true);
-    let isActive = true;
 
     if (typeof window !== 'undefined') {
       const storedName = localStorage.getItem('userName');
       const storedRole = localStorage.getItem('userRole') || 'client';
       if (storedName) {
         setIsLoggedIn(true);
-        const displayName = storedName.includes('@') ? 'Василь Циган' : storedName;
+        const displayName = storedName.includes('@') ? 'Користувач' : storedName;
         setUserName(displayName);
         setUserRole(storedRole);
         const nameParts = displayName.split(' ');
@@ -160,6 +154,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       }
     }
 
+    // 🟢 ВІДНОВЛЕНА ПРАВИЛЬНА ЛОГІКА СКРОЛУ
     const handleScroll = () => {
       if (window.scrollY > 400) {
         setScrollState('scrolled');
@@ -189,12 +184,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }, 100);
 
     return () => {
-      isActive = false;
       window.removeEventListener('scroll', handleScroll);
       observer.disconnect();
     };
   }, [supabase]);
 
+  // Закриття дропдаунів кліком поза межами
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -257,19 +252,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           return;
         }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, role')
-          .eq('id', data.user.id)
-          .single();
+        const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', data.user.id).single();
 
-        const metadataName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name;
-        let finalName = profile?.full_name || metadataName || 'Василь Циган';
-
-        if (finalName.includes('@')) {
-          finalName = 'Василь Циган';
-        }
-
+        let finalName = profile?.full_name || data.user?.user_metadata?.full_name || 'Користувач';
+        if (finalName.includes('@')) finalName = 'Користувач';
         const finalRole = profile?.role || 'client';
 
         localStorage.setItem('userName', finalName);
@@ -278,16 +264,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         setUserName(finalName);
         setUserRole(finalRole);
-        const nameParts = finalName.split(' ');
-        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-        setInitials(init.toUpperCase());
+        setInitials(finalName.substring(0, 2).toUpperCase());
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
 
-        if (finalRole === 'vendor') {
-          router.push('/cabinet');
-        }
+        if (finalRole === 'vendor') router.push('/cabinet');
       } else {
         const targetEmail = loginEmail.trim().toLowerCase();
         const targetFullName = `${regFirstName} ${regLastName}`.trim();
@@ -295,9 +277,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
           password: loginPassword,
-          options: {
-            data: { full_name: targetFullName }
-          }
+          options: { data: { full_name: targetFullName } }
         });
 
         if (error) {
@@ -307,26 +287,24 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         localStorage.setItem('userName', targetFullName);
         localStorage.setItem('userRole', 'client');
-        if (data?.session?.user) {
-          localStorage.setItem('userId', data.session.user.id);
-        }
+        if (data?.session?.user) localStorage.setItem('userId', data.session.user.id);
 
         setUserName(targetFullName);
         setUserRole('client');
-        setInitials((regFirstName[0] + (regLastName[0] || '')).toUpperCase());
+        setInitials(targetFullName.substring(0, 2).toUpperCase());
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
       }
     } catch (error) {
-      alert("Відбулася непередбачувана помилка при з'єднанні з сервером.");
+      alert("Відбулася помилка при з'єднанні з сервером.");
     }
   };
 
+  // 🟢 ГАРАНТОВАНИЙ ПОШУК ТА ПЛАВНИЙ СКРОЛ ДО РЕЗУЛЬТАТІВ
   const handleSearch = async () => {
     const term = searchWhat.trim().toLowerCase();
 
-    // ... (твій старий код визначення activeCategory) ...
     if (term === '') {
       setActiveCategory('all');
       setAppliedSearch('');
@@ -352,11 +330,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     setIsExpanded(true);
     setActiveSearch(null);
 
-    // 🔥 НОВА ЛОГІКА: Якщо обрано Дату, робимо запит на наш FastAPI
+    // Запит на бекенд, якщо обрана дата
     if (searchDate) {
-      setIsSearching(true);
       try {
-        // Формуємо URL з параметрами
         const queryParams = new URLSearchParams({
           city: searchWhere,
           target_date: searchDate,
@@ -364,50 +340,49 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         if (searchTime && searchTime !== 'Будь-коли') queryParams.append('time_period', searchTime);
         if (activeCategory !== 'all') queryParams.append('category', activeCategory);
 
-        // Додаємо обробку мережевих помилок
         const res = await fetch(`http://localhost:8000/businesses/search-available?${queryParams.toString()}`);
 
         if (res.ok) {
           const availableBizs = await res.json();
           setAvailableBizIds(availableBizs.map((b: any) => b.id));
         } else {
-          setAvailableBizIds([]); // Нічого не знайдено
+          setAvailableBizIds([]);
         }
       } catch (error) {
-        console.error("Помилка мережі (швидше за все бекенд вимкнено):", error);
-        // Не ламаємо додаток, просто показуємо, що нічого не знайдено
-        setAvailableBizIds([]);
-      } finally {
-        setIsSearching(false);
+        console.warn("Бекенд недоступний:", error);
+        setAvailableBizIds(null);
       }
     } else {
-      // Якщо дати немає, скидаємо фільтр по ID
       setAvailableBizIds(null);
     }
 
-    document.getElementById('salons-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // 🎯 ТОЧНИЙ ФОКУС: Прокрутка до секції з картками після оновлення стейту
+    setTimeout(() => {
+      const targetElement = document.getElementById('salons-section');
+      if (targetElement) {
+        // Враховуємо висоту фіксованого хедера (72px) + невеликий відступ (18px)
+        const headerOffset = 90;
+        const elementPosition = targetElement.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+        window.scrollTo({
+           top: offsetPosition,
+           behavior: 'smooth'
+        });
+      }
+    }, 150);
   };
 
-  useEffect(() => {
-    const handleGlobalEnter = (e: KeyboardEvent) => {
-      if (isAuthModalOpen) return;
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT') return;
+  // 🟢 ГЛОБАЛЬНИЙ ОБРОБНИК ENTER ДЛЯ ІНПУТІВ
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+      void handleSearch();
+    }
+  };
 
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleSearch();
-      }
-    };
-
-    document.addEventListener('keydown', handleGlobalEnter);
-    return () => document.removeEventListener('keydown', handleGlobalEnter);
-  }, [searchWhat, searchWhere, searchDate, searchTime, activeCategory, isAuthModalOpen, businesses]);
-
-  const searchParams = useSearchParams();
-  const isAutoSearchRun = useRef(false);
-
-  // 1. Зчитуємо параметри з URL і заповнюємо інпути
+  // Зчитуємо параметри з URL
   useEffect(() => {
     const what = searchParams.get('what');
     const where = searchParams.get('where');
@@ -420,14 +395,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     if (time) setSearchTime(time);
   }, [searchParams]);
 
-  // 2. Автоматично запускаємо пошук, як тільки дата підтягнулась у стейт
+  // Автоматично запускаємо пошук, як тільки дата підтягнулась у стейт
   useEffect(() => {
     const dateParam = searchParams.get('date');
-
-    // Якщо в URL є дата, ми ще не шукали, і стейт вже оновився — робимо пошук
     if (!isAutoSearchRun.current && dateParam && searchDate === dateParam) {
       isAutoSearchRun.current = true;
-      handleSearch(); // Викликаємо твою функцію перевірки через FastAPI
+      void handleSearch();
     }
   }, [searchDate, searchParams]);
 
@@ -464,10 +437,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const filteredBusinesses = useMemo(() => {
     return businesses
       .filter(biz => {
-        // 🔥 НОВА ПЕРЕВІРКА: Якщо ми шукали по даті, пропускаємо тільки ті ID, що повернув бекенд
+        // Якщо ми шукали по даті, пропускаємо тільки ті ID, що повернув бекенд
         if (availableBizIds !== null && !availableBizIds.includes(biz.id)) {
           return false;
         }
+
         let matchesCategory = true;
         if (activeCategory !== 'all' && !appliedSearch) {
           const searchTerms: Record<string, string[]> = {
@@ -512,25 +486,17 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       })
       .sort((a, b) => {
         if (sortBy === 'rating') {
-          const ratingA = parseFloat(a.rating) || 0;
-          const ratingB = parseFloat(b.rating) || 0;
-          return ratingB - ratingA;
+          return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
         }
         if (sortBy === 'newest') {
-          const idA = parseInt(a.id) || 0;
-          const idB = parseInt(b.id) || 0;
-          if (idA === 0 && idB === 0 && typeof a.id === 'string' && typeof b.id === 'string') {
-            return b.id.localeCompare(a.id);
-          }
-          return idB - idA;
+          return (parseInt(b.id) || 0) - (parseInt(a.id) || 0);
         }
         return 0;
       });
-  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere]);
+  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds]);
 
   const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 4);
 
-  // Форматування Дати + Часу для відображення в інпуті
   const getDisplayDateTime = () => {
     if (!searchDate && !searchTime) return 'Будь-коли';
     const datePart = searchDate ? new Date(searchDate).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' }) : 'Будь-який день';
@@ -588,11 +554,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return days;
   };
 
-  // КОМПОНЕНТ ДРОПДАУНУ КАЛЕНДАРЯ
   const renderDatePicker = () => (
     <div className="search-dropdown anim" style={{ maxHeight: 'none', overflowY: 'visible', padding: '1.5rem', width: '360px', right: 0, left: 'auto', top: 'calc(100% + 14px)', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 24px 50px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
-
-      {/* Шапка календаря */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
         <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -605,17 +568,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </button>
       </div>
 
-      {/* Дні тижня */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
         <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
       </div>
 
-      {/* Сітка днів */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '1.25rem' }}>
         {renderCalendarDays()}
       </div>
 
-      {/* Вибір періоду дня в один рядок */}
       <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1.25rem', display: 'flex', gap: '6px', justifyContent: 'space-between' }}>
         {['Ранок', 'Обід', 'Вечір', 'Будь-коли'].map(period => {
           const isSelected = searchTime === period || (period === 'Будь-коли' && searchTime === '');
@@ -642,7 +602,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           );
         })}
       </div>
-
     </div>
   );
 
@@ -678,9 +637,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .btn-theme { background-color: #C2D8C4 !important; color: #222222 !important; font-weight: 750; border: none; cursor: pointer; }
         .btn-theme:hover { background-color: #AECAB0 !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(194, 216, 196, 0.4); }
         
-        .nav-link { color: #ffffff; text-decoration: none; transition: 0.2s; font-weight: 600; font-size: 0.95rem; }
-        .nav-link:hover { color: #C2D8C4 !important; }
-
         .category-btn { 
           color: #64748b; font-weight: 650; font-size: 0.95rem; white-space: nowrap; position: relative; 
           padding-bottom: 6px; transition: color 0.3s; background: none; border: none; cursor: pointer; 
@@ -779,20 +735,38 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         .modal-input { width: 100%; padding: 0.85rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box; margin-bottom: 1rem; transition: 0.2s; }
         .modal-input:focus { outline: none; border-color: #222222; box-shadow: 0 0 0 3px rgba(34, 34, 34, 0.1); }
+        .social-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.85rem; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; font-weight: 600; color: #475569; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
+        .social-btn:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
 
-        .main-header { position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000; display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent; }
+        /* 🟢 ПРАВИЛЬНА АНІМАЦІЯ ТА ПОЗИЦІЮВАННЯ ХЕДЕРА */
+        .main-header {
+          position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000;
+          display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent;
+        }
         .main-header.top { transform: translateY(0); }
-        .main-header.scrolled { position: fixed; background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05); animation: slideDown 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
-        .main-header.hiding { position: fixed; background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05); animation: slideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
+        .main-header.scrolled {
+          position: fixed; background-color: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+          border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05);
+          animation: slideDown 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+        }
+        .main-header.hiding {
+          position: fixed; background-color: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+          border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05);
+          animation: slideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+        }
+        .main-header.top .nav-link { color: #ffffff; }
         .main-header.scrolled .nav-link, .main-header.hiding .nav-link { color: #475569; }
         .main-header.scrolled .nav-link:hover, .main-header.hiding .nav-link:hover { color: #8fae92 !important; }
+
         @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
         @keyframes slideUp { from { transform: translateY(0); } to { transform: translateY(-100%); } }
       `}</style>
 
       {/* МОДАЛКА ЛОГІНУ/РЕЄСТРАЦІЇ */}
       {isAuthModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
+        <div onClick={() => setIsAuthModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
           <div className="anim" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
             <button onClick={() => { setIsAuthModalOpen(false); setIsLoginView(true); }} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1.2rem', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>×</button>
             <h2 style={{ fontSize: '1.8rem', fontWeight: '800', textAlign: 'center', marginBottom: '0.5rem', color: '#111827', letterSpacing: '-0.02em' }}>{isLoginView ? 'З поверненням' : 'Почати роботу'}</h2>
@@ -861,7 +835,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                   value={searchWhat}
                   onChange={(e) => { setSearchWhat(e.target.value); setIsWhatOpen(true); setActiveSearch('header'); }}
                   onFocus={() => { setIsWhatOpen(true); setActiveSearch('header'); }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={handleInputKeyDown}
                   style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', backgroundColor: 'transparent' }}
                 />
                 {isWhatOpen && whatSuggestions.length > 0 && activeSearch === 'header' && scrollState !== 'top' && (
@@ -885,7 +859,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                   value={searchWhere}
                   onChange={(e) => { setSearchWhere(e.target.value); setIsWhereOpen(true); setActiveSearch('header'); }}
                   onFocus={() => { setIsWhereOpen(true); setActiveSearch('header'); }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={handleInputKeyDown}
                   style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', fontWeight: '600', backgroundColor: 'transparent' }}
                 />
                 {isWhereOpen && whereSuggestions.length > 0 && activeSearch === 'header' && scrollState !== 'top' && (
@@ -911,7 +885,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 )}
               </div>
 
-              <button onClick={handleSearch} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
+              <button type="button" onClick={() => void handleSearch()} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               </button>
 
@@ -1000,7 +974,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 value={searchWhat}
                 onChange={(e) => { setSearchWhat(e.target.value); setIsWhatOpen(true); setActiveSearch('hero'); }}
                 onFocus={() => { setIsWhatOpen(true); setActiveSearch('hero'); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                onKeyDown={handleInputKeyDown}
                 style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', backgroundColor: 'transparent', padding: '0.8rem 0' }}
               />
               {isWhatOpen && whatSuggestions.length > 0 && activeSearch === 'hero' && (
@@ -1028,7 +1002,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 value={searchWhere}
                 onChange={(e) => { setSearchWhere(e.target.value); setIsWhereOpen(true); setActiveSearch('hero'); }}
                 onFocus={() => { setIsWhereOpen(true); setActiveSearch('hero'); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                onKeyDown={handleInputKeyDown}
                 style={{ width: '100%', border: 'none', outline: 'none', color: '#222222', fontSize: '0.95rem', fontWeight: '600', backgroundColor: 'transparent', padding: '0.8rem 0' }}
               />
               {isWhereOpen && whereSuggestions.length > 0 && activeSearch === 'hero' && (
@@ -1058,7 +1032,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               )}
             </div>
 
-            <button onClick={handleSearch} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
+            <button type="button" onClick={() => void handleSearch()} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             </button>
 
@@ -1179,23 +1153,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </div>
           </div>
 
-          {loading ? (
-            <div className="salons-layout">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="tour-card" style={{ height: '340px', border: 'none', boxShadow: 'none' }}>
-                  <div className="skeleton-pulse" style={{ height: '170px', borderRadius: '20px 20px 0 0' }}></div>
-                  <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', flex: 1, background: '#fff', borderRadius: '0 0 20px 20px', border: '1px solid #f1f5f9', borderTop: 'none' }}>
-                    <div className="skeleton-pulse" style={{ height: '24px', width: '70%', borderRadius: '6px' }}></div>
-                    <div className="skeleton-pulse" style={{ height: '14px', width: '100%', borderRadius: '4px' }}></div>
-                    <div className="skeleton-pulse" style={{ height: '14px', width: '80%', borderRadius: '4px' }}></div>
-                    <div style={{ marginTop: 'auto' }}>
-                       <div className="skeleton-pulse" style={{ height: '42px', width: '100%', borderRadius: '99px' }}></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : filteredBusinesses.length === 0 ? (
+          {filteredBusinesses.length === 0 ? (
             <div className="anim" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '6rem 2rem', backgroundColor: '#f8fafc', borderRadius: '24px', border: '1px dashed #cbd5e1', margin: '2rem 0' }}>
               <div style={{ width: '72px', height: '72px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>

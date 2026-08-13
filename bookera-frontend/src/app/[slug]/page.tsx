@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/utils/supabase/client';
 import { Icons } from '@/components/shared';
+import { BookingSource } from '@/types';
 
 // === 1. СТАТИЧНІ ДАНІ, КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
@@ -47,6 +48,7 @@ const isTimeOverlapping = (reqStart: number, reqEnd: number, bStart: number, bEn
 export default function SalonProfile() {
   const { slug } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   // --- Стейт даних ---
@@ -78,7 +80,7 @@ export default function SalonProfile() {
   const [headerSearchWhat, setHeaderSearchWhat] = useState('');
   const [headerSearchWhere, setHeaderSearchWhere] = useState('Львів');
   const [headerSearchDate, setHeaderSearchDate] = useState('');
-  const [searchTime, setSearchTime] = useState(''); // 🔥 Додано стейт для часу як на головній
+  const [searchTime, setSearchTime] = useState('');
   const [isDateOpen, setIsDateOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const headerDateRef = useRef<HTMLDivElement>(null);
@@ -111,6 +113,13 @@ export default function SalonProfile() {
   const [selectedMasterId, setSelectedMasterId] = useState<number | string>(0);
   const [pendingBookingId, setPendingBookingId] = useState<number | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+
+  // 🟢 1. ВІДСТЕЖЕННЯ ДЖЕРЕЛА ПЕРЕХОДУ (?ref=bookera чи direct)
+  useEffect(() => {
+    const refParam = searchParams.get('ref')?.toLowerCase();
+    const source: BookingSource = refParam === 'bookera' ? 'BOOKERA' : 'DIRECT';
+    localStorage.setItem('booking_source', source);
+  }, [searchParams]);
 
   // --- Календар та дні ---
   const calendarDays = useMemo(() => {
@@ -163,7 +172,7 @@ export default function SalonProfile() {
     if (slug) void loadDataFromSupabase();
   }, [slug]);
 
-  const fetchBookings = async (bizId: number) => {
+  const fetchBookings = useCallback(async (bizId: number) => {
     const { data, error } = await supabase
       .from('bookings')
       .select('*')
@@ -171,7 +180,7 @@ export default function SalonProfile() {
       .neq('status', 'cancelled');
 
     if (error) {
-      console.warn("Помилка оновлення розкладу (можливо пуста таблиця):", error);
+      console.warn("Помилка оновлення розкладу:", error);
       return;
     }
 
@@ -186,9 +195,9 @@ export default function SalonProfile() {
       });
       setBookedAppointments(validBookings);
     }
-  };
+  }, [supabase]);
 
-  // 🔥 Виправлений useEffect для Realtime (БЕЗ синтаксичних помилок)
+  // Realtime оновлення для онлайн-календаря
   useEffect(() => {
     if (!salon?.id) return;
 
@@ -197,7 +206,7 @@ export default function SalonProfile() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bookings' },
-        (payload: any) => { // Додано : any
+        (payload: any) => {
           const newRecord = payload.new;
           const oldRecord = payload.old;
 
@@ -206,7 +215,7 @@ export default function SalonProfile() {
             (oldRecord && oldRecord.business_id === salon.id) ||
             (!newRecord?.business_id && !oldRecord?.business_id)
           ) {
-             fetchBookings(salon.id);
+             void fetchBookings(salon.id);
           }
         }
       )
@@ -215,11 +224,10 @@ export default function SalonProfile() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [salon?.id]);
-
+  }, [salon?.id, fetchBookings, supabase]);
 
   useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    const handleBeforeUnload = () => {
       if (pendingBookingId && !bookingSuccess) {
         const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/bookings?id=eq.${pendingBookingId}&status=eq.blocked`;
         fetch(url, {
@@ -241,7 +249,7 @@ export default function SalonProfile() {
         supabase.from('bookings').delete().eq('id', pendingBookingId).eq('status', 'blocked').then();
       }
     };
-  }, [pendingBookingId, bookingSuccess]);
+  }, [pendingBookingId, bookingSuccess, supabase]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -267,7 +275,7 @@ export default function SalonProfile() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        closeModal();
+        void closeModal();
         setCurrentImageIndex(null);
       }
       if (currentImageIndex !== null) {
@@ -286,7 +294,6 @@ export default function SalonProfile() {
     if (headerSearchDate) params.append('date', headerSearchDate);
     if (searchTime) params.append('time', searchTime);
 
-    // Перекидаємо на головну з усіма параметрами в URL
     router.push(`/?${params.toString()}`);
   };
 
@@ -573,6 +580,9 @@ export default function SalonProfile() {
        return;
     }
 
+    // 🟢 2. Отримуємо відстежене джерело з localStorage (або DIRECT за замовчуванням)
+    const bookingSource = (localStorage.getItem('booking_source') as BookingSource) || 'DIRECT';
+
     const duration = selectedService?.duration || selectedService?.duration_minutes || 60;
     const reqStart = parseTime(selectedTime!);
     const reqEnd = reqStart + duration;
@@ -598,7 +608,7 @@ export default function SalonProfile() {
 
         if (conflict) {
            alert("Вибачте, цей час щойно зайняв інший користувач. Будь ласка, оберіть інший.");
-           fetchBookings(salon.id);
+           void fetchBookings(salon.id);
            return;
         }
     }
@@ -621,7 +631,7 @@ export default function SalonProfile() {
       start_time: `${selectedTime}:00`,
       end_time: endTimeStr,
       status: 'blocked',
-      source: 'DIRECT'
+      source: bookingSource // 🟢 Записуємо джерело у перерву/запит
     }]).select().single();
 
     if (error) {
@@ -638,7 +648,8 @@ export default function SalonProfile() {
 
   const handleConfirmBooking = async () => {
     try {
-      const bookingSource = localStorage.getItem('booking_source') || 'DIRECT';
+      // 🟢 3. Підтверджуємо джерело запису з підтриманням системи DIRECT / BOOKERA
+      const bookingSource = (localStorage.getItem('booking_source') as BookingSource) || 'DIRECT';
 
       const { error } = await supabase.from('bookings')
         .update({
@@ -658,7 +669,7 @@ export default function SalonProfile() {
       setBookingSuccess(true);
       void fetchBookings(salon.id);
       setTimeout(() => {
-        closeModal();
+        void closeModal();
       }, 2500);
     } catch (e: any) {
       console.error(e);
@@ -817,7 +828,6 @@ export default function SalonProfile() {
         .btn-dark { background-color: #222222 !important; color: #ffffff !important; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
         .btn-dark:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); }
         
-        /* 🔥 ХОВЕР ДЛЯ ЛІНКУ "ДЛЯ БІЗНЕСУ" ТА ІНШИХ */
         .header-link { color: #475569; font-weight: 600; font-size: 0.95rem; text-decoration: none; transition: 0.2s; }
         .header-link:hover, .nav-link:hover { color: #8fae92 !important; }
         
@@ -899,7 +909,7 @@ export default function SalonProfile() {
         .social-btn:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
       `}} />
 
-      {/* 🔥 МОДАЛКА ЛОГІНУ/РЕЄСТРАЦІЇ (як на головній) */}
+      {/* МОДАЛКА ЛОГІНУ/РЕЄСТРАЦІЇ */}
       {isAuthModalOpen && (
         <div onClick={() => setIsAuthModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
           <div className="anim" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
@@ -968,7 +978,6 @@ export default function SalonProfile() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div></div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '1.25rem' }}>{renderCalendarDays()}</div>
 
-                    {/* 🔥 Блок часу як на головній */}
                     <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1.25rem', display: 'flex', gap: '6px', justifyContent: 'space-between' }}>
                       {['Ранок', 'Обід', 'Вечір', 'Будь-коли'].map(period => {
                         const isSelected = searchTime === period || (period === 'Будь-коли' && searchTime === '');

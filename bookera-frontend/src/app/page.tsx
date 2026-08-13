@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import HomePageClient from './HomePageClient';
+import HomePageClient from '@/components/home/HomePageClient';
 
 // КЕШУВАННЯ: Сторінка буде оновлюватися у фоні раз на 60 секунд.
 export const revalidate = 60;

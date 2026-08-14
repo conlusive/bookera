@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/utils/supabase/client';
 import { Icons } from '@/components/shared';
+import { api } from '@/lib/api';
 import { BookingSource } from '@/types';
 
 // === 1. СТАТИЧНІ ДАНІ, КОНСТАНТИ ТА ХЕЛПЕРИ ===
@@ -65,6 +66,7 @@ export default function SalonProfile() {
   const [userName, setUserName] = useState<string | null>(null);
   const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
+  const [userId, setUserId] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -109,19 +111,45 @@ export default function SalonProfile() {
   const [selectedService, setSelectedService] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-
   const [selectedMasterId, setSelectedMasterId] = useState<number | string>(0);
   const [pendingBookingId, setPendingBookingId] = useState<number | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number>(600); // 10 хвилин
 
-  // 🟢 1. ВІДСТЕЖЕННЯ ДЖЕРЕЛА ПЕРЕХОДУ (?ref=bookera чи direct)
+  // Відстеження джерела переходу
   useEffect(() => {
     const refParam = searchParams.get('ref')?.toLowerCase();
     const source: BookingSource = refParam === 'bookera' ? 'BOOKERA' : 'DIRECT';
     localStorage.setItem('booking_source', source);
   }, [searchParams]);
 
-  // --- Календар та дні ---
+  // Зворотний відлік 10 хвилин для заблокованого слоту
+  useEffect(() => {
+    if (bookingStage !== 'confirmation' || bookingSuccess) return;
+
+    setTimeLeft(600);
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          alert('Час на підтвердження вичерпано. Слот розблоковано.');
+          void closeModal();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [bookingStage, bookingSuccess]);
+
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  // Календарні дні
   const calendarDays = useMemo(() => {
     const days = [];
     const today = new Date();
@@ -151,7 +179,6 @@ export default function SalonProfile() {
     return Array.from(new Set(photos));
   }, [salon]);
 
-  // --- Ефекти ---
   useEffect(() => {
     setVisibleServicesCount(SERVICES_PER_PAGE);
   }, [searchQuery, sortOrder]);
@@ -160,40 +187,36 @@ export default function SalonProfile() {
     if (typeof window !== 'undefined') {
       const storedName = localStorage.getItem('userName');
       const storedRole = localStorage.getItem('userRole') || 'client';
+      const storedId = localStorage.getItem('userId');
       if (storedName) {
         setIsLoggedIn(true);
         setUserName(storedName);
         setUserRole(storedRole);
+        setUserId(storedId);
         const nameParts = storedName.split(' ');
         const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
         setInitials(init.toUpperCase());
       }
     }
-    if (slug) void loadDataFromSupabase();
+    if (slug) void loadData();
   }, [slug]);
 
   const fetchBookings = useCallback(async (bizId: number) => {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('business_id', bizId)
-      .neq('status', 'cancelled');
-
-    if (error) {
-      console.warn("Помилка оновлення розкладу:", error);
-      return;
-    }
-
-    if (data) {
-      const now = Date.now();
-      const validBookings = data.filter((b: any) => {
-        if (b.status === 'blocked' && b.created_at) {
-          const lockTime = new Date(b.created_at).getTime();
-          if (now - lockTime > LOCK_TIMEOUT_MINUTES * 60000) return false;
-        }
-        return true;
-      });
-      setBookedAppointments(validBookings);
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/appointments/booked?business_id=${bizId}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setBookedAppointments(data);
+        return;
+      }
+    } catch {
+      // Fallback до Supabase, якщо локальний API ще піднімається
+      const { data } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('business_id', bizId)
+        .neq('status', 'cancelled');
+      if (data) setBookedAppointments(data);
     }
   }, [supabase]);
 
@@ -205,18 +228,9 @@ export default function SalonProfile() {
       .channel(`room_${salon.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings' },
-        (payload: any) => {
-          const newRecord = payload.new;
-          const oldRecord = payload.old;
-
-          if (
-            (newRecord && newRecord.business_id === salon.id) ||
-            (oldRecord && oldRecord.business_id === salon.id) ||
-            (!newRecord?.business_id && !oldRecord?.business_id)
-          ) {
-             void fetchBookings(salon.id);
-          }
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => {
+          void fetchBookings(salon.id);
         }
       )
       .subscribe();
@@ -225,31 +239,6 @@ export default function SalonProfile() {
       supabase.removeChannel(channel);
     };
   }, [salon?.id, fetchBookings, supabase]);
-
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (pendingBookingId && !bookingSuccess) {
-        const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/bookings?id=eq.${pendingBookingId}&status=eq.blocked`;
-        fetch(url, {
-          method: 'DELETE',
-          headers: {
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
-          },
-          keepalive: true
-        }).catch(console.error);
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      if (pendingBookingId && !bookingSuccess) {
-        supabase.from('bookings').delete().eq('id', pendingBookingId).eq('status', 'blocked').then();
-      }
-    };
-  }, [pendingBookingId, bookingSuccess, supabase]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -297,116 +286,113 @@ export default function SalonProfile() {
     router.push(`/?${params.toString()}`);
   };
 
-  // --- Завантаження початкових даних ---
-  const loadDataFromSupabase = async () => {
+  // Завантаження даних салону з бекенда
+  const loadData = async () => {
     if (!salon) setLoading(true);
 
     try {
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug as string);
-      let query = supabase.from('businesses').select('*');
-      if (isUUID) {
-        query = query.eq('id', slug);
-      } else {
-        query = query.eq('slug', slug);
-      }
+      const bizData = await api.getBusiness(slug as string);
 
-      const { data: bizData, error: bizErr } = await query.single();
-
-      if (bizErr || !bizData) {
-        console.error("Салон не знайдено або помилка:", bizErr);
+      if (!bizData) {
         setNotFound(true);
         setLoading(false);
         return;
       }
 
-      if (bizData) {
-        if (isUUID && bizData.slug) {
-          router.replace(`/${bizData.slug}`);
-          return;
-        }
+      setSalon(bizData);
 
-        setSalon(bizData);
+      const [srvData, staffRes, revRes] = await Promise.all([
+        api.getBusinessServices(bizData.id),
+        supabase.from('users').select('*').eq('business_id', bizData.id).eq('role', 'master'),
+        supabase.from('reviews').select('*').eq('business_id', bizData.id).order('created_at', { ascending: false })
+      ]);
 
-        const [srvRes, staffRes, revRes] = await Promise.all([
-          supabase.from('services').select('*').eq('business_id', bizData.id).order('order_index', { ascending: true }),
-          supabase.from('staff').select('*').eq('business_id', bizData.id),
-          supabase.from('reviews').select('*').eq('business_id', bizData.id).order('created_at', { ascending: false })
-        ]);
+      if (srvData) setServices(srvData);
+      if (staffRes.data) setTeam(staffRes.data);
+      if (revRes.data) setReviews(revRes.data);
 
-        if (srvRes.data) setServices(srvRes.data);
-        if (staffRes.data) setTeam(staffRes.data);
-        if (revRes.data) setReviews(revRes.data);
-
-        await fetchBookings(bizData.id);
-      }
+      await fetchBookings(bizData.id);
     } catch (error) {
-      console.error("Непередбачена помилка:", error);
+      console.error("Помилка завантаження:", error);
       setNotFound(true);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Обчислювальні дані ---
-  const activeTeam = useMemo(() => team.filter(staff => staff.provides_services !== false), [team]);
+  // Команда та години
+  const activeTeam = useMemo(() => team, [team]);
   const staffers = useMemo(() => {
     const list: any[] = [{ id: 0, name: "Будь-хто", role: "Без переваг", photo: null }];
-    activeTeam.forEach((t) => list.push({ id: t.id, name: t.name, role: t.role || "Майстер", photo: t.photo || t.avatar_url || null }));
+    activeTeam.forEach((t) => list.push({
+      id: t.id,
+      name: `${t.first_name || 'Майстер'} ${t.last_name || ''}`.trim(),
+      role: "Майстер",
+      photo: null
+    }));
     return list;
   }, [activeTeam]);
 
   const allAvailableHours = useMemo(() => {
-    if (!salon) return [];
     const slots = [];
-    const openTimeStr = salon.open_time || '10:00';
-    const closeTimeStr = salon.close_time || '20:00';
-    const startHour = parseInt(openTimeStr.split(':')[0], 10);
-    const endHour = parseInt(closeTimeStr.split(':')[0], 10);
-
-    for (let h = startHour; h <= endHour; h++) {
+    for (let h = 9; h <= 20; h++) {
       for (let m = 0; m < 60; m += 15) {
-        if (h === endHour && m > 0) continue;
+        if (h === 20 && m > 0) continue;
         slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
       }
     }
     return slots;
-  }, [salon]);
+  }, []);
 
-  const getAvailableMasterForSlot = (date: string, reqStart: number, reqEnd: number, specificMasterId: string | number) => {
-    const daysBookings = bookedAppointments.filter((b: any) => b.booking_date === date);
-
-    if (specificMasterId !== 0 && specificMasterId !== '0') {
-      const isBusy = daysBookings.some((b: any) => {
-        if (String(b.staff_id) !== String(specificMasterId)) return false;
-        const bStart = parseTime(b.start_time.substring(0, 5));
-        const bEnd = parseTime(b.end_time.substring(0, 5));
-        return isTimeOverlapping(reqStart, reqEnd, bStart, bEnd);
-      });
-      return isBusy ? null : specificMasterId;
-    } else {
-      if (activeTeam.length === 0) return 0;
-      for (let master of activeTeam) {
-        const isBusy = daysBookings.some((b: any) => {
-          if (String(b.staff_id) !== String(master.id)) return false;
-          const bStart = parseTime(b.start_time.substring(0, 5));
-          const bEnd = parseTime(b.end_time.substring(0, 5));
-          return isTimeOverlapping(reqStart, reqEnd, bStart, bEnd);
-        });
-        if (!isBusy) return master.id;
-      }
-      return null;
-    }
-  };
-
-  const checkSlotAvailability = (date: string, timeStr: string, durationMins: number, specificMasterId: number | string = 0) => {
+  // 🟢 Розумна перевірка статусу слоту: 'free' | 'locked' (оформлюється) | 'busy' (зайнято)
+  const getSlotStatus = (date: string, timeStr: string, durationMins: number, specificMasterId: number | string = 0) => {
     const reqStart = parseTime(timeStr);
     const reqEnd = reqStart + durationMins;
-    const availableMaster = getAvailableMasterForSlot(date, reqStart, reqEnd, specificMasterId);
-    return availableMaster !== null;
+    const now = Date.now();
+
+    const daysBookings = bookedAppointments.filter((b: any) => {
+      const bDate = b.booking_date || (b.start_time && b.start_time.split('T')[0]);
+      return bDate === date && b.status !== 'cancelled';
+    });
+
+    const mastersToCheck = (specificMasterId !== 0 && specificMasterId !== '0')
+      ? activeTeam.filter(m => String(m.id) === String(specificMasterId))
+      : activeTeam;
+
+    if (mastersToCheck.length === 0) return 'free';
+
+    let availableCount = 0;
+    let isLockedByOther = false;
+
+    for (const master of mastersToCheck) {
+      const masterBookings = daysBookings.filter((b: any) => String(b.staff_id || b.master_id) === String(master.id));
+      const conflict = masterBookings.find((b: any) => {
+        const bStartStr = b.start_time.includes('T') ? b.start_time.split('T')[1].substring(0, 5) : b.start_time.substring(0, 5);
+        const bEndStr = b.end_time.includes('T') ? b.end_time.split('T')[1].substring(0, 5) : b.end_time.substring(0, 5);
+        const bStart = parseTime(bStartStr);
+        const bEnd = parseTime(bEndStr);
+        return isTimeOverlapping(reqStart, reqEnd, bStart, bEnd);
+      });
+
+      if (!conflict) {
+        availableCount++;
+      } else if (conflict.status === 'blocked') {
+        const lockTime = new Date(conflict.created_at || conflict.start_time).getTime();
+        if (now - lockTime <= LOCK_TIMEOUT_MINUTES * 60000) {
+          isLockedByOther = true;
+        } else {
+          availableCount++;
+        }
+      }
+    }
+
+    if (availableCount > 0) return 'free';
+    if (isLockedByOther) return 'locked';
+    return 'busy';
   };
 
   const getServiceAvailabilityText = (service: any) => {
-    const duration = service.duration || service.duration_minutes || 60;
+    const duration = service.duration_minutes || service.duration || 60;
     const freeSlots = [];
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -417,7 +403,7 @@ export default function SalonProfile() {
       for (const time of allAvailableHours) {
         if (freeSlots.length >= 2) break;
         if (day.date === todayStr && parseTime(time) <= currentMins) continue;
-        if (checkSlotAvailability(day.date, time, duration, 0)) {
+        if (getSlotStatus(day.date, time, duration, 0) === 'free') {
           freeSlots.push({ date: day.date, time: time, dayName: day.dayName, dayNum: day.dayNum });
         }
       }
@@ -447,7 +433,7 @@ export default function SalonProfile() {
     }
     if (sortOrder === 'price_asc') result.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
     else if (sortOrder === 'price_desc') result.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
-    else if (sortOrder === 'duration') result.sort((a, b) => (a.duration || a.duration_minutes || 0) - (b.duration || b.duration_minutes || 0));
+    else if (sortOrder === 'duration') result.sort((a, b) => (a.duration_minutes || 0) - (b.duration_minutes || 0));
     return result;
   }, [services, searchQuery, sortOrder]);
 
@@ -469,7 +455,7 @@ export default function SalonProfile() {
 
   const totalReviewPages = Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE);
 
-  // --- Функції Модалки Авторизації ---
+  // Авторизація
   const handleModalAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -493,10 +479,7 @@ export default function SalonProfile() {
         const metadataName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name;
         let finalName = profile?.full_name || metadataName || 'Гість';
 
-        if (finalName.includes('@')) {
-          finalName = 'Користувач';
-        }
-
+        if (finalName.includes('@')) finalName = 'Користувач';
         const finalRole = profile?.role || 'client';
 
         localStorage.setItem('userName', finalName);
@@ -505,6 +488,7 @@ export default function SalonProfile() {
 
         setUserName(finalName);
         setUserRole(finalRole);
+        setUserId(data.user.id);
         const nameParts = finalName.split(' ');
         const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
         setInitials(init.toUpperCase());
@@ -512,9 +496,7 @@ export default function SalonProfile() {
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
 
-        if (finalRole === 'vendor') {
-          router.push('/cabinet');
-        }
+        if (finalRole === 'vendor') router.push('/cabinet');
       } else {
         const targetEmail = loginEmail.trim().toLowerCase();
         const targetFullName = `${regFirstName} ${regLastName}`.trim();
@@ -522,9 +504,7 @@ export default function SalonProfile() {
         const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
           password: loginPassword,
-          options: {
-            data: { full_name: targetFullName }
-          }
+          options: { data: { full_name: targetFullName } }
         });
 
         if (error) {
@@ -536,6 +516,7 @@ export default function SalonProfile() {
         localStorage.setItem('userRole', 'client');
         if (data?.session?.user) {
           localStorage.setItem('userId', data.session.user.id);
+          setUserId(data.session.user.id);
         }
 
         setUserName(targetFullName);
@@ -545,12 +526,12 @@ export default function SalonProfile() {
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
       }
-    } catch (error) {
-      alert("Відбулася непередбачувана помилка при з'єднанні з сервером.");
+    } catch {
+      alert("Відбулася помилка при з'єднанні з сервером.");
     }
   };
 
-  // --- Обробники подій модалки бронювання ---
+  // Модалка бронювання
   const openModal = (service: any) => {
     setSelectedService(service);
     setBookingStage('selection');
@@ -561,11 +542,18 @@ export default function SalonProfile() {
 
   const closeModal = async () => {
     setIsModalOpen(false);
-
     if (pendingBookingId && !bookingSuccess) {
-      await supabase.from('bookings').delete().eq('id', pendingBookingId).eq('status', 'blocked');
+      try {
+        await api.unlockTimeSlot({
+          business_id: salon.id,
+          service_id: selectedService?.id,
+          start_time: `${selectedDate}T${selectedTime}:00`,
+          client_id: userId || undefined
+        });
+      } catch (e) {
+        console.warn(e);
+      }
     }
-
     setTimeout(() => {
       setBookingStage('selection');
       setBookingSuccess(false);
@@ -576,112 +564,57 @@ export default function SalonProfile() {
   const handleNextStep = async () => {
     if (!selectedTime) return alert("Оберіть час!");
     if (!isLoggedIn) {
-       setIsAuthModalOpen(true);
-       return;
-    }
-
-    // 🟢 2. Отримуємо відстежене джерело з localStorage (або DIRECT за замовчуванням)
-    const bookingSource = (localStorage.getItem('booking_source') as BookingSource) || 'DIRECT';
-
-    const duration = selectedService?.duration || selectedService?.duration_minutes || 60;
-    const reqStart = parseTime(selectedTime!);
-    const reqEnd = reqStart + duration;
-
-    const { data: doubleCheckData } = await supabase.from('bookings')
-      .select('*')
-      .eq('business_id', salon.id)
-      .eq('booking_date', selectedDate);
-
-    if (doubleCheckData) {
-        const now = Date.now();
-        const conflict = doubleCheckData.some(b => {
-           if (b.status === 'cancelled') return false;
-           if (b.status === 'blocked' && b.created_at) {
-              if (now - new Date(b.created_at).getTime() > LOCK_TIMEOUT_MINUTES * 60000) return false;
-           }
-           if (String(b.staff_id) !== String(selectedMasterId) && selectedMasterId !== 0 && selectedMasterId !== '0') return false;
-
-           const bStart = parseTime(b.start_time.substring(0, 5));
-           const bEnd = parseTime(b.end_time.substring(0, 5));
-           return isTimeOverlapping(reqStart, reqEnd, bStart, bEnd);
-        });
-
-        if (conflict) {
-           alert("Вибачте, цей час щойно зайняв інший користувач. Будь ласка, оберіть інший.");
-           void fetchBookings(salon.id);
-           return;
-        }
-    }
-
-    const finalMasterId = getAvailableMasterForSlot(selectedDate, reqStart, reqEnd, selectedMasterId);
-    if (finalMasterId === null) {
-      alert("Вибачте, цей час щойно зайняли. Будь ласка, оберіть інший.");
+      setIsAuthModalOpen(true);
       return;
     }
 
-    const endTimeStr = formatTime(reqEnd) + ':00';
+    const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
 
-    const { data, error } = await supabase.from('bookings').insert([{
-      business_id: salon.id,
-      service_id: selectedService.id,
-      staff_id: finalMasterId,
-      client_name: userName || 'Клієнт BookEra',
-      client_phone: '+380000000000',
-      booking_date: selectedDate,
-      start_time: `${selectedTime}:00`,
-      end_time: endTimeStr,
-      status: 'blocked',
-      source: bookingSource // 🟢 Записуємо джерело у перерву/запит
-    }]).select().single();
+    try {
+      const lockRes = await api.lockTimeSlot({
+        business_id: salon.id,
+        service_id: selectedService.id,
+        start_time: `${selectedDate}T${selectedTime}:00`,
+        master_id: selectedMasterId ? String(selectedMasterId) : "0",
+        client_id: userId || undefined,
+        source: bookingSource
+      });
 
-    if (error) {
-      console.error("Помилка блокування:", error);
-      alert("Цей час щойно почав бронювати інший клієнт. Будь ласка, оберіть інший час.");
+      setPendingBookingId(lockRes.booking_id);
+      setBookingStage('confirmation');
       void fetchBookings(salon.id);
-      return;
+    } catch (err: any) {
+      alert(err.message || "Цей час щойно зайняли. Оберіть інший слот.");
+      void fetchBookings(salon.id);
     }
-
-    setPendingBookingId(data.id);
-    setSelectedMasterId(finalMasterId);
-    setBookingStage('confirmation');
   };
 
   const handleConfirmBooking = async () => {
     try {
-      // 🟢 3. Підтверджуємо джерело запису з підтриманням системи DIRECT / BOOKERA
-      const bookingSource = (localStorage.getItem('booking_source') as BookingSource) || 'DIRECT';
+      const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
 
-      const { error } = await supabase.from('bookings')
-        .update({
-          status: 'confirmed',
-          source: bookingSource
-        })
-        .eq('id', pendingBookingId);
-
-      if (error) {
-        console.error("Помилка підтвердження:", error);
-        alert("Помилка бронювання: " + error.message);
-        return;
-      }
-
-      localStorage.removeItem('booking_source');
+      await api.createAppointment({
+        business_id: salon.id,
+        service_id: selectedService.id,
+        start_time: `${selectedDate}T${selectedTime}:00`,
+        master_id: String(selectedMasterId || "0"),
+        client_id: userId || undefined,
+        source: bookingSource
+      });
 
       setBookingSuccess(true);
       void fetchBookings(salon.id);
-      setTimeout(() => {
-        void closeModal();
-      }, 2500);
+      setTimeout(() => void closeModal(), 2500);
     } catch (e: any) {
-      console.error(e);
-      alert("Непередбачена помилка: " + e.message);
+      alert(e.message || "Помилка підтвердження бронювання.");
     }
   };
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isLoggedIn) {
-       setIsAuthModalOpen(true);
-       return;
+      setIsAuthModalOpen(true);
+      return;
     }
     if (reviewRating === 0) return alert("Будь ласка, оберіть кількість зірок.");
 
@@ -699,7 +632,6 @@ export default function SalonProfile() {
       const { error } = await supabase.from('reviews').insert([newReview]);
 
       if (error) {
-        console.error(error);
         alert('Сталася помилка при відправці відгуку.');
         setIsSubmittingReview(false);
         return;
@@ -711,8 +643,7 @@ export default function SalonProfile() {
       setReviewText('');
       setReviewFilter('all');
       setCurrentReviewPage(1);
-    } catch (err: any) {
-      console.error(err);
+    } catch {
       alert('Непередбачена помилка при відправці відгуку.');
     } finally {
       setIsSubmittingReview(false);
@@ -740,10 +671,11 @@ export default function SalonProfile() {
   const googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
   const averageRating = useMemo(() => {
-    if (reviews.length === 0) return salon?.reviews_rank ? parseFloat(salon.reviews_rank) : 0;
+    if (reviews.length === 0) return salon?.rating ? parseFloat(salon.rating) : 0;
     const total = reviews.reduce((acc, r) => acc + r.rating, 0);
     return total / reviews.length;
   }, [reviews, salon]);
+
   const totalReviewsCount = reviews.length > 0 ? reviews.length : (salon?.reviews_count ? parseInt(salon.reviews_count) : 0);
 
   const getDisplayDateTime = () => {
@@ -817,29 +749,21 @@ export default function SalonProfile() {
     <div style={{
       backgroundColor: '#ffffff',
       minHeight: '100vh',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      color: '#222222',
-      '--dynamic-accent': salon?.accent_color || '#e83e8c'
-    } as React.CSSProperties}>
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      color: '#222222'
+    }}>
 
       <style dangerouslySetInnerHTML={{ __html: `
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; }
         .anim { transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); }
         .btn-dark { background-color: #222222 !important; color: #ffffff !important; font-weight: 700; border: none; cursor: pointer; transition: 0.2s; }
         .btn-dark:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); }
-        
-        .header-link { color: #475569; font-weight: 600; font-size: 0.95rem; text-decoration: none; transition: 0.2s; }
-        .header-link:hover, .nav-link:hover { color: #8fae92 !important; }
-        
-        .header-user-wrapper { cursor: pointer; display: flex; align-items: center; gap: 0.6rem; transition: 0.2s; }
-        .header-user-name { color: #222222; font-weight: 700; font-size: 0.95rem; transition: 0.2s; }
-        .header-user-wrapper:hover .header-user-name { color: #8fae92; }
         .section-card { background-color: #ffffff; border-radius: 24px; padding: 2.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; }
         .section-title { font-size: 1.5rem; font-weight: 800; color: #222222; margin: 0; letter-spacing: -0.02em; }
         .service-pill { background-color: transparent; border-bottom: 1px solid #f1f5f9; padding: 1.5rem 0; display: flex; flex-direction: column; gap: 0.8rem; transition: all 0.2s ease; }
         .service-pill:last-child { border-bottom: none; }
         .service-pill-top { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-        .service-availability { display: flex; align-items: center; gap: 0.4rem; color: var(--dynamic-accent); font-size: 0.85rem; font-weight: 700; background: #f8fafc; padding: 0.4rem 0.8rem; border-radius: 8px; width: fit-content; }
+        .service-availability { display: flex; align-items: center; gap: 0.4rem; color: #166534; font-size: 0.85rem; font-weight: 700; background: #f0fdf4; padding: 0.4rem 0.8rem; border-radius: 8px; width: fit-content; }
         .service-availability.no-slots { background: #fef2f2; color: #ef4444; }
         .service-btn { background: #222222; border: 1px solid #222222; color: #ffffff; padding: 0.5rem 1.25rem; border-radius: 10px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s ease; }
         .service-btn:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); }
@@ -873,9 +797,7 @@ export default function SalonProfile() {
         .gallery-nav-btn:hover { background: rgba(255,255,255,0.3); transform: translateY(-50%) scale(1.1); }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @media (max-width: 900px) { .search-loc, .search-date, .search-divider-responsive { display: none !important; } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes modalEntrance { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        
         .modal-backdrop { animation: fadeIn 0.25s ease-out forwards; }
         .modal-content { animation: modalEntrance 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .modal-label { font-size: 0.65rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.75rem; display: block; }
@@ -888,23 +810,29 @@ export default function SalonProfile() {
         .date-card:hover:not(.active) { background: #f1f5f9; }
         .date-card.active { background-color: #222222; color: #ffffff !important; border-color: #222222; box-shadow: 0 6px 16px rgba(34, 34, 34, 0.15); }
         .date-card.active .date-name { opacity: 1 !important; color: #ffffff !important; }
-        .time-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; max-height: 200px; overflow-y: auto; padding-right: 4px; padding-bottom: 8px; }
-        .time-pill { border: none; background-color: #f8fafc; padding: 0.6rem 0.2rem; border-radius: 12px; cursor: pointer; font-size: 0.9rem; font-weight: 700; transition: all 0.2s; color: #475569; width: 100%; border: 1px dashed transparent; }
-        .time-pill:hover:not(.busy):not(.active) { background-color: #f1f5f9; border-color: #cbd5e1; }
+        
+        .time-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; max-height: 220px; overflow-y: auto; padding-right: 4px; padding-bottom: 8px; }
+        .time-pill { border: 1.5px solid transparent; background-color: #f8fafc; padding: 0.6rem 0.2rem; border-radius: 12px; cursor: pointer; font-size: 0.9rem; font-weight: 700; transition: all 0.2s; color: #475569; width: 100%; text-align: center; }
+        .time-pill:hover:not(.busy):not(.active):not(.locked) { background-color: #f1f5f9; border-color: #cbd5e1; }
         .time-pill.active { background-color: #222222 !important; color: #ffffff !important; box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); border-color: #222222; }
+        
+        /* Стани слотів */
+        .time-pill.locked { background-color: #fffbeb !important; color: #b45309 !important; border: 1.5px dashed #f59e0b !important; cursor: not-allowed; }
         .time-pill.busy { background-color: transparent !important; color: #cbd5e1 !important; cursor: not-allowed !important; border: 1px dashed #e2e8f0; text-decoration: line-through; }
+        
+        .lock-timer-badge { display: flex; align-items: center; justify-content: center; gap: 6px; background-color: #fef3c7; color: #92400e; padding: 6px 14px; border-radius: 999px; font-weight: 800; font-size: 0.85rem; width: fit-content; margin: 0 auto 1.5rem auto; border: 1px solid #fde68a; }
+
         .details-row { display: flex; align-items: flex-end; margin-bottom: 1rem; }
         .details-label { color: #64748b; font-size: 0.85rem; padding-right: 8px; font-weight: 600; }
         .details-value { color: #222222; font-size: 0.95rem; font-weight: 800; text-align: right; padding-left: 8px; }
         .details-dots { flex-grow: 1; border-bottom: 1px dashed #cbd5e1; margin-bottom: 4px; opacity: 0.6; }
         .success-circle { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #ffffff; margin: 0 auto; border: 2px solid #e2e8f0; }
         .success-svg { width: 32px; height: 32px; }
-        .success-check { stroke: var(--dynamic-accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: drawCheck 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; }
+        .success-check { stroke: #166534; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: drawCheck 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; }
         @keyframes drawCheck { to { stroke-dashoffset: 0; } }
         
         .modal-input { width: 100%; padding: 0.85rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box; margin-bottom: 1rem; transition: 0.2s; }
         .modal-input:focus { outline: none; border-color: #222222; box-shadow: 0 0 0 3px rgba(34, 34, 34, 0.1); }
-        
         .social-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.85rem; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; font-weight: 600; color: #475569; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
         .social-btn:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
       `}} />
@@ -925,7 +853,7 @@ export default function SalonProfile() {
               )}
               <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="modal-input" required />
               <input type="password" placeholder="Пароль" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="modal-input" required />
-              <button type="submit" style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: '#fff', borderRadius: '12px', fontWeight: '700', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', marginTop: '0.5rem', fontSize: '1rem', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#0f172a'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>{isLoginView ? 'Продовжити' : 'Зареєструватись'}</button>
+              <button type="submit" style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: '#fff', borderRadius: '12px', fontWeight: '700', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', marginTop: '0.5rem', fontSize: '1rem', transition: '0.2s' }}>{isLoginView ? 'Продовжити' : 'Зареєструватись'}</button>
             </form>
             <div style={{ display: 'flex', alignItems: 'center', margin: '1rem 0', color: '#94a3b8', fontSize: '0.85rem' }}>
               <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div>
@@ -971,9 +899,9 @@ export default function SalonProfile() {
                 {isDateOpen && (
                   <div className="search-dropdown anim" style={{ position: 'absolute', maxHeight: 'none', overflowY: 'visible', padding: '1.5rem', width: '360px', right: 0, left: 'auto', top: 'calc(100% + 14px)', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 24px 50px rgba(0,0,0,0.1)', background: '#fff' }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
                       <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '1rem', textTransform: 'capitalize' }}>{currentMonth.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}</div>
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+                      <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div></div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '1.25rem' }}>{renderCalendarDays()}</div>
@@ -996,8 +924,6 @@ export default function SalonProfile() {
                               fontWeight: '600', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s ease',
                               whiteSpace: 'nowrap'
                             }}
-                            onMouseOver={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
-                            onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = '#fff'; }}
                           >
                             {period}
                           </button>
@@ -1007,14 +933,14 @@ export default function SalonProfile() {
                   </div>
                 )}
               </div>
-              <button onClick={handleHeaderSearch} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
+              <button onClick={handleHeaderSearch} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }}>
                 <div style={{ display: 'flex', width: '16px', height: '16px', color: '#ffffff' }}><Icons.Search /></div>
               </button>
             </div>
           </div>
 
           <div style={{ width: '280px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
-            <Link href={userRole === 'vendor' ? "/cabinet" : "/business"} className="nav-link" style={{ whiteSpace: 'nowrap', color: '#475569', fontWeight: '600', textDecoration: 'none' }}>Для бізнесу</Link>
+            <Link href={userRole === 'vendor' ? "/cabinet" : "/business"} style={{ whiteSpace: 'nowrap', color: '#475569', fontWeight: '600', textDecoration: 'none' }}>Для бізнесу</Link>
 
             {isLoggedIn ? (
               <div style={{ position: 'relative' }} ref={profileRef}>
@@ -1030,15 +956,15 @@ export default function SalonProfile() {
                       <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Акаунт</div>
                       <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#222222', marginTop: '2px', wordWrap: 'break-word' }}>{userName}</div>
                     </div>
-                    <Link href="/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
-                    {userRole === 'vendor' && (<Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease' }} onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>)}
-                    <Link href="/settings" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
-                    <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '0.85rem' }}>Вийти з акаунту</button>
+                    <Link href="/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
+                    {userRole === 'vendor' && (<Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500' }} onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>)}
+                    <Link href="/settings" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
+                    <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '500', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '0.85rem' }}>Вийти з акаунту</button>
                   </div>
                 )}
               </div>
             ) : (
-              <span onClick={() => { setIsLoginView(true); setIsAuthModalOpen(true); }} className="anim" style={{ color: '#111827', cursor: 'pointer', transition: 'color 0.2s ease', fontWeight: '600', fontSize: '0.95rem', whiteSpace: 'nowrap' }} onMouseOver={e=>e.currentTarget.style.color='#8fae92'} onMouseOut={e=>e.currentTarget.style.color='#111827'}>Увійти / Зареєструватись</span>
+              <span onClick={() => { setIsLoginView(true); setIsAuthModalOpen(true); }} style={{ color: '#111827', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>Увійти / Зареєструватись</span>
             )}
           </div>
         </div>
@@ -1049,7 +975,6 @@ export default function SalonProfile() {
         {galleryPhotos.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', marginBottom: '2.5rem' }}>
             <div style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 60%, rgba(0,0,0,0.3) 100%)', zIndex: 1, pointerEvents: 'none' }}></div>
               <Image src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 768px) 100vw, 66vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(0)} />
             </div>
             {galleryPhotos.length > 1 && (
@@ -1088,7 +1013,7 @@ export default function SalonProfile() {
               Поділитися
             </button>
             <button className="icon-btn anim" onClick={() => setIsFavorite(!isFavorite)} style={{ width: '42px', height: '42px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <svg fill={isFavorite ? "#ef4444" : "none"} stroke={isFavorite ? "#ef4444" : "#222222"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{width: '20px', height: '20px', transition: '0.2s'}}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+              <svg fill={isFavorite ? "#ef4444" : "none"} stroke={isFavorite ? "#ef4444" : "#222222"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{width: '20px', height: '20px'}}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
             </button>
           </div>
         </div>
@@ -1141,19 +1066,19 @@ export default function SalonProfile() {
                             <div>
                               <div style={{ fontWeight: '800', fontSize: '1.15rem', color: '#222222', marginBottom: '0.3rem' }}>{service.name}</div>
                               <div style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                 <div style={{ display: 'flex', width: '14px', height: '14px' }}><Icons.Clock /></div> {service.duration || service.duration_minutes || 60} хв
+                                <div style={{ display: 'flex', width: '14px', height: '14px' }}><Icons.Clock /></div> {service.duration_minutes || service.duration || 60} хв
                               </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                              <div style={{ fontWeight: '900', color: 'var(--dynamic-accent)', fontSize: '1.25rem' }}>{service.price} ₴</div>
+                              <div style={{ fontWeight: '900', color: '#111827', fontSize: '1.25rem' }}>{service.price} ₴</div>
                               <button className="service-btn" onClick={() => openModal(service)}>Вибрати</button>
                             </div>
                           </div>
                           <div className={`service-availability ${availText === "Немає вільних годин найближчим часом" ? 'no-slots' : ''}`}>
                             {availText === "Немає вільних годин найближчим часом" ? (
-                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                             ) : (
-                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                             )}
                             <span>{availText}</span>
                           </div>
@@ -1198,7 +1123,7 @@ export default function SalonProfile() {
                 ) : (
                   <form onSubmit={handleReviewSubmit}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-                      <div style={{ fontWeight: '700', color: '#222222', fontSize: '1.05rem' }}>Залишити відгук як <span style={{color: '#C2D8C4', marginLeft: '4px', fontWeight: '800'}}>{userName}</span></div>
+                      <div style={{ fontWeight: '700', color: '#222222', fontSize: '1.05rem' }}>Залишити відгук як <span style={{color: '#8fae92', marginLeft: '4px', fontWeight: '800'}}>{userName}</span></div>
                       <div style={{ display: 'flex', gap: '2px' }} onMouseLeave={() => setHoverRating(0)}>
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button key={star} type="button" className={`star-btn ${(hoverRating || reviewRating) >= star ? 'active' : ''}`} onMouseEnter={() => setHoverRating(star)} onClick={() => setReviewRating(star)}>★</button>
@@ -1277,14 +1202,14 @@ export default function SalonProfile() {
               {/* Карта */}
               <div className="section-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ height: '220px', width: '100%', backgroundColor: '#e2e8f0', position: 'relative', overflow: 'hidden', borderRadius: '24px 24px 0 0' }}>
-                   <div style={{ position: 'absolute', top: '-150px', left: '-150px', width: 'calc(100% + 300px)', height: 'calc(100% + 300px)' }}>
-                     <iframe src={mapIframeUrl} style={{ width: '100%', height: '100%', border: 0, pointerEvents: 'none' }} allowFullScreen={false} loading="lazy" referrerPolicy="no-referrer-when-downgrade"></iframe>
-                   </div>
+                  <div style={{ position: 'absolute', top: '-150px', left: '-150px', width: 'calc(100% + 300px)', height: 'calc(100% + 300px)' }}>
+                    <iframe src={mapIframeUrl} style={{ width: '100%', height: '100%', border: 0, pointerEvents: 'none' }} allowFullScreen={false} loading="lazy" referrerPolicy="no-referrer-when-downgrade"></iframe>
+                  </div>
                 </div>
                 <div style={{ padding: '1.2rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderTop: '1px solid #f1f5f9' }}>
                   <div style={{ color: '#475569', fontSize: '0.95rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem', lineHeight: '1.3' }}>
-                     <div style={{ display: 'flex', width: '18px', flexShrink: 0, color: '#94a3b8' }}><Icons.MapPin /></div>
-                     <span>{salon?.address || "Адреса не вказана"}</span>
+                    <div style={{ display: 'flex', width: '18px', flexShrink: 0, color: '#94a3b8' }}><Icons.MapPin /></div>
+                    <span>{salon?.address || "Адреса не вказана"}</span>
                   </div>
                   <a href={googleMapsLink} target="_blank" rel="noopener noreferrer" className="anim" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#222222', fontWeight: '800', fontSize: '0.85rem', padding: '0.5rem 1rem', borderRadius: '10px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     Відкрити
@@ -1309,30 +1234,28 @@ export default function SalonProfile() {
         </div>
       </main>
 
-      {/* --- ГАЛЕРЕЯ (З ПОВЕРНЕНИМИ СТРІЛКАМИ) --- */}
+      {/* --- ГАЛЕРЕЯ (FULLSCREEN) --- */}
       {currentImageIndex !== null && galleryPhotos.length > 0 && (
         <div onClick={() => setCurrentImageIndex(null)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
-           <button style={{ position: 'absolute', top: '2rem', right: '2rem', background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', width: '48px', height: '48px', borderRadius: '50%', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2010 }} onClick={() => setCurrentImageIndex(null)}>✕</button>
-           <button className="gallery-nav-btn" style={{ left: '2rem' }} onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev === 0 ? galleryPhotos.length - 1 : (prev || 0) - 1); }}>‹</button>
-           <img src={galleryPhotos[currentImageIndex]} alt="Gallery fullscreen view" style={{ maxWidth: '85%', maxHeight: '85%', objectFit: 'contain', borderRadius: '16px', zIndex: 2005 }} onClick={e => e.stopPropagation()} />
-           <button className="gallery-nav-btn" style={{ right: '2rem' }} onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev === galleryPhotos.length - 1 ? 0 : (prev || 0) + 1); }}>›</button>
+          <button style={{ position: 'absolute', top: '2rem', right: '2rem', background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', width: '48px', height: '48px', borderRadius: '50%', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2010 }} onClick={() => setCurrentImageIndex(null)}>✕</button>
+          <button className="gallery-nav-btn" style={{ left: '2rem' }} onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev === 0 ? galleryPhotos.length - 1 : (prev || 0) - 1); }}>‹</button>
+          <img src={galleryPhotos[currentImageIndex]} alt="Fullscreen view" style={{ maxWidth: '85%', maxHeight: '85%', objectFit: 'contain', borderRadius: '16px', zIndex: 2005 }} onClick={e => e.stopPropagation()} />
+          <button className="gallery-nav-btn" style={{ right: '2rem' }} onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => prev === galleryPhotos.length - 1 ? 0 : (prev || 0) + 1); }}>›</button>
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО БРОНЮВАННЯ --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО БРОНЮВАННЯ З ТАЙМЕРОМ ТА СТАТУСАМИ --- */}
       {isModalOpen && (
         <div className="modal-backdrop" onClick={closeModal} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(34, 34, 34, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', borderRadius: '28px', width: '92%', maxWidth: '420px', padding: '2rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', borderRadius: '28px', width: '92%', maxWidth: '440px', padding: '2rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
 
-            {/* Кнопка закриття */}
             {!bookingSuccess && (
-              <button style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', position: 'absolute', top: '1.5rem', right: '1.5rem', padding: '0', display: 'flex', transition: '0.2s', zIndex: 10 }} onMouseOver={e => e.currentTarget.style.color = '#222222'} onMouseOut={e => e.currentTarget.style.color = '#94a3b8'} onClick={closeModal}>
+              <button style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', position: 'absolute', top: '1.5rem', right: '1.5rem', padding: '0', display: 'flex', transition: '0.2s', zIndex: 10 }} onClick={closeModal}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             )}
 
             {bookingSuccess ? (
-
               // КРОК 3: УСПІХ
               <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                 <div className="success-circle">
@@ -1346,40 +1269,45 @@ export default function SalonProfile() {
 
             ) : bookingStage === 'confirmation' ? (
 
-              // КРОК 2: ПЕРЕВІРКА ДЕТАЛЕЙ
+              // КРОК 2: ПЕРЕВІРКА ДЕТАЛЕЙ І ТАЙМЕР
               <>
+                <div className="lock-timer-badge">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>Час на підтвердження: {formatCountdown(timeLeft)}</span>
+                </div>
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.75rem', height: '24px' }}>
                   <button onClick={() => setBookingStage('selection')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', padding: 0, color: '#94a3b8' }}>
-                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                   </button>
                   <h2 style={{ fontSize: '1.25rem', fontWeight: '900', color: '#222222', margin: 0, letterSpacing: '-0.01em' }}>Перевірте деталі</h2>
                 </div>
 
                 <div style={{ marginBottom: '2.5rem' }}>
-                   <div className="details-row">
-                     <span className="details-label">Послуга</span>
-                     <div className="details-dots"></div>
-                     <span className="details-value">{selectedService?.name}</span>
-                   </div>
-                   <div className="details-row">
-                     <span className="details-label">Майстер</span>
-                     <div className="details-dots"></div>
-                     <span className="details-value">
-                       {selectedMasterId === 0 || selectedMasterId === '0' ? 'Будь-хто' : staffers.find(s => s.id === selectedMasterId)?.name}
-                     </span>
-                   </div>
-                   <div className="details-row">
-                     <span className="details-label">Дата та Час</span>
-                     <div className="details-dots"></div>
-                     <span className="details-value">
-                       {selectedDate.split('-').reverse().join('.')} о {selectedTime}
-                     </span>
-                   </div>
-                   <div className="details-row" style={{ marginTop: '2rem', alignItems: 'center' }}>
-                     <span className="details-label" style={{ fontWeight: '800', color: '#222222', fontSize: '1.05rem' }}>До сплати</span>
-                     <div className="details-dots" style={{ borderBottomColor: 'transparent' }}></div>
-                     <span className="details-value" style={{ color: 'var(--dynamic-accent)', fontSize: '1.3rem', fontWeight: '900' }}>{selectedService?.price} ₴</span>
-                   </div>
+                  <div className="details-row">
+                    <span className="details-label">Послуга</span>
+                    <div className="details-dots"></div>
+                    <span className="details-value">{selectedService?.name}</span>
+                  </div>
+                  <div className="details-row">
+                    <span className="details-label">Майстер</span>
+                    <div className="details-dots"></div>
+                    <span className="details-value">
+                      {selectedMasterId === 0 || selectedMasterId === '0' ? 'Будь-хто' : staffers.find(s => s.id === selectedMasterId)?.name}
+                    </span>
+                  </div>
+                  <div className="details-row">
+                    <span className="details-label">Дата та Час</span>
+                    <div className="details-dots"></div>
+                    <span className="details-value">
+                      {selectedDate.split('-').reverse().join('.')} о {selectedTime}
+                    </span>
+                  </div>
+                  <div className="details-row" style={{ marginTop: '2rem', alignItems: 'center' }}>
+                    <span className="details-label" style={{ fontWeight: '800', color: '#222222', fontSize: '1.05rem' }}>До сплати</span>
+                    <div className="details-dots" style={{ borderBottomColor: 'transparent' }}></div>
+                    <span className="details-value" style={{ color: '#166534', fontSize: '1.3rem', fontWeight: '900' }}>{selectedService?.price} ₴</span>
+                  </div>
                 </div>
 
                 <button onClick={handleConfirmBooking} className="btn-dark anim" style={{ width: '100%', padding: '1.1rem', borderRadius: '16px', fontSize: '1.05rem' }}>
@@ -1388,17 +1316,16 @@ export default function SalonProfile() {
               </>
             ) : (
 
-              // КРОК 1: ВИБІР ЧАСУ ТА ДАТИ
+              // КРОК 1: ВИБІР ЧАСУ ТА ДАТИ ЗІ СТАТУСАМИ
               <>
                 <h2 style={{ fontSize: '1.35rem', fontWeight: '900', color: '#222222', marginBottom: '1.25rem', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', height: '24px' }}>Бронювання</h2>
 
-                {/* Блок інформації про послугу */}
                 <div style={{ background: '#f8fafc', borderRadius: '18px', padding: '1.2rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.75rem', border: '1px solid #f1f5f9' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
                     <div style={{ fontWeight: '800', color: '#222222', fontSize: '1.05rem' }}>{selectedService?.name}</div>
-                    <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600' }}>{selectedService?.duration || selectedService?.duration_minutes || 60} хв</div>
+                    <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600' }}>{selectedService?.duration_minutes || selectedService?.duration || 60} хв</div>
                   </div>
-                  <div style={{ fontWeight: '900', color: 'var(--dynamic-accent)', fontSize: '1.2rem' }}>{selectedService?.price} ₴</div>
+                  <div style={{ fontWeight: '900', color: '#111827', fontSize: '1.2rem' }}>{selectedService?.price} ₴</div>
                 </div>
 
                 {/* 1. МАЙСТЕР */}
@@ -1430,16 +1357,38 @@ export default function SalonProfile() {
                 </div>
 
                 {/* 3. ЧАС */}
-                <div style={{ marginBottom: '2.5rem' }}>
-                  <label className="modal-label">3. ЧАС</label>
-                  <div className="hide-scrollbar time-grid">
+                <div style={{ marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <label className="modal-label" style={{ marginBottom: 0 }}>3. ЧАС</label>
+                    <span style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: '700' }}>🟡 — оформлюється</span>
+                  </div>
+
+                  <div className="time-grid hide-scrollbar">
                     {allAvailableHours.map((time) => {
-                      const duration = selectedService?.duration || selectedService?.duration_minutes || 60;
-                      const busy = !checkSlotAvailability(selectedDate, time, duration, selectedMasterId);
+                      const duration = selectedService?.duration_minutes || selectedService?.duration || 60;
+                      const status = getSlotStatus(selectedDate, time, duration, selectedMasterId);
                       const now = new Date();
+
                       if (selectedDate === fmtDate(now) && parseTime(time) <= (now.getHours() * 60 + now.getMinutes())) return null;
+
+                      if (status === 'locked') {
+                        return (
+                          <button key={time} disabled className="time-pill locked" title="Зараз оформлюється іншим клієнтом (до 10 хв)">
+                            {time}
+                          </button>
+                        );
+                      }
+
+                      if (status === 'busy') {
+                        return (
+                          <button key={time} disabled className="time-pill busy" title="Зайнято">
+                            {time}
+                          </button>
+                        );
+                      }
+
                       return (
-                        <button key={time} disabled={busy} onClick={() => setSelectedTime(time)} className={`time-pill ${busy ? 'busy' : ''} ${selectedTime === time ? 'active' : ''}`}>
+                        <button key={time} onClick={() => setSelectedTime(time)} className={`time-pill ${selectedTime === time ? 'active' : ''}`}>
                           {time}
                         </button>
                       );
@@ -1448,7 +1397,7 @@ export default function SalonProfile() {
                 </div>
 
                 <button onClick={handleNextStep} className="btn-dark anim" style={{ width: '100%', padding: '1.1rem', borderRadius: '16px', fontSize: '1.05rem' }}>
-                  Далі
+                  Забронювати на 10 хвилин
                 </button>
               </>
             )}

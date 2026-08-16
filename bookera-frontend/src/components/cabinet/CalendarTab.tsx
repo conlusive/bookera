@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Icons, MASTER_COLORS, toLocalDateStr, checkSameDay, CurrentTimeIndicator } from '@/components/shared';
+import { api } from '@/lib/api';
+import { useToast } from '@/context/ToastContext';
 
 // Іконка для чекбоксу в стилі Apple
 const CheckIcon = () => (
@@ -15,9 +17,15 @@ const CheckIcon = () => (
 const TASK_COLORS = ['#fdf4ff', '#f0fdf4', '#fffbeb', '#f0f9ff', '#fff1f2'];
 const TASK_BORDERS = ['#f5d0fe', '#bbf7d0', '#fde68a', '#bae6fd', '#fecdd3'];
 
-export default function CalendarTab({ business, team, services, refreshClients }: any) {
-  const supabase = createClient();
+export default function CalendarTab({ business, team = [], services = [], refreshClients, userProfile }: any) {
+  const supabase = useMemo(() => createClient(), []);
+  const { showToast } = useToast();
   const now = new Date();
+
+  // Стейт завантаження для кнопок збереження
+  const [isSavingCalSettings, setIsSavingCalSettings] = useState(false);
+  const [isSavingShifts, setIsSavingShifts] = useState(false);
+  const [isSavingAppt, setIsSavingAppt] = useState(false);
 
   // --- РЕФЕРЕНСИ ---
   const masterFilterRef = useRef<HTMLDivElement>(null);
@@ -41,7 +49,17 @@ export default function CalendarTab({ business, team, services, refreshClients }
     { day: 'Неділя', active: false, start: '09:00', end: '20:00' },
   ]);
 
-  const [filterMaster, setFilterMaster] = useState('all');
+  // 🟢 Автоматична фіксація майстра, якщо увійти з роллю 'master'
+  const isMasterUser = userProfile?.role === 'master';
+  const myMasterId = team.find((m: any) => m.email === userProfile?.email || m.id === userProfile?.id)?.id;
+
+  const [filterMaster, setFilterMaster] = useState<string>(isMasterUser && myMasterId ? String(myMasterId) : 'all');
+
+  useEffect(() => {
+    if (isMasterUser && myMasterId) {
+      setFilterMaster(String(myMasterId));
+    }
+  }, [isMasterUser, myMasterId]);
   const [isMasterFilterOpen, setIsMasterFilterOpen] = useState(false);
   const [clipboardApp, setClipboardApp] = useState<any>(null);
   const [contextMenu, setContextMenu] = useState<{x: number, y: number, app: any} | null>(null);
@@ -139,10 +157,27 @@ export default function CalendarTab({ business, team, services, refreshClients }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentDate, calendarView, filterMaster]);
 
-  // Завантаження записів
+ // Завантаження записів (FastAPI + Supabase Fallback)
   useEffect(() => {
     async function fetchAppointments() {
       if (!business) return;
+
+      try {
+        const apiData = await api.getBookedAppointments(business.id);
+        if (apiData && apiData.length > 0) {
+          const mapped = apiData.map((app: any) => ({
+            ...app,
+            booking_date: app.booking_date || (app.start_time ? app.start_time.split('T')[0] : toLocalDateStr(currentDate)),
+            start_time: app.start_time.includes('T') ? app.start_time.split('T')[1].substring(0, 8) : app.start_time,
+            end_time: app.end_time.includes('T') ? app.end_time.split('T')[1].substring(0, 8) : app.end_time,
+          }));
+          setAppointments(mapped);
+          return;
+        }
+      } catch (e) {
+        console.warn("API не доступний, перемикаємось на прямий запит:", e);
+      }
+
       const y = currentDate.getFullYear();
       const m = currentDate.getMonth();
       const startFetch = new Date(y, m, 1);
@@ -196,15 +231,40 @@ export default function CalendarTab({ business, team, services, refreshClients }
   };
 
   const handleSaveCalSettings = async () => {
-    if (business) await supabase.from('businesses').update({ cal_settings: calSettings }).eq('id', business.id);
-    setShowCalSettingsModal(false);
-  };
-  const handleSaveShifts = async () => {
-    if (business) await supabase.from('businesses').update({ shifts: shifts }).eq('id', business.id);
-    setShowShiftsModal(false);
+    if (!business?.id || isSavingCalSettings) return;
+    setIsSavingCalSettings(true);
+    try {
+      const [, res] = await Promise.all([
+        new Promise(resolve => setTimeout(resolve, 500)),
+        supabase.from('businesses').update({ cal_settings: calSettings }).eq('id', business.id)
+      ]);
+      if (res.error) throw res.error;
+      showToast('Налаштування календаря збережено', 'success');
+      setShowCalSettingsModal(false);
+    } catch (err: any) {
+      showToast('Помилка збереження налаштувань', 'error');
+    } finally {
+      setIsSavingCalSettings(false);
+    }
   };
 
-  // --- МЕНЕДЖЕР ЗАДАЧ ---
+  const handleSaveShifts = async () => {
+    if (!business?.id || isSavingShifts) return;
+    setIsSavingShifts(true);
+    try {
+      const [, res] = await Promise.all([
+        new Promise(resolve => setTimeout(resolve, 500)),
+        supabase.from('businesses').update({ shifts: shifts }).eq('id', business.id)
+      ]);
+      if (res.error) throw res.error;
+      showToast('Графік змін закладу збережено', 'success');
+      setShowShiftsModal(false);
+    } catch (err: any) {
+      showToast('Помилка збереження графіка', 'error');
+    } finally {
+      setIsSavingShifts(false);
+    }
+  };
   const handleAddTaskClick = () => { if (!hasSeenTaskInfo && tasks.length === 0) setShowTaskInfoModal(true); else setIsAddingTask(true); };
   const confirmTaskInfo = () => { setHasSeenTaskInfo(true); setShowTaskInfoModal(false); setIsAddingTask(true); };
   const saveNewTask = async () => {
@@ -232,19 +292,31 @@ export default function CalendarTab({ business, team, services, refreshClients }
     if (business) await supabase.from('businesses').update({ tasks: newTasks }).eq('id', business.id);
   };
 
-  // --- СИСТЕМА ЗАПИСІВ ---
+// --- СИСТЕМА ЗАПИСІВ ---
   const handleSaveAppointment = async () => {
     let finalPhone = '';
     if (!isBlockMode && apptForm.client_phone && apptForm.client_phone !== '+380') {
       const phoneStripped = apptForm.client_phone.replace(/\D/g, '');
-      if (phoneStripped.length !== 12) return alert("Некоректний номер телефону! Введіть 9 цифр після +380.");
+      if (phoneStripped.length !== 12) {
+        showToast("Некоректний номер! Введіть 9 цифр після +380", "error");
+        return;
+      }
       finalPhone = '+' + phoneStripped;
     }
 
-    try {
-      const selectedService = services.find((s: any) => String(s.id) === String(apptForm.service_id));
-      if (!isBlockMode && !selectedService) return alert("Оберіть існуючу послугу.");
+    if (!isBlockMode && !apptForm.client_name.trim()) {
+      showToast("Введіть ім'я клієнта", "error");
+      return;
+    }
 
+    const selectedService = services.find((s: any) => String(s.id) === String(apptForm.service_id));
+    if (!isBlockMode && !selectedService) {
+      showToast("Оберіть послугу зі списку", "error");
+      return;
+    }
+
+    setIsSavingAppt(true);
+    try {
       const [hours, minutes] = apptForm.time.split(':').map(Number);
       const startDateTime = new Date(1970, 0, 1, hours, minutes);
       const endDateTime = new Date(startDateTime.getTime() + (isBlockMode ? apptForm.duration : selectedService.duration) * 60000);
@@ -253,25 +325,29 @@ export default function CalendarTab({ business, team, services, refreshClients }
       const endTimeStr = `${endDateTime.getHours().toString().padStart(2, '0')}:${endDateTime.getMinutes().toString().padStart(2, '0')}:00`;
 
       const bookingData = isBlockMode
-      ? { business_id: business.id, staff_id: apptForm.staff_id || null, service_id: null, client_name: 'Неробочий час', client_phone: '0000000000', booking_date: apptForm.date, start_time: startTimeStr, end_time: endTimeStr, status: 'blocked' }
-      : { business_id: business.id, staff_id: apptForm.staff_id || null, service_id: apptForm.service_id, client_name: apptForm.client_name, client_phone: finalPhone, booking_date: apptForm.date, start_time: startTimeStr, end_time: endTimeStr, status: 'confirmed' };
+        ? { business_id: business.id, staff_id: apptForm.staff_id || null, service_id: null, client_name: 'Неробочий час', client_phone: '0000000000', booking_date: apptForm.date, start_time: startTimeStr, end_time: endTimeStr, status: 'blocked', block_reason: apptForm.block_reason || 'Перерва' }
+        : { business_id: business.id, staff_id: apptForm.staff_id || null, service_id: apptForm.service_id, client_name: apptForm.client_name.trim(), client_phone: finalPhone, booking_date: apptForm.date, start_time: startTimeStr, end_time: endTimeStr, status: 'confirmed' };
 
       const { data, error } = await supabase.from('bookings').insert([bookingData]).select().single();
 
-      if (error) { alert(`Помилка бази даних: ${error.message}`); }
-      else if (data) {
+      if (error) {
+        showToast(`Помилка: ${error.message}`, "error");
+        return;
+      }
+
+      if (data) {
         if (!isBlockMode) {
           const servicePrice = selectedService ? selectedService.price : 0;
           const safeDate = apptForm.date ? apptForm.date.substring(0, 10) : new Date().toISOString().split('T')[0];
           try {
             let existingClient = null;
             if (finalPhone !== '') {
-              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('phone', finalPhone).limit(1);
-              if (data && data.length > 0) existingClient = data[0];
+              const { data: clientData } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('phone', finalPhone).limit(1);
+              if (clientData && clientData.length > 0) existingClient = clientData[0];
             }
             if (!existingClient && apptForm.client_name?.trim()) {
-              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('name', apptForm.client_name.trim()).limit(1);
-              if (data && data.length > 0) existingClient = data[0];
+              const { data: clientData } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('name', apptForm.client_name.trim()).limit(1);
+              if (clientData && clientData.length > 0) existingClient = clientData[0];
             }
 
             if (existingClient) {
@@ -282,12 +358,18 @@ export default function CalendarTab({ business, team, services, refreshClients }
             if (refreshClients) refreshClients();
           } catch (syncErr) { console.error(syncErr); }
         }
-        setAppointments([...appointments, data]);
+
+        setAppointments(prev => [...prev, data]);
         setIsApptModalOpen(false);
         setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 });
         setIsBlockMode(false);
+        showToast(isBlockMode ? 'Час успішно заблоковано' : 'Запис успішно створено!', 'success');
       }
-    } catch (err: any) { alert(`Помилка: ${err.message}`); }
+    } catch (err: any) {
+      showToast(`Помилка: ${err.message}`, "error");
+    } finally {
+      setIsSavingAppt(false);
+    }
   };
 
   const handleUpdateBookingStatus = async (newStatus: string, specificApp: any = null) => {
@@ -296,10 +378,18 @@ export default function CalendarTab({ business, team, services, refreshClients }
     const finalStatus = appToUpdate.status === newStatus ? 'confirmed' : newStatus;
     try {
       const { error } = await supabase.from('bookings').update({ status: finalStatus }).eq('id', appToUpdate.id);
-      if (error) { alert("Помилка бази даних"); return; }
+      if (error) throw error;
+
       setAppointments(prev => prev.map(a => a.id === appToUpdate.id ? { ...a, status: finalStatus } : a));
-      if (selectedBooking && selectedBooking.id === appToUpdate.id) setSelectedBooking({ ...selectedBooking, status: finalStatus });
-    } catch (err) { alert("Помилка при оновленні статусу запису."); }
+      if (selectedBooking && selectedBooking.id === appToUpdate.id) {
+        setSelectedBooking({ ...selectedBooking, status: finalStatus });
+      }
+
+      const statusLabels: any = { completed: 'Виконано', late: 'Запізнення', 'no-show': 'Не прийшов', confirmed: 'Підтверджено' };
+      showToast(`Статус змінено: ${statusLabels[finalStatus] || finalStatus}`, 'info');
+    } catch (err) {
+      showToast("Не вдалося оновити статус запису", "error");
+    }
   };
 
   const handleCancelBooking = async () => {
@@ -308,10 +398,15 @@ export default function CalendarTab({ business, team, services, refreshClients }
     if (!confirm(`Ви впевнені, що хочете скасувати ${isBlock ? 'цю перерву' : 'цей запис'}?`)) return;
     try {
       const { error } = await supabase.from('bookings').delete().eq('id', selectedBooking.id);
-      if (error) { alert("Помилка при видаленні"); return; }
+      if (error) throw error;
+
       setAppointments(prev => prev.filter(a => a.id !== selectedBooking.id));
-      setIsBookingDetailsModalOpen(false); setSelectedBooking(null);
-    } catch (err) { alert("Помилка при скасуванні."); }
+      setIsBookingDetailsModalOpen(false);
+      setSelectedBooking(null);
+      showToast(isBlock ? 'Перерву видалено' : 'Запис успішно скасовано', 'success');
+    } catch (err) {
+      showToast("Помилка при скасуванні запису", "error");
+    }
   };
 
   const handleUpdateBookingTime = async (newStartTime: string) => {
@@ -435,22 +530,22 @@ export default function CalendarTab({ business, team, services, refreshClients }
   };
 
   // --- РОЗРАХУНКИ СІТКИ ---
-  const effectiveShifts = (() => {
-    let targetShifts = shifts;
+  const effectiveShifts = useMemo(() => {
+    let targetShifts: any = shifts;
     if (filterMaster !== 'all') {
-      const m = team.find((t: any) => String(t.id) === String(filterMaster));
+      const m = (team || []).find((t: any) => String(t.id) === String(filterMaster));
       if (m && m.shifts) {
-        if (Array.isArray(m.shifts)) {
-          targetShifts = m.shifts;
-        } else if (typeof m.shifts === 'string') {
-          try {
-            targetShifts = JSON.parse(m.shifts);
-          } catch (e) {}
-        }
+        targetShifts = m.shifts;
       }
     }
-    return Array.isArray(targetShifts) ? targetShifts : shifts;
-  })();
+    if (typeof targetShifts === 'string') {
+      try { targetShifts = JSON.parse(targetShifts); } catch { targetShifts = null; }
+    }
+    if (Array.isArray(targetShifts) && targetShifts.length === 7) {
+      return targetShifts;
+    }
+    return defaultWeekShifts;
+  }, [filterMaster, team, shifts]);
 
   const activeShifts = Array.isArray(effectiveShifts) ? effectiveShifts.filter((s: any) => s.active) : [];
   let gridStartHour = 8;
@@ -495,21 +590,36 @@ export default function CalendarTab({ business, team, services, refreshClients }
   });
   const isCurrentWeek = weekDays.some(wd => wd.toDateString() === now.toDateString());
 
+  const defaultWeekShifts = [
+    { day: 'Понеділок', active: true, start: '09:00', end: '20:00' },
+    { day: 'Вівторок', active: true, start: '09:00', end: '20:00' },
+    { day: 'Середа', active: true, start: '09:00', end: '20:00' },
+    { day: 'Четвер', active: true, start: '09:00', end: '20:00' },
+    { day: "П'ятниця", active: true, start: '09:00', end: '20:00' },
+    { day: 'Субота', active: true, start: '10:00', end: '18:00' },
+    { day: 'Неділя', active: false, start: '09:00', end: '20:00' },
+  ];
+
+  // 🟢 Захист від падіння, якщо shift не передано або він undefined
   const renderNonWorkingHours = (shift: any) => {
-    if (!shift.active) return <div className="non-working-bg" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>;
-    const [startH, startM] = shift.start.split(':').map(Number);
-    const [endH, endM] = shift.end.split(':').map(Number);
+    if (!shift || typeof shift !== 'object' || !shift.active) {
+      return <div className="non-working-bg" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>;
+    }
+    const startStr = shift.start || '09:00';
+    const endStr = shift.end || '20:00';
+    const [startH, startM] = startStr.split(':').map(Number);
+    const [endH, endM] = endStr.split(':').map(Number);
     const adjustedStartH = startH < gridStartHour ? startH + 24 : startH;
     const adjustedEndH = endH <= startH ? endH + 24 : endH;
-    const startPx = Math.max(0, (adjustedStartH - gridStartHour) * 60 + startM);
-    const endPx = Math.max(0, (adjustedEndH - gridStartHour) * 60 + endM);
+    const startPx = Math.max(0, (adjustedStartH - gridStartHour) * 60 + (startM || 0));
+    const endPx = Math.max(0, (adjustedEndH - gridStartHour) * 60 + (endM || 0));
     const totalPx = gridTotalHours * 60;
     return (
       <>
         {startPx > 0 && <div className="non-working-bg" style={{ position: 'absolute', top: 0, height: startPx, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>}
         {endPx < totalPx && <div className="non-working-bg" style={{ position: 'absolute', top: endPx, bottom: 0, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>}
       </>
-    )
+    );
   };
 
   const getCardPosition = (startTimeStr: string, endTimeStr: string, defaultDuration: number = 60) => {
@@ -562,9 +672,14 @@ export default function CalendarTab({ business, team, services, refreshClients }
   const tasksForSelectedDay = tasks.filter((t: any) => t.date === formatDateKey(currentDate));
 
   const filteredAppointments = appointments.filter(app => {
+    // Загальна перерва закладу (без прив'язки до майстра)
     const isGlobalBlock = (app.status === 'blocked' || app.color === 'blocked') && !app.staff_id;
     if (isGlobalBlock) return true;
-    if (filterMaster !== 'all' && String(app.staff_id) !== String(filterMaster)) return false;
+
+    // Якщо залогінений майстер — відфільтровуємо все, крім його ID
+    if (filterMaster !== 'all' && String(app.staff_id) !== String(filterMaster)) {
+      return false;
+    }
     return true;
   });
 
@@ -790,8 +905,20 @@ export default function CalendarTab({ business, team, services, refreshClients }
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={masterFilterRef}>
                 <div
-                  onClick={() => setIsMasterFilterOpen(!isMasterFilterOpen)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', padding: '0.4rem 0.8rem', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', color: '#475569', cursor: 'pointer', transition: '0.2s' }}
+                  onClick={() => { if (!isMasterUser) setIsMasterFilterOpen(!isMasterFilterOpen); }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    background: isMasterUser ? '#f1f5f9' : 'transparent',
+                    padding: '0.4rem 0.8rem',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    color: '#475569',
+                    cursor: isMasterUser ? 'default' : 'pointer',
+                    transition: '0.2s'
+                  }}
                   onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                   onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
@@ -1259,8 +1386,25 @@ export default function CalendarTab({ business, team, services, refreshClients }
               </div>
             </div>
 
-            <button onClick={handleSaveAppointment} style={{ width: '100%', marginTop: '2.5rem', padding: '0.85rem', backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#1e293b'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#0f172a'}>
-              {isBlockMode ? 'Заблокувати' : 'Створити запис'}
+            <button
+              onClick={handleSaveAppointment}
+              disabled={isSavingAppt}
+              style={{
+                width: '100%', marginTop: '2.5rem', padding: '0.85rem',
+                backgroundColor: isSavingAppt ? '#334155' : '#0f172a',
+                color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '1rem',
+                cursor: isSavingAppt ? 'not-allowed' : 'pointer', transition: '0.2s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+              }}
+            >
+              {isSavingAppt ? (
+                <>
+                  <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.6s linear infinite' }}></span>
+                  <span>Збереження...</span>
+                </>
+              ) : (
+                <span>{isBlockMode ? 'Заблокувати' : 'Створити запис'}</span>
+              )}
             </button>
           </div>
         </div>
@@ -1418,93 +1562,180 @@ export default function CalendarTab({ business, team, services, refreshClients }
         </div>
       )}
 
-      {/* --- МОДАЛКА НАЛАШТУВАННЯ КАЛЕНДАРЯ --- */}
+      {/* --- МОДАЛКА НАЛАШТУВАННЯ КАЛЕНДАРЯ (КОМПАКТНА) --- */}
       {showCalSettingsModal && (
         <div className="modal-overlay" onClick={() => setShowCalSettingsModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '750px', padding: '0' }}>
-            <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}><button onClick={() => setShowCalSettingsModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b' }}><Icons.ChevronLeft /></button><h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Налаштування календаря</h2></div>
-              <button onClick={handleSaveCalSettings} style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '0.6rem 1.25rem', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>Зберегти</button>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)', maxWidth: '460px', padding: '0', borderRadius: '16px' }}>
+            <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <button onClick={() => setShowCalSettingsModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b', padding: 0 }}><Icons.ChevronLeft /></button>
+                <h2 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>Налаштування календаря</h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveCalSettings}
+                disabled={isSavingCalSettings}
+                style={{
+                  padding: '0.45rem 1rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: isSavingCalSettings ? '#334155' : '#0f172a',
+                  fontWeight: '600',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  cursor: isSavingCalSettings ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  boxShadow: '0 2px 6px rgba(15, 23, 42, 0.12)'
+                }}
+              >
+                {isSavingCalSettings ? (
+                  <>
+                    <span style={{ width: '12px', height: '12px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.6s linear infinite' }}></span>
+                    <span>Збереження...</span>
+                  </>
+                ) : (
+                  <span>Зберегти</span>
+                )}
+              </button>
             </div>
-            <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '80vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+            <div className="custom-scroll" style={{ padding: '1.25rem 1.4rem', maxHeight: '75vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Вигляд за замовчуванням</label>
-                <div style={{ display: 'flex', gap: '2rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.6rem' }}>Вигляд за замовчуванням</label>
+                <div style={{ display: 'flex', gap: '1.5rem' }}>
                   {['day', 'week', 'month'].map(view => (
-                    <label key={view} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
+                    <label key={view} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', color: '#334155', fontWeight: '500' }}>
                       <input type="radio" checked={calSettings.defaultView === view} onChange={() => setCalSettings({...calSettings, defaultView: view})} style={{ display: 'none' }} />
-                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.defaultView === view ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
+                      <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: calSettings.defaultView === view ? '5px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
                       {view === 'day' ? 'День' : view === 'week' ? 'Тиждень' : 'Місяць'}
                     </label>
                   ))}
                 </div>
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Кольорова схема</label>
-                <div style={{ display: 'flex', gap: '1.5rem' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.6rem' }}>Кольорова схема</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
                   {['pastel', 'vivid'].map(scheme => (
-                    <div key={scheme} onClick={() => setCalSettings({...calSettings, colorScheme: scheme})} style={{ flex: 1, border: `2px solid ${calSettings.colorScheme === scheme ? '#0f172a' : '#e2e8f0'}`, borderRadius: '12px', padding: '1.2rem', cursor: 'pointer', transition: '0.2s', position: 'relative' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.5rem' }}>
-                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.colorScheme === scheme ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
-                        <span style={{ fontWeight: '700', fontSize: '1rem', color: '#0f172a' }}>{scheme === 'pastel' ? 'Пастельні' : 'Яскраві'}</span>
+                    <div
+                      key={scheme}
+                      onClick={() => setCalSettings({...calSettings, colorScheme: scheme})}
+                      style={{
+                        border: `1.5px solid ${calSettings.colorScheme === scheme ? '#0f172a' : '#e2e8f0'}`,
+                        borderRadius: '10px',
+                        padding: '0.8rem',
+                        cursor: 'pointer',
+                        background: calSettings.colorScheme === scheme ? '#f8fafc' : '#fff',
+                        transition: '0.2s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                        <div style={{ width: '14px', height: '14px', borderRadius: '50%', border: calSettings.colorScheme === scheme ? '4px solid #0f172a' : '1.5px solid #cbd5e1', flexShrink: 0 }}></div>
+                        <span style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a' }}>{scheme === 'pastel' ? 'Пастельні' : 'Яскраві'}</span>
                       </div>
-                      <div style={{ borderTop: '1px dashed #e2e8f0', borderLeft: '1px dashed #e2e8f0', height: '60px', position: 'relative' }}>
-                        <div style={{ position: 'absolute', top: '10px', left: '10px', width: '80%', height: '15px', background: scheme === 'pastel' ? '#e0e7ff' : '#3b82f6', borderLeft: scheme === 'pastel' ? '3px solid #cbd5e1' : 'none', borderRadius: '4px' }}></div>
-                        <div style={{ position: 'absolute', top: '35px', left: '30px', width: '60%', height: '20px', background: scheme === 'pastel' ? '#dcfce7' : '#10b981', borderLeft: scheme === 'pastel' ? '3px solid #cbd5e1' : 'none', borderRadius: '4px' }}></div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <div style={{ flex: 1, height: '8px', borderRadius: '3px', background: scheme === 'pastel' ? '#e0e7ff' : '#3b82f6' }}></div>
+                        <div style={{ flex: 1, height: '8px', borderRadius: '3px', background: scheme === 'pastel' ? '#dcfce7' : '#10b981' }}></div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Відображення кольорів у розкладі</label>
-                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.6rem' }}>Колір карток у розкладі</label>
+                <div style={{ display: 'flex', gap: '1.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', color: '#334155', fontWeight: '500' }}>
                     <input type="radio" checked={calSettings.colorMode === 'master' || !calSettings.colorMode} onChange={() => setCalSettings({...calSettings, colorMode: 'master'})} style={{ display: 'none' }} />
-                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: (calSettings.colorMode === 'master' || !calSettings.colorMode) ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
-                    Колір за майстром
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: (calSettings.colorMode === 'master' || !calSettings.colorMode) ? '5px solid #0f172a' : '1.5px solid #cbd5e1', flexShrink: 0 }}></div>
+                    За майстром
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', color: '#334155', fontWeight: '500' }}>
                     <input type="radio" checked={calSettings.colorMode === 'category'} onChange={() => setCalSettings({...calSettings, colorMode: 'category'})} style={{ display: 'none' }} />
-                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.colorMode === 'category' ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
-                    Колір за послугою
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: calSettings.colorMode === 'category' ? '5px solid #0f172a' : '1.5px solid #cbd5e1', flexShrink: 0 }}></div>
+                    За послугою
                   </label>
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1rem' }}>Робочі години та перерви</div>
-                <button onClick={() => { setShowCalSettingsModal(false); setShowShiftsModal(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', color: '#0f172a', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'}><Icons.Clock /> Налаштувати зміни</button>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.85rem' }}>Графік роботи закладу</div>
+                <button
+                  type="button"
+                  onClick={() => { setShowCalSettingsModal(false); setShowShiftsModal(true); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.8rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer', color: '#0f172a' }}
+                >
+                  <Icons.Clock /> Змінити
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- МОДАЛКА НАЛАШТУВАННЯ РОБОЧИХ ЗМІН --- */}
+      {/* --- МОДАЛКА НАЛАШТУВАННЯ РОБОЧИХ ЗМІН (КОМПАКТНА) --- */}
       {showShiftsModal && (
         <div className="modal-overlay" onClick={() => setShowShiftsModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '600px', padding: '0' }}>
-            <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}><button onClick={() => { setShowShiftsModal(false); setShowCalSettingsModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b' }}><Icons.ChevronLeft /></button><h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Робочі години</h2></div>
-              <button onClick={handleSaveShifts} style={{ background: '#0f172a', color: '#fff', border: 'none', padding: '0.6rem 1.25rem', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>Зберегти</button>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)', maxWidth: '460px', padding: '0', borderRadius: '16px' }}>
+            <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <button onClick={() => { setShowShiftsModal(false); setShowCalSettingsModal(true); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b', padding: 0 }}><Icons.ChevronLeft /></button>
+                <h2 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>Робочі години</h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveShifts}
+                disabled={isSavingShifts}
+                style={{
+                  padding: '0.45rem 1rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: isSavingShifts ? '#334155' : '#0f172a',
+                  fontWeight: '600',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  cursor: isSavingShifts ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  boxShadow: '0 2px 6px rgba(15, 23, 42, 0.12)'
+                }}
+              >
+                {isSavingShifts ? (
+                  <>
+                    <span style={{ width: '12px', height: '12px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.6s linear infinite' }}></span>
+                    <span>Збереження...</span>
+                  </>
+                ) : (
+                  <span>Зберегти</span>
+                )}
+              </button>
             </div>
-            <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+
+            <div className="custom-scroll" style={{ padding: '1.25rem 1.4rem', maxHeight: '75vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {shifts.map((shift, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', transition: '0.2s', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', width: '160px' }}>
-                    <div onClick={() => { const newShifts = [...shifts]; newShifts[idx].active = !shift.active; setShifts(newShifts); }} style={{ width: '44px', height: '24px', borderRadius: '12px', background: shift.active ? '#10b981' : '#cbd5e1', position: 'relative', cursor: 'pointer', transition: '0.3s', flexShrink: 0 }}>
-                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: shift.active ? '22px' : '2px', transition: '0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 1rem', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', width: '130px' }}>
+                    <div onClick={() => { const newShifts = [...shifts]; newShifts[idx].active = !shift.active; setShifts(newShifts); }} style={{ width: '38px', height: '22px', borderRadius: '11px', background: shift.active ? '#10b981' : '#cbd5e1', position: 'relative', cursor: 'pointer', transition: '0.3s', flexShrink: 0 }}>
+                      <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: shift.active ? '18px' : '2px', transition: '0.3s', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}></div>
                     </div>
-                    <div style={{ fontWeight: '700', color: shift.active ? '#0f172a' : '#94a3b8', fontSize: '1rem' }}>{shift.day}</div>
+                    <div style={{ fontWeight: '600', color: shift.active ? '#0f172a' : '#94a3b8', fontSize: '0.9rem' }}>{shift.day}</div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '240px' }}>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                     {shift.active ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', width: '100%', justifyContent: 'space-between' }}>
-                        <input type="time" value={shift.start} onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].start = e.target.value; setShifts(newShifts); }} style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '100px', textAlign: 'center' }} />
-                        <span style={{ color: '#94a3b8', fontWeight: '800' }}>—</span>
-                        <input type="time" value={shift.end} onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].end = e.target.value; setShifts(newShifts); }} style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '100px', textAlign: 'center' }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <input type="time" value={shift.start} onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].start = e.target.value; setShifts(newShifts); }} style={{ padding: '0.35rem 0.5rem', border: '1px solid #cbd5e1', borderRadius: '6px', fontWeight: '600', color: '#0f172a', fontSize: '0.85rem', width: '75px', textAlign: 'center', outline: 'none' }} />
+                        <span style={{ color: '#94a3b8', fontWeight: '700' }}>—</span>
+                        <input type="time" value={shift.end} onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].end = e.target.value; setShifts(newShifts); }} style={{ padding: '0.35rem 0.5rem', border: '1px solid #cbd5e1', borderRadius: '6px', fontWeight: '600', color: '#0f172a', fontSize: '0.85rem', width: '75px', textAlign: 'center', outline: 'none' }} />
                       </div>
-                    ) : ( <div style={{ padding: '0.5rem 0', width: '100%', textAlign: 'center', color: '#94a3b8', fontWeight: '700', fontSize: '0.95rem', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>Вихідний</div> )}
+                    ) : (
+                      <div style={{ padding: '0.35rem 1rem', color: '#94a3b8', fontWeight: '600', fontSize: '0.8rem', background: '#f8fafc', borderRadius: '6px', border: '1px dashed #cbd5e1' }}>Вихідний</div>
+                    )}
                   </div>
                 </div>
               ))}

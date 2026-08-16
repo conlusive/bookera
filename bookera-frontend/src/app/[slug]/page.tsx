@@ -6,10 +6,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/utils/supabase/client';
 import { Icons } from '@/components/shared';
-import { api } from '@/lib/api';
+import { api, SlotStatusItem } from '@/lib/api';
 import { BookingSource } from '@/types';
 
-// === 1. СТАТИЧНІ ДАНІ, КОНСТАНТИ ТА ХЕЛПЕРИ ===
+// === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
 const REVIEWS_PER_PAGE = 5;
 const REVIEW_MAX_LENGTH = 500;
@@ -34,23 +34,13 @@ const parseTime = (timeStr: string) => {
   return h * 60 + m;
 };
 
-const formatTime = (mins: number) => {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-};
-
-const isTimeOverlapping = (reqStart: number, reqEnd: number, bStart: number, bEnd: number) => {
-  return reqStart < bEnd && bStart < reqEnd;
-};
-
 // =======================================================
 
 export default function SalonProfile() {
   const { slug } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // --- Стейт даних ---
   const [salon, setSalon] = useState<any>(null);
@@ -114,7 +104,37 @@ export default function SalonProfile() {
   const [selectedMasterId, setSelectedMasterId] = useState<number | string>(0);
   const [pendingBookingId, setPendingBookingId] = useState<number | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number>(600); // 10 хвилин
+  const [timeLeft, setTimeLeft] = useState<number>(600);
+
+  // 🟢 Дані розрахованих слотів від Slot Engine
+  const [slotItems, setSlotItems] = useState<SlotStatusItem[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+
+  // Функція завантаження вільних слотів із бекенду
+  const fetchAvailableSlots = useCallback(async () => {
+    if (!salon?.id || !selectedService?.id || !selectedDate) return;
+    setIsLoadingSlots(true);
+    try {
+      const data = await api.getAvailableSlots({
+        business_id: salon.id,
+        service_id: selectedService.id,
+        target_date: selectedDate,
+        master_id: selectedMasterId ? String(selectedMasterId) : '0',
+      });
+      setSlotItems(data.slots || []);
+    } catch (e) {
+      console.error("Помилка розрахунку слотів:", e);
+      setSlotItems([]);
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  }, [salon?.id, selectedService?.id, selectedDate, selectedMasterId]);
+
+  useEffect(() => {
+    if (isModalOpen && selectedDate && selectedService) {
+      void fetchAvailableSlots();
+    }
+  }, [isModalOpen, selectedDate, selectedService, selectedMasterId, fetchAvailableSlots]);
 
   // Відстеження джерела переходу
   useEffect(() => {
@@ -123,7 +143,7 @@ export default function SalonProfile() {
     localStorage.setItem('booking_source', source);
   }, [searchParams]);
 
-  // Зворотний відлік 10 хвилин для заблокованого слоту
+  // Зворотний відлік 10 хвилин
   useEffect(() => {
     if (bookingStage !== 'confirmation' || bookingSuccess) return;
 
@@ -201,23 +221,55 @@ export default function SalonProfile() {
     if (slug) void loadData();
   }, [slug]);
 
-  const fetchBookings = useCallback(async (bizId: number) => {
+// ⚡ Миттєве паралельне завантаження даних салону
+  const loadData = useCallback(async () => {
+    if (!slug) return;
     try {
-      const res = await fetch(`http://127.0.0.1:8000/appointments/booked?business_id=${bizId}`, { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        setBookedAppointments(data);
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug as string);
+
+      // 1. Отримуємо салон напряму без зависань
+      const { data: bizData, error: bizErr } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq(isUUID ? 'id' : 'slug', slug)
+        .maybeSingle();
+
+      if (bizErr || !bizData) {
+        setNotFound(true);
+        setLoading(false);
         return;
       }
-    } catch {
-      // Fallback до Supabase, якщо локальний API ще піднімається
-      const { data } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('business_id', bizId)
-        .neq('status', 'cancelled');
-      if (data) setBookedAppointments(data);
+
+      // Відображаємо шапку салону миттєво
+      setSalon(bizData);
+      setLoading(false);
+
+      // 2. Всі пов'язані дані завантажуються паралельно (~50 мс)
+      const [servicesRes, staffRes, reviewsRes, bookingsRes] = await Promise.all([
+        supabase.from('services').select('*').eq('business_id', bizData.id).order('price', { ascending: true }),
+        supabase.from('users').select('*').eq('business_id', bizData.id).eq('role', 'master'),
+        supabase.from('reviews').select('*').eq('business_id', bizData.id).order('created_at', { ascending: false }),
+        supabase.from('appointments').select('*').eq('business_id', bizData.id).neq('status', 'cancelled')
+      ]);
+
+      if (servicesRes.data) setServices(servicesRes.data);
+      if (staffRes.data) setTeam(staffRes.data);
+      if (reviewsRes.data) setReviews(reviewsRes.data);
+      if (bookingsRes.data) setBookedAppointments(bookingsRes.data);
+    } catch (error) {
+      console.error("Помилка завантаження:", error);
+      setNotFound(true);
+      setLoading(false);
     }
+  }, [slug, supabase]);
+
+  const fetchBookings = useCallback(async (bizId: number) => {
+    const { data } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('business_id', bizId)
+      .neq('status', 'cancelled');
+    if (data) setBookedAppointments(data);
   }, [supabase]);
 
   // Realtime оновлення для онлайн-календаря
@@ -286,41 +338,6 @@ export default function SalonProfile() {
     router.push(`/?${params.toString()}`);
   };
 
-  // Завантаження даних салону з бекенда
-  const loadData = async () => {
-    if (!salon) setLoading(true);
-
-    try {
-      const bizData = await api.getBusiness(slug as string);
-
-      if (!bizData) {
-        setNotFound(true);
-        setLoading(false);
-        return;
-      }
-
-      setSalon(bizData);
-
-      const [srvData, staffRes, revRes] = await Promise.all([
-        api.getBusinessServices(bizData.id),
-        supabase.from('users').select('*').eq('business_id', bizData.id).eq('role', 'master'),
-        supabase.from('reviews').select('*').eq('business_id', bizData.id).order('created_at', { ascending: false })
-      ]);
-
-      if (srvData) setServices(srvData);
-      if (staffRes.data) setTeam(staffRes.data);
-      if (revRes.data) setReviews(revRes.data);
-
-      await fetchBookings(bizData.id);
-    } catch (error) {
-      console.error("Помилка завантаження:", error);
-      setNotFound(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Команда та години
   const activeTeam = useMemo(() => team, [team]);
   const staffers = useMemo(() => {
     const list: any[] = [{ id: 0, name: "Будь-хто", role: "Без переваг", photo: null }];
@@ -333,97 +350,23 @@ export default function SalonProfile() {
     return list;
   }, [activeTeam]);
 
-  const allAvailableHours = useMemo(() => {
-    const slots = [];
-    for (let h = 9; h <= 20; h++) {
-      for (let m = 0; m < 60; m += 15) {
-        if (h === 20 && m > 0) continue;
-        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-      }
-    }
-    return slots;
-  }, []);
-
-  // 🟢 Розумна перевірка статусу слоту: 'free' | 'locked' (оформлюється) | 'busy' (зайнято)
-  const getSlotStatus = (date: string, timeStr: string, durationMins: number, specificMasterId: number | string = 0) => {
-    const reqStart = parseTime(timeStr);
-    const reqEnd = reqStart + durationMins;
-    const now = Date.now();
-
-    const daysBookings = bookedAppointments.filter((b: any) => {
-      const bDate = b.booking_date || (b.start_time && b.start_time.split('T')[0]);
-      return bDate === date && b.status !== 'cancelled';
-    });
-
-    const mastersToCheck = (specificMasterId !== 0 && specificMasterId !== '0')
-      ? activeTeam.filter(m => String(m.id) === String(specificMasterId))
-      : activeTeam;
-
-    if (mastersToCheck.length === 0) return 'free';
-
-    let availableCount = 0;
-    let isLockedByOther = false;
-
-    for (const master of mastersToCheck) {
-      const masterBookings = daysBookings.filter((b: any) => String(b.staff_id || b.master_id) === String(master.id));
-      const conflict = masterBookings.find((b: any) => {
-        const bStartStr = b.start_time.includes('T') ? b.start_time.split('T')[1].substring(0, 5) : b.start_time.substring(0, 5);
-        const bEndStr = b.end_time.includes('T') ? b.end_time.split('T')[1].substring(0, 5) : b.end_time.substring(0, 5);
-        const bStart = parseTime(bStartStr);
-        const bEnd = parseTime(bEndStr);
-        return isTimeOverlapping(reqStart, reqEnd, bStart, bEnd);
-      });
-
-      if (!conflict) {
-        availableCount++;
-      } else if (conflict.status === 'blocked') {
-        const lockTime = new Date(conflict.created_at || conflict.start_time).getTime();
-        if (now - lockTime <= LOCK_TIMEOUT_MINUTES * 60000) {
-          isLockedByOther = true;
-        } else {
-          availableCount++;
-        }
-      }
-    }
-
-    if (availableCount > 0) return 'free';
-    if (isLockedByOther) return 'locked';
-    return 'busy';
-  };
-
-  const getServiceAvailabilityText = (service: any) => {
+  // Легкий розрахунок доступності
+  const getServiceAvailabilityText = useCallback((service: any) => {
     const duration = service.duration_minutes || service.duration || 60;
-    const freeSlots = [];
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
     const todayStr = fmtDate(now);
 
-    for (const day of calendarDays) {
-      if (freeSlots.length >= 2) break;
-      for (const time of allAvailableHours) {
-        if (freeSlots.length >= 2) break;
-        if (day.date === todayStr && parseTime(time) <= currentMins) continue;
-        if (getSlotStatus(day.date, time, duration, 0) === 'free') {
-          freeSlots.push({ date: day.date, time: time, dayName: day.dayName, dayNum: day.dayNum });
-        }
-      }
+    const previewDays = calendarDays.slice(0, 2);
+
+    for (const day of previewDays) {
+      const isDayToday = day.date === todayStr;
+      if (isDayToday && currentMins > 20 * 60) continue;
+      return isDayToday ? "Є час сьогодні" : `Найближчий час ${day.dayName}`;
     }
 
-    if (freeSlots.length === 0) return "Немає вільних годин найближчим часом";
-    const first = freeSlots[0];
-    const second = freeSlots[1];
-    const isToday = first.date === todayStr;
-    const isTomorrow = first.date === calendarDays[1]?.date;
-
-    let textPrefix = "";
-    if (isToday) textPrefix = "Є час сьогодні:";
-    else if (isTomorrow) textPrefix = "Найближчий час на завтра:";
-    else textPrefix = `Найближчий запис ${first.dayNum} ${first.dayName.toLowerCase()}:`;
-
-    let timesText = first.time;
-    if (second && second.date === first.date) timesText += `, ${second.time}`;
-    return `${textPrefix} ${timesText}`;
-  };
+    return "Є вільні слоти для запису";
+  }, [calendarDays]);
 
   const processedServices = useMemo(() => {
     let result = [...services];
@@ -589,10 +532,11 @@ export default function SalonProfile() {
     }
   };
 
-  const handleConfirmBooking = async () => {
+const handleConfirmBooking = async () => {
     try {
       const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
 
+      // 1. Створюємо/підтверджуємо запис
       await api.createAppointment({
         business_id: salon.id,
         service_id: selectedService.id,
@@ -601,6 +545,73 @@ export default function SalonProfile() {
         client_id: userId || undefined,
         source: bookingSource
       });
+
+      // 2. 🟢 Автоматичне оновлення або додавання клієнта в CRM таблицю `clients`
+      const servicePrice = Number(selectedService?.price || 0);
+      const safePhone = localStorage.getItem('userPhone') || '';
+      const clientDisplayName = userName || 'Гість';
+
+      try {
+        let existingClient = null;
+
+        if (safePhone) {
+          const { data } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('business_id', salon.id)
+            .eq('phone', safePhone)
+            .maybeSingle();
+          existingClient = data;
+        }
+
+        if (!existingClient && clientDisplayName !== 'Гість') {
+          const { data } = await supabase
+            .from('clients')
+            .select('*')
+            .eq('business_id', salon.id)
+            .eq('name', clientDisplayName)
+            .maybeSingle();
+          existingClient = data;
+        }
+
+        if (existingClient) {
+          await supabase.from('clients').update({
+            last_visit: selectedDate,
+            visits: (existingClient.visits || 0) + 1,
+            spent: (existingClient.spent || 0) + servicePrice,
+          }).eq('id', existingClient.id);
+        } else {
+          await supabase.from('clients').insert([{
+            business_id: salon.id,
+            name: clientDisplayName,
+            phone: safePhone || null,
+            email: loginEmail || null,
+            last_visit: selectedDate,
+            visits: 1,
+            spent: servicePrice,
+            balance: 0,
+            tags: ['Онлайн-запис']
+          }]);
+        }
+      } catch (clientSyncErr) {
+        console.warn("Помилка синхронізації клієнта в CRM:", clientSyncErr);
+      }
+
+      // 3. 🟢 Відправка сповіщень (Email + Telegram)
+      fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          business_name: salon.name,
+          client_name: clientDisplayName,
+          client_phone: safePhone,
+          service_name: selectedService?.name,
+          price: servicePrice,
+          date: selectedDate,
+          time: selectedTime,
+          address: salon.address
+        })
+      }).catch(err => console.warn("Помилка відправки сповіщення:", err));
 
       setBookingSuccess(true);
       void fetchBookings(salon.id);
@@ -933,7 +944,7 @@ export default function SalonProfile() {
                   </div>
                 )}
               </div>
-              <button onClick={handleHeaderSearch} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }}>
+              <button onClick={handleHeaderSearch} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
                 <div style={{ display: 'flex', width: '16px', height: '16px', color: '#ffffff' }}><Icons.Search /></div>
               </button>
             </div>
@@ -1013,7 +1024,7 @@ export default function SalonProfile() {
               Поділитися
             </button>
             <button className="icon-btn anim" onClick={() => setIsFavorite(!isFavorite)} style={{ width: '42px', height: '42px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <svg fill={isFavorite ? "#ef4444" : "none"} stroke={isFavorite ? "#ef4444" : "#222222"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{width: '20px', height: '20px'}}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+              <svg fill={isFavorite ? "#ef4444" : "none"} stroke={isFavorite ? "#ef4444" : "#222222"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{width: '20px', height: '20px', transition: '0.2s'}}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
             </button>
           </div>
         </div>
@@ -1357,43 +1368,55 @@ export default function SalonProfile() {
                 </div>
 
                 {/* 3. ЧАС */}
+{/* 3. ЧАС (Синхронізовано з Slot Engine) */}
                 <div style={{ marginBottom: '2rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <label className="modal-label" style={{ marginBottom: 0 }}>3. ЧАС</label>
-                    <span style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: '700' }}>🟡 — оформлюється</span>
+                    <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', fontWeight: '700' }}>
+                      <span style={{ color: '#16a34a' }}>🟢 Вільно</span>
+                      <span style={{ color: '#b45309' }}>🟡 Оформлюється</span>
+                    </div>
                   </div>
 
-                  <div className="time-grid hide-scrollbar">
-                    {allAvailableHours.map((time) => {
-                      const duration = selectedService?.duration_minutes || selectedService?.duration || 60;
-                      const status = getSlotStatus(selectedDate, time, duration, selectedMasterId);
-                      const now = new Date();
+                  {isLoadingSlots ? (
+                    <div style={{ textAlign: 'center', padding: '1.5rem 0', color: '#64748b', fontSize: '0.85rem', fontWeight: '600' }}>
+                      Розрахунок вільних годин...
+                    </div>
+                  ) : slotItems.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '1.5rem 0', color: '#94a3b8', fontSize: '0.85rem', fontWeight: '600', background: '#f8fafc', borderRadius: '12px' }}>
+                      Немає вільних слотів на цю дату
+                    </div>
+                  ) : (
+                    <div className="time-grid hide-scrollbar">
+                      {slotItems.map((slot) => {
+                        if (slot.status === 'locked') {
+                          return (
+                            <button key={slot.time} disabled className="time-pill locked" title="Зараз оформлюється іншим клієнтом (до 10 хв)">
+                              {slot.time}
+                            </button>
+                          );
+                        }
 
-                      if (selectedDate === fmtDate(now) && parseTime(time) <= (now.getHours() * 60 + now.getMinutes())) return null;
+                        if (slot.status === 'booked') {
+                          return (
+                            <button key={slot.time} disabled className="time-pill busy" title="Час зайнято">
+                              {slot.time}
+                            </button>
+                          );
+                        }
 
-                      if (status === 'locked') {
                         return (
-                          <button key={time} disabled className="time-pill locked" title="Зараз оформлюється іншим клієнтом (до 10 хв)">
-                            {time}
+                          <button
+                            key={slot.time}
+                            onClick={() => setSelectedTime(slot.time)}
+                            className={`time-pill ${selectedTime === slot.time ? 'active' : ''}`}
+                          >
+                            {slot.time}
                           </button>
                         );
-                      }
-
-                      if (status === 'busy') {
-                        return (
-                          <button key={time} disabled className="time-pill busy" title="Зайнято">
-                            {time}
-                          </button>
-                        );
-                      }
-
-                      return (
-                        <button key={time} onClick={() => setSelectedTime(time)} className={`time-pill ${selectedTime === time ? 'active' : ''}`}>
-                          {time}
-                        </button>
-                      );
-                    })}
-                  </div>
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <button onClick={handleNextStep} className="btn-dark anim" style={{ width: '100%', padding: '1.1rem', borderRadius: '16px', fontSize: '1.05rem' }}>

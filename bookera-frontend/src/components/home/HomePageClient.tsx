@@ -76,6 +76,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [loginPassword, setLoginPassword] = useState('');
   const [regFirstName, setRegFirstName] = useState('');
   const [regLastName, setRegLastName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
 
   const [userName, setUserName] = useState<string | null>(null);
   const [initials, setInitials] = useState<string>('');
@@ -270,19 +271,38 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         setIsAuthModalOpen(false);
 
         if (finalRole === 'vendor') router.push('/cabinet');
-      } else {
+} else {
         const targetEmail = loginEmail.trim().toLowerCase();
         const targetFullName = `${regFirstName} ${regLastName}`.trim();
+        const targetPhone = regPhone.trim();
 
         const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
           password: loginPassword,
-          options: { data: { full_name: targetFullName } }
+          options: {
+            data: {
+              full_name: targetFullName,
+              phone: targetPhone || null,
+              role: 'client'
+            }
+          }
         });
 
+        // 1. Спочатку перевіряємо помилку
         if (error) {
           alert(`Помилка реєстрації: ${error.message}`);
           return;
+        }
+
+        // 2. Якщо реєстрація успішна — записуємо профіль
+        if (data?.user) {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            full_name: targetFullName,
+            phone: targetPhone || null,
+            email: targetEmail,
+            role: 'client'
+          });
         }
 
         localStorage.setItem('userName', targetFullName);
@@ -291,12 +311,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         setUserName(targetFullName);
         setUserRole('client');
-        setInitials(targetFullName.substring(0, 2).toUpperCase());
+        const initialsStr = targetFullName.length >= 2 ? targetFullName.substring(0, 2).toUpperCase() : 'К';
+        setInitials(initialsStr);
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
-      }
-    } catch (error) {
+      }    } catch (error) {
       alert("Відбулася помилка при з'єднанні з сервером.");
     }
   };

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { api } from '@/lib/api';
 
 // Локальні іконки
 const CopyIcon = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>);
@@ -352,6 +353,19 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         showToast("Послугу оновлено", "success");
       } else {
         const order_index = services.length;
+        // 🟢 Збереження через FastAPI бекенд із fallback на Supabase
+        try {
+          await api.createService({
+            business_id: business.id,
+            name: serviceForm.name,
+            duration_minutes: serviceForm.duration,
+            price: serviceForm.price,
+            addon_service_ids: serviceForm.addon_services,
+          } as any);
+        } catch (apiErr) {
+          console.warn("API createService fallback:", apiErr);
+        }
+
         const { data, error } = await supabase.from('services').insert({ ...serviceForm, business_id: business.id, order_index }).select().single();
         if (error) throw error;
         setServices(prev => [...prev, data]);

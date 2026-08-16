@@ -1,15 +1,89 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Icons } from '@/components/shared';
 
-// 🟢 Локальні іконки для методів виплати (щоб уникнути помилки "undefined" з Icons)
-const WalletIcon = () => <svg width="1.2em" height="1.2em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>;
-const CreditCardIcon = () => <svg width="1.2em" height="1.2em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>;
 
-export default function TeamTab({ business, team, setTeam, services, userProfile, setActiveTab, setFilterMaster, globalShifts }: any) {
-  const supabase = createClient();
+// 🟢 Локальні іконки
+const WalletIcon = () => (
+  <svg width="1.2em" height="1.2em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+    <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+    <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+  </svg>
+);
+
+const CreditCardIcon = () => (
+  <svg width="1.2em" height="1.2em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="14" x="2" y="5" rx="2" />
+    <line x1="2" x2="22" y1="10" y2="10" />
+  </svg>
+);
+
+// 🟢 Кнопка збереження зі спінером
+const ActionSaveButton = ({ onClick, text = "Зберегти дані" }: { onClick: () => Promise<void>; text?: string }) => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await Promise.all([
+        onClick(),
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={isSaving}
+      style={{
+        padding: '0.65rem 1.4rem',
+        borderRadius: '10px',
+        border: 'none',
+        background: isSaving ? '#334155' : '#0f172a',
+        fontWeight: '700',
+        color: '#ffffff',
+        fontSize: '0.9rem',
+        cursor: isSaving ? 'not-allowed' : 'pointer',
+        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.55rem',
+        boxShadow: isSaving ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
+        opacity: isSaving ? 0.85 : 1,
+      }}
+      onMouseOver={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+      onMouseOut={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(0)'; }}
+    >
+      {isSaving ? (
+        <>
+          <span style={{
+            width: '13px',
+            height: '13px',
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            borderTopColor: '#ffffff',
+            borderRadius: '50%',
+            display: 'inline-block',
+            animation: 'spin 0.6s linear infinite'
+          }}></span>
+          <span>Збереження...</span>
+        </>
+      ) : (
+        <span>{text}</span>
+      )}
+    </button>
+  );
+};
+
+export default function TeamTab({ business, team = [], setTeam, services = [], userProfile, setActiveTab, setFilterMaster, globalShifts = [] }: any) {
+  const supabase = useMemo(() => createClient(), []);
 
   // --- СТАНИ КОМАНДИ ---
   const [selectedStaffId, setSelectedStaffId] = useState<string | number | null>(null);
@@ -42,10 +116,80 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
   const [unpaidAppointments, setUnpaidAppointments] = useState<any[]>([]);
   const [isLoadingFinance, setIsLoadingFinance] = useState(false);
 
+// 🟢 Стан збереження форми (для кнопки)
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+
   // 🟢 СТАНИ МОДАЛОК
   const [isInviteStaffModalOpen, setIsInviteStaffModalOpen] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: '', name: '', role: 'master', phone: '+380' });
+  const [inviteForm, setInviteForm] = useState({ email: '', role: 'master' });
   const [isInvitingStaff, setIsInvitingStaff] = useState(false);
+
+  // 🟢 Стейт та плавний показ Toast-сповіщень (з анімацією випливання і запливання)
+  const [toast, setToast] = useState<{ show: boolean; msg: string; type: 'success' | 'error' | 'info'; isExiting: boolean }>({
+    show: false,
+    msg: '',
+    type: 'success',
+    isExiting: false,
+  });
+
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ show: true, msg, type, isExiting: false });
+    setTimeout(() => {
+      // Запускаємо анімацію запливання за 300мс до повного зникнення
+      setToast(prev => ({ ...prev, isExiting: true }));
+      setTimeout(() => {
+        setToast({ show: false, msg: '', type: 'success', isExiting: false });
+      }, 300);
+    }, 2700);
+  };
+
+  // 🟢 Автоматична синхронізація імені та телефону співробітника з його зареєстрованого профілю
+  useEffect(() => {
+    async function syncStaffWithProfiles() {
+      if (!team || team.length === 0) return;
+
+      const emailsToSync = team
+        .filter((t: any) => t.email && (t.status === 'pending' || t.name === t.email.split('@')[0] || !t.phone))
+        .map((t: any) => t.email.toLowerCase());
+
+      if (emailsToSync.length === 0) return;
+
+      const { data: matchedProfiles } = await supabase
+        .from('profiles')
+        .select('email, full_name, phone')
+        .in('email', emailsToSync);
+
+      if (matchedProfiles && matchedProfiles.length > 0) {
+        let hasChanges = false;
+        const updatedTeam = team.map((member: any) => {
+          const profile = matchedProfiles.find((p: any) => p.email?.toLowerCase() === member.email?.toLowerCase());
+          if (profile && (member.name !== profile.full_name || member.phone !== profile.phone || member.status !== 'active')) {
+            hasChanges = true;
+            const updated = {
+              ...member,
+              name: profile.full_name || member.name,
+              phone: profile.phone || member.phone,
+              status: 'active'
+            };
+            // Оновлюємо в базі staff
+            supabase.from('staff').update({
+              name: updated.name,
+              phone: updated.phone,
+              status: 'active'
+            }).eq('id', member.id).then();
+            return updated;
+          }
+          return member;
+        });
+
+        if (hasChanges) {
+          setTeam(updatedTeam);
+        }
+      }
+    }
+
+    void syncStaffWithProfiles();
+  }, [team, supabase, setTeam]);
 
   // Стани модалки передачі прав
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -67,14 +211,44 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
     wMintBg: '#dcfce7', wMintBorder: '#86efac', wMintText: '#166534',
   };
 
-  // --- ЛОГІКА МАЙСТРА ТА ДОСТУПІВ ---
-  let currentStaff = selectedStaffId ? team.find((t: any) => String(t.id) === String(selectedStaffId)) : team[0];
-  if (!selectedStaffId && team.length > 0) setTimeout(() => setSelectedStaffId(team[0].id), 0);
+// --- ЛОГІКА МАЙСТРА ТА ДОСТУПІВ ---
+  // 🟢 Залізобетонна перевірка прав власника за ID, роллю або email
+  const isSystemOwner = Boolean(
+    (userProfile?.id && business?.owner_id && String(userProfile.id) === String(business.owner_id)) ||
+    userProfile?.role === 'vendor' ||
+    userProfile?.role === 'owner' ||
+    (userProfile?.email && business?.owner_id && business.owner_id === userProfile.id)
+  );
 
-  const isSystemOwner = userProfile?.id === business?.owner_id || userProfile?.role === 'vendor';
-  const currentLoggedInStaff = team.find((t: any) => t.email === userProfile?.email);
+  const currentLoggedInStaff = (team || []).find((t: any) => t.email === userProfile?.email || String(t.id) === String(userProfile?.id));
   const currentUserRole = isSystemOwner ? 'owner' : (currentLoggedInStaff?.role || 'master');
-  const hasAdminRights = currentUserRole === 'admin' || currentUserRole === 'owner';
+  const hasAdminRights = isSystemOwner || currentUserRole === 'admin' || currentUserRole === 'owner';
+
+  // Гарантуємо наявність картки власника, навіть якщо база staff ще порожня
+  const effectiveTeam = useMemo(() => {
+    let list = [...(team || [])];
+    const hasOwnerInList = list.some((t: any) => t.role === 'owner' || t.email === userProfile?.email || String(t.id) === String(userProfile?.id));
+
+    if (!hasOwnerInList && isSystemOwner && userProfile) {
+      list.unshift({
+        id: userProfile.id || 'owner-profile',
+        name: userProfile.full_name || 'Я (Власник)',
+        email: userProfile.email || '',
+        phone: userProfile.phone || business?.phone || '',
+        role: 'owner',
+        status: 'active',
+        title: 'Власник бізнесу',
+        provides_services: true,
+        assigned_services: (services || []).map((s: any) => String(s.id)),
+        shifts: globalShifts,
+        commission_rate: 100,
+        fixed_salary: 0
+      });
+    }
+    return list;
+  }, [team, userProfile, isSystemOwner, services, globalShifts, business]);
+
+  let currentStaff = selectedStaffId ? effectiveTeam.find((t: any) => String(t.id) === String(selectedStaffId)) : null;
 
   let isOwnerProfile = false;
 
@@ -95,8 +269,34 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
     }
   }
 
+  const defaultWeekShifts = [
+    { day: 'Понеділок', active: true, start: '09:00', end: '20:00' },
+    { day: 'Вівторок', active: true, start: '09:00', end: '20:00' },
+    { day: 'Середа', active: true, start: '09:00', end: '20:00' },
+    { day: 'Четвер', active: true, start: '09:00', end: '20:00' },
+    { day: "П'ятниця", active: true, start: '09:00', end: '20:00' },
+    { day: 'Субота', active: true, start: '10:00', end: '18:00' },
+    { day: 'Неділя', active: false, start: '09:00', end: '20:00' },
+  ];
+
   const providesServices = currentStaff?.provides_services !== false;
-  const staffShifts = currentStaff?.shifts && currentStaff.shifts.length > 0 ? currentStaff.shifts : globalShifts;
+
+  // 🟢 Безпечний розбір масиву змін із захистом від null/undefined/string
+  const staffShifts = useMemo(() => {
+    let s = currentStaff?.shifts;
+    if (typeof s === 'string') {
+      try { s = JSON.parse(s); } catch { s = null; }
+    }
+    if (Array.isArray(s) && s.length > 0) return s;
+
+    let g = globalShifts;
+    if (typeof g === 'string') {
+      try { g = JSON.parse(g); } catch { g = null; }
+    }
+    if (Array.isArray(g) && g.length > 0) return g;
+
+    return defaultWeekShifts;
+  }, [currentStaff?.shifts, globalShifts]);
 
   useEffect(() => {
     if (currentStaff) {
@@ -129,29 +329,70 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
   };
 
   const handleInviteStaff = async () => {
-    if (!inviteForm.email || !inviteForm.name) return alert("Заповніть обов'язкові поля: Ім'я та Email.");
+    const targetEmail = inviteForm.email.trim().toLowerCase();
+    if (!targetEmail) return alert("Введіть електронну пошту співробітника.");
+    if (!business?.id) return alert("Помилка: бізнес не обрано.");
+
     setIsInvitingStaff(true);
     try {
-      let finalPhone = inviteForm.phone && inviteForm.phone !== '+380' ? inviteForm.phone : '';
+      const existingInTeam = (team || []).find((t: any) => t.email?.toLowerCase() === targetEmail);
+      if (existingInTeam) {
+        alert("Співробітник з таким email вже є у вашій команді.");
+        setIsInvitingStaff(false);
+        return;
+      }
+
+      // Шукаємо дані в профілях
+      // 2. Автоматично шукаємо дані в базі зареєстрованих користувачів (регістронезалежно)
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('full_name, phone')
+        .ilike('email', targetEmail)
+        .maybeSingle();
+
+      const staffName = existingProfile?.full_name?.trim() || targetEmail.split('@')[0];
+      const staffPhone = existingProfile?.phone?.trim() || null;
+      const isRegistered = Boolean(existingProfile && existingProfile.full_name);
 
       const newStaffData = {
-        business_id: business.id, name: inviteForm.name.trim(), email: inviteForm.email.trim(),
-        phone: finalPhone || null, role: inviteForm.role, status: 'pending',
+        business_id: business.id,
+        name: staffName,
+        email: targetEmail,
+        phone: staffPhone,
+        role: inviteForm.role || 'master',
+        status: existingProfile ? 'active' : 'pending',
+        title: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
         provides_services: inviteForm.role === 'master',
-        assigned_services: inviteForm.role === 'master' ? services.map((s: any) => s.id) : [],
-        commission_rate: 40, fixed_salary: 0, tax_rate: 0, payout_history: [], auto_payout: false,
-        keeps_tips: true, deduct_materials: false, payout_period: 'weekly', payout_day: 'monday',
+        assigned_services: inviteForm.role === 'master' ? (services || []).map((s: any) => String(s.id)) : [],
+        commission_rate: 40,
+        fixed_salary: 0,
+        tax_rate: 0,
         payment_method: 'cash'
       };
 
-      const { data, error } = await supabase.from('staff').insert([newStaffData]).select().single();
-      if (error) throw error;
+      const { data, error } = await supabase
+        .from('staff')
+        .insert([newStaffData])
+        .select()
+        .single();
 
-      setTeam([...team, data]);
+      if (error) {
+        console.error("Помилка додавання в staff:", error);
+        alert(`Помилка бази даних: ${error.message}`);
+        return;
+      }
+
+      setTeam((prev: any[]) => [...prev, data]);
+      setSelectedStaffId(data.id);
       setIsInviteStaffModalOpen(false);
-      setInviteForm({ email: '', name: '', role: 'master', phone: '+380' });
-      alert(`Запрошення успішно надіслано на ${inviteForm.email}!`);
-    } catch (err) { alert("Помилка при додаванні співробітника."); } finally { setIsInvitingStaff(false); }
+      setInviteForm({ email: '', role: 'master' });
+      alert(`Співробітника ${data.name} успішно додано до команди!`);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Помилка: ${err.message || 'Не вдалося додати співробітника'}`);
+    } finally {
+      setIsInvitingStaff(false);
+    }
   };
 
   const handleUpdateLocalStaff = (updates: any) => {
@@ -159,17 +400,37 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
     setTeam(team.map((t: any) => String(t.id) === String(currentStaff.id) ? updatedStaff : t));
   };
 
-  // 🟢 Автозбереження
-  const handleSaveSettingsDB = async (updates: any) => {
-    if (!currentStaff || !hasAdminRights) return;
+// 🟢 Надійне збереження в базу з реактивним станом кнопки та Toast-сповіщенням
+  const handleSaveSettingsDB = async (updates: any, notify: boolean = true) => {
+    if (!currentStaff || !hasAdminRights || isSavingStaff) return;
+    setIsSavingStaff(true);
     handleUpdateLocalStaff(updates);
+
     try {
-      const { error } = await supabase.from('staff').update(updates).eq('id', currentStaff.id);
-      if (error) {
-        console.warn("Помилка автозбереження:", error);
-      }
-    } catch (err) {
-      console.warn("Помилка автозбереження:", err);
+      // Затримка 600мс гарантує, що анімація кнопки буде плавною і помітною
+      const [res] = await Promise.all([
+        (async () => {
+          if (isOwnerProfile && currentStaff.id === userProfile?.id) {
+            if (updates.name || updates.phone) {
+              return await supabase.from('profiles').update({
+                full_name: updates.name || currentStaff.name,
+                phone: updates.phone || currentStaff.phone
+              }).eq('id', userProfile.id);
+            }
+            return { error: null };
+          }
+          return await supabase.from('staff').update(updates).eq('id', currentStaff.id);
+        })(),
+        new Promise(resolve => setTimeout(resolve, 600))
+      ]);
+
+      if (res.error) throw res.error;
+      if (notify) showToast("Зміни успішно збережено", "success");
+    } catch (err: any) {
+      console.error("Помилка збереження в БД:", err);
+      showToast("Помилка при збереженні даних", "error");
+    } finally {
+      setIsSavingStaff(false);
     }
   };
 
@@ -271,42 +532,134 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
 
   const filteredTeam = team.filter((member: any) => member.name.toLowerCase().includes(staffSearchQuery.toLowerCase()));
 
-  // Кастомна кнопка збереження
-  const ActionSaveButton = ({ onClick, text }: { onClick: (e: any) => Promise<void>, text: string }) => (
-    <button
-      onClick={async (e) => {
-        const btn = e.currentTarget; const originalText = btn.innerText;
-        btn.innerText = 'Збереження...'; btn.style.opacity = '0.7'; btn.disabled = true;
-        try {
-          await onClick(e);
-          btn.innerText = '✓ Збережено'; btn.style.background = colors.green; btn.style.opacity = '1';
-          setTimeout(() => { btn.innerText = originalText; btn.style.background = colors.textPrimary; btn.disabled = false; }, 2500);
-        } catch(err: any) { alert(`Помилка: ${err.message || err}`); btn.innerText = originalText; btn.style.opacity = '1'; btn.disabled = false; }
-      }}
-      style={{ padding: '0.6rem 1.5rem', borderRadius: '10px', border: 'none', background: colors.textPrimary, fontWeight: '600', color: '#fff', fontSize: '0.9rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)' }}
-      onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
-    >
-      {text}
-    </button>
-  );
+  // 🟢 Реактивна кнопка збереження зі спінером та станом "Збереження..."
+  const ActionSaveButton = ({ onClick, text = "Зберегти дані" }: { onClick: () => Promise<void>; text?: string }) => {
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleClick = async () => {
+      if (isSaving) return;
+      setIsSaving(true);
+      try {
+        await onClick();
+      } finally {
+        setTimeout(() => setIsSaving(false), 400);
+      }
+    };
+
+    return (
+      <button
+        onClick={handleClick}
+        disabled={isSaving}
+        style={{
+          padding: '0.65rem 1.4rem',
+          borderRadius: '10px',
+          border: 'none',
+          background: isSaving ? '#334155' : colors.textPrimary,
+          fontWeight: '700',
+          color: '#ffffff',
+          fontSize: '0.9rem',
+          cursor: isSaving ? 'not-allowed' : 'pointer',
+          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          boxShadow: isSaving ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
+          opacity: isSaving ? 0.85 : 1,
+        }}
+        onMouseOver={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+        onMouseOut={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(0)'; }}
+      >
+        {isSaving ? (
+          <>
+            <span style={{
+              width: '13px',
+              height: '13px',
+              border: '2px solid rgba(255, 255, 255, 0.3)',
+              borderTopColor: '#ffffff',
+              borderRadius: '50%',
+              display: 'inline-block',
+              animation: 'spin 0.6s linear infinite'
+            }}></span>
+            <span>Збереження...</span>
+          </>
+        ) : (
+          <span>{text}</span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <div style={{ display: 'flex', height: '100%', width: '100%', backgroundColor: colors.bg, overflow: 'hidden' }}>
 
+      {/* 🟢 CSS-Анімації для плавного Toast і спінера кнопки */}
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes toastSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(30px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes toastSlideOut {
+          from {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+          to {
+            opacity: 0;
+            transform: translateY(30px) scale(0.95);
+          }
+        }
+        .toast-in {
+          animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .toast-out {
+          animation: toastSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
+
       {/* --- ЛІВА ПАНЕЛЬ КОМАНДИ --- */}
       <div style={{ width: '300px', borderRight: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', backgroundColor: colors.surface, zIndex: 10 }}>
         <div style={{ padding: '2rem 1.5rem 1rem 1.5rem' }}>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: colors.textPrimary, margin: '0 0 1rem 0', letterSpacing: '-0.5px' }}>Команда</h2>
-          <div style={{ position: 'relative', marginBottom: '1rem' }}>
-            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary }}><Icons.Search /></div>
-            <input type="text" placeholder="Пошук..." value={staffSearchQuery} onChange={(e) => setStaffSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.2rem', borderRadius: '10px', border: `1px solid ${colors.border}`, fontSize: '0.9rem', outline: 'none', transition: '0.2s', backgroundColor: colors.bg, color: colors.textPrimary }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>Команда</h2>
+            {hasAdminRights && (
+              <button
+                onClick={() => setIsInviteStaffModalOpen(true)}
+                style={{
+                  padding: '0.45rem 0.9rem',
+                  background: colors.textPrimary,
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  transition: '0.2s',
+                  boxShadow: '0 2px 6px rgba(15, 23, 42, 0.12)'
+                }}
+                onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
+                onMouseOut={e => e.currentTarget.style.opacity = '1'}
+              >
+                <Icons.Plus /> Додати
+              </button>
+            )}
           </div>
 
-          {hasAdminRights && (
-            <button onClick={() => setIsInviteStaffModalOpen(true)} style={{ width: '100%', padding: '0.7rem', background: '#fff', color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: '10px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }} onMouseOver={e => e.currentTarget.style.background = colors.surface} onMouseOut={e => e.currentTarget.style.background = '#fff'}>
-              <Icons.Plus /> Додати в команду
-            </button>
-          )}
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary }}><Icons.Search /></div>
+            <input type="text" placeholder="Пошук..." value={staffSearchQuery} onChange={(e) => setStaffSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.2rem', borderRadius: '10px', border: `1px solid ${colors.border}`, fontSize: '0.9rem', outline: 'none', transition: '0.2s', backgroundColor: colors.bg, color: colors.textPrimary }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border}/>
+          </div>
         </div>
 
         <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0 1rem 1rem 1rem' }}>
@@ -394,10 +747,51 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
               <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 {hasAdminRights && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-1rem' }}>
-                    <ActionSaveButton
-                      text="Зберегти дані"
-                      onClick={() => handleSaveSettingsDB({ name: currentStaff.name, title: currentStaff.title, phone: currentStaff.phone, email: currentStaff.email })}
-                    />
+                    <button
+                      type="button"
+                      disabled={isSavingStaff}
+                      onClick={() => handleSaveSettingsDB({
+                        name: currentStaff.name,
+                        title: currentStaff.title,
+                        phone: currentStaff.phone,
+                        email: currentStaff.email
+                      })}
+                      style={{
+                        padding: '0.65rem 1.4rem',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: isSavingStaff ? '#334155' : colors.textPrimary,
+                        fontWeight: '700',
+                        color: '#ffffff',
+                        fontSize: '0.9rem',
+                        cursor: isSavingStaff ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.55rem',
+                        boxShadow: isSavingStaff ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
+                        opacity: isSavingStaff ? 0.85 : 1,
+                      }}
+                      onMouseOver={e => { if (!isSavingStaff) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                      onMouseOut={e => { if (!isSavingStaff) e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
+                      {isSavingStaff ? (
+                        <>
+                          <span style={{
+                            width: '13px',
+                            height: '13px',
+                            border: '2px solid rgba(255, 255, 255, 0.3)',
+                            borderTopColor: '#ffffff',
+                            borderRadius: '50%',
+                            display: 'inline-block',
+                            animation: 'spin 0.6s linear infinite'
+                          }}></span>
+                          <span>Збереження...</span>
+                        </>
+                      ) : (
+                        <span>Зберегти дані</span>
+                      )}
+                    </button>
                   </div>
                 )}
 
@@ -631,8 +1025,9 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
                         }
 
                         setUnpaidAppointments([]);
+                        showToast(`Виплату ${totalPending.toLocaleString('uk-UA')} ₴ успішно зафіксовано!`, "success");
                      } catch (err: any) {
-                        alert("Помилка збереження виплати: " + err.message);
+                        showToast("Помилка збереження виплати", "error");
                      }
                   };
 
@@ -714,27 +1109,56 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
                        <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0 }}>Параметри автоматичного розрахунку.</p>
                      </div>
                      {hasAdminRights && (
-                        <ActionSaveButton
-                           text="Зберегти"
-                           onClick={async () => {
-                              const updates = {
-                                 commission_rate: currentStaff.commission_rate || 0,
-                                 fixed_salary: currentStaff.fixed_salary || 0,
-                                 tax_rate: currentStaff.tax_rate || 0,
-                                 payout_period: currentStaff.payout_period || 'weekly',
-                                 payout_day: currentStaff.payout_day || 'monday',
-                                 auto_payout: currentStaff.auto_payout || false,
-                                 keeps_tips: currentStaff.keeps_tips !== false,
-                                 deduct_materials: currentStaff.deduct_materials || false,
-                                 payment_method: currentStaff.payment_method || 'cash',
-                                 card_number: currentStaff.card_number || '',
-                                 bank_name: currentStaff.bank_name || ''
-                              };
-                              handleUpdateLocalStaff(updates);
-                              const { error } = await supabase.from('staff').update(updates).eq('id', currentStaff.id);
-                              if (error) throw error;
+                        <button
+                           type="button"
+                           disabled={isSavingStaff}
+                           onClick={() => handleSaveSettingsDB({
+                              commission_rate: currentStaff.commission_rate || 0,
+                              fixed_salary: currentStaff.fixed_salary || 0,
+                              tax_rate: currentStaff.tax_rate || 0,
+                              payout_period: currentStaff.payout_period || 'weekly',
+                              payout_day: currentStaff.payout_day || 'monday',
+                              auto_payout: currentStaff.auto_payout || false,
+                              keeps_tips: currentStaff.keeps_tips !== false,
+                              deduct_materials: currentStaff.deduct_materials || false,
+                              payment_method: currentStaff.payment_method || 'cash',
+                              card_number: currentStaff.card_number || '',
+                              bank_name: currentStaff.bank_name || ''
+                           })}
+                           style={{
+                              padding: '0.65rem 1.4rem',
+                              borderRadius: '10px',
+                              border: 'none',
+                              background: isSavingStaff ? '#334155' : colors.textPrimary,
+                              fontWeight: '700',
+                              color: '#ffffff',
+                              fontSize: '0.9rem',
+                              cursor: isSavingStaff ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.55rem',
+                              boxShadow: isSavingStaff ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
+                              opacity: isSavingStaff ? 0.85 : 1,
                            }}
-                        />
+                        >
+                           {isSavingStaff ? (
+                              <>
+                                 <span style={{
+                                    width: '13px',
+                                    height: '13px',
+                                    border: '2px solid rgba(255, 255, 255, 0.3)',
+                                    borderTopColor: '#ffffff',
+                                    borderRadius: '50%',
+                                    display: 'inline-block',
+                                    animation: 'spin 0.6s linear infinite'
+                                 }}></span>
+                                 <span>Збереження...</span>
+                              </>
+                           ) : (
+                              <span>Зберегти</span>
+                           )}
+                        </button>
                      )}
                   </div>
 
@@ -1149,7 +1573,7 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ ПЕРСОНАЛУ --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ ПЕРСОНАЛУ (ТІЛЬКИ EMAIL ТА РОЛЬ) --- */}
       {isInviteStaffModalOpen && (
         <div className="modal-overlay" onClick={() => setIsInviteStaffModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '420px', background: '#fff', padding: '2rem', borderRadius: '20px', width: '100%' }}>
@@ -1157,38 +1581,105 @@ export default function TeamTab({ business, team, setTeam, services, userProfile
               <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: colors.textPrimary, margin: 0 }}>Додати співробітника</h2>
               <button onClick={() => setIsInviteStaffModalOpen(false)} style={{ background: colors.surface, border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: colors.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
-            <p style={{ fontSize: '0.85rem', color: colors.textSecondary, marginBottom: '1.5rem', lineHeight: '1.4' }}>Ми надішлемо запрошення на вказану пошту. Співробітник отримає лист з посиланням для входу.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div><label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Ім'я та прізвище *</label><input type="text" value={inviteForm.name} onChange={e => setInviteForm({...inviteForm, name: e.target.value})} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s', boxSizing: 'border-box' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} placeholder="Наприклад: Анна Коваль" autoFocus /></div>
-              <div><label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Електронна пошта *</label><input type="email" value={inviteForm.email} onChange={e => setInviteForm({...inviteForm, email: e.target.value})} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s', boxSizing: 'border-box' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} placeholder="anna@example.com" /></div>
+            <p style={{ fontSize: '0.85rem', color: colors.textSecondary, marginBottom: '1.5rem', lineHeight: '1.4' }}>Введіть email співробітника. Система автоматично підтягне його ім'я та телефон із зареєстрованого профілю.</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
               <div>
-                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Телефон</label>
-                 <input
-                   type="text"
-                   value={inviteForm.phone}
-                   onChange={e => {
-                     let val = e.target.value;
-                     if (!val.startsWith('+380')) val = '+380';
-                     const digits = val.slice(4).replace(/\D/g, '');
-                     setInviteForm({...inviteForm, phone: '+380' + digits.slice(0, 9)});
-                   }}
-                   style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s', boxSizing: 'border-box' }}
-                   onFocus={e => e.currentTarget.style.borderColor = colors.blue}
-                   onBlur={e => e.currentTarget.style.borderColor = colors.border}
-                 />
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Електронна пошта *</label>
+                <input
+                  type="email"
+                  value={inviteForm.email}
+                  onChange={e => setInviteForm({...inviteForm, email: e.target.value})}
+                  style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s', boxSizing: 'border-box' }}
+                  onFocus={e => e.currentTarget.style.borderColor = colors.blue}
+                  onBlur={e => e.currentTarget.style.borderColor = colors.border}
+                  placeholder="anna@example.com"
+                  autoFocus
+                />
               </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Роль у системі</label>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                  <div onClick={() => setInviteForm({...inviteForm, role: 'master'})} style={{ flex: 1, padding: '0.8rem', border: `1.5px solid ${inviteForm.role === 'master' ? colors.blue : colors.border}`, borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: inviteForm.role === 'master' ? colors.blueLight : '#fff', transition: '0.2s' }}><input type="radio" checked={inviteForm.role === 'master'} readOnly style={{ accentColor: colors.blue }} /><span style={{ fontWeight: '600', color: colors.textPrimary, fontSize: '0.9rem' }}>Спеціаліст</span></div>
-                  <div onClick={() => setInviteForm({...inviteForm, role: 'admin'})} style={{ flex: 1, padding: '0.8rem', border: `1.5px solid ${inviteForm.role === 'admin' ? colors.blue : colors.border}`, borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: inviteForm.role === 'admin' ? colors.blueLight : '#fff', transition: '0.2s' }}><input type="radio" checked={inviteForm.role === 'admin'} readOnly style={{ accentColor: colors.blue }} /><span style={{ fontWeight: '600', color: colors.textPrimary, fontSize: '0.9rem' }}>Адмін</span></div>
+                  <div
+                    onClick={() => setInviteForm({...inviteForm, role: 'master'})}
+                    style={{ flex: 1, padding: '0.8rem', border: `1.5px solid ${inviteForm.role === 'master' ? colors.blue : colors.border}`, borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: inviteForm.role === 'master' ? colors.blueLight : '#fff', transition: '0.2s' }}
+                  >
+                    <input type="radio" checked={inviteForm.role === 'master'} readOnly style={{ accentColor: colors.blue }} />
+                    <span style={{ fontWeight: '600', color: colors.textPrimary, fontSize: '0.9rem' }}>Спеціаліст</span>
+                  </div>
+                  <div
+                    onClick={() => setInviteForm({...inviteForm, role: 'admin'})}
+                    style={{ flex: 1, padding: '0.8rem', border: `1.5px solid ${inviteForm.role === 'admin' ? colors.blue : colors.border}`, borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: inviteForm.role === 'admin' ? colors.blueLight : '#fff', transition: '0.2s' }}
+                  >
+                    <input type="radio" checked={inviteForm.role === 'admin'} readOnly style={{ accentColor: colors.blue }} />
+                    <span style={{ fontWeight: '600', color: colors.textPrimary, fontSize: '0.9rem' }}>Адмін</span>
+                  </div>
                 </div>
               </div>
             </div>
-            <button onClick={handleInviteStaff} disabled={isInvitingStaff} style={{ width: '100%', marginTop: '2rem', padding: '0.85rem', backgroundColor: colors.blue, color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '0.95rem', cursor: isInvitingStaff ? 'not-allowed' : 'pointer', opacity: isInvitingStaff ? 0.7 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-              {isInvitingStaff ? 'Відправка...' : 'Надіслати запрошення'}
+
+            <button
+              onClick={handleInviteStaff}
+              disabled={isInvitingStaff}
+              style={{ width: '100%', marginTop: '2rem', padding: '0.85rem', backgroundColor: colors.blue, color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '0.95rem', cursor: isInvitingStaff ? 'not-allowed' : 'pointer', opacity: isInvitingStaff ? 0.7 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {isInvitingStaff ? 'Додавання...' : 'Додати в команду'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 🟢 Стилізоване Toast-сповіщення у кольорах BookEra */}
+      {toast.show && (
+        <div
+          className={toast.isExiting ? 'toast-out' : 'toast-in'}
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            background: toast.type === 'error' ? '#fff1f2' : (toast.type === 'info' ? '#eff6ff' : '#f0fdf4'),
+            border: `1.5px solid ${toast.type === 'error' ? '#fecdd3' : (toast.type === 'info' ? '#bfdbfe' : '#86efac')}`,
+            color: toast.type === 'error' ? '#991b1b' : (toast.type === 'info' ? '#1e40af' : '#166534'),
+            padding: '0.75rem 1.25rem',
+            borderRadius: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            boxShadow: toast.type === 'error'
+              ? '0 12px 30px rgba(239, 68, 68, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04)'
+              : '0 12px 30px rgba(16, 185, 129, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04)',
+            zIndex: 9999,
+            fontWeight: '700',
+            fontSize: '0.9rem',
+            pointerEvents: 'none',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <div style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '50%',
+            background: toast.type === 'error' ? '#fee2e2' : (toast.type === 'info' ? '#dbeafe' : '#dcfce7'),
+            color: toast.type === 'error' ? '#dc2626' : (toast.type === 'info' ? '#2563eb' : '#16a34a'),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            {toast.type === 'error' ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </div>
+          <span style={{ letterSpacing: '-0.2px' }}>{toast.msg}</span>
         </div>
       )}
     </div>

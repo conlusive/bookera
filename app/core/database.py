@@ -8,7 +8,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True, # (якщо в тебе це було)
-    connect_args={"statement_cache_size": 0}  # 🔥 ДОДАЙ ОСЬ ЦЕЙ РЯДОК
+    echo=False,
+    connect_args={"statement_cache_size": 0}  # Обов'язково для Supabase PgBouncer
 )
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)

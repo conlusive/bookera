@@ -4,9 +4,6 @@ from app.api import users, businesses, services, appointments
 from app.models.base import Base
 from app.core.database import engine
 
-# 🔥 ОЦЕЙ РЯДОК ОБОВ'ЯЗКОВИЙ, щоб SQLAlchemy дізналась про таблиці перед їх створенням
-from app.models.user import User, Business, Service, Appointment
-
 app = FastAPI(
     title="BookEra API",
     version="1.0.0"
@@ -14,21 +11,24 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], # Дозволяємо запити з твого Next.js
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["*"], # Дозволяємо всі методи (GET, POST, OPTIONS тощо)
-    allow_headers=["*"], # Дозволяємо всі хедери
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
 
 @app.on_event("startup")
 async def startup_event():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-app.include_router(businesses.router, prefix="/businesses", tags=["Businesses"])
-app.include_router(services.router, prefix="/services", tags=["Services"])
-app.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
-app.include_router(users.router, prefix="/auth", tags=["Authentication"])
+
+app.include_router(businesses.router)
+app.include_router(services.router)
+app.include_router(appointments.router)
+app.include_router(users.router, prefix="/auth")
+
 
 @app.get("/")
 async def health_check():

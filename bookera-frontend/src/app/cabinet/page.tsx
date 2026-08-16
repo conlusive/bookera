@@ -294,18 +294,29 @@ export default function BusinessCabinet() {
         }
 
         const userId = session.user.id;
+        const userEmail = session.user.email;
 
         const [profileRes, bizRes] = await Promise.all([
-          supabase.from('profiles').select('*').eq('id', userId).single(),
+          supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
           supabase.from('businesses').select('*').eq('owner_id', userId)
         ]);
 
         if (!isMounted) return;
 
-        setUserProfile(profileRes.data || { full_name: session.user.email });
+        const allBiz = bizRes.data || [];
+        const isOwner = allBiz.length > 0;
 
-        const allBiz = bizRes.data;
-        if (allBiz && allBiz.length > 0) {
+        // 🟢 Гарантуємо наявність id та ролі vendor для власника бізнесу
+        const profileData = profileRes.data || {};
+        setUserProfile({
+          id: userId,
+          email: userEmail,
+          full_name: profileData.full_name || session.user.user_metadata?.full_name || userEmail,
+          role: profileData.role || (isOwner ? 'vendor' : 'client'),
+          ...profileData
+        });
+
+        if (allBiz.length > 0) {
           setMyBusinesses(allBiz);
 
           const savedBizId = localStorage.getItem('bookera_active_biz_id');
@@ -1200,7 +1211,21 @@ export default function BusinessCabinet() {
         <nav className="apple-sidebar-nav" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: isSidebarCollapsed ? '0 0.5rem' : '0 0.75rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {!isSidebarCollapsed && <div style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.05em', textTransform: 'uppercase', padding: '0.5rem 0.8rem', marginTop: '0.5rem' }}>Робоче середовище</div>}
 
-          {navItems.map(item => {
+          {navItems
+            .filter(item => {
+              const role = userProfile?.role;
+              // ✂️ Для майстра показуємо лише робочі вкладки
+              if (role === 'master') {
+                return ['Calendar', 'Clients', 'Services', 'Team'].includes(item.id);
+              }
+              // 👔 Для адміністратора приховуємо системні налаштування
+              if (role === 'admin') {
+                return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats'].includes(item.id);
+              }
+              // 👑 Власник (owner / vendor) бачить усі вкладки
+              return true;
+            })
+            .map(item => {
             const isActive = activeTab === item.id;
             return (
               <div key={item.id} className="nav-item-wrapper" style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
@@ -1317,7 +1342,7 @@ export default function BusinessCabinet() {
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', overflowY: 'auto', position: 'relative' }}>
 
         {/* 🟢 ВСІ ВКЛАДКИ ПІДКЛЮЧЕНІ ТУТ */}
-        {activeTab === 'Calendar' && <CalendarTab business={business} team={team} services={services} />}
+        {activeTab === 'Calendar' && <CalendarTab business={business} team={team} services={services} userProfile={userProfile} />}
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
         {activeTab === 'Clients' && <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} />}
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}

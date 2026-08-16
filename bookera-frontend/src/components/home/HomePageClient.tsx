@@ -914,35 +914,125 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
           {/* ПРОФІЛЬ ТА МЕНЮ */}
           <div style={{ width: '280px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
-            <Link href="/business" className="nav-link" style={{ whiteSpace: 'nowrap' }}>Для бізнесу</Link>
+            <Link
+              href="/business"
+              style={{
+                whiteSpace: 'nowrap',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                textDecoration: 'none',
+                color: isHeaderDark ? '#475569' : '#ffffff',
+                transition: 'color 0.2s ease',
+                cursor: 'pointer'
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.color = '#8fae92'; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = isHeaderDark ? '#475569' : '#ffffff'; }}
+            >
+              Для бізнесу
+            </Link>
 
             {isLoggedIn ? (
               <div style={{ position: 'relative' }} ref={profileRef}>
-                <div onClick={() => setIsProfileOpen(!isProfileOpen)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', userSelect: 'none', padding: '0.3rem', borderRadius: '20px', transition: '0.2s' }}>
-                  <span style={{ color: isHeaderDark ? '#111827' : '#ffffff', transition: '0.2s', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }}>{userName}</span>
+                <div
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  style={{
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.65rem',
+                    userSelect: 'none',
+                    padding: '0.3rem 0.5rem',
+                    borderRadius: '20px',
+                    transition: 'all 0.2s ease'
+                  }}
+                  className="anim"
+                >
+                  <span style={{
+                    color: isHeaderDark ? '#111827' : '#ffffff',
+                    transition: 'color 0.2s ease',
+                    fontSize: '0.95rem',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '120px'
+                  }}>
+                    {userName}
+                  </span>
+
                   <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%', backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                    fontWeight: '800', fontSize: '0.9rem', boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.25)', transition: '0.2s', flexShrink: 0
-                  }}>{initials}</div>
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}><path d="M1 1L5 5L9 1" stroke={isHeaderDark ? '#64748b' : '#ffffff'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: '0.2s' }}/></svg>
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#111827',
+                    fontWeight: '800',
+                    fontSize: '0.9rem',
+                    boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.35)',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0
+                  }}>
+                    {initials}
+                  </div>
+
+                  <svg
+                    width="10"
+                    height="6"
+                    viewBox="0 0 10 6"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style={{
+                      transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease',
+                      flexShrink: 0
+                    }}
+                  >
+                    <path
+                      d="M1 1L5 5L9 1"
+                      stroke={isHeaderDark ? '#64748b' : '#ffffff'}
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ transition: 'stroke 0.2s ease' }}
+                    />
+                  </svg>
                 </div>
 
                 {isProfileOpen && (
-                  <div className="anim" style={{ position: 'absolute', top: '150%', right: 0, width: '230px', background: '#ffffff', borderRadius: '16px', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.5rem', zIndex: 1001, border: '1px solid #e2e8f0' }}>
-                    <div style={{ padding: '0.5rem 1rem 0.75rem 1rem', borderBottom: '1px solid #e2e8f0', marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Акаунт</div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#222222', marginTop: '2px', wordWrap: 'break-word' }}>{userName}</div>
+                  <div className="search-dropdown anim" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '210px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.4rem', zIndex: 1001 }}>
+                    <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.25rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Акаунт</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
                     </div>
-                    <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
-                    {userRole === 'vendor' && (<Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease' }} onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>)}
-                    <Link href="/account/settings" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
-                    <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500', transition: 'all 0.2s ease', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '0.85rem' }}>Вийти з акаунту</button>
+                    <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
+                    {userRole === 'vendor' && (
+                      <Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Панель салону</Link>
+                    )}
+                    <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
+                    <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #f1f5f9', marginTop: '2px', boxSizing: 'border-box' }}>Вийти з акаунту</button>
                   </div>
                 )}
               </div>
             ) : (
-              <span onClick={() => { setIsLoginView(true); setIsAuthModalOpen(true); }} className="anim" style={{ color: isHeaderDark ? '#111827' : '#ffffff', cursor: 'pointer', transition: 'color 0.2s ease', fontWeight: '600', fontSize: '0.95rem', whiteSpace: 'nowrap' }} onMouseOver={e=>e.currentTarget.style.color='#8fae92'} onMouseOut={e=>e.currentTarget.style.color=isHeaderDark ? '#111827' : '#ffffff'}>Увійти / Зареєструватись</span>
+              <span
+                onClick={() => { setIsLoginView(true); setIsAuthModalOpen(true); }}
+                className="anim"
+                style={{
+                  color: isHeaderDark ? '#111827' : '#ffffff',
+                  cursor: 'pointer',
+                  transition: 'color 0.2s ease',
+                  fontWeight: '600',
+                  fontSize: '0.95rem',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.color = '#8fae92'; }}
+                onMouseOut={(e) => { e.currentTarget.style.color = isHeaderDark ? '#111827' : '#ffffff'; }}
+              >
+                Увійти / Зареєструватись
+              </span>
             )}
           </div>
         </div>

@@ -16,34 +16,94 @@ import {
   Heart,
   Settings,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Camera,
+  Trash2,
+  CalendarPlus,
+  Download,
+  KeyRound,
+  ShieldCheck
 } from "lucide-react";
+
+// Клієнтська компресія зображення через HTML5 Canvas
+const compressImage = (file: File): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 500;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Помилка компресії зображення'));
+          },
+          'image/webp',
+          0.85
+        );
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
 
 export default function ClientProfilePage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { showToast } = useToast();
 
-  // --- Стейт завантаження та користувача ---
+  // --- Стейт користувача та завантаження ---
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('client');
   const [profile, setProfile] = useState<any>(null);
   const [isHeaderProfileOpen, setIsHeaderProfileOpen] = useState(false);
   const headerProfileRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Активна вкладка ---
+  // --- Активні вкладки ---
   const [activeTab, setActiveTab] = useState<'appointments' | 'balance' | 'vouchers' | 'favorites' | 'settings'>('appointments');
   const [appointmentFilter, setAppointmentFilter] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
 
-  // --- Реальні дані з БД ---
+  // --- Дані з БД ---
   const [appointments, setAppointments] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
 
-  // --- Стейт форми налаштувань ---
+  // --- Форма налаштувань ---
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('+380 ');
   const [email, setEmail] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  // --- Зміна пароля ---
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // --- Модальні вікна ---
   const [cancelModalAppt, setCancelModalAppt] = useState<any | null>(null);
@@ -52,7 +112,7 @@ export default function ClientProfilePage() {
   const [newRescheduleTime, setNewRescheduleTime] = useState<string>('12:00');
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
-  // --- Завантаження даних з Supabase ---
+  // --- Завантаження даних із Supabase ---
   useEffect(() => {
     async function loadData() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -64,7 +124,7 @@ export default function ClientProfilePage() {
 
       setEmail(user.email || '');
 
-      // 1. Профіль користувача
+      // 1. Профіль
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -75,6 +135,11 @@ export default function ClientProfilePage() {
         setProfile(profileData);
         setFullName(profileData.full_name || '');
         setUserRole(profileData.role || 'client');
+        setAvatarUrl(profileData.avatar_url || null);
+
+        if (profileData.avatar_url) {
+          localStorage.setItem('userAvatar', profileData.avatar_url);
+        }
 
         if (profileData.phone) {
           const rawDigits = profileData.phone.replace(/^\+380/, '').replace(/\D/g, '');
@@ -85,7 +150,7 @@ export default function ClientProfilePage() {
         setFullName(storedName);
       }
 
-      // 2. Реальні бронювання
+      // 2. Бронювання
       try {
         const { data: apptsData } = await supabase
           .from('appointments')
@@ -108,7 +173,7 @@ export default function ClientProfilePage() {
         console.error("Помилка завантаження бронювань:", err);
       }
 
-      // 3. Реальні улюблені заклади
+      // 3. Улюблені заклади
       try {
         const { data: favsData } = await supabase
           .from('favorites')
@@ -132,7 +197,7 @@ export default function ClientProfilePage() {
     loadData();
   }, [supabase, router]);
 
-  // Закриття меню профілю кліком поза межами
+  // Закриття випадаючого списку профілю
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (headerProfileRef.current && !headerProfileRef.current.contains(event.target as Node)) {
@@ -148,10 +213,135 @@ export default function ClientProfilePage() {
     localStorage.removeItem('userName');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userAvatar');
     router.push('/');
   };
 
-  // Фіксований незмінний префікс +380
+  // Завантаження, стиснення та збереження фото
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setIsUploadingAvatar(false);
+      return;
+    }
+
+    try {
+      const compressedBlob = await compressImage(file);
+      const filePath = `${user.id}/${Date.now()}.webp`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, compressedBlob, {
+          contentType: 'image/webp',
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+
+      if (dbError) throw dbError;
+
+      setAvatarUrl(publicUrl);
+      localStorage.setItem('userAvatar', publicUrl);
+      window.dispatchEvent(new Event('storage'));
+      showToast('Аватарку оптимізовано та збережено', 'success');
+    } catch (err: any) {
+      showToast(`Помилка завантаження: ${err.message}`, 'error');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Видалення фото
+  const handleAvatarDelete = async () => {
+    if (!confirm('Видалити фото профілю?')) return;
+    setIsUploadingAvatar(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setIsUploadingAvatar(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setAvatarUrl(null);
+      localStorage.removeItem('userAvatar');
+      window.dispatchEvent(new Event('storage'));
+      showToast('Аватарку видалено', 'info');
+    } catch (err: any) {
+      showToast(`Не вдалося видалити: ${err.message}`, 'error');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  // Видалення салону з улюблених
+  const handleRemoveFavorite = async (businessId: string | number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('favorites')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('business_id', businessId);
+
+      setFavorites(prev => prev.filter(b => b.id !== businessId));
+      showToast('Заклад видалено з улюблених', 'info');
+    } catch {
+      showToast('Не вдалося оновити улюблені', 'error');
+    }
+  };
+
+  // Оновлення пароля
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      showToast('Пароль повинен містити щонайменше 6 символів', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast('Паролі не співпадають', 'error');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setIsChangingPassword(false);
+
+    if (error) {
+      showToast(`Помилка: ${error.message}`, 'error');
+    } else {
+      showToast('Пароль успішно оновлено', 'success');
+      setNewPassword('');
+      setConfirmPassword('');
+    }
+  };
+
+  // Введення телефону з префіксом +380
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (!val.startsWith('+380')) {
@@ -161,7 +351,7 @@ export default function ClientProfilePage() {
     setPhone(`+380 ${digitsOnly}`);
   };
 
-  // Збереження профілю з викликом Toast
+  // Збереження особистих даних
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -183,7 +373,7 @@ export default function ClientProfilePage() {
     setIsSaving(false);
 
     if (error) {
-      showToast(`Помилка збереження: ${error.message}`, 'error');
+      showToast(`Помилка: ${error.message}`, 'error');
     } else {
       showToast('Дані успішно збережено', 'success');
       localStorage.setItem('userName', fullName.trim());
@@ -240,10 +430,80 @@ export default function ClientProfilePage() {
       setRescheduleModalAppt(null);
       showToast('Час візиту успішно змінено', 'success');
     } catch {
-      showToast('Помилка при зміні часу візиту', 'error');
+      showToast('Помилка при зміні часу', 'error');
     } finally {
       setIsSubmittingAction(false);
     }
+  };
+
+  // Пряме посилання на Google Calendar
+  const getGoogleCalendarUrl = (app: any) => {
+    const title = encodeURIComponent(`${app.services?.name || 'Візит'} — ${app.businesses?.name || 'Салон'}`);
+    const location = encodeURIComponent(`${app.businesses?.city || ''}, ${app.businesses?.address || ''}`);
+    const dateFormatted = app.date.replace(/-/g, '');
+    const timeFormatted = (app.time?.substring(0, 5) || '12:00').replace(/:/g, '') + '00';
+
+    const duration = app.services?.duration_minutes || 60;
+    const startHour = parseInt(app.time?.substring(0, 2) || '12');
+    const startMin = parseInt(app.time?.substring(3, 5) || '00');
+    const endMinutesTotal = startHour * 60 + startMin + duration;
+    const endHour = String(Math.floor(endMinutesTotal / 60)).padStart(2, '0');
+    const endMin = String(endMinutesTotal % 60).padStart(2, '0');
+    const endTimeFormatted = `${endHour}${endMin}00`;
+
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateFormatted}T${timeFormatted}/${dateFormatted}T${endTimeFormatted}&location=${location}`;
+  };
+
+  // Завантаження файлу .ics для Apple Calendar / Outlook
+  const downloadAppleIcs = (app: any) => {
+    const dateFormatted = app.date.replace(/-/g, '');
+    const timeFormatted = (app.time?.substring(0, 5) || '12:00').replace(/:/g, '') + '00';
+    const duration = app.services?.duration_minutes || 60;
+    const startHour = parseInt(app.time?.substring(0, 2) || '12');
+    const startMin = parseInt(app.time?.substring(3, 5) || '00');
+    const endMinutesTotal = startHour * 60 + startMin + duration;
+    const endHour = String(Math.floor(endMinutesTotal / 60)).padStart(2, '0');
+    const endMin = String(endMinutesTotal % 60).padStart(2, '0');
+    const endTimeFormatted = `${endHour}${endMin}00`;
+
+    const icsContent = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//BookEra Inc//Booking//UA',
+      'BEGIN:VEVENT',
+      `SUMMARY:${app.services?.name || 'Візит'} — ${app.businesses?.name || 'Салон'}`,
+      `LOCATION:${app.businesses?.city || ''}, ${app.businesses?.address || ''}`,
+      `DTSTART:${dateFormatted}T${timeFormatted}`,
+      `DTEND:${dateFormatted}T${endTimeFormatted}`,
+      'DESCRIPTION:Бронювання через сервіс BookEra',
+      'STATUS:CONFIRMED',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute('download', `visit-${app.date}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Календарний файл .ics завантажено', 'success');
+  };
+
+  // Бейджі відносного часу
+  const getRelativeDateBadge = (dateStr: string) => {
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const targetDate = new Date(dateStr);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.round((targetDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return <span style={{ backgroundColor: '#f0fdf4', color: '#166534', padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700' }}>Сьогодні</span>;
+    if (diffDays === 1) return <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700' }}>Завтра</span>;
+    if (diffDays > 1 && diffDays <= 7) return <span style={{ backgroundColor: '#f8fafc', color: '#475569', padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700' }}>Через {diffDays} дн.</span>;
+    return null;
   };
 
   const today = new Date().toISOString().split('T')[0];
@@ -357,24 +617,32 @@ export default function ClientProfilePage() {
           {/* ПРАВА ЧАСТИНА */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
 
-            {/* ПРОФІЛЬНИЙ ПІЛЛ З ІНІЦІАЛАМИ ТА ШЕВРОНОМ */}
+            {/* ПРОФІЛЬНИЙ ПІЛЛ (БЕЗ РАМОК НА АВАТАРЦІ) */}
             <div style={{ position: 'relative' }} ref={headerProfileRef}>
               <div
                 onClick={() => setIsHeaderProfileOpen(!isHeaderProfileOpen)}
                 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.65rem', userSelect: 'none', padding: '0.35rem 0.5rem', borderRadius: '20px', transition: '0.2s' }}
                 className="anim"
               >
-                <span style={{ color: '#111827', fontSize: '0.95rem', fontWeight: '600', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ color: '#111827', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap' }}>
                   {displayName}
                 </span>
 
-                <div style={{
-                  width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                  fontWeight: '800', fontSize: '0.9rem', flexShrink: 0
-                }}>
-                  {initials.toUpperCase()}
-                </div>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
+                    fontWeight: '800', fontSize: '0.9rem', flexShrink: 0
+                  }}>
+                    {initials.toUpperCase()}
+                  </div>
+                )}
 
                 <svg
                   width="10"
@@ -416,6 +684,34 @@ export default function ClientProfilePage() {
 
             {/* ЛІВА КОЛОНКА (НАВІГАЦІЯ) */}
             <aside style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+
+              {/* Компактний віджет користувача */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0.25rem 1rem 0.25rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  />
+                ) : (
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#C2D8C4',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
+                    fontWeight: '800', fontSize: '0.95rem', flexShrink: 0
+                  }}>
+                    {initials.toUpperCase()}
+                  </div>
+                )}
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {displayName}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {email}
+                  </div>
+                </div>
+              </div>
+
               <button onClick={() => setActiveTab('appointments')} className={`nav-item anim ${activeTab === 'appointments' ? 'active' : ''}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                   <CalendarDays className="w-4 h-4 text-slate-400" />
@@ -445,7 +741,7 @@ export default function ClientProfilePage() {
               <button onClick={() => setActiveTab('favorites')} className={`nav-item anim ${activeTab === 'favorites' ? 'active' : ''}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                   <Heart className="w-4 h-4 text-slate-400" />
-                  <span>Улюблені</span>
+                  <span>Улюблені ({favorites.length})</span>
                 </div>
               </button>
 
@@ -512,17 +808,30 @@ export default function ClientProfilePage() {
                                   style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' }}
                                 />
                                 <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.15rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
                                     <h3 style={{ fontSize: '1.05rem', fontWeight: '700', margin: 0 }}>
                                       {app.services?.name || 'Послуга'}
                                     </h3>
+                                    {isUpcoming && getRelativeDateBadge(app.date)}
                                     {isCancelled && (
                                       <span style={{ fontSize: '0.72rem', color: '#ef4444', fontWeight: '600' }}>(Скасовано)</span>
                                     )}
                                   </div>
-                                  <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>
-                                    {app.businesses?.name} • {app.businesses?.city || 'Львів'}, {app.businesses?.address || ''}
-                                  </div>
+
+                                  {/* Клікабельна адреса з відкриттям у Google Maps */}
+                                  <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${app.businesses?.name || ''} ${app.businesses?.city || ''} ${app.businesses?.address || ''}`)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#6b7280', fontSize: '0.85rem', textDecoration: 'none' }}
+                                    className="anim"
+                                    onMouseOver={e => e.currentTarget.style.color = '#111827'}
+                                    onMouseOut={e => e.currentTarget.style.color = '#6b7280'}
+                                  >
+                                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>{app.businesses?.name} • {app.businesses?.city || 'Львів'}, {app.businesses?.address || ''}</span>
+                                  </a>
+
                                   <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.35rem', fontSize: '0.8rem', color: '#4b5563', fontWeight: '600' }}>
                                     <span>{dateObj.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                                     <span>•</span>
@@ -533,9 +842,33 @@ export default function ClientProfilePage() {
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                                 {isUpcoming ? (
                                   <>
+                                    {/* Google Calendar */}
+                                    <a
+                                      href={getGoogleCalendarUrl(app)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Google Календар"
+                                      className="btn-subtle anim"
+                                      style={{ padding: '0.5rem 0.65rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', textDecoration: 'none' }}
+                                    >
+                                      <CalendarPlus className="w-3.5 h-3.5 text-slate-600" />
+                                      <span>Google</span>
+                                    </a>
+
+                                    {/* Apple / Outlook Calendar (.ics) */}
+                                    <button
+                                      onClick={() => downloadAppleIcs(app)}
+                                      title="Apple / iCal (.ics)"
+                                      className="btn-subtle anim"
+                                      style={{ padding: '0.5rem 0.65rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-slate-600" />
+                                      <span>iCal</span>
+                                    </button>
+
                                     <button
                                       onClick={() => { setRescheduleModalAppt(app); setNewRescheduleDate(app.date); }}
                                       className="btn-subtle anim"
@@ -569,7 +902,7 @@ export default function ClientProfilePage() {
                 </div>
               )}
 
-              {/* 2. ВКЛАДКА: БОНУСИ (ЗАГЛУШКА) */}
+              {/* 2. ВКЛАДКА: БОНУСИ */}
               {activeTab === 'balance' && (
                 <div className="clean-card anim" style={{ padding: '3.5rem 1.5rem', textAlign: 'center' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f8fafc', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
@@ -582,7 +915,7 @@ export default function ClientProfilePage() {
                 </div>
               )}
 
-              {/* 3. ВКЛАДКА: СЕРТИФІКАТИ (ЗАГЛУШКА) */}
+              {/* 3. ВКЛАДКА: СЕРТИФІКАТИ */}
               {activeTab === 'vouchers' && (
                 <div className="clean-card anim" style={{ padding: '3.5rem 1.5rem', textAlign: 'center' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f8fafc', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
@@ -616,9 +949,16 @@ export default function ClientProfilePage() {
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
                       {favorites.map(item => (
-                        <div key={item.id} className="clean-card anim" style={{ overflow: 'hidden' }}>
+                        <div key={item.id} className="clean-card anim" style={{ overflow: 'hidden', position: 'relative' }}>
                           <div style={{ height: '130px', position: 'relative' }}>
                             <img src={item.cover_photo || item.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=400&q=80"} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <button
+                              onClick={() => handleRemoveFavorite(item.id)}
+                              title="Видалити з улюблених"
+                              style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}
+                            >
+                              <Heart className="w-3.5 h-3.5 fill-red-500 text-red-500" />
+                            </button>
                           </div>
                           <div style={{ padding: '1rem' }}>
                             <div style={{ fontSize: '0.95rem', fontWeight: '700', margin: '0 0 0.15rem 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
@@ -638,71 +978,180 @@ export default function ClientProfilePage() {
 
               {/* 5. ВКЛАДКА: НАЛАШТУВАННЯ */}
               {activeTab === 'settings' && (
-                <div className="clean-card" style={{ padding: '2.5rem', width: '100%', boxSizing: 'border-box' }}>
-                  <div style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.25rem' }}>Персональні дані</div>
-                  <p style={{ color: '#6b7280', fontSize: '0.88rem', margin: '0 0 1.75rem 0' }}>
-                    Ця контактна інформація автоматично підставляється при бронюванні візитів
-                  </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
 
-                  <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+                  {/* Персональні дані */}
+                  <div className="clean-card" style={{ padding: '2.5rem', width: '100%', boxSizing: 'border-box' }}>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.25rem' }}>Персональні дані</div>
+                    <p style={{ color: '#6b7280', fontSize: '0.88rem', margin: '0 0 2rem 0' }}>
+                      Ця контактна інформація автоматично підставляється при бронюванні візитів
+                    </p>
 
-                    {/* Ім'я та Прізвище */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
-                        Ім'я та Прізвище
-                      </label>
-                      <input
-                        type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        placeholder="Введіть ваше ім'я"
-                        className="clean-input anim"
-                        required
-                      />
+                    {/* Блок завантаження аватарки */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem', paddingBottom: '1.75rem', borderBottom: '1px solid #f1f5f9' }}>
+                      <div style={{ position: 'relative' }}>
+                        {avatarUrl ? (
+                          <img
+                            src={avatarUrl}
+                            alt="Аватарка"
+                            style={{ width: '74px', height: '74px', borderRadius: '50%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{ width: '74px', height: '74px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: '800', color: '#111827' }}>
+                            {initials.toUpperCase()}
+                          </div>
+                        )}
+
+                        {isUploadingAvatar && (
+                          <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Loader2 className="w-5 h-5 animate-spin text-slate-700" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleAvatarUpload}
+                          accept="image/png, image/jpeg, image/webp"
+                          style={{ display: 'none' }}
+                        />
+                        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.35rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploadingAvatar}
+                            className="btn-subtle anim"
+                            style={{ padding: '0.55rem 1rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <Camera className="w-3.5 h-3.5" /> Змінити фото
+                          </button>
+
+                          {avatarUrl && (
+                            <button
+                              type="button"
+                              onClick={handleAvatarDelete}
+                              disabled={isUploadingAvatar}
+                              className="btn-danger-subtle anim"
+                              style={{ padding: '0.55rem 0.85rem', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Видалити
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Автоматичне стиснення в WebP (до 3 МБ)</div>
+                      </div>
                     </div>
 
-                    {/* Номер телефону з монолітним полем */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
-                        Номер телефону
-                      </label>
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={handlePhoneChange}
-                        placeholder="+380 97 123 4567"
-                        className="clean-input anim"
-                      />
-                    </div>
+                    <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
+                          Ім'я та Прізвище
+                        </label>
+                        <input
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          placeholder="Введіть ваше ім'я"
+                          className="clean-input anim"
+                          required
+                        />
+                      </div>
 
-                    {/* Email (тільки для читання) */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
-                        Email (прив'язаний до акаунта)
-                      </label>
-                      <input
-                        type="email"
-                        value={email}
-                        disabled
-                        className="clean-input"
-                        style={{ color: '#9ca3af', backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
-                      />
-                    </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
+                          Номер телефону
+                        </label>
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={handlePhoneChange}
+                          placeholder="+380 97 123 4567"
+                          className="clean-input anim"
+                        />
+                      </div>
 
-                    {/* Кнопка збереження */}
-                    <div>
-                      <button
-                        type="submit"
-                        disabled={isSaving}
-                        className="btn-dark anim"
-                        style={{ padding: '0.85rem 2rem', borderRadius: '10px', marginTop: '0.5rem', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                      >
-                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {isSaving ? 'Збереження...' : 'Зберегти зміни'}
-                      </button>
-                    </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
+                          Email (прив'язаний до акаунта)
+                        </label>
+                        <input
+                          type="email"
+                          value={email}
+                          disabled
+                          className="clean-input"
+                          style={{ color: '#9ca3af', backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
+                        />
+                      </div>
 
-                  </form>
+                      <div>
+                        <button
+                          type="submit"
+                          disabled={isSaving}
+                          className="btn-dark anim"
+                          style={{ padding: '0.85rem 2rem', borderRadius: '10px', marginTop: '0.5rem', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        >
+                          {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                          {isSaving ? 'Збереження...' : 'Зберегти зміни'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Безпека та зміна пароля */}
+                  <div className="clean-card" style={{ padding: '2.5rem', width: '100%', boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                      <KeyRound className="w-5 h-5 text-slate-700" />
+                      <div style={{ fontSize: '1.25rem', fontWeight: '700' }}>Безпека та пароль</div>
+                    </div>
+                    <p style={{ color: '#6b7280', fontSize: '0.88rem', margin: '0 0 1.5rem 0' }}>
+                      Оновіть пароль для входу до вашого облікового запису
+                    </p>
+
+                    <form onSubmit={handlePasswordChange} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', width: '100%' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
+                          Новий пароль
+                        </label>
+                        <input
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Мінімум 6 символів"
+                          className="clean-input anim"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '600', color: '#374151', marginBottom: '0.45rem' }}>
+                          Підтвердження пароля
+                        </label>
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Повторіть новий пароль"
+                          className="clean-input anim"
+                          required
+                        />
+                      </div>
+
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <button
+                          type="submit"
+                          disabled={isChangingPassword}
+                          className="btn-subtle anim"
+                          style={{ padding: '0.85rem 1.75rem', borderRadius: '10px', marginTop: '0.5rem', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        >
+                          {isChangingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
+                          {isChangingPassword ? 'Оновлення...' : 'Змінити пароль'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
                 </div>
               )}
 

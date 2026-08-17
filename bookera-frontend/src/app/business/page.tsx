@@ -36,6 +36,7 @@ export default function BusinessLandingPage() {
   const [userName, setUserName] = useState<string | null>(null);
   const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const [percent, setPercent] = useState(0);
@@ -144,10 +145,13 @@ export default function BusinessLandingPage() {
     if (typeof window !== 'undefined') {
       const storedName = localStorage.getItem('userName');
       const storedRole = localStorage.getItem('userRole') || 'client';
+      const storedAvatar = localStorage.getItem('userAvatar');
+
+      if (storedAvatar) setAvatarUrl(storedAvatar);
 
       if (storedName) {
         setIsLoggedIn(true);
-        const displayName = storedName.includes('@') ? 'Василь Циган' : storedName;
+        const displayName = storedName.includes('@') ? 'Користувач' : storedName;
         setUserName(displayName);
         setUserRole(storedRole);
         const nameParts = displayName.split(' ');
@@ -155,6 +159,13 @@ export default function BusinessLandingPage() {
         setInitials(init.toUpperCase());
       }
 
+      // Слухач миттєвого оновлення аватарки при зміні в іншій вкладці
+      const handleStorageUpdate = () => {
+        setAvatarUrl(localStorage.getItem('userAvatar') || null);
+        const updatedName = localStorage.getItem('userName');
+        if (updatedName) setUserName(updatedName);
+      };
+      window.addEventListener('storage', handleStorageUpdate);
     }
 
     let ticking = false;
@@ -241,6 +252,8 @@ export default function BusinessLandingPage() {
     localStorage.removeItem('userName');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userAvatar');
+    setAvatarUrl(null);
     setIsLoggedIn(false);
     setIsProfileOpen(false);
     setUserName(null);
@@ -539,11 +552,26 @@ export default function BusinessLandingPage() {
                   <span style={{ color: '#111827', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
                     {userName}
                   </span>
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                    fontWeight: '800', fontSize: '0.9rem', flexShrink: 0
-                  }}>{initials}</div>
+
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={userName || 'Аватарка'}
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        flexShrink: 0
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
+                      fontWeight: '800', fontSize: '0.9rem', flexShrink: 0
+                    }}>{initials}</div>
+                  )}
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}>
                     <path d="M1 1L5 5L9 1" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>

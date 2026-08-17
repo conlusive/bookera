@@ -81,6 +81,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [userName, setUserName] = useState<string | null>(null);
   const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // --- Стан для пошуку ---
@@ -142,18 +143,30 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     setMounted(true);
 
     if (typeof window !== 'undefined') {
-      const storedName = localStorage.getItem('userName');
-      const storedRole = localStorage.getItem('userRole') || 'client';
-      if (storedName) {
-        setIsLoggedIn(true);
-        const displayName = storedName.includes('@') ? 'Користувач' : storedName;
-        setUserName(displayName);
-        setUserRole(storedRole);
-        const nameParts = displayName.split(' ');
-        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-        setInitials(init.toUpperCase());
-      }
-    }
+  const storedName = localStorage.getItem('userName');
+  const storedRole = localStorage.getItem('userRole') || 'client';
+  const storedAvatar = localStorage.getItem('userAvatar');
+
+  if (storedAvatar) setAvatarUrl(storedAvatar);
+
+  if (storedName) {
+    setIsLoggedIn(true);
+    const displayName = storedName.includes('@') ? 'Користувач' : storedName;
+    setUserName(displayName);
+    setUserRole(storedRole);
+    const nameParts = displayName.split(' ');
+    const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
+    setInitials(init.toUpperCase());
+  }
+
+  // Миттєве оновлення при зміні фото в сусідній вкладці/профілі
+  const handleStorageUpdate = () => {
+    setAvatarUrl(localStorage.getItem('userAvatar') || null);
+    const updatedName = localStorage.getItem('userName');
+    if (updatedName) setUserName(updatedName);
+  };
+  window.addEventListener('storage', handleStorageUpdate);
+}
 
     // 🟢 ВІДНОВЛЕНА ПРАВИЛЬНА ЛОГІКА СКРОЛУ
     const handleScroll = () => {
@@ -233,6 +246,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     localStorage.removeItem('userName');
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userAvatar');
+    setAvatarUrl(null);
     setIsLoggedIn(false);
     setIsProfileOpen(false);
     setUserName(null);
@@ -913,7 +928,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           </div>
 
           {/* ПРОФІЛЬ ТА МЕНЮ */}
-          <div style={{ width: '280px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
+          <div style={{ width: '320px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
             <Link
               href="/business"
               style={{
@@ -952,31 +967,43 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                     transition: 'color 0.2s ease',
                     fontSize: '0.95rem',
                     fontWeight: '600',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    maxWidth: '120px'
+                    whiteSpace: 'nowrap'
                   }}>
                     {userName}
                   </span>
 
-                  <div style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '50%',
-                    backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#111827',
-                    fontWeight: '800',
-                    fontSize: '0.9rem',
-                    boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.35)',
-                    transition: 'all 0.2s ease',
-                    flexShrink: 0
-                  }}>
-                    {initials}
-                  </div>
+                  {/* 🟢 РЕНДЕР АВАТАРКИ АБО ІНІЦІАЛІВ */}
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={userName || 'Аватарка'}
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        flexShrink: 0
+                      }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#111827',
+                      fontWeight: '800',
+                      fontSize: '0.9rem',
+                      boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.35)',
+                      transition: 'all 0.2s ease',
+                      flexShrink: 0
+                    }}>
+                      {initials}
+                    </div>
+                  )}
 
                   <svg
                     width="10"
@@ -1524,8 +1551,37 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               <span style={{ color: '#64748b', fontSize: '0.85rem' }}>© 2026 BookEra Inc. Усі права захищено.</span>
             </div>
             <div style={{ display: 'flex', gap: '1rem' }}>
-               <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1px solid #475569', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer' }}>IG</div>
-               <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1px solid #475569', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer' }}>FB</div>
+               {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={userName || 'Аватарка'}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    flexShrink: 0
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#111827',
+                  fontWeight: '800',
+                  fontSize: '0.9rem',
+                  boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.35)',
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0
+                }}>
+                  {initials}
+                </div>
+              )}
             </div>
           </div>
         </div>

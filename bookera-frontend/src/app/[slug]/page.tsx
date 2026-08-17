@@ -13,7 +13,6 @@ import { BookingSource } from '@/types';
 const SERVICES_PER_PAGE = 5;
 const REVIEWS_PER_PAGE = 5;
 const REVIEW_MAX_LENGTH = 500;
-const LOCK_TIMEOUT_MINUTES = 10;
 
 const sortOptionsList = [
   { value: 'default', label: 'За замовчуванням' },
@@ -28,13 +27,6 @@ const fmtDate = (d: Date) => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
-
-const parseTime = (timeStr: string) => {
-  const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + m;
-};
-
-// =======================================================
 
 export default function SalonProfile() {
   const { slug } = useParams();
@@ -107,11 +99,11 @@ export default function SalonProfile() {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(600);
 
-  // 🟢 Дані розрахованих слотів від Slot Engine
+  // Дані розрахованих слотів
   const [slotItems, setSlotItems] = useState<SlotStatusItem[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
-  // Функція завантаження вільних слотів із бекенду
+  // Завантаження слотів
   const fetchAvailableSlots = useCallback(async () => {
     if (!salon?.id || !selectedService?.id || !selectedDate) return;
     setIsLoadingSlots(true);
@@ -137,14 +129,14 @@ export default function SalonProfile() {
     }
   }, [isModalOpen, selectedDate, selectedService, selectedMasterId, fetchAvailableSlots]);
 
-  // Відстеження джерела переходу
+  // Джерело переходу
   useEffect(() => {
     const refParam = searchParams.get('ref')?.toLowerCase();
     const source: BookingSource = refParam === 'bookera' ? 'BOOKERA' : 'DIRECT';
     localStorage.setItem('booking_source', source);
   }, [searchParams]);
 
-  // Зворотний відлік 10 хвилин
+  // Таймер 10 хвилин
   useEffect(() => {
     if (bookingStage !== 'confirmation' || bookingSuccess) return;
 
@@ -204,6 +196,7 @@ export default function SalonProfile() {
     setVisibleServicesCount(SERVICES_PER_PAGE);
   }, [searchQuery, sortOrder]);
 
+  // Завантаження профілю юзера
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedName = localStorage.getItem('userName');
@@ -224,24 +217,76 @@ export default function SalonProfile() {
         setInitials(init.toUpperCase());
       }
 
-      // Миттєве оновлення фото
       const handleStorageUpdate = () => {
         setAvatarUrl(localStorage.getItem('userAvatar') || null);
         const updatedName = localStorage.getItem('userName');
         if (updatedName) setUserName(updatedName);
       };
       window.addEventListener('storage', handleStorageUpdate);
+      return () => window.removeEventListener('storage', handleStorageUpdate);
     }
-    if (slug) void loadData();
-  }, [slug]);
+  }, []);
 
-// ⚡ Миттєве паралельне завантаження даних салону
+  // Перевірка статусу улюбленого закладу
+ // Перевірка статусу улюбленого
+  useEffect(() => {
+    async function checkFavorite() {
+      if (!salon?.id) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('favorites')
+        .select('id')
+        .eq('business_id', String(salon.id))
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      setIsFavorite(!!data);
+    }
+    void checkFavorite();
+  }, [salon?.id, supabase]);
+
+  // Додавання / Видалення з бази
+  const handleToggleFavorite = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    if (!salon?.id) return;
+
+    const nextState = !isFavorite;
+    setIsFavorite(nextState);
+
+    try {
+      if (nextState) {
+        const { error } = await supabase
+          .from('favorites')
+          .insert([{ user_id: user.id, business_id: String(salon.id) }]);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('favorites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('business_id', String(salon.id));
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      console.error("Помилка оновлення favorites:", err);
+      setIsFavorite(!nextState);
+      alert(`Не вдалося оновити улюблені: ${err.message || 'помилка зв’язку'}`);
+    }
+  };
+
+  // Завантаження даних салону
   const loadData = useCallback(async () => {
     if (!slug) return;
     try {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug as string);
 
-      // 1. Отримуємо салон напряму без зависань
       const { data: bizData, error: bizErr } = await supabase
         .from('businesses')
         .select('*')
@@ -254,11 +299,9 @@ export default function SalonProfile() {
         return;
       }
 
-      // Відображаємо шапку салону миттєво
       setSalon(bizData);
       setLoading(false);
 
-      // 2. Всі пов'язані дані завантажуються паралельно (~50 мс)
       const [servicesRes, staffRes, reviewsRes, bookingsRes] = await Promise.all([
         supabase.from('services').select('*').eq('business_id', bizData.id).order('price', { ascending: true }),
         supabase.from('users').select('*').eq('business_id', bizData.id).eq('role', 'master'),
@@ -277,6 +320,10 @@ export default function SalonProfile() {
     }
   }, [slug, supabase]);
 
+  useEffect(() => {
+    if (slug) void loadData();
+  }, [slug, loadData]);
+
   const fetchBookings = useCallback(async (bizId: number) => {
     const { data } = await supabase
       .from('appointments')
@@ -286,7 +333,7 @@ export default function SalonProfile() {
     if (data) setBookedAppointments(data);
   }, [supabase]);
 
-  // Realtime оновлення для онлайн-календаря
+  // Realtime підписка на зміни слотів
   useEffect(() => {
     if (!salon?.id) return;
 
@@ -364,9 +411,7 @@ export default function SalonProfile() {
     return list;
   }, [activeTeam]);
 
-  // Легкий розрахунок доступності
   const getServiceAvailabilityText = useCallback((service: any) => {
-    const duration = service.duration_minutes || service.duration || 60;
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
     const todayStr = fmtDate(now);
@@ -412,7 +457,7 @@ export default function SalonProfile() {
 
   const totalReviewPages = Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE);
 
-  // Авторизація
+  // Авторизація через модалку
   const handleModalAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -429,7 +474,7 @@ export default function SalonProfile() {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('full_name, role')
+          .select('full_name, role, avatar_url')
           .eq('id', data.user.id)
           .single();
 
@@ -442,10 +487,12 @@ export default function SalonProfile() {
         localStorage.setItem('userName', finalName);
         localStorage.setItem('userRole', finalRole);
         localStorage.setItem('userId', data.user.id);
+        if (profile?.avatar_url) localStorage.setItem('userAvatar', profile.avatar_url);
 
         setUserName(finalName);
         setUserRole(finalRole);
         setUserId(data.user.id);
+        if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
         const nameParts = finalName.split(' ');
         const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
         setInitials(init.toUpperCase());
@@ -488,7 +535,6 @@ export default function SalonProfile() {
     }
   };
 
-  // Модалка бронювання
   const openModal = (service: any) => {
     setSelectedService(service);
     setBookingStage('selection');
@@ -546,11 +592,10 @@ export default function SalonProfile() {
     }
   };
 
-const handleConfirmBooking = async () => {
+  const handleConfirmBooking = async () => {
     try {
       const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
 
-      // 1. Створюємо/підтверджуємо запис
       await api.createAppointment({
         business_id: salon.id,
         service_id: selectedService.id,
@@ -560,7 +605,6 @@ const handleConfirmBooking = async () => {
         source: bookingSource
       });
 
-      // 2. 🟢 Автоматичне оновлення або додавання клієнта в CRM таблицю `clients`
       const servicePrice = Number(selectedService?.price || 0);
       const safePhone = localStorage.getItem('userPhone') || '';
       const clientDisplayName = userName || 'Гість';
@@ -611,7 +655,6 @@ const handleConfirmBooking = async () => {
         console.warn("Помилка синхронізації клієнта в CRM:", clientSyncErr);
       }
 
-      // 3. 🟢 Відправка сповіщень (Email + Telegram)
       fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -842,7 +885,6 @@ const handleConfirmBooking = async () => {
         .time-pill:hover:not(.busy):not(.active):not(.locked) { background-color: #f1f5f9; border-color: #cbd5e1; }
         .time-pill.active { background-color: #222222 !important; color: #ffffff !important; box-shadow: 0 4px 12px rgba(34, 34, 34, 0.15); border-color: #222222; }
         
-        /* Стани слотів */
         .time-pill.locked { background-color: #fffbeb !important; color: #b45309 !important; border: 1.5px dashed #f59e0b !important; cursor: not-allowed; }
         .time-pill.busy { background-color: transparent !important; color: #cbd5e1 !important; cursor: not-allowed !important; border: 1px dashed #e2e8f0; text-decoration: line-through; }
         
@@ -881,11 +923,7 @@ const handleConfirmBooking = async () => {
               <input type="password" placeholder="Пароль" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="modal-input" required />
               <button type="submit" style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: '#fff', borderRadius: '12px', fontWeight: '700', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', marginTop: '0.5rem', fontSize: '1rem', transition: '0.2s' }}>{isLoginView ? 'Продовжити' : 'Зареєструватись'}</button>
             </form>
-            <div style={{ display: 'flex', alignItems: 'center', margin: '1rem 0', color: '#94a3b8', fontSize: '0.85rem' }}>
-              <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div>
-              <span style={{ padding: '0 1rem' }}>АБО</span>
-              <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', margin: '1rem 0', color: '#94a3b8', fontSize: '0.85rem' }}><div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div><span style={{ padding: '0 1rem' }}>АБО</span><div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div></div>
             <button className="social-btn" onClick={() => alert('Ця функція з\'явиться пізніше')}>Google</button>
             <p style={{ textAlign: 'center', fontSize: '0.9rem', color: '#64748b', marginTop: '1.5rem' }}>{isLoginView ? (<>Немає акаунту? <span onClick={() => setIsLoginView(false)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Створити</span></>) : (<>Вже маєте акаунт? <span onClick={() => setIsLoginView(true)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Увійти</span></>)}</p>
           </div>
@@ -1048,7 +1086,7 @@ const handleConfirmBooking = async () => {
                     </div>
                     <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
                     {userRole === 'vendor' && (
-                      <Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>
+                      <Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Панель салону</Link>
                     )}
                     <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
                     <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '550', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #f1f5f9', marginTop: '2px', boxSizing: 'border-box' }}>Вийти з акаунту</button>
@@ -1111,7 +1149,7 @@ const handleConfirmBooking = async () => {
               <svg fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{width: '18px', height: '18px'}}><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
               Поділитися
             </button>
-            <button className="icon-btn anim" onClick={() => setIsFavorite(!isFavorite)} style={{ width: '42px', height: '42px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <button className="icon-btn anim" onClick={handleToggleFavorite} style={{ width: '42px', height: '42px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
               <svg fill={isFavorite ? "#ef4444" : "none"} stroke={isFavorite ? "#ef4444" : "#222222"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" style={{width: '20px', height: '20px', transition: '0.2s'}}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
             </button>
           </div>
@@ -1355,7 +1393,6 @@ const handleConfirmBooking = async () => {
             )}
 
             {bookingSuccess ? (
-              // КРОК 3: УСПІХ
               <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                 <div className="success-circle">
                   <svg viewBox="0 0 52 52" className="success-svg">
@@ -1368,7 +1405,6 @@ const handleConfirmBooking = async () => {
 
             ) : bookingStage === 'confirmation' ? (
 
-              // КРОК 2: ПЕРЕВІРКА ДЕТАЛЕЙ І ТАЙМЕР
               <>
                 <div className="lock-timer-badge">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -1415,7 +1451,6 @@ const handleConfirmBooking = async () => {
               </>
             ) : (
 
-              // КРОК 1: ВИБІР ЧАСУ ТА ДАТИ ЗІ СТАТУСАМИ
               <>
                 <h2 style={{ fontSize: '1.35rem', fontWeight: '900', color: '#222222', marginBottom: '1.25rem', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', height: '24px' }}>Бронювання</h2>
 
@@ -1456,7 +1491,6 @@ const handleConfirmBooking = async () => {
                 </div>
 
                 {/* 3. ЧАС */}
-{/* 3. ЧАС (Синхронізовано з Slot Engine) */}
                 <div style={{ marginBottom: '2rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <label className="modal-label" style={{ marginBottom: 0 }}>3. ЧАС</label>

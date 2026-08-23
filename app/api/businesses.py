@@ -3,14 +3,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
-from app.models.user import Business, User, RoleEnum, Appointment
-from app.schemas import BusinessOut
+from app.models.models import Business, User, RoleEnum, Appointment, Service
+from app.schemas.business import BusinessOut
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
-
-LOCK_TIMEOUT_MINUTES = 10
 
 
 def get_utc_now():
@@ -25,6 +24,17 @@ def parse_time_period(period: Optional[str]):
     elif period == "Вечір":
         return time(17, 0), time(23, 0)
     return time(8, 0), time(23, 0)
+
+
+@router.get("/", response_model=List[BusinessOut])
+async def list_businesses(db: AsyncSession = Depends(get_db)):
+    stmt = (
+        select(Business)
+        .where(Business.is_active == True)
+        .options(selectinload(Business.services))
+    )
+    res = await db.execute(stmt)
+    return res.scalars().all()
 
 
 @router.get(
@@ -42,7 +52,14 @@ async def search_available_businesses(
     now = get_utc_now()
     period_start, period_end = parse_time_period(time_period)
 
-    stmt = select(Business).where(func.lower(Business.city).like(f"%{city.lower()}%"))
+    stmt = (
+        select(Business)
+        .where(
+            Business.is_active == True,
+            func.lower(Business.city).like(f"%{city.lower()}%")
+        )
+        .options(selectinload(Business.services))
+    )
     if category and category != "all":
         stmt = stmt.where(func.lower(Business.category).like(f"%{category.lower()}%"))
 
@@ -57,13 +74,10 @@ async def search_available_businesses(
     for biz in businesses:
         masters_stmt = select(User).where(
             User.business_id == biz.id,
-            User.role == RoleEnum.master
+            or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)
         )
         masters_res = await db.execute(masters_stmt)
         masters = masters_res.scalars().all()
-
-        if not masters:
-            continue
 
         day_start = datetime.combine(target_date, time(0, 0))
         day_end = datetime.combine(target_date, time(23, 59, 59))
@@ -74,10 +88,7 @@ async def search_available_businesses(
             Appointment.start_time <= day_end,
             or_(
                 Appointment.status == "confirmed",
-                and_(
-                    Appointment.status == "blocked",
-                    Appointment.expires_at > now
-                )
+                and_(Appointment.status == "blocked", Appointment.expires_at > now),
             )
         )
         bookings_res = await db.execute(bookings_stmt)
@@ -96,16 +107,26 @@ async def search_available_businesses(
                 current_slot += timedelta(minutes=30)
                 continue
 
-            for master in masters:
+            if not masters:
+                # Якщо окремих майстрів не заведено, рахуємо сам заклад як майстра
                 is_busy = any(
-                    b.master_id == master.id and
-                    b.start_time < slot_end and
-                    b.end_time > slot_start
+                    b.start_time < slot_end and b.end_time > slot_start
                     for b in existing_bookings
                 )
                 if not is_busy:
                     has_free_slot = True
                     break
+            else:
+                for master in masters:
+                    is_busy = any(
+                        b.master_id == str(master.id) and
+                        b.start_time < slot_end and
+                        b.end_time > slot_start
+                        for b in existing_bookings
+                    )
+                    if not is_busy:
+                        has_free_slot = True
+                        break
 
             if has_free_slot:
                 break
@@ -123,10 +144,14 @@ async def get_business_by_slug_or_id(
     slug_or_id: str,
     db: AsyncSession = Depends(get_db),
 ):
+    stmt = (
+        select(Business)
+        .options(selectinload(Business.services))
+    )
     if slug_or_id.isdigit():
-        stmt = select(Business).where(Business.id == int(slug_or_id))
+        stmt = stmt.where(Business.id == int(slug_or_id))
     else:
-        stmt = select(Business).where(Business.slug == slug_or_id)
+        stmt = stmt.where(Business.slug == slug_or_id)
 
     result = await db.execute(stmt)
     business = result.scalars().first()

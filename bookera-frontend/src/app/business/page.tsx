@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері

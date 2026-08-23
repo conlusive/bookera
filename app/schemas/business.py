@@ -1,51 +1,44 @@
-from typing import Optional, List
-from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional, Any
+from pydantic import BaseModel
+from decimal import Decimal
+
+
+class ServiceOut(BaseModel):
+    id: int
+    business_id: int
+    name: str
+    description: Optional[str] = None
+    price: Decimal
+    duration_minutes: int
+    is_group: bool = False
+    max_participants: int = 1
+    is_active: bool = True
+
+    class Config:
+        from_attributes = True
 
 
 class BusinessBase(BaseModel):
-    name: str = Field(..., min_length=2, max_length=150)
+    name: str
     slug: str
-    address: str
-    category: Optional[str] = None
-    city: Optional[str] = "Львів"
-    description: Optional[str] = None
-    business_type: Optional[str] = None
-    workspace_type: Optional[str] = None
-    shifts: Optional[str] = None
-    cover_photo: Optional[str] = None
-    logo: Optional[str] = None
-    phone: Optional[str] = None
-    working_hours: Optional[str] = None
-
-
-class BusinessCreate(BusinessBase):
-    owner_id: str
-
-
-class BusinessUpdate(BaseModel):
-    name: Optional[str] = None
-    slug: Optional[str] = None
+    category: Optional[str] = "Салон краси"
     address: Optional[str] = None
-    category: Optional[str] = None
-    city: Optional[str] = None
-    description: Optional[str] = None
+    city: Optional[str] = "Львів"
+    phone: Optional[str] = None
+    rating: Optional[Decimal] = Decimal("5.0")
+    reviews_count: Optional[int] = 0
     cover_photo: Optional[str] = None
     logo: Optional[str] = None
-    phone: Optional[str] = None
-    working_hours: Optional[str] = None
+    tags: Optional[List[str]] = []
+    open_time: Optional[str] = "09:00"
+    close_time: Optional[str] = "20:00"
+    days_off: Optional[List[int]] = []
 
 
 class BusinessOut(BusinessBase):
     id: int
-    owner_id: str
-    rating: Optional[float] = 0.0
-    reviews_count: Optional[int] = 0
-    is_radar_active: bool = False
-    virtual_balance: float = 0.0
-    created_at: Optional[datetime] = None
-    model_config = ConfigDict(from_attributes=True)
+    is_active: bool = True
+    services: Optional[List[ServiceOut]] = []
 
-
-class BusinessResponse(BusinessOut):
-    pass
+    class Config:
+        from_attributes = True

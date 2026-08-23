@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.api.deps import get_db
-from app.models.user import Service, Business
+from app.models.models import Business, User, RoleEnum, Appointment, Service, LockedSlot
 from app.schemas import ServiceCreate, ServiceResponse, ServiceUpdate
 
 router = APIRouter(prefix="/services", tags=["Services"])

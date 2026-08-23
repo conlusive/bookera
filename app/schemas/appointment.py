@@ -1,13 +1,13 @@
 from datetime import date, datetime, time
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
-from app.models.user import BookingSourceEnum
+from pydantic import BaseModel
+from app.models.models import BookingSourceEnum
 
 
 class SlotStatusItem(BaseModel):
-    time: str                      # Формат "10:00"
-    status: str                    # "available" | "locked" | "booked"
-    available_masters_count: int   # Кількість вільних майстрів
+    time: str
+    status: str  # "available", "booked", "locked"
+    available_masters_count: int = 1
 
 
 class AvailableSlotsResponse(BaseModel):
@@ -30,9 +30,16 @@ class AppointmentCreate(BaseModel):
     business_id: int
     service_id: int
     start_time: datetime
-    master_id: str
+    master_id: Optional[str] = "0"
     client_id: Optional[str] = None
-    source: BookingSourceEnum = BookingSourceEnum.DIRECT
+    client_name: Optional[str] = None
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
+    source: Optional[BookingSourceEnum] = BookingSourceEnum.DIRECT
+
+
+class AppointmentStatusUpdate(BaseModel):
+    status: str  # "confirmed", "completed", "cancelled"
 
 
 class AppointmentResponse(BaseModel):
@@ -44,12 +51,15 @@ class AppointmentResponse(BaseModel):
     start_time: datetime
     end_time: datetime
     status: str
-    source: BookingSourceEnum
+    source: Optional[str] = "direct"
+    price: Optional[float] = None
+    client_name: Optional[str] = None
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
     created_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
 
 
-# 🟢 Аліас для сумісності з app/schemas/__init__.py
 AppointmentOut = AppointmentResponse

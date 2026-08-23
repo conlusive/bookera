@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { Icons, toLocalDateStr } from '@/components/shared';
 
 export default function InventoryTab({ business, team }: any) {

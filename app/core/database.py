@@ -1,14 +1,33 @@
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from dotenv import load_dotenv
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
+# Для роботи asyncpg через Supabase Transaction Pooler (порт 6543)
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"statement_cache_size": 0}  # Обов'язково для Supabase PgBouncer
+    connect_args={
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0
+    }
 )
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False
+)
+
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

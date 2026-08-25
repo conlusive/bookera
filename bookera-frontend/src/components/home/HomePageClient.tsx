@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
 
 const categoriesData = [
   { name: 'Рекомендовані', slug: 'all' },
@@ -368,21 +369,13 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     // Запит на бекенд, якщо обрана дата
     if (searchDate) {
       try {
-        const queryParams = new URLSearchParams({
+        const availableBizs = await api.searchAvailableBusinesses({
           city: searchWhere,
           target_date: searchDate,
+          time_period: searchTime && searchTime !== 'Будь-коли' ? searchTime : undefined,
+          category: activeCategory !== 'all' ? activeCategory : undefined,
         });
-        if (searchTime && searchTime !== 'Будь-коли') queryParams.append('time_period', searchTime);
-        if (activeCategory !== 'all') queryParams.append('category', activeCategory);
-
-        const res = await fetch(`http://localhost:8000/businesses/search-available?${queryParams.toString()}`);
-
-        if (res.ok) {
-          const availableBizs = await res.json();
-          setAvailableBizIds(availableBizs.map((b: any) => b.id));
-        } else {
-          setAvailableBizIds([]);
-        }
+        setAvailableBizIds(availableBizs.map((b: any) => b.id));
       } catch (error) {
         console.warn("Бекенд недоступний:", error);
         setAvailableBizIds(null);

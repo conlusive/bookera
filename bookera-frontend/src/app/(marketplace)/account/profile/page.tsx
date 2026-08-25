@@ -220,15 +220,15 @@ export default function ClientProfilePage() {
           .from('appointments')
           .select(`
             id,
-            date,
-            time,
+            start_time,
+            end_time,
             status,
             price,
             businesses ( id, name, address, city, cover_photo, logo, slug, rating ),
             services ( id, name, price, duration_minutes )
           `)
-          .eq('user_id', user.id)
-          .order('date', { ascending: false });
+          .or(`user_id.eq.${user.id},client_id.eq.${user.id}`)
+          .order('start_time', { ascending: false });
 
         if (apptsData) {
           setAppointments(apptsData);
@@ -619,10 +619,12 @@ export default function ClientProfilePage() {
   };
 
   const today = new Date().toISOString().split('T')[0];
+  const nowIso = new Date().toISOString();
   const filteredAppointments = useMemo(() => {
     return appointments.filter(app => {
-      const isUpcoming = app.date >= today && app.status !== 'cancelled';
-      const isCompleted = app.date < today && app.status !== 'cancelled';
+      const appDateIso = app.start_time || app.date || '';
+      const isUpcoming = appDateIso >= nowIso && app.status !== 'cancelled';
+      const isCompleted = appDateIso < nowIso && app.status !== 'cancelled';
       const isCancelled = app.status === 'cancelled';
 
       if (appointmentFilter === 'upcoming') return isUpcoming;
@@ -630,9 +632,12 @@ export default function ClientProfilePage() {
       if (appointmentFilter === 'cancelled') return isCancelled;
       return true;
     });
-  }, [appointments, appointmentFilter, today]);
+  }, [appointments, appointmentFilter, nowIso]);
 
-  const upcomingCount = appointments.filter(app => app.date >= today && app.status !== 'cancelled').length;
+  const upcomingCount = appointments.filter(app => {
+    const appDateIso = app.start_time || app.date || '';
+    return appDateIso >= nowIso && app.status !== 'cancelled';
+  }).length;
   const displayName = fullName || profile?.full_name || 'Користувач';
   const nameParts = displayName.split(' ');
   const initials = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];

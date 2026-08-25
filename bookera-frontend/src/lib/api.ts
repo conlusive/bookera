@@ -1,35 +1,39 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 export interface Business {
   id: number;
   name: string;
   slug: string;
-  address: string;
-  city: string;
   category?: string;
+  address?: string;
+  city?: string;
+  phone?: string;
   rating?: number;
   reviews_count?: number;
   cover_photo?: string;
   logo?: string;
-  phone?: string;
+  tags?: string[];
   open_time?: string;
   close_time?: string;
   days_off?: number[];
+  is_active?: boolean;
 }
 
 export interface Service {
   id: number;
   business_id: number;
   name: string;
-  duration_minutes: number;
+  description?: string;
   price: number;
-  is_group: boolean;
-  max_participants: number;
+  duration_minutes: number;
+  is_group?: boolean;
+  max_participants?: number;
+  is_active?: boolean;
 }
 
 export interface SlotStatusItem {
   time: string;
-  status: "available" | "locked" | "booked";
+  status: 'available' | 'locked' | 'booked';
   available_masters_count: number;
 }
 
@@ -48,40 +52,65 @@ export interface Appointment {
   master_id?: string;
   start_time: string;
   end_time: string;
-  status: string;
-  source: string;
+  status: 'confirmed' | 'blocked' | 'cancelled' | 'completed';
+  source?: string;
+  price?: number;
+  client_name?: string;
+  client_phone?: string;
+  client_email?: string;
+  created_at?: string;
 }
 
 export const api = {
-  // === ПУБЛІЧНИЙ ФЛОУ ===
+  // === КЛІЄНТСЬКИЙ МАРКЕТПЛЕЙС ===
+
   async getBusiness(slugOrId: string | number): Promise<Business> {
-    const res = await fetch(`${API_URL}/businesses/${slugOrId}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("Заклад не знайдено");
+    const res = await fetch(`${API_URL}/businesses/${slugOrId}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Заклад не знайдено');
     return res.json();
   },
 
-  async getBusinessServices(businessId: number): Promise<Service[]> {
-    const res = await fetch(`${API_URL}/services/business/${businessId}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("Помилка завантаження послуг");
+  async searchAvailableBusinesses(params: {
+    city?: string;
+    target_date: string;
+    time_period?: string;
+    category?: string;
+  }): Promise<Business[]> {
+    const query = new URLSearchParams({
+      city: params.city || 'Львів',
+      target_date: params.target_date,
+      time_period: params.time_period || 'Будь-коли',
+      category: params.category || 'all',
+    });
+
+    const res = await fetch(`${API_URL}/businesses/search-available?${query.toString()}`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Помилка пошуку закладів');
     return res.json();
   },
+
+  // === РОЗРАХУНОК СЛОТІВ ТА БРОНЮВАННЯ ===
 
   async getAvailableSlots(params: {
     business_id: number;
     service_id: number;
     target_date: string;
     master_id?: string;
+    step_minutes?: number;
   }): Promise<AvailableSlotsResponse> {
     const query = new URLSearchParams({
       business_id: String(params.business_id),
       service_id: String(params.service_id),
       target_date: params.target_date,
-      master_id: params.master_id || "0",
+      master_id: params.master_id || '0',
+      step_minutes: String(params.step_minutes || 15),
     });
+
     const res = await fetch(`${API_URL}/appointments/available-slots?${query.toString()}`, {
-      cache: "no-store",
+      cache: 'no-store',
     });
-    if (!res.ok) throw new Error("Не вдалося завантажити вільні слоти");
+    if (!res.ok) throw new Error('Не вдалося завантажити вільні слоти');
     return res.json();
   },
 
@@ -94,13 +123,14 @@ export const api = {
     source?: string;
   }): Promise<{ status: string; booking_id: number; message: string }> {
     const res = await fetch(`${API_URL}/appointments/lock`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Цей час зайнято або заблоковано.");
+      const err = await res.json().catch(() => ({ detail: 'Слот зайнято' }));
+      throw new Error(err.detail || 'Цей час щойно зайняли');
     }
     return res.json();
   },
@@ -112,8 +142,8 @@ export const api = {
     client_id?: string;
   }): Promise<{ status: string }> {
     const res = await fetch(`${API_URL}/appointments/unlock`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     return res.json();
@@ -123,43 +153,52 @@ export const api = {
     business_id: number;
     service_id: number;
     start_time: string;
-    master_id: string;
+    master_id?: string;
     client_id?: string;
+    client_name?: string;
+    client_phone?: string;
+    client_email?: string;
     source?: string;
   }): Promise<Appointment> {
     const res = await fetch(`${API_URL}/appointments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Помилка підтвердження бронювання.");
+      const err = await res.json().catch(() => ({ detail: 'Помилка оформлення' }));
+      throw new Error(err.detail || 'Не вдалося створити візит');
     }
     return res.json();
   },
 
-  // === КАБІНЕТ БІЗНЕСУ (DASHBOARD) ===
-  async getBookedAppointments(businessId: number): Promise<Appointment[]> {
-    const res = await fetch(`${API_URL}/appointments/booked?business_id=${businessId}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("Помилка завантаження розкладу");
+  // === КАБІНЕТ БІЗНЕСУ (CRM) ===
+
+  async getBookedAppointments(businessId: number, masterId?: string): Promise<Appointment[]> {
+    const query = new URLSearchParams({ business_id: String(businessId) });
+    if (masterId && masterId !== '0' && masterId !== 'all') {
+      query.append('master_id', masterId);
+    }
+
+    const res = await fetch(`${API_URL}/appointments/booked?${query.toString()}`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Помилка завантаження розкладу');
     return res.json();
   },
 
-  async createService(serviceData: {
-    business_id: number;
-    name: string;
-    duration_minutes: number;
-    price: number;
-    is_group?: boolean;
-    max_participants?: number;
-  }): Promise<Service> {
-    const res = await fetch(`${API_URL}/services`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(serviceData),
+  async updateAppointmentStatus(
+    appointmentId: number,
+    status: 'confirmed' | 'completed' | 'cancelled'
+  ): Promise<Appointment> {
+    const res = await fetch(`${API_URL}/appointments/${appointmentId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
     });
-    if (!res.ok) throw new Error("Помилка додавання послуги");
+
+    if (!res.ok) throw new Error('Не вдалося оновити статус');
     return res.json();
   },
 };

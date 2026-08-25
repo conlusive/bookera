@@ -592,23 +592,30 @@ export default function SalonProfile() {
     }
   };
 
-  const handleConfirmBooking = async () => {
+const handleConfirmBooking = async () => {
     try {
       const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
+      const safePhone = localStorage.getItem('userPhone') || '';
+      const clientDisplayName = userName || 'Гість';
+      const { data: { user } } = await supabase.auth.getUser();
+      const clientUserEmail = user?.email || loginEmail || '';
 
+      // Створення запису у FastAPI + автоматична фонова відправка Email (SMTP)
       await api.createAppointment({
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: String(selectedMasterId || "0"),
-        client_id: userId || undefined,
+        client_id: user?.id || userId || undefined,
+        client_name: clientDisplayName,
+        client_phone: safePhone,
+        client_email: clientUserEmail,
         source: bookingSource
       });
 
       const servicePrice = Number(selectedService?.price || 0);
-      const safePhone = localStorage.getItem('userPhone') || '';
-      const clientDisplayName = userName || 'Гість';
 
+      // Синхронізація клієнта в базу даних CRM
       try {
         let existingClient = null;
 
@@ -643,7 +650,7 @@ export default function SalonProfile() {
             business_id: salon.id,
             name: clientDisplayName,
             phone: safePhone || null,
-            email: loginEmail || null,
+            email: clientUserEmail || null,
             last_visit: selectedDate,
             visits: 1,
             spent: servicePrice,
@@ -654,21 +661,6 @@ export default function SalonProfile() {
       } catch (clientSyncErr) {
         console.warn("Помилка синхронізації клієнта в CRM:", clientSyncErr);
       }
-
-      fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_name: salon.name,
-          client_name: clientDisplayName,
-          client_phone: safePhone,
-          service_name: selectedService?.name,
-          price: servicePrice,
-          date: selectedDate,
-          time: selectedTime,
-          address: salon.address
-        })
-      }).catch(err => console.warn("Помилка відправки сповіщення:", err));
 
       setBookingSuccess(true);
       void fetchBookings(salon.id);

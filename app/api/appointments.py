@@ -8,7 +8,7 @@ from app.schemas.appointment import AppointmentStatusUpdate
 
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
-from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum
+from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
@@ -66,10 +66,18 @@ async def get_available_slots(
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
 
-    # 1.2 Перевірка вихідних днів
-    weekday_idx = (target_date.weekday() + 1) % 7
-    days_off = getattr(business, "days_off", []) or []
-    if weekday_idx in days_off:
+    # 1.2 Графік роботи цього дня тижня (з нової таблиці business_hours,
+    # замість колишнього JSON-поля days_off). weekday: 0=понеділок...6=неділя (ISO)
+    iso_weekday = target_date.weekday()  # уже 0=понеділок в Python - без хитрого JS-зсуву
+    hours_res = await db.execute(
+        select(BusinessHours).where(
+            BusinessHours.business_id == business_id,
+            BusinessHours.weekday == iso_weekday,
+        )
+    )
+    day_hours = hours_res.scalars().first()
+
+    if day_hours is not None and not day_hours.is_open:
         return AvailableSlotsResponse(
             date=target_date,
             service_id=service.id,
@@ -77,9 +85,9 @@ async def get_available_slots(
             slots=[],
         )
 
-    # 1.3 Графік роботи
-    open_mins = parse_hhmm_to_minutes(getattr(business, "open_time", "09:00") or "09:00")
-    close_mins = parse_hhmm_to_minutes(getattr(business, "close_time", "20:00") or "20:00")
+    # 1.3 Межі робочого дня (дефолт 09:00-20:00, якщо графік ще не заповнений)
+    open_mins = parse_hhmm_to_minutes(day_hours.open_time if day_hours else "09:00")
+    close_mins = parse_hhmm_to_minutes(day_hours.close_time if day_hours else "20:00")
     duration = service.duration_minutes
 
     # 1.4 Майстри закладу

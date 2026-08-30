@@ -3,6 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import businesses, services, appointments
+from app.api.crm import clients as crm_clients, staff as crm_staff, business as crm_business, extras as crm_extras
 from app.models.base import Base
 from app.core.database import engine
 
@@ -41,6 +42,10 @@ async def startup_event():
 app.include_router(businesses.router)
 app.include_router(services.router)
 app.include_router(appointments.router)
+app.include_router(crm_clients.router)
+app.include_router(crm_staff.router)
+app.include_router(crm_business.router)
+app.include_router(crm_extras.router)
 
 
 @app.get("/")

@@ -13,20 +13,20 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import businesses, services, appointments
 from app.api.crm import clients as crm_clients, staff as crm_staff, business as crm_business, extras as crm_extras
-from app.models.base import Base
 from app.core.database import engine, AsyncSessionLocal
 from app.core.logging_config import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Схема тепер керується виключно через Alembic (`alembic upgrade head`),
+    # а не create_all. create_all не вміє ALTER на існуючих таблицях і
+    # тихо ігнорує розбіжності - Alembic натомість версіонує кожну зміну
+    # і однаково працює і на новій базі, і на вже задеплоєній.
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("SELECT 1"))
         logger.info("Успішне підключення до бази даних")
     except Exception as e:
-        # Це попередження, а не помилка запуску: create_all не критичний,
-        # якщо міграції вже застосовані окремо. Але лишити це непоміченим
-        # у логах небезпечно - тому ERROR, а не тихий print.
         logger.error(f"Проблема при старті/підключенні до БД: {e}")
     yield
 

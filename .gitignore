@@ -1,9 +1,12 @@
-node_modules/
-__pycache__/
+*.egg-info/
+*.log
 *.pyc
+.coverage
 .env
 .env.local
 .env.test
 .next/
+.pytest_cache/
+__pycache__/
+node_modules/
 venv/
-*.log

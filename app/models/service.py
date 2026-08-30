@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Numeric, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now
 from app.models.base import Base
 
 
@@ -19,7 +20,7 @@ class Service(Base):
     max_participants = Column(Integer, default=1)
     is_active = Column(Boolean, default=True)
     order_index = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     business = relationship("Business", back_populates="services")
     appointments = relationship("Appointment", back_populates="service")
@@ -29,6 +30,13 @@ class Service(Base):
         primaryjoin="Service.id==ServiceAddon.service_id",
         secondaryjoin="Service.id==ServiceAddon.addon_service_id",
     )
+
+    @property
+    def addon_service_ids(self) -> list:
+        """Обчислюване поле для API-відповіді - список id зі зв'язку `addons`.
+        Викликач має заздалегідь підвантажити addons через selectinload,
+        інакше звернення сюди поза async-сесією впаде з MissingGreenlet."""
+        return [s.id for s in self.addons]
 
 
 class ServiceAddon(Base):

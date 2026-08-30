@@ -6,6 +6,7 @@ from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
+from app.core.time_utils import utc_now
 from app.models import Business, User, RoleEnum, Appointment, Service
 from app.schemas.business import BusinessOut
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
 
 def get_utc_now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return utc_now()
 
 
 def parse_time_period(period: Optional[str]):
@@ -27,11 +28,18 @@ def parse_time_period(period: Optional[str]):
 
 
 @router.get("/", response_model=List[BusinessOut])
-async def list_businesses(db: AsyncSession = Depends(get_db)):
+async def list_businesses(
+    limit: int = Query(50, ge=1, le=200, description="Максимум записів (за замовчуванням 50, ліміт 200)"),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
     stmt = (
         select(Business)
         .where(Business.is_active == True)
         .options(selectinload(Business.services))
+        .order_by(Business.id)
+        .limit(limit)
+        .offset(offset)
     )
     res = await db.execute(stmt)
     return res.scalars().all()
@@ -47,6 +55,7 @@ async def search_available_businesses(
     target_date: date = Query(..., description="Обрана дата (YYYY-MM-DD)"),
     time_period: Optional[str] = Query("Будь-коли", description="Ранок, Обід, Вечір або Будь-коли"),
     category: Optional[str] = Query("all", description="Категорія послуги"),
+    limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
     now = get_utc_now()
@@ -62,6 +71,7 @@ async def search_available_businesses(
     )
     if category and category != "all":
         stmt = stmt.where(func.lower(Business.category).like(f"%{category.lower()}%"))
+    stmt = stmt.limit(limit)
 
     result = await db.execute(stmt)
     businesses = result.scalars().all()

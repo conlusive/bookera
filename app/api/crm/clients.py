@@ -16,6 +16,8 @@ router = APIRouter(prefix="/crm/clients", tags=["CRM - Clients"])
 async def list_clients(
     business_id: int = Query(...),
     search: Optional[str] = Query(None, description="Пошук за іменем або телефоном"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -25,7 +27,7 @@ async def list_clients(
         like = f"%{search.lower()}%"
         from sqlalchemy import or_, func
         stmt = stmt.where(or_(func.lower(Client.name).like(like), Client.phone.like(like)))
-    stmt = stmt.order_by(Client.last_visit_at.desc().nullslast())
+    stmt = stmt.order_by(Client.last_visit_at.desc().nullslast()).limit(limit).offset(offset)
     result = await db.execute(stmt)
     return result.scalars().all()
 

@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric, Computed, Text
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now
 from app.models.base import Base
 
 
@@ -62,8 +63,8 @@ class Appointment(Base):
         Computed("COALESCE(master_id, 'BIZ-' || business_id::text)", persisted=True),
     )
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     business = relationship("Business", back_populates="appointments")
     service = relationship("Service", back_populates="appointments")

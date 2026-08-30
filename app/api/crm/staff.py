@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user
 from app.core.email import send_email_sync
+from app.core.time_utils import utc_now
 from app.models import StaffInvite, User, Business
 from app.schemas.staff import StaffInviteCreate, StaffInviteResponse, InviteAccept, StaffUpdate, StaffResponse
 
@@ -37,7 +38,7 @@ async def create_invite(
         token=secrets.token_urlsafe(32),
         status="pending",
         invited_by=current_user.id,
-        expires_at=datetime.utcnow() + timedelta(days=INVITE_EXPIRY_DAYS),
+        expires_at=utc_now() + timedelta(days=INVITE_EXPIRY_DAYS),
     )
     db.add(invite)
     await db.commit()
@@ -81,7 +82,7 @@ async def accept_invite(
         raise HTTPException(status_code=404, detail="Запрошення не знайдено")
     if invite.status != "pending":
         raise HTTPException(status_code=400, detail="Це запрошення вже використане або скасоване")
-    if invite.expires_at < datetime.utcnow():
+    if invite.expires_at < utc_now():
         invite.status = "expired"
         await db.commit()
         raise HTTPException(status_code=400, detail="Термін дії запрошення сплив")

@@ -8,6 +8,7 @@ from app.schemas.appointment import AppointmentStatusUpdate
 
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
+from app.core.rate_limit import rate_limit
 from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours
 from app.schemas.appointment import (
     AppointmentCreate,
@@ -23,8 +24,7 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 LOCK_TIMEOUT_MINUTES = 10
 
 
-def get_utc_now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.core.time_utils import utc_now as get_utc_now
 
 
 def parse_hhmm_to_minutes(t_val) -> int:
@@ -200,10 +200,16 @@ async def get_available_slots(
 # === 2. БЛОКУВАННЯ ТА РОЗБЛОКУВАННЯ ===
 
 @router.post("/lock")
-async def lock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(get_db)):
+async def lock_time_slot(
+    request: LockSlotRequest,
+    db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("lock", max_requests=20, window_seconds=60)),
+):
     now = get_utc_now()
 
-    srv_result = await db.execute(select(Service).where(Service.id == request.service_id))
+    srv_result = await db.execute(
+        select(Service).where(Service.id == request.service_id, Service.business_id == request.business_id)
+    )
     service = srv_result.scalars().first()
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
@@ -356,7 +362,9 @@ async def create_appointment(
     biz_res = await db.execute(select(Business).where(Business.id == appointment_in.business_id))
     business = biz_res.scalars().first()
 
-    srv_res = await db.execute(select(Service).where(Service.id == appointment_in.service_id))
+    srv_res = await db.execute(
+        select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id)
+    )
     service = srv_res.scalars().first()
 
     if not appointment:

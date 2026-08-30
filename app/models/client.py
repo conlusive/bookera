@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Numeric, Text, JSON
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now
 from app.models.base import Base
 
 
@@ -34,8 +35,8 @@ class Client(Base):
     last_visit_at = Column(DateTime, nullable=True)
     medical_pdf_url = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     business = relationship("Business", back_populates="clients")
     appointments = relationship("Appointment", back_populates="client")

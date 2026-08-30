@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Numeric
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now
 from app.models.base import Base
 
 
@@ -37,7 +38,7 @@ class User(Base):
     commission_rate = Column(Numeric(5, 2), nullable=True)  # % комісії майстра
     is_active = Column(Boolean, default=True, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     business = relationship("Business", back_populates="staff", foreign_keys=[business_id])
     owned_businesses = relationship("Business", back_populates="owner", foreign_keys="Business.owner_id")
@@ -56,7 +57,7 @@ class StaffInvite(Base):
     status = Column(String, default="pending", nullable=False)  # pending, accepted, expired, revoked
     invited_by = Column(String, ForeignKey("users.id"), nullable=True)
     accepted_by = Column(String, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     expires_at = Column(DateTime, nullable=False)
 
     business = relationship("Business", back_populates="invites")

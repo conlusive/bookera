@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.rate_limit import rate_limit
 from app.models import Review, InventoryItem, Expense
 from app.schemas.extras import (
     ReviewCreate, ReviewReply, ReviewResponse,
@@ -19,7 +20,11 @@ router = APIRouter(tags=["CRM - Extras"])
 # === Відгуки: створення публічне (клієнт лишає відгук), відповідь бізнесу - захищена ===
 
 @router.post("/public/reviews", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
-async def create_review(review_in: ReviewCreate, db: AsyncSession = Depends(get_db)):
+async def create_review(
+    review_in: ReviewCreate,
+    db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("review", max_requests=5, window_seconds=3600)),
+):
     review = Review(**review_in.model_dump())
     db.add(review)
     await db.commit()
@@ -28,8 +33,16 @@ async def create_review(review_in: ReviewCreate, db: AsyncSession = Depends(get_
 
 
 @router.get("/public/reviews", response_model=List[ReviewResponse])
-async def list_reviews(business_id: int = Query(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Review).where(Review.business_id == business_id).order_by(Review.created_at.desc()))
+async def list_reviews(
+    business_id: int = Query(...),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Review).where(Review.business_id == business_id)
+        .order_by(Review.created_at.desc()).limit(limit).offset(offset)
+    )
     return result.scalars().all()
 
 

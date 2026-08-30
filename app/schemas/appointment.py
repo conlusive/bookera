@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
 from typing import List, Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.models import BookingSourceEnum
 
 
@@ -65,8 +65,7 @@ class AppointmentResponse(BaseModel):
     client_email: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 AppointmentOut = AppointmentResponse

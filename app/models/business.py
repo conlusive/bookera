@@ -6,6 +6,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now
 from app.models.base import Base
 
 
@@ -33,8 +34,8 @@ class Business(Base):
     tags = Column(JSON, default=list)
 
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     owner = relationship("User", back_populates="owned_businesses", foreign_keys=[owner_id])
     staff = relationship("User", back_populates="business", foreign_keys="User.business_id")

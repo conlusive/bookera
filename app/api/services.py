@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.api.deps import get_db
-from app.models.models import Business, User, RoleEnum, Appointment, Service, LockedSlot
+from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.models import Business, User, RoleEnum, Appointment, Service
 from app.schemas import ServiceCreate, ServiceResponse, ServiceUpdate
 
 router = APIRouter(prefix="/services", tags=["Services"])
@@ -12,13 +13,19 @@ router = APIRouter(prefix="/services", tags=["Services"])
 
 @router.post("", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_service(
-    service_in: ServiceCreate, db: AsyncSession = Depends(get_db)
+    service_in: ServiceCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     business_result = await db.execute(
         select(Business).where(Business.id == service_in.business_id)
     )
     if not business_result.scalars().first():
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    # business_id приходить у тілі запиту, тому перевірка доступу - вручну
+    # (не через FastAPI-залежність, яка читає його лише з query/path).
+    await assert_business_access(db, current_user, service_in.business_id)
 
     new_service = Service(
         business_id=service_in.business_id,

@@ -6,7 +6,7 @@ from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
-from app.models.models import Business, User, RoleEnum, Appointment, Service
+from app.models import Business, User, RoleEnum, Appointment, Service
 from app.schemas.business import BusinessOut
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
@@ -69,30 +69,43 @@ async def search_available_businesses(
     if not businesses:
         return []
 
+    # Батчимо запити замість N+1: раніше на кожен заклад з результатів
+    # виконувалось 2 окремих запити в базу (майстри + бронювання) в циклі.
+    # При 100 закладах у видачі це 200 зайвих round-trip'ів на один пошук -
+    # саме те, що першим лягає під навантаженням. Тепер - рівно 2 запити всього.
+    business_ids = [biz.id for biz in businesses]
+
+    masters_stmt = select(User).where(
+        User.business_id.in_(business_ids),
+        or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR),
+    )
+    masters_res = await db.execute(masters_stmt)
+    masters_by_business: dict = {}
+    for m in masters_res.scalars().all():
+        masters_by_business.setdefault(m.business_id, []).append(m)
+
+    day_start = datetime.combine(target_date, time(0, 0))
+    day_end = datetime.combine(target_date, time(23, 59, 59))
+
+    bookings_stmt = select(Appointment).where(
+        Appointment.business_id.in_(business_ids),
+        Appointment.start_time >= day_start,
+        Appointment.start_time <= day_end,
+        or_(
+            Appointment.status == "confirmed",
+            and_(Appointment.status == "blocked", Appointment.expires_at > now),
+        ),
+    )
+    bookings_res = await db.execute(bookings_stmt)
+    bookings_by_business: dict = {}
+    for b in bookings_res.scalars().all():
+        bookings_by_business.setdefault(b.business_id, []).append(b)
+
     available_businesses = []
 
     for biz in businesses:
-        masters_stmt = select(User).where(
-            User.business_id == biz.id,
-            or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)
-        )
-        masters_res = await db.execute(masters_stmt)
-        masters = masters_res.scalars().all()
-
-        day_start = datetime.combine(target_date, time(0, 0))
-        day_end = datetime.combine(target_date, time(23, 59, 59))
-
-        bookings_stmt = select(Appointment).where(
-            Appointment.business_id == biz.id,
-            Appointment.start_time >= day_start,
-            Appointment.start_time <= day_end,
-            or_(
-                Appointment.status == "confirmed",
-                and_(Appointment.status == "blocked", Appointment.expires_at > now),
-            )
-        )
-        bookings_res = await db.execute(bookings_stmt)
-        existing_bookings = bookings_res.scalars().all()
+        masters = masters_by_business.get(biz.id, [])
+        existing_bookings = bookings_by_business.get(biz.id, [])
 
         current_slot = datetime.combine(target_date, period_start)
         period_end_dt = datetime.combine(target_date, period_end)

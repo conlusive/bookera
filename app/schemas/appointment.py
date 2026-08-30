@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
-from typing import List, Optional
-from pydantic import BaseModel
-from app.models.models import BookingSourceEnum
+from typing import List, Literal, Optional
+from pydantic import BaseModel, ConfigDict
+from app.models import BookingSourceEnum
 
 
 class SlotStatusItem(BaseModel):
@@ -22,7 +22,11 @@ class LockSlotRequest(BaseModel):
     service_id: int
     start_time: datetime
     master_id: Optional[str] = "0"
-    client_id: Optional[str] = None
+    # session_token - анонімний ідентифікатор браузерної сесії (генерує фронтенд,
+    # напр. crypto.randomUUID() у localStorage). НЕ є ID реального клієнта з CRM -
+    # потрібен лише щоб один браузер міг прибрати власний прострочений lock.
+    session_token: Optional[str] = None
+    client_id: Optional[int] = None  # заповнюється, лише якщо це реальний CRM-контакт
     source: BookingSourceEnum = BookingSourceEnum.DIRECT
 
 
@@ -31,7 +35,8 @@ class AppointmentCreate(BaseModel):
     service_id: int
     start_time: datetime
     master_id: Optional[str] = "0"
-    client_id: Optional[str] = None
+    session_token: Optional[str] = None
+    client_id: Optional[int] = None
     client_name: Optional[str] = None
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
@@ -39,14 +44,16 @@ class AppointmentCreate(BaseModel):
 
 
 class AppointmentStatusUpdate(BaseModel):
-    status: str  # "confirmed", "completed", "cancelled"
+    # Раніше було просто `str` - приймало будь-яке значення і могло зламати
+    # фільтри в іншому коді, які звіряються з конкретними рядками.
+    status: Literal["confirmed", "completed", "cancelled"]
 
 
 class AppointmentResponse(BaseModel):
     id: int
     business_id: int
     service_id: int
-    client_id: Optional[str] = None
+    client_id: Optional[int] = None
     master_id: Optional[str] = None
     start_time: datetime
     end_time: datetime
@@ -58,8 +65,7 @@ class AppointmentResponse(BaseModel):
     client_email: Optional[str] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 AppointmentOut = AppointmentResponse

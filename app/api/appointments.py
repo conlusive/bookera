@@ -2,11 +2,14 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy import and_, delete, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate
 
 from app.api.deps import get_db
-from app.models.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum
+from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
+from app.core.rate_limit import rate_limit
+from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
@@ -21,8 +24,22 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 LOCK_TIMEOUT_MINUTES = 10
 
 
-def get_utc_now():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from app.core.time_utils import utc_now as get_utc_now
+
+
+def normalize_master_id(raw) -> Optional[str]:
+    """
+    Фронтенд надсилає '0' як позначку 'майстра не обрано' - без нормалізації
+    це буквально записується в БД і падає на зовнішньому ключі (master_id
+    посилається на users.id, а користувача з id='0' не існує). Єдине місце
+    цієї логіки замість трьох різних перевірок в різних ендпоінтах.
+    """
+    if raw is None:
+        return None
+    raw_str = str(raw)
+    if raw_str in ("0", "", "null", "None"):
+        return None
+    return raw_str
 
 
 def parse_hhmm_to_minutes(t_val) -> int:
@@ -64,10 +81,18 @@ async def get_available_slots(
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
 
-    # 1.2 Перевірка вихідних днів
-    weekday_idx = (target_date.weekday() + 1) % 7
-    days_off = getattr(business, "days_off", []) or []
-    if weekday_idx in days_off:
+    # 1.2 Графік роботи цього дня тижня (з нової таблиці business_hours,
+    # замість колишнього JSON-поля days_off). weekday: 0=понеділок...6=неділя (ISO)
+    iso_weekday = target_date.weekday()  # уже 0=понеділок в Python - без хитрого JS-зсуву
+    hours_res = await db.execute(
+        select(BusinessHours).where(
+            BusinessHours.business_id == business_id,
+            BusinessHours.weekday == iso_weekday,
+        )
+    )
+    day_hours = hours_res.scalars().first()
+
+    if day_hours is not None and not day_hours.is_open:
         return AvailableSlotsResponse(
             date=target_date,
             service_id=service.id,
@@ -75,9 +100,9 @@ async def get_available_slots(
             slots=[],
         )
 
-    # 1.3 Графік роботи
-    open_mins = parse_hhmm_to_minutes(getattr(business, "open_time", "09:00") or "09:00")
-    close_mins = parse_hhmm_to_minutes(getattr(business, "close_time", "20:00") or "20:00")
+    # 1.3 Межі робочого дня (дефолт 09:00-20:00, якщо графік ще не заповнений)
+    open_mins = parse_hhmm_to_minutes(day_hours.open_time if day_hours else "09:00")
+    close_mins = parse_hhmm_to_minutes(day_hours.close_time if day_hours else "20:00")
     duration = service.duration_minutes
 
     # 1.4 Майстри закладу
@@ -190,10 +215,16 @@ async def get_available_slots(
 # === 2. БЛОКУВАННЯ ТА РОЗБЛОКУВАННЯ ===
 
 @router.post("/lock")
-async def lock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(get_db)):
+async def lock_time_slot(
+    request: LockSlotRequest,
+    db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("lock", max_requests=20, window_seconds=60)),
+):
     now = get_utc_now()
 
-    srv_result = await db.execute(select(Service).where(Service.id == request.service_id))
+    srv_result = await db.execute(
+        select(Service).where(Service.id == request.service_id, Service.business_id == request.business_id)
+    )
     service = srv_result.scalars().first()
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
@@ -255,11 +286,11 @@ async def lock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(ge
             if overlap.scalars().first():
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
 
-    # Очищуємо старі незавершені блоки клієнта
-    if request.client_id:
+    # Очищуємо старі незавершені блоки цієї ж браузерної сесії
+    if request.session_token:
         await db.execute(
             delete(Appointment).where(
-                Appointment.client_id == str(request.client_id),
+                Appointment.session_token == request.session_token,
                 Appointment.status == "blocked",
             )
         )
@@ -267,7 +298,8 @@ async def lock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(ge
     new_lock = Appointment(
         business_id=request.business_id,
         service_id=request.service_id,
-        client_id=str(request.client_id) if request.client_id else None,
+        client_id=request.client_id,
+        session_token=request.session_token,
         master_id=str(assigned_master_id) if assigned_master_id else None,
         start_time=request.start_time,
         end_time=requested_end_time,
@@ -278,7 +310,15 @@ async def lock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(ge
         expires_at=now + timedelta(minutes=LOCK_TIMEOUT_MINUTES),
     )
     db.add(new_lock)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Спрацював exclusion constraint на рівні БД (no_overlapping_bookings) -
+        # хтось інший щойно зайняв цей самий слот між нашою перевіркою і вставкою.
+        # Це і є справжній, надійний захист від подвійного бронювання: перевірка
+        # в Python вище - лише оптимізація, щоб не чекати зайвий round-trip у типовому випадку.
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
     await db.refresh(new_lock)
 
     return {"status": "success", "booking_id": new_lock.id, "message": "Заблоковано на 10 хвилин"}
@@ -286,10 +326,10 @@ async def lock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(ge
 
 @router.post("/unlock")
 async def unlock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(get_db)):
-    if request.client_id:
+    if request.session_token:
         await db.execute(
             delete(Appointment).where(
-                Appointment.client_id == str(request.client_id),
+                Appointment.session_token == request.session_token,
                 Appointment.status == "blocked",
             )
         )
@@ -314,17 +354,32 @@ async def create_appointment(
         Appointment.expires_at > now,
     )
     if appointment_in.master_id and appointment_in.master_id not in ("0", "", "null", "None"):
-        lock_query = lock_query.where(Appointment.master_id == str(appointment_in.master_id))
-    if appointment_in.client_id:
-        lock_query = lock_query.where(Appointment.client_id == str(appointment_in.client_id))
+        lock_query = lock_query.where(Appointment.master_id == normalize_master_id(appointment_in.master_id))
+    if appointment_in.session_token:
+        lock_query = lock_query.where(Appointment.session_token == appointment_in.session_token)
 
     result = await db.execute(lock_query)
     appointment = result.scalars().first()
 
+    if not appointment:
+        # Прибираємо прострочені локи цього закладу перед прямою вставкою -
+        # той самий цикл очищення, що й у /lock, потрібен і тут, інакше
+        # "мертвий" протермінований блок може безпідставно заважати новому запису.
+        now_cleanup = get_utc_now()
+        await db.execute(
+            delete(Appointment).where(
+                Appointment.business_id == appointment_in.business_id,
+                Appointment.status == "blocked",
+                Appointment.expires_at < now_cleanup,
+            )
+        )
+
     biz_res = await db.execute(select(Business).where(Business.id == appointment_in.business_id))
     business = biz_res.scalars().first()
 
-    srv_res = await db.execute(select(Service).where(Service.id == appointment_in.service_id))
+    srv_res = await db.execute(
+        select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id)
+    )
     service = srv_res.scalars().first()
 
     if not appointment:
@@ -335,8 +390,9 @@ async def create_appointment(
         appointment = Appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
-            master_id=str(appointment_in.master_id) if appointment_in.master_id else None,
-            client_id=str(appointment_in.client_id) if appointment_in.client_id else None,
+            master_id=normalize_master_id(appointment_in.master_id),
+            client_id=appointment_in.client_id,
+            session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
             status="confirmed",
@@ -357,7 +413,11 @@ async def create_appointment(
         if appointment_in.source:
             appointment.source = str(appointment_in.source)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
     await db.refresh(appointment)
 
     # Фонова відправка листа клієнту через SMTP
@@ -382,7 +442,11 @@ async def get_booked_appointments(
     business_id: int,
     master_id: Optional[str] = Query(None, description="Фільтр записів за майстром"),
     db: AsyncSession = Depends(get_db),
+    _current_user: CurrentUser = Depends(require_business_access),
 ):
+    # ВАЖЛИВО: цей ендпоінт віддає ім'я, телефон і email клієнтів.
+    # Раніше був доступний без жодної авторизації - будь-хто, хто знав
+    # business_id, міг вивантажити всі контакти клієнтів закладу.
     now = get_utc_now()
     query = select(Appointment).where(
         Appointment.business_id == business_id,
@@ -402,7 +466,8 @@ async def get_booked_appointments(
 async def update_appointment_status(
     appointment_id: int,
     payload: AppointmentStatusUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     stmt = select(Appointment).where(Appointment.id == appointment_id)
     result = await db.execute(stmt)
@@ -413,6 +478,10 @@ async def update_appointment_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Візит не знайдено"
         )
+
+    # business_id відомий лише ПІСЛЯ того, як знайшли запис - тому перевірка
+    # доступу тут ручна (assert_business_access), а не через FastAPI-залежність.
+    await assert_business_access(db, current_user, appointment.business_id)
 
     appointment.status = payload.status
     await db.commit()

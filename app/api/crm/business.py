@@ -14,6 +14,12 @@ from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessOut, Bu
 
 router = APIRouter(prefix="/crm/businesses", tags=["CRM - Business"])
 
+# ПРИМІТКА: тут навмисно немає DELETE /{business_id}. У моделі Business
+# каскадне видалення (services, appointments, clients, invites, reviews,
+# inventory, expenses - усе з cascade="all, delete-orphan") означає, що
+# фізичне видалення бізнесу назавжди стирає всю історію бронювань і фінансів.
+# "Видалення" бізнесу - це PATCH з is_active=false (soft delete), не DELETE.
+
 
 def slugify(name: str) -> str:
     base = re.sub(r"[^\w\s-]", "", name.lower()).strip()

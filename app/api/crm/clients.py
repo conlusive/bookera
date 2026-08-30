@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user
 from app.models import Client, ClientLink
+from app.models.appointment import Appointment
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 
 router = APIRouter(prefix="/crm/clients", tags=["CRM - Clients"])
@@ -77,6 +78,19 @@ async def delete_client(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     client = await _get_owned_client(db, current_user, client_id)
+
+    # Без цієї перевірки SQLAlchemy мовчки обнулить client_id на всіх минулих
+    # бронюваннях цього клієнта перед видаленням (стандартна поведінка ORM
+    # для nullable зв'язку) - історія відвідувань тихо втрачає власника.
+    # Явно забороняємо це, а не покладаємось на побічний ефект ORM.
+    appts = await db.execute(select(Appointment.id).where(Appointment.client_id == client_id).limit(1))
+    if appts.scalars().first() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="У цього клієнта є історія бронювань - видалення заборонене, щоб не втратити її. "
+                   "Використайте is_blacklisted замість видалення, якщо потрібно приховати клієнта.",
+        )
+
     await db.delete(client)
     await db.commit()
 

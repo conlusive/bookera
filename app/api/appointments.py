@@ -27,6 +27,21 @@ LOCK_TIMEOUT_MINUTES = 10
 from app.core.time_utils import utc_now as get_utc_now
 
 
+def normalize_master_id(raw) -> Optional[str]:
+    """
+    Фронтенд надсилає '0' як позначку 'майстра не обрано' - без нормалізації
+    це буквально записується в БД і падає на зовнішньому ключі (master_id
+    посилається на users.id, а користувача з id='0' не існує). Єдине місце
+    цієї логіки замість трьох різних перевірок в різних ендпоінтах.
+    """
+    if raw is None:
+        return None
+    raw_str = str(raw)
+    if raw_str in ("0", "", "null", "None"):
+        return None
+    return raw_str
+
+
 def parse_hhmm_to_minutes(t_val) -> int:
     if isinstance(t_val, str):
         parts = t_val.split(":")
@@ -339,7 +354,7 @@ async def create_appointment(
         Appointment.expires_at > now,
     )
     if appointment_in.master_id and appointment_in.master_id not in ("0", "", "null", "None"):
-        lock_query = lock_query.where(Appointment.master_id == str(appointment_in.master_id))
+        lock_query = lock_query.where(Appointment.master_id == normalize_master_id(appointment_in.master_id))
     if appointment_in.session_token:
         lock_query = lock_query.where(Appointment.session_token == appointment_in.session_token)
 
@@ -375,7 +390,7 @@ async def create_appointment(
         appointment = Appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
-            master_id=str(appointment_in.master_id) if appointment_in.master_id else None,
+            master_id=normalize_master_id(appointment_in.master_id),
             client_id=appointment_in.client_id,
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,

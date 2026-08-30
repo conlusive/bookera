@@ -54,7 +54,32 @@ async def test_full_business_onboarding_flow(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_service_with_addon_ids_does_not_crash(client, auth_headers):
+async def test_client_with_appointment_history_cannot_be_deleted(client, auth_headers):
+    """
+    Регресійний тест: раніше видалення клієнта з бронюваннями мовчки
+    обнуляло client_id на його історії відвідувань (побічний ефект ORM),
+    замість явної заборони.
+    """
+    headers = auth_headers("delete-safety-owner")
+    r = await client.post("/crm/businesses", json={"name": "Delete Safety Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.post("/services", json={"business_id": business_id, "name": "Стрижка", "duration_minutes": 30, "price": 300}, headers=headers)
+    service_id = r.json()["id"]
+
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Клієнт з історією"}, headers=headers)
+    client_id = r.json()["id"]
+
+    from datetime import datetime, timedelta, timezone
+    slot = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=3)).replace(hour=14, minute=0)
+    r = await client.post("/appointments", json={
+        "business_id": business_id, "service_id": service_id,
+        "start_time": slot.isoformat(), "client_id": client_id, "client_name": "Клієнт з історією",
+    })
+    assert r.status_code == 200, r.text
+
+    r = await client.delete(f"/crm/clients/{client_id}", headers=headers)
+    assert r.status_code == 409, "Клієнта з історією бронювань не можна видаляти без явного попередження"
     """Регресійний тест: раніше падало з 500 через відсутню колонку в БД."""
     headers = auth_headers("addon-test-owner")
     r = await client.post("/crm/businesses", json={"name": "Addon Salon", "city": "Львів"}, headers=headers)

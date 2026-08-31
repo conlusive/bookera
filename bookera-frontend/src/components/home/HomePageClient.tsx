@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
+import { isBusinessRole } from '@/lib/roles';
 
 const categoriesData = [
   { name: 'Рекомендовані', slug: 'all' },
@@ -1023,7 +1024,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                       <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
                     </div>
                     <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
-                    {userRole === 'vendor' && (
+                    {isBusinessRole(userRole) && (
                       <Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Панель салону</Link>
                     )}
                     <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
@@ -1530,7 +1531,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               <Link href="#" className="footer-link anim">Політика конфіденційності</Link>
               <Link href="#" className="footer-link anim">Умови використання</Link>
               <Link href="#" className="footer-link anim">Кар'єра</Link>
-              <Link href={userRole === 'vendor' ? "/cabinet" : "/business"} className="footer-link anim" style={{ color: '#C2D8C4', fontWeight: '700' }}>BookEra Business</Link>
+              <Link href={isBusinessRole(userRole) ? "/cabinet" : "/business"} className="footer-link anim" style={{ color: '#C2D8C4', fontWeight: '700' }}>BookEra Business</Link>
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

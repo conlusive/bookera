@@ -48,7 +48,14 @@ class Expense(Base):
     description = Column(String, nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
     expense_date = Column(Date, default=dt_date.today, nullable=False)
-    is_recurring = Column(Boolean, default=False)
+
+    # "none" / "weekly" / "monthly". recurrence_group_id об'єднує ВСІ майбутні
+    # входження одного повторюваного платежу - раніше фронтенд шукав "майбутні
+    # входження" зіставленням за текстом (category+description), що ламалось,
+    # якщо два різні повторювані платежі мали однакову назву й категорію.
+    recurrence = Column(String, default="none", nullable=False)
+    recurrence_group_id = Column(String, nullable=True, index=True)
+
     created_at = Column(DateTime, default=utc_now)
 
     business = relationship("Business", back_populates="expenses")

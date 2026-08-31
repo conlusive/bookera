@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
 
 export default function ClientsTab({ business, clientsList, setClientsList, fetchClientsFromDB, onBookAgain }: any) {
@@ -137,32 +139,21 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     setIsSavingClient(true);
 
     try {
-      const safeDate = new Date().toISOString().split('T')[0];
-      const newClientData = {
+      const created = await api.createClient(await getAuthToken(), {
         business_id: business.id,
         name: newClientForm.name.trim(),
         phone: finalPhone,
-        email: newClientForm.email.trim() || null,
-        birthday: newClientForm.birthday || null,
-        instagram: '',
-        last_visit: safeDate,
-        visits: 0,
-        spent: 0,
-        balance: 0,
-        linked_clients: [],
-        is_blacklisted: false,
-        tags: ['Новий']
-      };
+        email: newClientForm.email.trim() || undefined,
+        birthday: newClientForm.birthday || undefined,
+        tags: ['Новий'],
+      });
 
-      const { error: insertError } = await supabase.from('clients').insert([newClientData]);
-      if (insertError) throw insertError;
-
-      await fetchClientsFromDB(business.id);
+      setClientsList((prev: any) => [...prev, created]);
       setIsAddClientModalOpen(false);
       setNewClientForm({ name: '', phone: '+380', email: '', birthday: '' });
       showToast("Клієнта додано", 'success');
-    } catch (err) {
-      showToast("Критична помилка сервера", 'error');
+    } catch (err: any) {
+      showToast(err?.message || "Критична помилка сервера", 'error');
     } finally {
       setIsSavingClient(false);
     }
@@ -171,11 +162,15 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const executeDeleteClient = async (clientId: string) => {
     setConfirmDialog(null);
     try {
-      await supabase.from('clients').delete().eq('id', clientId);
+      await api.deleteClient(await getAuthToken(), Number(clientId));
       setClientsList((prev: any) => prev.filter((c: any) => c.id !== clientId));
       closeViewingClient();
       showToast("Клієнта видалено", 'info');
-    } catch (err) { showToast("Не вдалося видалити клієнта.", 'error'); }
+    } catch (err: any) {
+      // Бекенд свідомо забороняє видаляти клієнтів з історією бронювань
+      // або нарахованими балами (409) - показуємо причину, а не спільну помилку.
+      showToast(err?.message || "Не вдалося видалити клієнта.", 'error');
+    }
   };
 
   // --- ЗБЕРЕЖЕННЯ ДАНИХ КЛІЄНТА (ВКЛЮЧНО З ІНСТА ТА ДН) ---
@@ -197,75 +192,48 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? optimisticUpdatedClient : c));
 
     try {
-      const { error } = await supabase.from('clients').update({
+      await api.updateClient(await getAuthToken(), viewingClient.id, {
         notes: editingClientNotes,
         allergies: editingClientAllergies,
         formulas: editingFormulas,
         consent_photo: consents.photo,
         consent_procedure: consents.procedure,
         instagram: editingInstagram,
-        birthday: editingBirthday || null
-      }).eq('id', viewingClient.id);
-
-      if (error) throw error;
+        birthday: editingBirthday || undefined,
+      });
       showToast("Дані успішно збережено", 'success');
-
-    } catch (err) {
-      try {
-         await supabase.from('clients').update({
-            notes: editingClientNotes,
-            allergies: editingClientAllergies,
-            birthday: editingBirthday || null
-         }).eq('id', viewingClient.id);
-         showToast("Частково збережено. Додайте колонку 'instagram' в БД", 'info');
-      } catch (fallbackErr) { showToast("Помилка збереження бази", 'error'); }
+    } catch (err: any) {
+      showToast(err?.message || "Помилка збереження бази", 'error');
     }
   };
 
   const handleLinkClient = async (targetClientId: string) => {
     if (!viewingClient) return;
 
-    const currentLinked = viewingClient.linked_clients || [];
-    if (currentLinked.includes(targetClientId)) return showToast("Вже додано до сім'ї", "error");
-
-    const newLinkedForCurrent = [...currentLinked, targetClientId];
-    const targetClient = clientsList.find((c: any) => c.id === targetClientId);
-    const newLinkedForTarget = [...(targetClient?.linked_clients || []), viewingClient.id];
+    const currentLinked = viewingClient.linked_client_ids || [];
+    if (currentLinked.includes(Number(targetClientId))) return showToast("Вже додано до сім'ї", "error");
 
     try {
-      await supabase.from('clients').update({ linked_clients: newLinkedForCurrent }).eq('id', viewingClient.id);
-      await supabase.from('clients').update({ linked_clients: newLinkedForTarget }).eq('id', targetClientId);
-
-      setViewingClient({ ...viewingClient, linked_clients: newLinkedForCurrent });
-      setClientsList(clientsList.map((c: any) => {
-         if (c.id === viewingClient.id) return { ...c, linked_clients: newLinkedForCurrent };
-         if (c.id === targetClientId) return { ...c, linked_clients: newLinkedForTarget };
-         return c;
-      }));
-
+      const updated = await api.linkClients(await getAuthToken(), viewingClient.id, Number(targetClientId));
+      setViewingClient(updated);
+      setClientsList(clientsList.map((c: any) => (c.id === updated.id ? updated : c)));
       showToast("Профілі успішно об'єднані", "success");
       setIsFamilyModalOpen(false);
       setFamilySearch('');
-    } catch (error) { showToast("Помилка зв'язування", "error"); }
+    } catch (error: any) {
+      showToast(error?.message || "Помилка зв'язування", "error");
+    }
   };
 
   const handleUnlinkClient = async (targetClientId: string) => {
-    const newLinkedForCurrent = viewingClient.linked_clients.filter((id: string) => id !== targetClientId);
-    const targetClient = clientsList.find((c: any) => c.id === targetClientId);
-    const newLinkedForTarget = (targetClient?.linked_clients || []).filter((id: string) => id !== viewingClient.id);
-
     try {
-      await supabase.from('clients').update({ linked_clients: newLinkedForCurrent }).eq('id', viewingClient.id);
-      await supabase.from('clients').update({ linked_clients: newLinkedForTarget }).eq('id', targetClientId);
-
-      setViewingClient({ ...viewingClient, linked_clients: newLinkedForCurrent });
-      setClientsList(clientsList.map((c: any) => {
-         if (c.id === viewingClient.id) return { ...c, linked_clients: newLinkedForCurrent };
-         if (c.id === targetClientId) return { ...c, linked_clients: newLinkedForTarget };
-         return c;
-      }));
+      const updated = await api.unlinkClients(await getAuthToken(), viewingClient.id, Number(targetClientId));
+      setViewingClient(updated);
+      setClientsList(clientsList.map((c: any) => (c.id === updated.id ? updated : c)));
       showToast("Зв'язок розірвано", "info");
-    } catch (error) { showToast("Помилка видалення", "error"); }
+    } catch (error: any) {
+      showToast(error?.message || "Помилка видалення", "error");
+    }
   };
 
   const handlePDFUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -274,6 +242,8 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
     setIsUploadingPDF(true);
     try {
+      // Файл - у Supabase Storage (це файлове сховище, не структуровані дані
+      // бізнесу - залишається окремим від FastAPI, як і має бути).
       const fileExt = file.name.split('.').pop();
       const fileName = `medical_consent_${viewingClient.id}_${Date.now()}.${fileExt}`;
       const filePath = `${business?.id || 'general'}/${fileName}`;
@@ -283,7 +253,8 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
       const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(filePath);
 
-      await supabase.from('clients').update({ medical_pdf_url: publicUrl }).eq('id', viewingClient.id);
+      // А посилання на файл - вже структуровані дані клієнта, йде через FastAPI.
+      await api.updateClient(await getAuthToken(), viewingClient.id, { medical_pdf_url: publicUrl });
 
       setViewingClient({ ...viewingClient, medical_pdf_url: publicUrl });
       setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, medical_pdf_url: publicUrl } : c));
@@ -299,11 +270,11 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
   const handleRemovePDF = async () => {
      try {
-       await supabase.from('clients').update({ medical_pdf_url: null }).eq('id', viewingClient.id);
+       await api.updateClient(await getAuthToken(), viewingClient.id, { medical_pdf_url: undefined });
        setViewingClient({ ...viewingClient, medical_pdf_url: null });
        setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, medical_pdf_url: null } : c));
        showToast("Файл видалено", "info");
-     } catch (err) { showToast("Помилка видалення", "error"); }
+     } catch (err: any) { showToast(err?.message || "Помилка видалення", "error"); }
   };
 
   const handleToggleBlacklist = async () => {
@@ -312,8 +283,9 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     setViewingClient({ ...viewingClient, is_blacklisted: newStatus });
     setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, is_blacklisted: newStatus } : c));
     showToast(newStatus ? "Додано до чорного списку" : "Видалено з чорного списку", newStatus ? 'error' : 'success');
-    try { await supabase.from('clients').update({ is_blacklisted: newStatus }).eq('id', viewingClient.id); }
-    catch (error) { showToast("Помилка сервера", 'error'); }
+    try {
+      await api.updateClient(await getAuthToken(), viewingClient.id, { is_blacklisted: newStatus });
+    } catch (error: any) { showToast(error?.message || "Помилка сервера", 'error'); }
   };
 
   const handleUpdateBalance = async () => {
@@ -324,7 +296,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
      const newBalance = balanceOperation === 'add' ? currentBalance + amount : currentBalance - amount;
 
      try {
-        await supabase.from('clients').update({ balance: newBalance }).eq('id', viewingClient.id);
+        await api.updateClient(await getAuthToken(), viewingClient.id, { balance: newBalance });
         setViewingClient({ ...viewingClient, balance: newBalance });
         setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, balance: newBalance } : c));
         showToast(`Баланс ${balanceOperation === 'add' ? 'поповнено' : 'зменшено'}`, 'success');
@@ -360,21 +332,21 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
     const updatedTags = [...currentTags, cleanTag];
     try {
-      await supabase.from('clients').update({ tags: updatedTags }).eq('id', viewingClient.id);
+      await api.updateClient(await getAuthToken(), viewingClient.id, { tags: updatedTags });
       setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, tags: updatedTags } : c));
       setViewingClient({ ...viewingClient, tags: updatedTags });
       setNewTagInput('');
       setIsAddingTagInfo(false);
-    } catch (err) { showToast("Помилка додавання тегу", 'error'); }
+    } catch (err: any) { showToast(err?.message || "Помилка додавання тегу", 'error'); }
   };
 
   const handleRemoveTag = async (tagToRemove: string) => {
      const updatedTags = viewingClient.tags.filter((t: string) => t !== tagToRemove);
      try {
-        await supabase.from('clients').update({ tags: updatedTags }).eq('id', viewingClient.id);
+        await api.updateClient(await getAuthToken(), viewingClient.id, { tags: updatedTags });
         setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, tags: updatedTags } : c));
         setViewingClient({ ...viewingClient, tags: updatedTags });
-     } catch(err) { showToast("Помилка", 'error'); }
+     } catch(err: any) { showToast(err?.message || "Помилка", 'error'); }
   };
 
   const isBirthdaySoon = (birthdayString: string) => {
@@ -577,9 +549,9 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1.2rem' }}>
                           <div style={{ fontSize: '0.7rem', fontWeight: '700', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', marginBottom: '0.8rem' }}>Сім'я / Зв'язки</div>
 
-                          {viewingClient.linked_clients && viewingClient.linked_clients.length > 0 && (
+                          {viewingClient.linked_client_ids && viewingClient.linked_client_ids.length > 0 && (
                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                                {viewingClient.linked_clients.map((id: string) => {
+                                {viewingClient.linked_client_ids.map((id: string) => {
                                    const linked = clientsList.find((c: any) => c.id === id);
                                    if (!linked) return null;
                                    return (
@@ -920,7 +892,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
               <div className="custom-scroll" style={{ maxHeight: '250px', overflowY: 'auto' }}>
                  {clientsList.filter((c: any) =>
                      c.id !== viewingClient.id && // Не показувати себе
-                     !(viewingClient.linked_clients || []).includes(c.id) && // Не показувати вже доданих
+                     !(viewingClient.linked_client_ids || []).includes(c.id) && // Не показувати вже доданих
                      c.name.toLowerCase().includes(familySearch.toLowerCase())
                  ).map((c: any) => (
                     <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem', borderBottom: '1px solid #f1f5f9' }}>
@@ -930,7 +902,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                        </button>
                     </div>
                  ))}
-                 {clientsList.filter((c: any) => c.id !== viewingClient.id && !(viewingClient.linked_clients || []).includes(c.id) && c.name.toLowerCase().includes(familySearch.toLowerCase())).length === 0 && (
+                 {clientsList.filter((c: any) => c.id !== viewingClient.id && !(viewingClient.linked_client_ids || []).includes(c.id) && c.name.toLowerCase().includes(familySearch.toLowerCase())).length === 0 && (
                      <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.9rem' }}>Нікого не знайдено</div>
                  )}
               </div>

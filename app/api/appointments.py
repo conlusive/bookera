@@ -1,4 +1,7 @@
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
+import os
+import secrets
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy import and_, delete, or_, select
@@ -9,15 +12,20 @@ from app.schemas.appointment import AppointmentStatusUpdate
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
 from app.core.rate_limit import rate_limit
-from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours
+from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
     AvailableSlotsResponse,
     LockSlotRequest,
+    ManageBookingRequest,
+    ManualAppointmentCreate,
     SlotStatusItem,
 )
 from app.core.email import send_booking_confirmation_email
+from app.services.monetization import charge_commission_if_applicable, award_points_for_new_client
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
@@ -377,10 +385,65 @@ async def create_appointment(
     biz_res = await db.execute(select(Business).where(Business.id == appointment_in.business_id))
     business = biz_res.scalars().first()
 
+    # Джерело визначає СЕРВЕР, звіряючи токен з тим, що збережений у бізнесу -
+    # клієнт більше не може просто заявити "я прийшов напряму" і уникнути комісії.
+    resolved_source = (
+        "direct"
+        if business and appointment_in.direct_link_token and appointment_in.direct_link_token == business.direct_link_token
+        else "marketplace"
+    )
+
     srv_res = await db.execute(
         select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id)
     )
     service = srv_res.scalars().first()
+
+    # Застосування подарункового сертифіката - зменшує ціну, не робить
+    # бронювання безкоштовним понад залишок сертифіката.
+    applied_certificate = None
+    final_price = service.price if service else Decimal("0")
+    if appointment_in.gift_certificate_code and service:
+        cert_res = await db.execute(
+            select(GiftCertificate).where(
+                GiftCertificate.code == appointment_in.gift_certificate_code.upper(),
+                GiftCertificate.business_id == appointment_in.business_id,
+                GiftCertificate.status == "active",
+            )
+        )
+        applied_certificate = cert_res.scalars().first()
+        if applied_certificate and (not applied_certificate.expires_at or applied_certificate.expires_at > now):
+            discount = min(applied_certificate.remaining_amount, final_price)
+            final_price = final_price - discount
+            applied_certificate.remaining_amount -= discount
+            if applied_certificate.remaining_amount <= 0:
+                applied_certificate.status = "redeemed"
+        else:
+            applied_certificate = None  # невалідний/протермінований - ігноруємо мовчки, ціна лишається повною
+
+    # Створюємо/знаходимо CRM-контакт для цього бізнесу за телефоном.
+    # Раніше це робив фронтенд, пишучи НАПРЯМУ в таблицю клієнтів чужого
+    # бізнесу без авторизації - тепер це робить сервер, як і має бути.
+    resolved_client_id = appointment_in.client_id
+    if resolved_client_id is None and appointment_in.client_phone and business:
+        existing_client = await db.execute(
+            select(Client).where(
+                Client.business_id == appointment_in.business_id,
+                Client.phone == appointment_in.client_phone,
+            )
+        )
+        crm_client = existing_client.scalars().first()
+        if not crm_client:
+            crm_client = Client(
+                business_id=appointment_in.business_id,
+                name=appointment_in.client_name or appointment_in.client_phone,
+                phone=appointment_in.client_phone,
+                email=appointment_in.client_email,
+                tags=["Онлайн-запис"],
+            )
+            db.add(crm_client)
+            await db.flush()
+            await award_points_for_new_client(db, business, appointment_in.client_phone, crm_client.id)
+        resolved_client_id = crm_client.id
 
     if not appointment:
         # Створюємо прямий запис, якщо блоку не було
@@ -391,27 +454,32 @@ async def create_appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
             master_id=normalize_master_id(appointment_in.master_id),
-            client_id=appointment_in.client_id,
+            client_id=resolved_client_id,
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
             status="confirmed",
-            price=service.price if service else 0,
+            price=final_price,
             client_name=appointment_in.client_name,
             client_phone=appointment_in.client_phone,
             client_email=appointment_in.client_email,
-            source=str(appointment_in.source or "direct"),
+            source=resolved_source,
+            manage_token=secrets.token_urlsafe(24),
             created_at=now,
         )
         db.add(appointment)
     else:
         appointment.status = "confirmed"
         appointment.expires_at = None
+        appointment.client_id = resolved_client_id
+        appointment.price = final_price
         appointment.client_name = appointment_in.client_name
         appointment.client_phone = appointment_in.client_phone
         appointment.client_email = appointment_in.client_email
-        if appointment_in.source:
-            appointment.source = str(appointment_in.source)
+        appointment.manage_token = secrets.token_urlsafe(24)
+        # source визначає сервер (resolved_source), а не клієнтське поле -
+        # раніше тут лишався appointment_in.source, якого в схемі вже немає.
+        appointment.source = resolved_source
 
     try:
         await db.commit()
@@ -431,9 +499,52 @@ async def create_appointment(
             booking_date=appointment.start_time.strftime("%d.%m.%Y"),
             booking_time=appointment.start_time.strftime("%H:%M"),
             price=float(service.price or 0),
-            address=f"{business.city}, {business.address or ''}"
+            address=f"{business.city}, {business.address or ''}",
+            manage_url=f"{FRONTEND_URL}/my-booking/{appointment.id}?token={appointment.manage_token}",
         )
 
+    return appointment
+
+
+@router.get("/{appointment_id}/manage", response_model=AppointmentResponse)
+async def get_appointment_for_client(
+    appointment_id: int,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Дозволяє клієнту переглянути СВОЄ бронювання за токеном з листа -
+    без потреби реєструватись/логінитись (гостьове бронювання).
+    """
+    result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+    appointment = result.scalars().first()
+    if not appointment or not appointment.manage_token or appointment.manage_token != token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
+    return appointment
+
+
+@router.post("/{appointment_id}/cancel", response_model=AppointmentResponse)
+async def cancel_appointment_by_client(
+    appointment_id: int,
+    payload: ManageBookingRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Клієнт скасовує власне бронювання за токеном - без авторизації бізнесу."""
+    result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+    appointment = result.scalars().first()
+    if not appointment or not appointment.manage_token or appointment.manage_token != payload.token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
+
+    if appointment.status == "cancelled":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Це бронювання вже скасоване")
+    if appointment.status == "completed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Візит вже відбувся, скасування неможливе")
+    if appointment.start_time <= get_utc_now():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Час візиту вже настав")
+
+    appointment.status = "cancelled"
+    await db.commit()
+    await db.refresh(appointment)
     return appointment
 
 
@@ -484,6 +595,13 @@ async def update_appointment_status(
     await assert_business_access(db, current_user, appointment.business_id)
 
     appointment.status = payload.status
+
+    if payload.status == "completed":
+        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
+        business = biz_res.scalars().first()
+        if business:
+            await charge_commission_if_applicable(db, appointment, business)
+
     await db.commit()
     await db.refresh(appointment)
     return appointment

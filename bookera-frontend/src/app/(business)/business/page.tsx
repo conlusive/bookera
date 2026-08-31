@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
@@ -355,21 +357,22 @@ export default function BusinessLandingPage() {
         return;
       }
 
-      // 🔍 ПЕРЕВІРЯЄМО: чи є у цього власника реальний бізнес в БД
-      const { data: existingBusiness } = await supabase
-        .from('businesses')
-        .select('id')
-        .eq('owner_id', userId)
-        .maybeSingle();
+      // Перевіряємо, чи є у цього власника реальний бізнес - через
+      // /crm/businesses/me (єдине надійне джерело "мого бізнесу"),
+      // а не пряме звернення в базу.
+      try {
+        const token = await getAuthToken();
+        const me = await api.getMyProfile(token);
 
-      if (existingBusiness) {
-        // Якщо бізнес є — сміливо пускаємо в кабінет
-        router.push('/cabinet');
-      } else {
-        // Якщо бізнес був видалений — оновлюємо статус назад на клієнта і ведемо на реєстрацію нового
-        await supabase.from('profiles').update({ role: 'client' }).eq('id', userId);
-        localStorage.setItem('userRole', 'client');
-        setUserRole('client');
+        if (me.business_id) {
+          router.push('/cabinet');
+        } else {
+          localStorage.setItem('userRole', 'client');
+          setUserRole('client');
+          router.push('/business/register');
+        }
+      } catch (err) {
+        console.error(err);
         router.push('/business/register');
       }
     } else {

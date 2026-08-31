@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 
 interface StorefrontTabProps {
   business: any;
@@ -102,23 +104,18 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     setIsSaving(true);
 
     try {
-      const { error } = await supabase.from('businesses').update({
+      const token = await getAuthToken();
+      await api.updateBusiness(token, business.id, {
         name: formData.name,
         category: formData.category,
         address: formData.address,
         description: formData.description,
         accent_color: accentColor,
         layout_config: layoutConfig,
-        logo: logo,
-        cover_photo: coverPhoto,
-        workplace_photos: workplacePhotos
-      }).eq('id', business.id);
-
-      if (error) {
-        console.error("Помилка Supabase:", error.message, error.details);
-        alert(`Не вдалося зберегти дані: ${error.message}`);
-        return;
-      }
+        logo: logo ?? undefined,
+        cover_photo: coverPhoto ?? undefined,
+        workplace_photos: workplacePhotos,
+      });
 
       alert("Дані успішно збережено!");
     } catch (err: any) {

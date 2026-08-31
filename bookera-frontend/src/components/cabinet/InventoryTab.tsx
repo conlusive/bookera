@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons, toLocalDateStr } from '@/components/shared';
 
 export default function InventoryTab({ business, team }: any) {
-  const supabase = createClient();
   const [activeMode, setActiveMode] = useState<'expenses' | 'stock'>('expenses');
 
   // 🟢 СТЕЙТИ ДАНИХ
@@ -193,12 +193,13 @@ export default function InventoryTab({ business, team }: any) {
       if (!business?.id) return;
       setIsLoading(true);
       try {
-        const [expRes, invRes] = await Promise.all([
-          supabase.from('expenses').select('*').eq('business_id', business.id).order('expense_date', { ascending: false }),
-          supabase.from('inventory').select('*').eq('business_id', business.id).order('created_at', { ascending: false })
+        const token = await getAuthToken();
+        const [expData, invData] = await Promise.all([
+          api.listExpenses(token, business.id),
+          api.listInventory(token, business.id),
         ]);
-        if (expRes.data) setAllExpenses(expRes.data);
-        if (invRes.data) setInventory(invRes.data);
+        setAllExpenses(expData);
+        setInventory(invData);
       } catch (error) {
         console.error("Помилка завантаження:", error);
       } finally {
@@ -288,120 +289,48 @@ export default function InventoryTab({ business, team }: any) {
     if (!expForm.amount || Number(expForm.amount) <= 0) return alert('Введіть коректну суму більше нуля');
     setIsSaving(true);
     try {
-      const expenseData = {
-        amount: Number(expForm.amount),
-        category: expForm.category,
-        description: expForm.description.trim(),
-        expense_date: expForm.date,
-        recurrence: expForm.recurrence
-      };
-
-      const generateFutureExpenses = async (startDate: string, recType: string) => {
-        const futureInserts = [];
-        const [year, month, day] = startDate.split('-').map(Number);
-        const limit = recType === 'weekly' ? 52 : 12;
-
-        for (let i = 1; i <= limit; i++) {
-          let nextDate = recType === 'weekly'
-            ? new Date(year, month - 1, day + (i * 7))
-            : new Date(year, month - 1 + i, day);
-
-          futureInserts.push({
-            business_id: business.id,
-            amount: Number(expForm.amount),
-            category: expForm.category,
-            description: expForm.description.trim(),
-            expense_date: toLocalDateStr(nextDate),
-            recurrence: recType
-          });
-        }
-        if (futureInserts.length > 0) {
-          const { error: batchError, data } = await supabase.from('expenses').insert(futureInserts).select();
-          if (batchError) console.error("Помилка автогенерації:", batchError);
-          return data || [];
-        }
-        return [];
-      };
-
-      let updatedAllExpenses = [...allExpenses];
+      const token = await getAuthToken();
+      const recurrence = (expForm.recurrence === 'weekly' || expForm.recurrence === 'monthly')
+        ? expForm.recurrence
+        : 'none';
 
       if (editingExpense) {
-        const oldDate = editingExpense.expense_date;
-        const isDateChanged = oldDate !== expForm.date;
-        const isAmountChanged = Number(editingExpense.amount) !== Number(expForm.amount);
         const wasRecurring = editingExpense.recurrence && editingExpense.recurrence !== 'none';
+        const isDateChanged = editingExpense.expense_date !== expForm.date;
+        const isAmountChanged = Number(editingExpense.amount) !== Number(expForm.amount);
 
-        const { data: updatedRecord, error } = await supabase.from('expenses').update(expenseData).eq('id', editingExpense.id).select().single();
-        if (error) throw new Error(error.message);
-
-        updatedAllExpenses = updatedAllExpenses.map(e => e.id === editingExpense.id ? updatedRecord : e);
-
+        let applyToFuture = false;
         if (wasRecurring && (isDateChanged || isAmountChanged)) {
-          const updateFuture = window.confirm('Ви змінили дату або суму регулярного платежу. Бажаєте автоматично оновити всі майбутні записи цієї витрати?');
-
-          if (updateFuture) {
-            const { data: futureMatches } = await supabase
-              .from('expenses')
-              .select('*')
-              .eq('business_id', business.id)
-              .eq('category', editingExpense.category)
-              .eq('description', editingExpense.description || '')
-              .gt('expense_date', oldDate);
-
-            if (futureMatches && futureMatches.length > 0) {
-              const oldD = new Date(oldDate);
-              const newD = new Date(expForm.date);
-              const diffDays = Math.round((newD.getTime() - oldD.getTime()) / (1000 * 3600 * 24));
-
-              const updates = futureMatches.map(match => {
-                const matchDate = new Date(match.expense_date);
-                matchDate.setDate(matchDate.getDate() + diffDays);
-                const y = matchDate.getFullYear();
-                const m = String(matchDate.getMonth() + 1).padStart(2, '0');
-                const d = String(matchDate.getDate()).padStart(2, '0');
-
-                return {
-                  id: match.id,
-                  business_id: business.id,
-                  category: match.category,
-                  description: match.description,
-                  amount: Number(expForm.amount),
-                  expense_date: `${y}-${m}-${d}`,
-                  recurrence: expForm.recurrence
-                };
-              });
-
-              const { data: updatedFutures, error: updateError } = await supabase.from('expenses').upsert(updates).select();
-              if (updateError) console.error("Помилка оновлення майбутніх:", updateError);
-
-              if (updatedFutures) {
-                 updatedAllExpenses = updatedAllExpenses.map(e => {
-                    const match = updatedFutures.find(u => u.id === e.id);
-                    return match ? match : e;
-                 });
-              }
-            }
-          }
-        }
-        else if (!wasRecurring && expForm.recurrence !== 'none') {
-           const newFutures = await generateFutureExpenses(expForm.date, expForm.recurrence);
-           updatedAllExpenses = [...newFutures, ...updatedAllExpenses];
+          applyToFuture = window.confirm(
+            'Ви змінили дату або суму регулярного платежу. Бажаєте автоматично оновити всі майбутні записи цієї витрати?'
+          );
         }
 
+        // Уся логіка "знайти й посунути майбутні входження" тепер на бекенді
+        // (за recurrence_group_id, надійно) - тут лише один запит замість
+        // ручного select+diff+upsert по всій таблиці.
+        await api.updateExpense(token, editingExpense.id, {
+          amount: Number(expForm.amount),
+          category: expForm.category,
+          description: expForm.description.trim(),
+          expense_date: expForm.date,
+          apply_to_future: applyToFuture,
+        });
       } else {
-        const { data: newRecord, error } = await supabase.from('expenses').insert([{ ...expenseData, business_id: business.id }]).select().single();
-        if (error) throw new Error(error.message);
-
-        updatedAllExpenses = [newRecord, ...updatedAllExpenses];
-
-        if (expForm.recurrence !== 'none') {
-           const newFutures = await generateFutureExpenses(expForm.date, expForm.recurrence);
-           updatedAllExpenses = [...newFutures, ...updatedAllExpenses];
-        }
+        // Якщо recurrence != 'none' - бекенд одразу створює й майбутні
+        // входження (12 місячних / 52 тижневих), одним запитом.
+        await api.createExpense(token, {
+          business_id: business.id,
+          amount: Number(expForm.amount),
+          category: expForm.category,
+          description: expForm.description.trim(),
+          expense_date: expForm.date,
+          recurrence,
+        });
       }
 
-      updatedAllExpenses.sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
-      setAllExpenses(updatedAllExpenses);
+      const refreshed = await api.listExpenses(token, business.id);
+      setAllExpenses(refreshed);
       closeExpModal();
     } catch (err: any) {
       alert(`Помилка: ${err.message}`);
@@ -414,21 +343,20 @@ export default function InventoryTab({ business, team }: any) {
     if (!invForm.name.trim()) return alert('Введіть назву товару');
     setIsSaving(true);
     try {
+      const token = await getAuthToken();
       const invData = {
         name: invForm.name.trim(),
         quantity: Number(invForm.quantity) || 0,
         unit: invForm.unit,
-        price: Number(invForm.price) || 0
+        cost_per_unit: Number(invForm.price) || 0,
       };
 
       if (editingInventory) {
-        const { data, error } = await supabase.from('inventory').update(invData).eq('id', editingInventory.id).select().single();
-        if (error) throw new Error(error.message);
-        setInventory(inventory.map(i => i.id === editingInventory.id ? data : i));
+        const updated = await api.updateInventoryItem(token, editingInventory.id, invData);
+        setInventory(inventory.map(i => i.id === editingInventory.id ? updated : i));
       } else {
-        const { data, error } = await supabase.from('inventory').insert([{ ...invData, business_id: business.id }]).select().single();
-        if (error) throw new Error(error.message);
-        setInventory([data, ...inventory]);
+        const created = await api.createInventoryItem(token, { business_id: business.id, ...invData });
+        setInventory([created, ...inventory]);
       }
 
       closeInvModal();
@@ -440,19 +368,28 @@ export default function InventoryTab({ business, team }: any) {
   };
 
   const deleteExpense = async (id: string) => {
-    if (!confirm('Видалити витрату?')) return;
+    const expense = allExpenses.find((e: any) => e.id === id);
+    let deleteFuture = false;
+    if (expense?.recurrence_group_id) {
+      deleteFuture = window.confirm('Це частина повторюваного платежу. Видалити також усі майбутні входження?');
+    } else if (!confirm('Видалити витрату?')) {
+      return;
+    }
     try {
-      await supabase.from('expenses').delete().eq('id', id);
-      setAllExpenses(allExpenses.filter(e => e.id !== id));
-    } catch (error) { console.error(error); }
+      const token = await getAuthToken();
+      await api.deleteExpense(token, Number(id), deleteFuture);
+      const refreshed = await api.listExpenses(token, business.id);
+      setAllExpenses(refreshed);
+    } catch (error: any) { alert(error?.message || 'Помилка видалення'); }
   };
 
   const deleteInventory = async (id: string) => {
     if (!confirm('Видалити товар?')) return;
     try {
-      await supabase.from('inventory').delete().eq('id', id);
+      const token = await getAuthToken();
+      await api.deleteInventoryItem(token, Number(id));
       setInventory(inventory.filter(i => i.id !== id));
-    } catch (error) { console.error(error); }
+    } catch (error: any) { alert(error?.message || 'Помилка видалення'); }
   };
 
   const shiftPickerMonth = (direction: number) => {
@@ -499,7 +436,7 @@ export default function InventoryTab({ business, team }: any) {
       name: item.name,
       quantity: String(item.quantity),
       unit: item.unit,
-      price: String(item.price)
+      price: String(item.cost_per_unit)
     });
     setIsInvModalOpen(true);
   };
@@ -583,7 +520,7 @@ export default function InventoryTab({ business, team }: any) {
     return acc;
   }, {});
 
-  const totalStockValue = inventory.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.price)), 0);
+  const totalStockValue = inventory.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.cost_per_unit)), 0);
   const lowStockItems = inventory.filter(i => i.quantity <= 5 && i.quantity > 0);
   const outOfStockItems = inventory.filter(i => i.quantity <= 0);
 
@@ -926,7 +863,7 @@ export default function InventoryTab({ business, team }: any) {
                               {i.quantity} <span style={{ color: theme.textMuted, fontWeight: '500' }}>{i.unit}</span>
                             </td>
                             <td style={{ padding: '1rem 1.5rem', fontSize: '0.95rem', color: theme.textMain, textAlign: 'right' }}>
-                               {Number(i.price).toLocaleString('uk-UA')} ₴
+                               {Number(i.cost_per_unit).toLocaleString('uk-UA')} ₴
                             </td>
                             <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
                               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>

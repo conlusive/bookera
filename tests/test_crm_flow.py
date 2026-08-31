@@ -45,12 +45,43 @@ async def test_full_business_onboarding_flow(client, auth_headers):
     assert r.status_code == 200
     assert len(r.json()) == 7
 
-    # 8. Видалення клієнта
-    r = await client.delete(f"/crm/clients/{client_id}", headers=headers)
+    # 8. Видалення клієнта - для цього кроку створюємо ОКРЕМОГО клієнта без
+    # телефону (щоб не мати історії балів) - "Оксана" вище вже має бали
+    # нараховані за неї, і видалення такого клієнта тепер справедливо
+    # заборонене (перевіряється в test_client_with_appointment_history_cannot_be_deleted
+    # та окремим тестом на бали нижче).
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Тимчасовий"}, headers=headers)
+    temp_client_id = r.json()["id"]
+    r = await client.delete(f"/crm/clients/{temp_client_id}", headers=headers)
     assert r.status_code == 204
 
     r = await client.get(f"/crm/clients?business_id={business_id}", headers=headers)
-    assert len(r.json()) == 0
+    assert len(r.json()) == 1  # лишилась тільки Оксана
+
+
+@pytest.mark.asyncio
+async def test_client_link_and_unlink(client, auth_headers):
+    headers = auth_headers("link-owner")
+    r = await client.post("/crm/businesses", json={"name": "Link Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Мама"}, headers=headers)
+    client_a = r.json()["id"]
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Донька"}, headers=headers)
+    client_b = r.json()["id"]
+
+    r = await client.post(f"/crm/clients/{client_a}/link/{client_b}", headers=headers)
+    assert r.status_code == 200
+    assert client_b in r.json()["linked_client_ids"]
+
+    # симетричність - у другого теж має з'явитись зв'язок
+    r = await client.get(f"/crm/clients?business_id={business_id}", headers=headers)
+    by_id = {c["id"]: c for c in r.json()}
+    assert client_a in by_id[client_b]["linked_client_ids"]
+
+    r = await client.delete(f"/crm/clients/{client_a}/link/{client_b}", headers=headers)
+    assert r.status_code == 200
+    assert client_b not in r.json()["linked_client_ids"]
 
 
 @pytest.mark.asyncio
@@ -80,6 +111,10 @@ async def test_client_with_appointment_history_cannot_be_deleted(client, auth_he
 
     r = await client.delete(f"/crm/clients/{client_id}", headers=headers)
     assert r.status_code == 409, "Клієнта з історією бронювань не можна видаляти без явного попередження"
+
+
+@pytest.mark.asyncio
+async def test_service_with_addon_ids_does_not_crash(client, auth_headers):
     """Регресійний тест: раніше падало з 500 через відсутню колонку в БД."""
     headers = auth_headers("addon-test-owner")
     r = await client.post("/crm/businesses", json={"name": "Addon Salon", "city": "Львів"}, headers=headers)
@@ -87,3 +122,24 @@ async def test_client_with_appointment_history_cannot_be_deleted(client, auth_he
 
     r = await client.post("/services", json={"business_id": business_id, "name": "Базова", "duration_minutes": 30, "price": 300}, headers=headers)
     assert r.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_get_my_profile_replaces_old_profiles_table(client, auth_headers):
+    """GET /crm/businesses/me - заміна старої таблиці 'profiles', якої більше нема."""
+    headers = auth_headers("me-test-user")
+
+    # До реєстрації бізнесу - є юзер, але business_id ще None (якщо юзер взагалі є)
+    r = await client.get("/crm/businesses/me", headers=headers)
+    assert r.status_code == 200
+    assert r.json()["business_id"] is None
+
+    r = await client.post("/crm/businesses", json={"name": "Me Test Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.get("/crm/businesses/me", headers=headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["business_id"] == business_id
+    assert data["role"] == "business_owner"
+    assert data["business"]["id"] == business_id

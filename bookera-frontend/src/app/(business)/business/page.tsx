@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { isBusinessRole } from '@/lib/roles';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
@@ -156,6 +157,24 @@ export default function BusinessLandingPage() {
         const displayName = storedName.includes('@') ? 'Користувач' : storedName;
         setUserName(displayName);
         setUserRole(storedRole);
+
+        // localStorage - лише швидкий "перший малюнок", щоб сторінка не
+        // блимала. Справжня роль приходить з бекенду: у браузері могло
+        // залишитись застаріле значення ('vendor'/'owner' зі старих версій),
+        // через яке власник бачив кнопку "Відкрити бізнес" замість кабінету.
+        void (async () => {
+          try {
+            const token = await getAuthToken();
+            const me = await api.getMyProfile(token);
+            if (me.role) {
+              setUserRole(me.role);
+              localStorage.setItem('userRole', me.role);
+            }
+          } catch {
+            // Немає сесії або бекенд недоступний - лишаємо значення з localStorage.
+          }
+        })();
+
         const nameParts = displayName.split(' ');
         const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
         setInitials(init.toUpperCase());
@@ -587,7 +606,7 @@ export default function BusinessLandingPage() {
                       <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#222222', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
                     </div>
                     <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
-                    {userRole === 'vendor' && (<Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>)}
+                    {isBusinessRole(userRole) && (<Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>)}
                     <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
                     <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #f1f5f9', marginTop: '2px', boxSizing: 'border-box' }}>Вийти з акаунту</button>
                   </div>
@@ -625,7 +644,7 @@ export default function BusinessLandingPage() {
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center' }}>
               <button onClick={handleStartBusinessClick} className="btn-primary">
-                {userRole === 'vendor' ? 'Перейти в кабінет' : isLoggedIn ? 'Відкрити бізнес' : 'Створити профіль'}
+                {isBusinessRole(userRole) ? 'Перейти в кабінет' : isLoggedIn ? 'Відкрити бізнес' : 'Створити профіль'}
               </button>
               <button onClick={() => document.getElementById('bento')?.scrollIntoView({ behavior: 'smooth' })} className="btn-secondary">
                 Огляд функцій
@@ -789,7 +808,7 @@ export default function BusinessLandingPage() {
                 Всі необхідні інструменти для бронювання, фінансів та клієнтів — в одному зручному додатку.
               </p>
               <button onClick={handleStartBusinessClick} style={{ backgroundColor: '#111827', color: '#ffffff', fontWeight: '700', fontSize: '1rem', padding: '1.1rem 2.8rem', borderRadius: '999px', border: 'none', cursor: 'pointer', transition: '0.3s', boxShadow: '0 15px 30px rgba(17, 24, 39, 0.15)', willChange: 'transform' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-3px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
-                {userRole === 'vendor' ? 'Перейти в кабінет' : 'Створити акаунт'}
+                {isBusinessRole(userRole) ? 'Перейти в кабінет' : 'Створити акаунт'}
               </button>
             </div>
 

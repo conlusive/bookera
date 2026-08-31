@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { OWNER_ROLE } from '@/lib/roles';
 
 export default function BusinessRegisterWizard() {
   const router = useRouter();
@@ -185,7 +186,10 @@ export default function BusinessRegisterWizard() {
 
       // Роль власника FastAPI вже виставив сам усередині registerBusiness -
       // окремого оновлення 'profiles' більше не потрібно (такої таблиці нема).
-      localStorage.setItem('userRole', 'owner');
+      // OWNER_ROLE ('business_owner') - те саме значення, що повертає бекенд.
+      // Раніше тут писалось 'owner', і сторінка /business не впізнавала
+      // власника, показуючи йому кнопку "Відкрити бізнес" замість кабінету.
+      localStorage.setItem('userRole', OWNER_ROLE);
 
       router.push('/cabinet');
 

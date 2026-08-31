@@ -14,9 +14,11 @@ Supabase має ДВІ схеми підпису токенів:
 і лише якщо це не вдалось - відкочується на HS256 через SUPABASE_JWT_SECRET.
 """
 import os
+import ssl
 from dataclasses import dataclass
 from typing import Optional
 
+import certifi
 import jwt
 from jwt import PyJWKClient
 from fastapi import Depends, HTTPException, status
@@ -41,7 +43,17 @@ def _get_jwks_client() -> Optional[PyJWKClient]:
     if not SUPABASE_URL:
         return None
     if _jwks_client is None:
-        _jwks_client = PyJWKClient(f"{SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json")
+        # Явно передаємо кореневі сертифікати з certifi. Без цього на macOS
+        # (і в частині Docker-образів) Python не бачить системного сховища
+        # сертифікатів і падає з CERTIFICATE_VERIFY_FAILED, не змігши
+        # завантажити публічні ключі Supabase.
+        # Свідомо НЕ вимикаємо перевірку сертифіката (ssl._create_unverified_context):
+        # це відкрило б можливість підмінити ключі підробленим з'єднанням.
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        _jwks_client = PyJWKClient(
+            f"{SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json",
+            ssl_context=ssl_context,
+        )
     return _jwks_client
 
 

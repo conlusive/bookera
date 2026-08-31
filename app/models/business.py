@@ -37,6 +37,16 @@ class Business(Base):
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
+    # Гнучкі JSON-налаштування - не потребують окремих таблиць, бо ніколи
+    # не фільтруються/не JOIN'яться, лише читаються й перезаписуються цілком.
+    accent_color = Column(String, nullable=True)
+    layout_config = Column(JSON, nullable=True)
+    workplace_photos = Column(JSON, default=list)
+    booking_settings = Column(JSON, nullable=True)
+    security_settings = Column(JSON, nullable=True)
+    notification_settings = Column(JSON, nullable=True)
+    payments_settings = Column(JSON, nullable=True)
+
     # === Монетизація ===
     # Унікальний токен для "прямого" посилання бізнесу (Instagram-біо тощо) -
     # клієнти, що прийшли через нього, НЕ рахуються комісією. На відміну від

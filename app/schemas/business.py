@@ -59,6 +59,13 @@ class BusinessUpdate(BaseModel):
     logo: Optional[str] = None
     tags: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    accent_color: Optional[str] = None
+    layout_config: Optional[dict] = None
+    workplace_photos: Optional[List[str]] = None
+    booking_settings: Optional[dict] = None
+    security_settings: Optional[dict] = None
+    notification_settings: Optional[dict] = None
+    payments_settings: Optional[dict] = None
 
 
 class BusinessOut(BusinessBase):
@@ -68,5 +75,12 @@ class BusinessOut(BusinessBase):
     reviews_count: Optional[int] = 0
     is_active: bool = True
     services: Optional[List[ServiceOut]] = []
+    accent_color: Optional[str] = None
+    layout_config: Optional[dict] = None
+    workplace_photos: Optional[List[str]] = []
+    booking_settings: Optional[dict] = None
+    security_settings: Optional[dict] = None
+    notification_settings: Optional[dict] = None
+    payments_settings: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)

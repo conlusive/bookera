@@ -28,6 +28,13 @@ export interface Business {
   tags?: string[];
   is_active?: boolean;
   services?: Service[];
+  accent_color?: string;
+  layout_config?: Record<string, any>;
+  workplace_photos?: string[];
+  booking_settings?: Record<string, any>;
+  security_settings?: Record<string, any>;
+  notification_settings?: Record<string, any>;
+  payments_settings?: Record<string, any>;
 }
 
 export interface Service {

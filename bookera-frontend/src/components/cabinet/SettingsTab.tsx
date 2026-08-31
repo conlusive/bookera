@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 
 interface SettingsTabProps {
   business: any;
@@ -86,12 +88,12 @@ export default function SettingsTab({ business }: SettingsTabProps) {
     if (!business) return;
     setIsSettingsSaving(true);
     try {
-      const { error } = await supabase.from('businesses').update({ [column]: data }).eq('id', business.id);
-      if (error) throw error;
+      const token = await getAuthToken();
+      await api.updateBusiness(token, business.id, { [column]: data });
       showToast(successMsg);
     } catch(e: any) {
-      console.warn(`Помилка оновлення колонки ${column}:`, e.message || e);
-      showToast('Помилка збереження. Перевір структуру БД.');
+      console.warn(`Помилка оновлення ${column}:`, e.message || e);
+      showToast(e?.message || 'Помилка збереження');
     } finally {
       setIsSettingsSaving(false);
     }

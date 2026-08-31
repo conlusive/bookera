@@ -1,5 +1,5 @@
 from datetime import date as dt_date, datetime
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -56,7 +56,7 @@ class ExpenseCreate(BaseModel):
     description: Optional[str] = None
     amount: float
     expense_date: dt_date = Field(default_factory=dt_date.today)
-    is_recurring: bool = False
+    recurrence: Literal["none", "weekly", "monthly"] = "none"
 
 
 class ExpenseUpdate(BaseModel):
@@ -64,9 +64,22 @@ class ExpenseUpdate(BaseModel):
     description: Optional[str] = None
     amount: Optional[float] = None
     expense_date: Optional[dt_date] = None
-    is_recurring: Optional[bool] = None
+    recurrence: Optional[Literal["none", "weekly", "monthly"]] = None
+    # Якщо true і ця витрата - частина повторюваної серії, застосовує ту саму
+    # зміну дати/суми до всіх МАЙБУТНІХ входжень цієї ж серії (той самий
+    # зсув у днях, та сама нова сума) - замість крихкого зіставлення за
+    # текстом category+description, як робив старий фронтенд-код.
+    apply_to_future: bool = False
 
 
-class ExpenseResponse(ExpenseCreate):
+class ExpenseResponse(BaseModel):
     id: int
+    business_id: int
+    category: Optional[str] = None
+    description: Optional[str] = None
+    amount: float
+    expense_date: dt_date
+    recurrence: str = "none"
+    recurrence_group_id: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)

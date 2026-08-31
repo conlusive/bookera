@@ -88,3 +88,40 @@ async def test_business_stats_endpoint(client, auth_headers):
     intruder = auth_headers("stats-intruder")
     r = await client.get(f"/crm/businesses/{business_id}/stats", headers=intruder)
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_manual_time_block_and_reschedule(client, auth_headers):
+    """Блокування часу (обід тощо) - без клієнта/послуги, і перенесення на інший час."""
+    headers = auth_headers("block-test-owner")
+    r = await client.post("/crm/businesses", json={"name": "Block Test Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    from datetime import datetime, timedelta, timezone
+    slot = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)).replace(hour=13, minute=0)
+
+    r = await client.post("/crm/appointments", json={
+        "business_id": business_id, "start_time": slot.isoformat(), "is_block": True, "duration_minutes": 60,
+    }, headers=headers)
+    assert r.status_code == 201, r.text
+    assert r.json()["service_id"] is None
+    assert r.json()["client_name"] == "Неробочий час"
+    block_id = r.json()["id"]
+
+    # Без duration_minutes блокування створити не можна
+    r = await client.post("/crm/appointments", json={
+        "business_id": business_id, "start_time": slot.isoformat(), "is_block": True,
+    }, headers=headers)
+    assert r.status_code == 400
+
+    # Перенесення на інший час - тривалість (60 хв) зберігається
+    new_start = slot + timedelta(hours=3)
+    r = await client.patch(f"/crm/appointments/{block_id}/reschedule", json={"start_time": new_start.isoformat()}, headers=headers)
+    assert r.status_code == 200
+    new_end = datetime.fromisoformat(r.json()["end_time"])
+    new_start_resp = datetime.fromisoformat(r.json()["start_time"])
+    assert (new_end - new_start_resp).total_seconds() == 3600
+
+    # Перенесення без авторизації - заборонено
+    r = await client.patch(f"/crm/appointments/{block_id}/reschedule", json={"start_time": slot.isoformat()})
+    assert r.status_code == 401

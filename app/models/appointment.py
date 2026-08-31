@@ -34,7 +34,10 @@ class Appointment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    # nullable=True: "блокування часу" (обід, особиста справа) - не прив'язане
+    # до жодної послуги, але все одно має зайняти місце в календарі й
+    # захищатись тим самим exclusion constraint від подвійного бронювання.
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)  # реальний CRM-контакт
     session_token = Column(String, nullable=True, index=True)  # анонімна сесія браузера під час оформлення (для очищення власних locks)
     master_id = Column(String, ForeignKey("users.id"), nullable=True)

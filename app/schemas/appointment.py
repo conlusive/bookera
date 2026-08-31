@@ -51,14 +51,20 @@ class AppointmentCreate(BaseModel):
 class ManualAppointmentCreate(BaseModel):
     """Для CRM-календаря: staff вручну вносить запис (дзвінок/walk-in)."""
     business_id: int
-    service_id: int
+    service_id: Optional[int] = None  # None лише якщо is_block=true
     start_time: datetime
+    duration_minutes: Optional[int] = None  # обов'язково, якщо is_block=true (немає послуги, щоб узяти тривалість звідти)
     master_id: Optional[str] = None
     client_id: Optional[int] = None  # існуючий CRM-контакт
     client_name: Optional[str] = None  # або новий контакт "з голови"
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
     notes: Optional[str] = None
+    is_block: bool = False  # true = "заблокувати час" (обід тощо), не справжній запис клієнта
+
+
+class AppointmentRescheduleRequest(BaseModel):
+    start_time: datetime
 
 
 class AppointmentStatusUpdate(BaseModel):
@@ -74,7 +80,7 @@ class ManageBookingRequest(BaseModel):
 class AppointmentResponse(BaseModel):
     id: int
     business_id: int
-    service_id: int
+    service_id: Optional[int] = None
     client_id: Optional[int] = None
     master_id: Optional[str] = None
     start_time: datetime

@@ -11,6 +11,7 @@ from app.core.auth import CurrentUser, assert_business_access, get_current_user
 from app.core.time_utils import utc_now
 from app.models import Appointment, Business, Client, Service
 from app.schemas.appointment import AppointmentResponse, ManualAppointmentCreate
+from app.services.monetization import award_points_for_new_client
 
 router = APIRouter(prefix="/crm/appointments", tags=["CRM - Appointments"])
 
@@ -65,6 +66,7 @@ async def create_manual_appointment(
             )
             db.add(client)
             await db.flush()
+            await award_points_for_new_client(db, business, payload.client_phone, client.id)
         client_id = client.id
 
     appointment = Appointment(

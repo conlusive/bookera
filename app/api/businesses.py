@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
 from app.core.time_utils import utc_now
-from app.models import Business, User, RoleEnum, Appointment, Service
+from app.models import Business, User, RoleEnum, Appointment, Service, RadarBoost
 from app.schemas.business import BusinessOut
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
@@ -33,11 +33,18 @@ async def list_businesses(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
+    # Бізнеси з активним radar-бустом підіймаються вище (аналог "піднято" на OLX) -
+    # підзапит перевіряє наявність не протермінованого активного буста.
+    radar_subq = (
+        select(RadarBoost.business_id)
+        .where(RadarBoost.status == "active", RadarBoost.expires_at > utc_now())
+        .subquery()
+    )
     stmt = (
         select(Business)
         .where(Business.is_active == True)
         .options(selectinload(Business.services))
-        .order_by(Business.id)
+        .order_by(Business.id.in_(select(radar_subq.c.business_id)).desc(), Business.id)
         .limit(limit)
         .offset(offset)
     )

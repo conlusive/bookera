@@ -5,6 +5,10 @@ from app.models.service import Service, ServiceAddon
 from app.models.client import Client, ClientLink
 from app.models.appointment import Appointment, AppointmentStatus, BookingSourceEnum
 from app.models.extras import Review, InventoryItem, Expense
+from app.models.monetization import (
+    PointsLedgerEntry, PointsReasonEnum, ReferralCommission,
+    RadarBoost, GiftCertificate, Payment,
+)
 
 __all__ = [
     "Base", "User", "RoleEnum", "StaffInvite",
@@ -13,4 +17,6 @@ __all__ = [
     "Client", "ClientLink",
     "Appointment", "AppointmentStatus", "BookingSourceEnum",
     "Review", "InventoryItem", "Expense",
+    "PointsLedgerEntry", "PointsReasonEnum", "ReferralCommission",
+    "RadarBoost", "GiftCertificate", "Payment",
 ]

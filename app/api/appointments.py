@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 import os
 import secrets
 from typing import List, Optional
@@ -11,7 +12,7 @@ from app.schemas.appointment import AppointmentStatusUpdate
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
 from app.core.rate_limit import rate_limit
-from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours
+from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
@@ -22,6 +23,7 @@ from app.schemas.appointment import (
     SlotStatusItem,
 )
 from app.core.email import send_booking_confirmation_email
+from app.services.monetization import charge_commission_if_applicable
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -383,10 +385,40 @@ async def create_appointment(
     biz_res = await db.execute(select(Business).where(Business.id == appointment_in.business_id))
     business = biz_res.scalars().first()
 
+    # Джерело визначає СЕРВЕР, звіряючи токен з тим, що збережений у бізнесу -
+    # клієнт більше не може просто заявити "я прийшов напряму" і уникнути комісії.
+    resolved_source = (
+        "direct"
+        if business and appointment_in.direct_link_token and appointment_in.direct_link_token == business.direct_link_token
+        else "marketplace"
+    )
+
     srv_res = await db.execute(
         select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id)
     )
     service = srv_res.scalars().first()
+
+    # Застосування подарункового сертифіката - зменшує ціну, не робить
+    # бронювання безкоштовним понад залишок сертифіката.
+    applied_certificate = None
+    final_price = service.price if service else Decimal("0")
+    if appointment_in.gift_certificate_code and service:
+        cert_res = await db.execute(
+            select(GiftCertificate).where(
+                GiftCertificate.code == appointment_in.gift_certificate_code.upper(),
+                GiftCertificate.business_id == appointment_in.business_id,
+                GiftCertificate.status == "active",
+            )
+        )
+        applied_certificate = cert_res.scalars().first()
+        if applied_certificate and (not applied_certificate.expires_at or applied_certificate.expires_at > now):
+            discount = min(applied_certificate.remaining_amount, final_price)
+            final_price = final_price - discount
+            applied_certificate.remaining_amount -= discount
+            if applied_certificate.remaining_amount <= 0:
+                applied_certificate.status = "redeemed"
+        else:
+            applied_certificate = None  # невалідний/протермінований - ігноруємо мовчки, ціна лишається повною
 
     if not appointment:
         # Створюємо прямий запис, якщо блоку не було
@@ -402,11 +434,11 @@ async def create_appointment(
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
             status="confirmed",
-            price=service.price if service else 0,
+            price=final_price,
             client_name=appointment_in.client_name,
             client_phone=appointment_in.client_phone,
             client_email=appointment_in.client_email,
-            source=str(appointment_in.source or "direct"),
+            source=resolved_source,
             manage_token=secrets.token_urlsafe(24),
             created_at=now,
         )
@@ -535,6 +567,13 @@ async def update_appointment_status(
     await assert_business_access(db, current_user, appointment.business_id)
 
     appointment.status = payload.status
+
+    if payload.status == "completed":
+        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
+        business = biz_res.scalars().first()
+        if business:
+            await charge_commission_if_applicable(db, appointment, business)
+
     await db.commit()
     await db.refresh(appointment)
     return appointment

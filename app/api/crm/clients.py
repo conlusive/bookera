@@ -8,6 +8,8 @@ from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user
 from app.models import Client, ClientLink
 from app.models.appointment import Appointment
+from app.models import Business
+from app.services.monetization import award_points_for_new_client
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 
 router = APIRouter(prefix="/crm/clients", tags=["CRM - Clients"])
@@ -42,6 +44,14 @@ async def create_client(
     await assert_business_access(db, current_user, client_in.business_id)
     client = Client(**client_in.model_dump())
     db.add(client)
+    await db.flush()
+
+    if client_in.phone:
+        biz_res = await db.execute(select(Business).where(Business.id == client_in.business_id))
+        business = biz_res.scalars().first()
+        if business:
+            await award_points_for_new_client(db, business, client_in.phone, client.id)
+
     await db.commit()
     await db.refresh(client)
     return client
@@ -89,6 +99,17 @@ async def delete_client(
             status_code=status.HTTP_409_CONFLICT,
             detail="У цього клієнта є історія бронювань - видалення заборонене, щоб не втратити її. "
                    "Використайте is_blacklisted замість видалення, якщо потрібно приховати клієнта.",
+        )
+
+    from app.models import PointsLedgerEntry
+    points_ref = await db.execute(
+        select(PointsLedgerEntry.id).where(PointsLedgerEntry.reference_client_id == client_id).limit(1)
+    )
+    if points_ref.scalars().first() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="За цього клієнта нараховані бали (він - історія в бухгалтерії балів) - "
+                   "видалення заборонене. Використайте is_blacklisted замість видалення.",
         )
 
     await db.delete(client)

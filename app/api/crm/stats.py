@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.time_utils import utc_now
 from app.models import Appointment, Client, Service
 
 router = APIRouter(prefix="/crm/businesses", tags=["CRM - Stats"])
@@ -43,7 +44,7 @@ async def get_business_stats(
 ):
     await assert_business_access(db, current_user, business_id)
 
-    today = datetime.utcnow().date()
+    today = utc_now().date()
     period_start = date_from or today.replace(day=1)
     period_end = date_to or today
     start_dt = datetime.combine(period_start, datetime.min.time())
@@ -62,7 +63,7 @@ async def get_business_stats(
     upcoming_stmt = select(func.count(Appointment.id)).where(
         Appointment.business_id == business_id,
         Appointment.status == "confirmed",
-        Appointment.start_time > datetime.utcnow(),
+        Appointment.start_time > utc_now(),
     )
     upcoming_res = await db.execute(upcoming_stmt)
     upcoming_count = upcoming_res.scalar() or 0

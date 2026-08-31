@@ -19,6 +19,7 @@ from app.api.crm import (
     extras as crm_extras,
     appointments as crm_appointments,
     stats as crm_stats,
+    monetization as crm_monetization,
 )
 from app.core.database import engine, AsyncSessionLocal
 from app.core.logging_config import logger
@@ -133,6 +134,7 @@ app.include_router(crm_business.router)
 app.include_router(crm_extras.router)
 app.include_router(crm_appointments.router)
 app.include_router(crm_stats.router)
+app.include_router(crm_monetization.router)
 
 
 @app.get("/")

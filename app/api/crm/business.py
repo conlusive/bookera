@@ -52,7 +52,12 @@ async def register_business(
     else:
         user.role = "business_owner"
 
-    business = Business(**data, owner_id=current_user.id, slug=slugify(payload.name))
+    business = Business(
+        **data,
+        owner_id=current_user.id,
+        slug=slugify(payload.name),
+        direct_link_token=secrets.token_urlsafe(12),
+    )
     db.add(business)
     await db.flush()
 

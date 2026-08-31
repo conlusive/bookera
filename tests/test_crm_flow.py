@@ -45,12 +45,18 @@ async def test_full_business_onboarding_flow(client, auth_headers):
     assert r.status_code == 200
     assert len(r.json()) == 7
 
-    # 8. Видалення клієнта
-    r = await client.delete(f"/crm/clients/{client_id}", headers=headers)
+    # 8. Видалення клієнта - для цього кроку створюємо ОКРЕМОГО клієнта без
+    # телефону (щоб не мати історії балів) - "Оксана" вище вже має бали
+    # нараховані за неї, і видалення такого клієнта тепер справедливо
+    # заборонене (перевіряється в test_client_with_appointment_history_cannot_be_deleted
+    # та окремим тестом на бали нижче).
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Тимчасовий"}, headers=headers)
+    temp_client_id = r.json()["id"]
+    r = await client.delete(f"/crm/clients/{temp_client_id}", headers=headers)
     assert r.status_code == 204
 
     r = await client.get(f"/crm/clients?business_id={business_id}", headers=headers)
-    assert len(r.json()) == 0
+    assert len(r.json()) == 1  # лишилась тільки Оксана
 
 
 @pytest.mark.asyncio

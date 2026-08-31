@@ -182,7 +182,8 @@ export interface Expense {
   description?: string;
   amount: number;
   expense_date: string;
-  is_recurring: boolean;
+  recurrence?: 'none' | 'weekly' | 'monthly';
+  recurrence_group_id?: string;
 }
 
 // ============ Внутрішні хелпери ============
@@ -451,6 +452,31 @@ export const api = {
     await authFetch(`/crm/staff/${staffId}`, token, { method: 'DELETE' });
   },
 
+  async getPayoutPreview(token: string, businessId: number, staffId: string): Promise<{
+    staff_id: string; period_start: string; period_end: string; gross_revenue: number;
+    commission_rate: number; payout_amount: number; completed_appointments_count: number;
+  }> {
+    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/payout-preview`, token);
+  },
+
+  async createPayout(token: string, businessId: number, staffId: string, notes?: string) {
+    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/payouts`, token, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    });
+  },
+
+  async listPayouts(token: string, businessId: number, staffId: string) {
+    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/payouts`, token);
+  },
+
+  async transferOwnership(token: string, businessId: number, newOwnerUserId: string) {
+    return authFetch(`/crm/businesses/${businessId}/transfer-ownership`, token, {
+      method: 'POST',
+      body: JSON.stringify({ new_owner_user_id: newOwnerUserId }),
+    });
+  },
+
   // === CRM: ЗАПИСИ ===
 
   async getBookedAppointments(token: string, businessId: number, masterId?: string): Promise<Appointment[]> {
@@ -556,15 +582,15 @@ export const api = {
     return authFetch(`/crm/expenses?business_id=${businessId}`, token);
   },
 
-  async createExpense(token: string, payload: { business_id: number; category?: string; description?: string; amount: number; expense_date?: string; is_recurring?: boolean }): Promise<Expense> {
+  async createExpense(token: string, payload: { business_id: number; category?: string; description?: string; amount: number; expense_date?: string; recurrence?: 'none' | 'weekly' | 'monthly' }): Promise<Expense> {
     return authFetch(`/crm/expenses`, token, { method: 'POST', body: JSON.stringify(payload) });
   },
 
-  async updateExpense(token: string, expenseId: number, payload: Partial<Expense>): Promise<Expense> {
+  async updateExpense(token: string, expenseId: number, payload: Partial<Expense> & { apply_to_future?: boolean }): Promise<Expense> {
     return authFetch(`/crm/expenses/${expenseId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
   },
 
-  async deleteExpense(token: string, expenseId: number): Promise<void> {
-    await authFetch(`/crm/expenses/${expenseId}`, token, { method: 'DELETE' });
+  async deleteExpense(token: string, expenseId: number, deleteFuture = false): Promise<void> {
+    await authFetch(`/crm/expenses/${expenseId}?delete_future=${deleteFuture}`, token, { method: 'DELETE' });
   },
 };

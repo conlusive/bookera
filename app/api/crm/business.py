@@ -21,6 +21,22 @@ router = APIRouter(prefix="/crm/businesses", tags=["CRM - Business"])
 # "Видалення" бізнесу - це PATCH з is_active=false (soft delete), не DELETE.
 
 
+@router.get("/{business_id}/masters")
+async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Публічний список майстрів для клієнта, що обирає, до кого записатись -
+    навмисно віддає лише безпечні поля (без телефону/email/комісії),
+    на відміну від /crm/businesses/{id}/staff, який вимагає авторизації.
+    """
+    result = await db.execute(
+        select(User).where(User.business_id == business_id, User.role.in_(["master", "business_owner"]), User.is_active == True)
+    )
+    return [
+        {"id": u.id, "full_name": u.full_name, "specialization": u.specialization, "avatar_url": u.avatar_url}
+        for u in result.scalars().all()
+    ]
+
+
 @router.get("/me")
 async def get_my_profile(
     db: AsyncSession = Depends(get_db),

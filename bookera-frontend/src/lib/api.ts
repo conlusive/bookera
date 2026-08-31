@@ -412,6 +412,10 @@ export const api = {
     return publicFetch(`/services/business/${businessId}`);
   },
 
+  async listPublicMasters(businessId: number): Promise<{ id: string; full_name?: string; specialization?: string; avatar_url?: string }[]> {
+    return publicFetch(`/crm/businesses/${businessId}/masters`);
+  },
+
   async updateService(token: string, serviceId: number, payload: Partial<Service>): Promise<Service> {
     return authFetch(`/services/${serviceId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
   },

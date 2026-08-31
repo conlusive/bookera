@@ -12,7 +12,7 @@ from app.schemas.appointment import AppointmentStatusUpdate
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
 from app.core.rate_limit import rate_limit
-from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate
+from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
@@ -23,7 +23,7 @@ from app.schemas.appointment import (
     SlotStatusItem,
 )
 from app.core.email import send_booking_confirmation_email
-from app.services.monetization import charge_commission_if_applicable
+from app.services.monetization import charge_commission_if_applicable, award_points_for_new_client
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -420,6 +420,31 @@ async def create_appointment(
         else:
             applied_certificate = None  # невалідний/протермінований - ігноруємо мовчки, ціна лишається повною
 
+    # Створюємо/знаходимо CRM-контакт для цього бізнесу за телефоном.
+    # Раніше це робив фронтенд, пишучи НАПРЯМУ в таблицю клієнтів чужого
+    # бізнесу без авторизації - тепер це робить сервер, як і має бути.
+    resolved_client_id = appointment_in.client_id
+    if resolved_client_id is None and appointment_in.client_phone and business:
+        existing_client = await db.execute(
+            select(Client).where(
+                Client.business_id == appointment_in.business_id,
+                Client.phone == appointment_in.client_phone,
+            )
+        )
+        crm_client = existing_client.scalars().first()
+        if not crm_client:
+            crm_client = Client(
+                business_id=appointment_in.business_id,
+                name=appointment_in.client_name or appointment_in.client_phone,
+                phone=appointment_in.client_phone,
+                email=appointment_in.client_email,
+                tags=["Онлайн-запис"],
+            )
+            db.add(crm_client)
+            await db.flush()
+            await award_points_for_new_client(db, business, appointment_in.client_phone, crm_client.id)
+        resolved_client_id = crm_client.id
+
     if not appointment:
         # Створюємо прямий запис, якщо блоку не було
         requested_end_time = appointment_in.start_time + timedelta(
@@ -429,7 +454,7 @@ async def create_appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
             master_id=normalize_master_id(appointment_in.master_id),
-            client_id=appointment_in.client_id,
+            client_id=resolved_client_id,
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
@@ -446,12 +471,15 @@ async def create_appointment(
     else:
         appointment.status = "confirmed"
         appointment.expires_at = None
+        appointment.client_id = resolved_client_id
+        appointment.price = final_price
         appointment.client_name = appointment_in.client_name
         appointment.client_phone = appointment_in.client_phone
         appointment.client_email = appointment_in.client_email
         appointment.manage_token = secrets.token_urlsafe(24)
-        if appointment_in.source:
-            appointment.source = str(appointment_in.source)
+        # source визначає сервер (resolved_source), а не клієнтське поле -
+        # раніше тут лишався appointment_in.source, якого в схемі вже немає.
+        appointment.source = resolved_source
 
     try:
         await db.commit()

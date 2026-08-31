@@ -125,3 +125,37 @@ async def test_manual_time_block_and_reschedule(client, auth_headers):
     # Перенесення без авторизації - заборонено
     r = await client.patch(f"/crm/appointments/{block_id}/reschedule", json={"start_time": slot.isoformat()})
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_public_booking_creates_crm_client_on_server(client, auth_headers):
+    """
+    Регресійний тест на закриту діру безпеки: раніше CRM-контакт створював
+    сам фронтенд, пишучи напряму в таблицю клієнтів чужого бізнесу без
+    жодної авторизації. Тепер це робить виключно сервер.
+    """
+    headers = auth_headers("public-booking-owner")
+    r = await client.post("/crm/businesses", json={"name": "Public Booking Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+    r = await client.post("/services", json={"business_id": business_id, "name": "Стрижка", "duration_minutes": 30, "price": 400}, headers=headers)
+    service_id = r.json()["id"]
+
+    from datetime import datetime, timedelta, timezone
+    slot = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=4)).replace(hour=11, minute=0)
+
+    # Публічне бронювання - БЕЗ токена, як робить звичайний відвідувач сайту
+    r = await client.post("/appointments", json={
+        "business_id": business_id, "service_id": service_id, "start_time": slot.isoformat(),
+        "client_name": "Новий Відвідувач", "client_phone": "+380631234567", "client_email": "v@t.com",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["client_id"] is not None, "Сервер мав сам створити CRM-контакт"
+
+    # Контакт реально з'явився в CRM бізнесу
+    r = await client.get(f"/crm/clients?business_id={business_id}", headers=headers)
+    clients = r.json()
+    assert any(c["phone"] == "+380631234567" for c in clients)
+
+    # І бізнес отримав бали за нового для екосистеми клієнта
+    r = await client.get(f"/crm/businesses/{business_id}/monetization", headers=headers)
+    assert r.json()["points_balance"] == 10

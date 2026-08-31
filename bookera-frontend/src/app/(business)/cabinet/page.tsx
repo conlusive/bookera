@@ -20,6 +20,21 @@ import MarketingTab from '@/components/cabinet/MarketingTab';
 import SettingsTab from '@/components/cabinet/SettingsTab';
 import StorefrontTab from '@/components/cabinet/StorefrontTab';
 
+
+/**
+ * Бекенд повертає співробітника з полем full_name (як у моделі User),
+ * а компоненти кабінету історично читають .name. Нормалізуємо один раз
+ * тут, щоб не правити те саме в 15 місцях TeamTab/CalendarTab - і щоб
+ * порожнє імʼя не валило інтерфейс (member.name.toLowerCase() падав з
+ * "Cannot read properties of undefined").
+ */
+function normalizeStaff(list: any[]): any[] {
+  return (list || []).map((s: any) => ({
+    ...s,
+    name: s.full_name || s.name || s.email || 'Без імені',
+  }));
+}
+
 export default function BusinessCabinet() {
   const router = useRouter();
   const supabase = createClient();
@@ -252,7 +267,7 @@ export default function BusinessCabinet() {
         ]);
 
         setServices(srvsData || []);
-        setTeam(teamData || []);
+        setTeam(normalizeStaff(teamData));
         if (clientsData) setClientsList(clientsData);
         if (hoursData && hoursData.length > 0) {
           const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
@@ -336,7 +351,7 @@ export default function BusinessCabinet() {
 
           if (isMounted) {
             setServices(srvsData || []);
-            setTeam(teamData || []);
+            setTeam(normalizeStaff(teamData));
             if (clientsData) setClientsList(clientsData);
             if (hoursData && hoursData.length > 0) {
               const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];

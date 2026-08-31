@@ -33,16 +33,21 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Захист кабінету бізнесу
+  // Захист кабінету бізнесу.
+  // Перевіряємо ЛИШЕ наявність сесії. Раніше тут звірялась роль з
+  // user_metadata Supabase - але туди при реєстрації записується 'client'
+  // (людина реєструється як звичайний користувач ДО того, як створить
+  // салон), а справжня роль живе в таблиці users на бекенді. Через це
+  // власника викидало з власного кабінету.
+  //
+  // Робити тут запит до бекенду не варто: middleware виконується на
+  // КОЖЕН запит, включно зі статикою, і мережевий виклик відчутно
+  // сповільнив би весь сайт. Справжня перевірка прав усе одно
+  // відбувається на бекенді при кожному зверненні до /crm/* - middleware
+  // тут лише зручність (не показувати кабінет незалогіненому), а не
+  // межа безпеки.
   if (pathname.startsWith('/cabinet')) {
     if (!user) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/business';
-      return NextResponse.redirect(url);
-    }
-
-    const role = user.user_metadata?.role;
-    if (role !== 'vendor' && role !== 'business_owner') {
       const url = request.nextUrl.clone();
       url.pathname = '/business';
       return NextResponse.redirect(url);

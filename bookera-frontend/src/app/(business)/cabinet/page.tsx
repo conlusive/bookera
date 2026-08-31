@@ -286,6 +286,7 @@ export default function BusinessCabinet() {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session) {
+          console.warn('[cabinet] Немає активної сесії, повертаю на /business', sessionError);
           router.push('/business');
           return;
         }
@@ -306,6 +307,18 @@ export default function BusinessCabinet() {
           full_name: me.full_name || session.user.user_metadata?.full_name || userEmail,
           role: me.role || 'client',
         });
+
+        console.info('[cabinet] Профіль з бекенду:', { role: me.role, business_id: me.business_id });
+
+        if (!me.business_id) {
+          // Людина залогінена, але салону ще не має - їй тут нема чого
+          // робити, ведемо на реєстрацію бізнесу. Раніше цю перевірку
+          // робив middleware за роллю з user_metadata, але там завжди
+          // 'client' (роль там записується при реєстрації акаунта, ДО
+          // створення салону), тому власника викидало з його ж кабінету.
+          router.push('/business/register');
+          return;
+        }
 
         if (me.business && me.business_id) {
           setMyBusinesses([me.business]);

@@ -391,6 +391,10 @@ export const api = {
     return authFetch(`/crm/businesses/${businessId}/hours`, token, { method: 'PUT', body: JSON.stringify(hours) });
   },
 
+  async getBusinessHours(businessId: number): Promise<BusinessHoursItem[]> {
+    return publicFetch(`/crm/businesses/${businessId}/hours`);
+  },
+
   // === CRM: ПОСЛУГИ ===
 
   async createService(token: string, payload: Partial<Service> & { business_id: number; name: string; duration_minutes: number; price: number }): Promise<Service> {

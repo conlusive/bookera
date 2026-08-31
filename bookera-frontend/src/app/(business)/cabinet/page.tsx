@@ -246,29 +246,37 @@ export default function BusinessCabinet() {
   const loadSpecificBusiness = async (bizId: number | string) => {
     setLoading(true);
     try {
+      const token = await getAuthToken();
       let targetBiz = myBusinesses.find(b => String(b.id) === String(bizId));
 
       if (!targetBiz) {
-        const { data } = await supabase.from('businesses').select('*').eq('id', bizId).single();
-        if (data) targetBiz = data;
+        targetBiz = await api.getBusiness(bizId);
       }
 
       if (targetBiz) {
         setBusiness(targetBiz);
         localStorage.setItem('bookera_active_biz_id', String(targetBiz.id));
 
-        if (targetBiz.cal_settings) setCalSettings(targetBiz.cal_settings);
-        if (targetBiz.shifts) setShifts(targetBiz.shifts);
-
-        const [srvsRes, mastersRes, clientsRes] = await Promise.all([
-          supabase.from('services').select('*').eq('business_id', targetBiz.id).order('order_index', { ascending: true }),
-          supabase.from('staff').select('*').eq('business_id', targetBiz.id),
-          supabase.from('clients').select('*').eq('business_id', targetBiz.id).order('last_visit', { ascending: false })
+        const [srvsData, teamData, clientsData, hoursData] = await Promise.all([
+          api.getBusinessServices(targetBiz.id),
+          api.listStaff(token, targetBiz.id),
+          api.listClients(token, targetBiz.id),
+          api.getBusinessHours(targetBiz.id),
         ]);
 
-        setServices(srvsRes.data || []);
-        setTeam(mastersRes.data || []);
-        if (clientsRes.data) setClientsList(clientsRes.data);
+        setServices(srvsData || []);
+        setTeam(teamData || []);
+        if (clientsData) setClientsList(clientsData);
+        if (hoursData && hoursData.length > 0) {
+          const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+          const byWeekday = new Map(hoursData.map(h => [h.weekday, h]));
+          setShifts(dayNames.map((day, i) => {
+            const h = byWeekday.get(i);
+            return h
+              ? { day, active: h.is_open, start: h.open_time.slice(0, 5), end: h.close_time.slice(0, 5) }
+              : { day, active: true, start: '09:00', end: '20:00' };
+          }));
+        }
         setFilterMaster('all');
       }
     } catch (error) {
@@ -317,16 +325,27 @@ export default function BusinessCabinet() {
           setBusiness(me.business);
           localStorage.setItem('bookera_active_biz_id', String(me.business.id));
 
-          const [srvsData, teamData, clientsData] = await Promise.all([
+          const [srvsData, teamData, clientsData, hoursData] = await Promise.all([
             api.getBusinessServices(me.business.id),
             api.listStaff(token, me.business.id),
             api.listClients(token, me.business.id),
+            api.getBusinessHours(me.business.id),
           ]);
 
           if (isMounted) {
             setServices(srvsData || []);
             setTeam(teamData || []);
             if (clientsData) setClientsList(clientsData);
+            if (hoursData && hoursData.length > 0) {
+              const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+              const byWeekday = new Map(hoursData.map(h => [h.weekday, h]));
+              setShifts(dayNames.map((day, i) => {
+                const h = byWeekday.get(i);
+                return h
+                  ? { day, active: h.is_open, start: h.open_time.slice(0, 5), end: h.close_time.slice(0, 5) }
+                  : { day, active: true, start: '09:00', end: '20:00' };
+              }));
+            }
           }
         }
       } catch (error) {

@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { Business } from '@/types';
 
 // 🟢 ІМПОРТУЄМО ІКОНКИ ТА КОНСТАНТИ З ТВОГО ОКРЕМОГО ФАЙЛУ

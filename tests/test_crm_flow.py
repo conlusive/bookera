@@ -122,3 +122,24 @@ async def test_service_with_addon_ids_does_not_crash(client, auth_headers):
 
     r = await client.post("/services", json={"business_id": business_id, "name": "Базова", "duration_minutes": 30, "price": 300}, headers=headers)
     assert r.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_get_my_profile_replaces_old_profiles_table(client, auth_headers):
+    """GET /crm/businesses/me - заміна старої таблиці 'profiles', якої більше нема."""
+    headers = auth_headers("me-test-user")
+
+    # До реєстрації бізнесу - є юзер, але business_id ще None (якщо юзер взагалі є)
+    r = await client.get("/crm/businesses/me", headers=headers)
+    assert r.status_code == 200
+    assert r.json()["business_id"] is None
+
+    r = await client.post("/crm/businesses", json={"name": "Me Test Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.get("/crm/businesses/me", headers=headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["business_id"] == business_id
+    assert data["role"] == "business_owner"
+    assert data["business"]["id"] == business_id

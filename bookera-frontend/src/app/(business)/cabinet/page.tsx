@@ -71,14 +71,12 @@ export default function BusinessCabinet() {
 
   // 🟢 Змінено тип параметра bizId на number | string
   const fetchClientsFromDB = async (bizId: number | string) => {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('business_id', bizId)
-      .order('last_visit', { ascending: false });
-
-    if (!error && data) {
+    try {
+      const token = await getAuthToken();
+      const data = await api.listClients(token, Number(bizId));
       setClientsList(data);
+    } catch (err) {
+      console.error("Помилка завантаження клієнтів:", err);
     }
   };
 
@@ -104,30 +102,21 @@ export default function BusinessCabinet() {
 
     setIsSavingClient(true);
     try {
-      const safeDate = new Date().toISOString().split('T')[0];
-      const newClientData = {
+      const token = await getAuthToken();
+      await api.createClient(token, {
         business_id: business.id,
         name: newClientForm.name.trim(),
         phone: finalPhone,
-        email: emailTrimmed || null,
-        last_visit: safeDate,
-        visits: 0,
-        spent: 0,
-        tags: ['Новий']
-      };
-
-      const { error: insertError } = await supabase.from('clients').insert([newClientData]);
-      if (insertError) {
-         const { tags, ...clientDataWithoutTags } = newClientData;
-         await supabase.from('clients').insert([clientDataWithoutTags]);
-      }
+        email: emailTrimmed || undefined,
+        tags: ['Новий'],
+      });
 
       await fetchClientsFromDB(business.id);
       setIsAddClientModalOpen(false);
       setNewClientForm({ name: '', phone: '+380', email: '' });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Помилка при створенні клієнта");
+      alert(err?.message || "Помилка при створенні клієнта");
     } finally {
       setIsSavingClient(false);
     }
@@ -136,36 +125,30 @@ export default function BusinessCabinet() {
   const handleDeleteClient = async (clientId: string) => {
     if (!confirm("Ви впевнені, що хочете назавжди видалити цього клієнта з бази? Усі його дані будуть втрачені.")) return;
     try {
-      const {error} = await supabase.from('clients').delete().eq('id', clientId);
-      if (error) {
-        console.error("Помилка видалення клієнта:", error);
-        alert("Не вдалося видалити клієнта.");
-        return;
-      }
+      const token = await getAuthToken();
+      await api.deleteClient(token, Number(clientId));
       setClientsList(prev => prev.filter(c => c.id !== clientId));
       setViewingClient(null);
-    } catch (err) {
-      console.error("Системна помилка:", err);
-      alert("Не вдалося видалити клієнта.");
+    } catch (err: any) {
+      // Бекенд свідомо забороняє видаляти клієнтів з історією бронювань
+      // або нарахованими балами (409) - показуємо причину, а не спільну помилку.
+      console.error("Помилка видалення клієнта:", err);
+      alert(err?.message || "Не вдалося видалити клієнта.");
     }
   };
 
   const handleSaveClientNotes = async () => {
     if (!viewingClient) return;
     try {
-      const { error } = await supabase.from('clients').update({ notes: editingClientNotes, allergies: editingClientAllergies }).eq('id', viewingClient.id);
-      if (error) {
-         console.error("Помилка збереження:", error);
-         alert("Не вдалося зберегти зміни.");
-         return;
-      }
+      const token = await getAuthToken();
+      await api.updateClient(token, viewingClient.id, { notes: editingClientNotes, allergies: editingClientAllergies });
       const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, notes: editingClientNotes, allergies: editingClientAllergies } : c);
       setClientsList(updatedClients);
       setViewingClient({ ...viewingClient, notes: editingClientNotes, allergies: editingClientAllergies });
       alert("Зміни успішно збережено!");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Системна помилка:", err);
-      alert("Не вдалося зберегти зміни.");
+      alert(err?.message || "Не вдалося зберегти зміни.");
     }
   };
 
@@ -192,7 +175,8 @@ export default function BusinessCabinet() {
     const updatedTags = [...currentTags, newTag.trim()];
 
     try {
-      await supabase.from('clients').update({ tags: updatedTags }).eq('id', viewingClient.id);
+      const token = await getAuthToken();
+      await api.updateClient(token, viewingClient.id, { tags: updatedTags });
       const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, tags: updatedTags } : c);
       setClientsList(updatedClients);
       setViewingClient({ ...viewingClient, tags: updatedTags });
@@ -205,7 +189,8 @@ export default function BusinessCabinet() {
      if (!confirm(`Видалити тег "${tagToRemove}"?`)) return;
      const updatedTags = viewingClient.tags.filter((t: string) => t !== tagToRemove);
      try {
-        await supabase.from('clients').update({ tags: updatedTags }).eq('id', viewingClient.id);
+        const token = await getAuthToken();
+        await api.updateClient(token, viewingClient.id, { tags: updatedTags });
         const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, tags: updatedTags } : c);
         setClientsList(updatedClients);
         setViewingClient({ ...viewingClient, tags: updatedTags });
@@ -256,6 +241,8 @@ export default function BusinessCabinet() {
       if (targetBiz) {
         setBusiness(targetBiz);
         localStorage.setItem('bookera_active_biz_id', String(targetBiz.id));
+        const savedCal = localStorage.getItem(`bookera_cal_settings_${targetBiz.id}`);
+        if (savedCal) setCalSettings(JSON.parse(savedCal));
 
         const [srvsData, teamData, clientsData, hoursData] = await Promise.all([
           api.getBusinessServices(targetBiz.id),
@@ -324,6 +311,8 @@ export default function BusinessCabinet() {
           setMyBusinesses([me.business]);
           setBusiness(me.business);
           localStorage.setItem('bookera_active_biz_id', String(me.business.id));
+          const savedCal = localStorage.getItem(`bookera_cal_settings_${me.business.id}`);
+          if (savedCal) setCalSettings(JSON.parse(savedCal));
 
           const [srvsData, teamData, clientsData, hoursData] = await Promise.all([
             api.getBusinessServices(me.business.id),
@@ -364,48 +353,43 @@ export default function BusinessCabinet() {
     async function fetchAppointments() {
       if (!business) return;
 
-      const y = currentDate.getFullYear();
-      const m = currentDate.getMonth();
-
-      const startFetch = new Date(y, m, 1);
-      startFetch.setDate(startFetch.getDate() - 7);
-
-      const endFetch = new Date(y, m + 1, 0);
-      endFetch.setDate(endFetch.getDate() + 7);
-      endFetch.setHours(23, 59, 59, 999);
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('business_id', business.id)
-        .gte('booking_date', toLocalDateStr(startFetch))
-        .lte('booking_date', toLocalDateStr(endFetch));
-
-      if (!error && data) {
+      try {
+        const token = await getAuthToken();
+        // Бекенд віддає одне поле start_time/end_time (повний ISO datetime),
+        // а решта цього файлу очікує старий формат booking_date + окремі
+        // "HH:MM:SS" рядки - перетворюємо на межі отримання даних, щоб не
+        // чіпати весь рендер-код нижче.
+        const apiAppointments = await api.getBookedAppointments(token, business.id);
         const currentTime = new Date();
 
-        const processedData = data.map(app => {
-          if (app.status === 'blocked' || app.color === 'blocked') return app;
-          if (app.status !== 'confirmed' && app.status !== undefined && app.status !== null) return app;
+        const processedData = apiAppointments.map((app: any) => {
+          const start = new Date(app.start_time);
+          const end = new Date(app.end_time);
+          const pad = (n: number) => String(n).padStart(2, '0');
 
-          if (app.booking_date && app.end_time && app.start_time) {
-            const [year, month, day] = app.booking_date.split('-').map(Number);
-            const [startH] = app.start_time.split(':').map(Number);
-            let [endH, endM] = app.end_time.split(':').map(Number);
+          const mapped = {
+            ...app,
+            staff_id: app.master_id,
+            booking_date: toLocalDateStr(start),
+            start_time: `${pad(start.getHours())}:${pad(start.getMinutes())}:00`,
+            end_time: `${pad(end.getHours())}:${pad(end.getMinutes())}:00`,
+          };
 
-            if (endH < startH) endH += 24;
-
-            const endDateTime = new Date(year, month - 1, day, endH, endM);
-
-            if (currentTime > endDateTime) {
-              supabase.from('bookings').update({ status: 'completed' }).eq('id', app.id).then();
-              return { ...app, status: 'completed' };
-            }
+          if (mapped.status === 'blocked') return mapped;
+          if (mapped.status === 'confirmed' && currentTime > end) {
+            // Той самий "автозавершити минулі візити" ефект, що був раніше -
+            // тепер справжній PATCH замість fire-and-forget Supabase-виклику,
+            // і що важливо: тепер це коректно нараховує комісію (якщо джерело -
+            // маркетплейс), бо йде через ту саму логіку update_appointment_status.
+            api.updateAppointmentStatus(token, app.id, 'completed').catch(() => {});
+            return { ...mapped, status: 'completed' };
           }
-          return app;
+          return mapped;
         });
 
         setAppointments(processedData);
+      } catch (err) {
+        console.error("Помилка завантаження записів:", err);
       }
     }
     void fetchAppointments();
@@ -482,7 +466,19 @@ export default function BusinessCabinet() {
 
   const handleSaveShifts = async () => {
     if (business) {
-      await supabase.from('businesses').update({ shifts: shifts }).eq('id', business.id);
+      try {
+        const token = await getAuthToken();
+        const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+        const hoursPayload = shifts.map((s: any) => ({
+          weekday: dayNames.indexOf(s.day),
+          is_open: s.active,
+          open_time: s.start,
+          close_time: s.end,
+        }));
+        await api.setBusinessHours(token, business.id, hoursPayload);
+      } catch (err: any) {
+        alert(err?.message || "Не вдалося зберегти графік роботи");
+      }
     }
     setShowShiftsModal(false);
   };
@@ -500,101 +496,48 @@ export default function BusinessCabinet() {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return alert("Помилка: Ви не авторизовані (сесія відсутня).");
+      const token = await getAuthToken();
 
       const selectedService = services.find(s => String(s.id) === String(apptForm.service_id));
       if (!isBlockMode && !selectedService) return alert("Оберіть існуючу послугу.");
 
       const [hours, minutes] = apptForm.time.split(':').map(Number);
-      const startDateTime = new Date(1970, 0, 1, hours, minutes);
-      const endDateTime = new Date(startDateTime.getTime() + (isBlockMode ? apptForm.duration : selectedService.duration) * 60000);
+      const startDateTime = new Date(`${apptForm.date}T00:00:00`);
+      startDateTime.setHours(hours, minutes, 0, 0);
 
-      const startTimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
-      const endTimeStr = `${endDateTime.getHours().toString().padStart(2, '0')}:${endDateTime.getMinutes().toString().padStart(2, '0')}:00`;
+      // Весь пошук/створення клієнта за телефоном тепер робить бекенд
+      // (POST /crm/appointments) - раніше тут було ~40 рядків ручного
+      // select+update/insert напряму в Supabase.
+      const created = await api.createManualAppointment(token, {
+        business_id: business.id,
+        service_id: isBlockMode ? undefined : Number(apptForm.service_id),
+        start_time: startDateTime.toISOString(),
+        duration_minutes: isBlockMode ? apptForm.duration : undefined,
+        master_id: apptForm.staff_id || undefined,
+        client_name: isBlockMode ? undefined : apptForm.client_name,
+        client_phone: isBlockMode ? undefined : finalPhone,
+        is_block: isBlockMode,
+      });
 
-      const bookingData = isBlockMode
-      ? {
-          business_id: business.id,
-          staff_id: apptForm.staff_id || null,
-          service_id: null,
-          client_name: 'Неробочий час',
-          client_phone: '0000000000',
-          client_email: null,
-          booking_date: apptForm.date,
-          start_time: startTimeStr,
-          end_time: endTimeStr,
-          status: 'blocked'
-        }
-      : {
-          business_id: business.id,
-          staff_id: apptForm.staff_id || null,
-          service_id: apptForm.service_id,
-          client_name: apptForm.client_name,
-          client_phone: finalPhone,
-          client_email: null,
-          booking_date: apptForm.date,
-          start_time: startTimeStr,
-          end_time: endTimeStr,
-          status: 'confirmed',
-          source: apptForm.source
-        };
-
-      const { data, error } = await supabase.from('bookings').insert([bookingData]).select().single();
-
-      if (error) {
-        console.error("Деталі помилки Supabase:", error);
-        alert(`Помилка бази даних: ${error.message}`);
-      } else if (data) {
-
-        if (!isBlockMode) {
-          const servicePrice = selectedService ? selectedService.price : 0;
-          const name = apptForm.client_name?.trim() || 'Невідомий';
-          const safeDate = apptForm.date ? apptForm.date.substring(0, 10) : new Date().toISOString().split('T')[0];
-
-          try {
-            let existingClient = null;
-            if (finalPhone !== '') {
-              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('phone', finalPhone).limit(1);
-              if (data && data.length > 0) existingClient = data[0];
-            }
-            if (!existingClient && name !== 'Невідомий') {
-              const { data } = await supabase.from('clients').select('*').eq('business_id', business.id).eq('name', name).limit(1);
-              if (data && data.length > 0) existingClient = data[0];
-            }
-
-            if (existingClient) {
-              await supabase.from('clients').update({
-                last_visit: safeDate,
-                visits: (existingClient.visits || 0) + 1,
-                spent: (existingClient.spent || 0) + servicePrice,
-                phone: existingClient.phone || finalPhone
-              }).eq('id', existingClient.id);
-            } else {
-              const { error: insertError } = await supabase.from('clients').insert([{
-                business_id: business.id,
-                name: name,
-                phone: finalPhone,
-                last_visit: safeDate,
-                visits: 1,
-                spent: servicePrice,
-                source: apptForm.source
-              }]);
-              if (insertError) console.error("Деталі помилки Supabase:", insertError);
-            }
-            await fetchClientsFromDB(business.id);
-          } catch (syncErr) {
-            console.error("Помилка коду при синхронізації клієнта:", syncErr);
-          }
-        }
-        setAppointments([...appointments, data]);
-        setIsApptModalOpen(false);
-        setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60, source: 'Адмін-панель' });
-        setIsBlockMode(false);
+      if (!isBlockMode) {
+        await fetchClientsFromDB(business.id);
       }
+
+      const end = new Date(created.end_time);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      setAppointments([...appointments, {
+        ...created,
+        staff_id: created.master_id,
+        booking_date: apptForm.date,
+        start_time: `${pad(hours)}:${pad(minutes)}:00`,
+        end_time: `${pad(end.getHours())}:${pad(end.getMinutes())}:00`,
+      }]);
+      setIsApptModalOpen(false);
+      setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60, source: 'Адмін-панель' });
+      setIsBlockMode(false);
     } catch (err: any) {
       console.error("Системна помилка створення запису:", err);
-      alert(`Критична помилка: ${err.message || 'Невідома помилка'}`);
+      alert(`Помилка: ${err.message || 'Невідома помилка'}`);
     }
   };
 
@@ -603,19 +546,15 @@ export default function BusinessCabinet() {
     const finalStatus = appToUpdate.status === newStatus ? 'confirmed' : newStatus;
 
     try {
-      const { error } = await supabase.from('bookings').update({ status: finalStatus }).eq('id', appToUpdate.id);
-      if (error) {
-         console.error(error);
-         alert("Помилка при оновленні статусу запису.");
-         return;
-      }
+      const token = await getAuthToken();
+      await api.updateAppointmentStatus(token, appToUpdate.id, finalStatus as any);
       setAppointments(prev => prev.map(app => app.id === appToUpdate.id ? { ...app, status: finalStatus } : app));
       if (selectedBooking && selectedBooking.id === appToUpdate.id) {
          setSelectedBooking({ ...selectedBooking, status: finalStatus });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Системна помилка при оновленні статусу запису.");
+      alert(err?.message || "Системна помилка при оновленні статусу запису.");
     }
   };
 
@@ -643,7 +582,14 @@ export default function BusinessCabinet() {
     setDragConfirmData(null);
 
     if (business) {
-       await supabase.from('bookings').update({ booking_date: newDateStr, start_time: newStart, end_time: newEnd, status: newStatus }).eq('id', app.id);
+       try {
+         const token = await getAuthToken();
+         const newStartIso = new Date(`${newDateStr}T${newStart}`);
+         await api.rescheduleAppointment(token, app.id, newStartIso.toISOString());
+       } catch (err: any) {
+         console.error(err);
+         alert(err?.message || "Не вдалося перенести запис");
+       }
     }
   };
 
@@ -677,7 +623,14 @@ export default function BusinessCabinet() {
      setAppointments(prev => prev.map(a => a.id === updatedApp.id ? updatedApp : a));
 
      if (business) {
-       await supabase.from('bookings').update({ start_time: newStartStr, end_time: newEndStr, status: newStatus }).eq('id', updatedApp.id);
+       try {
+         const token = await getAuthToken();
+         const newStartIso = new Date(`${selectedBooking.booking_date}T${newStartStr}`);
+         await api.rescheduleAppointment(token, updatedApp.id, newStartIso.toISOString());
+       } catch (err: any) {
+         console.error(err);
+         alert(err?.message || "Не вдалося перенести запис");
+       }
      }
   };
 
@@ -688,18 +641,17 @@ export default function BusinessCabinet() {
     if (!confirm(`Ви впевнені, що хочете скасувати ${isBlock ? 'цю перерву' : 'цей запис'}?`)) return;
 
     try {
-      const { error } = await supabase.from('bookings').delete().eq('id', selectedBooking.id);
-      if (error) {
-         console.error(error);
-         alert("Помилка при скасуванні. Перевірте консоль.");
-         return;
-      }
+      const token = await getAuthToken();
+      // 'cancelled' замість жорсткого видалення - узгоджено з рештою системи,
+      // де історія запису зберігається (потрібна для статистики й обліку),
+      // а не зникає безслідно.
+      await api.updateAppointmentStatus(token, selectedBooking.id, 'cancelled');
       setAppointments(prev => prev.filter(a => a.id !== selectedBooking.id));
       setIsBookingDetailsModalOpen(false);
       setSelectedBooking(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Системна помилка при скасуванні.");
+      alert(err?.message || "Системна помилка при скасуванні.");
     }
   };
 
@@ -2076,7 +2028,10 @@ export default function BusinessCabinet() {
                   btn.disabled = true;
 
                   if (business) {
-                    await supabase.from('businesses').update({ cal_settings: calSettings }).eq('id', business.id);
+                    // cal_settings - лише вигляд календаря (кольори, режим
+                    // перегляду), не бізнес-дані - достатньо зберігати
+                    // локально в браузері, без окремого бекенд-запиту.
+                    localStorage.setItem(`bookera_cal_settings_${business.id}`, JSON.stringify(calSettings));
                     setCalendarView(calSettings.defaultView as any);
                     localStorage.setItem('bookera_calendarView', calSettings.defaultView);
                   }

@@ -506,17 +506,26 @@ export const api = {
     token: string,
     payload: {
       business_id: number;
-      service_id: number;
+      service_id?: number;
       start_time: string;
+      duration_minutes?: number;
       master_id?: string;
       client_id?: number;
       client_name?: string;
       client_phone?: string;
       client_email?: string;
       notes?: string;
+      is_block?: boolean;
     }
   ): Promise<Appointment> {
     return authFetch(`/crm/appointments`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async rescheduleAppointment(token: string, appointmentId: number, startTime: string): Promise<Appointment> {
+    return authFetch(`/crm/appointments/${appointmentId}/reschedule`, token, {
+      method: 'PATCH',
+      body: JSON.stringify({ start_time: startTime }),
+    });
   },
 
   // === CRM: СТАТИСТИКА ===

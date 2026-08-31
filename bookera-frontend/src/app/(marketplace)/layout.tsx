@@ -6,8 +6,8 @@ export default function MarketplaceLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white">
-      <main className="flex-1">{children}</main>
+    <div className="min-h-screen flex flex-col bg-white text-[#222222] selection:bg-[#C2D8C4] selection:text-[#111827]">
+      <main className="flex-1 bg-white">{children}</main>
     </div>
   );
 }

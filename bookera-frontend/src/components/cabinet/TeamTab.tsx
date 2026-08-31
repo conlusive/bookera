@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
 
 
@@ -113,7 +115,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [staffServiceSearchQuery, setStaffServiceSearchQuery] = useState('');
 
   // 🟢 СТЕЙТ ДЛЯ ЗАРПЛАТИ
-  const [unpaidAppointments, setUnpaidAppointments] = useState<any[]>([]);
+  const [payoutPreview, setPayoutPreview] = useState<{
+    gross_revenue: number; commission_rate: number; payout_amount: number;
+    completed_appointments_count: number; period_start: string;
+  } | null>(null);
   const [isLoadingFinance, setIsLoadingFinance] = useState(false);
 
 // 🟢 Стан збереження форми (для кнопки)
@@ -143,53 +148,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     }, 2700);
   };
 
-  // 🟢 Автоматична синхронізація імені та телефону співробітника з його зареєстрованого профілю
-  useEffect(() => {
-    async function syncStaffWithProfiles() {
-      if (!team || team.length === 0) return;
-
-      const emailsToSync = team
-        .filter((t: any) => t.email && (t.status === 'pending' || t.name === t.email.split('@')[0] || !t.phone))
-        .map((t: any) => t.email.toLowerCase());
-
-      if (emailsToSync.length === 0) return;
-
-      const { data: matchedProfiles } = await supabase
-        .from('profiles')
-        .select('email, full_name, phone')
-        .in('email', emailsToSync);
-
-      if (matchedProfiles && matchedProfiles.length > 0) {
-        let hasChanges = false;
-        const updatedTeam = team.map((member: any) => {
-          const profile = matchedProfiles.find((p: any) => p.email?.toLowerCase() === member.email?.toLowerCase());
-          if (profile && (member.name !== profile.full_name || member.phone !== profile.phone || member.status !== 'active')) {
-            hasChanges = true;
-            const updated = {
-              ...member,
-              name: profile.full_name || member.name,
-              phone: profile.phone || member.phone,
-              status: 'active'
-            };
-            // Оновлюємо в базі staff
-            supabase.from('staff').update({
-              name: updated.name,
-              phone: updated.phone,
-              status: 'active'
-            }).eq('id', member.id).then();
-            return updated;
-          }
-          return member;
-        });
-
-        if (hasChanges) {
-          setTeam(updatedTeam);
-        }
-      }
-    }
-
-    void syncStaffWithProfiles();
-  }, [team, supabase, setTeam]);
+  // ПРИМІТКА: тут раніше був useEffect, що синхронізував ім'я/телефон
+  // співробітника з таблиці 'profiles' (auth-профіль) у таблицю 'staff'.
+  // Обидві таблиці більше не існують - персонал тепер напряму User-модель
+  // на бекенді, і api.listStaff() вже повертає актуальні full_name/phone
+  // без потреби в окремій синхронізації.
 
   // Стани модалки передачі прав
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -310,11 +273,12 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const fetchUnpaidAppointments = async (staffId: string, lastPayoutDate: string | null) => {
     setIsLoadingFinance(true);
     try {
-      let query = supabase.from('bookings').select('*').eq('business_id', business.id).eq('staff_id', staffId).eq('status', 'completed');
-      if (lastPayoutDate) query = query.gt('booking_date', lastPayoutDate.split('T')[0]);
-
-      const { data, error } = await query;
-      if (!error && data) setUnpaidAppointments(data);
+      const token = await getAuthToken();
+      // Розрахунок тепер повністю на бекенді (той самий period-based підхід,
+      // що не дає одному й тому ж візиту потрапити у дві виплати підряд) -
+      // раніше фронтенд сам тягнув сирі 'bookings' і рахував суму на клієнті.
+      const preview = await api.getPayoutPreview(token, business.id, staffId);
+      setPayoutPreview(preview);
     } catch (err) {
       console.error(err);
     } finally {
@@ -407,28 +371,36 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     handleUpdateLocalStaff(updates);
 
     try {
-      // Затримка 600мс гарантує, що анімація кнопки буде плавною і помітною
+      // Бекенд підтримує: full_name, phone, specialization, role,
+      // commission_rate, is_active. Поля assigned_services/shifts/
+      // provides_services - деталізація на рівні "які послуги виконує САМЕ
+      // цей майстер" і "особистий графік майстра окремо від графіка
+      // закладу" - такого рівня в моделі User на бекенді поки немає,
+      // тому ці поля лишаються лише в локальному стані цього сеансу
+      // (не губляться одразу, але й не переживуть перезавантаження сторінки).
+      const backendUpdates: Record<string, any> = {};
+      if (updates.name !== undefined) backendUpdates.full_name = updates.name;
+      if (updates.phone !== undefined) backendUpdates.phone = updates.phone;
+      if (updates.role !== undefined) backendUpdates.role = updates.role;
+      if (updates.commission_rate !== undefined) backendUpdates.commission_rate = updates.commission_rate;
+      if (updates.specialization !== undefined) backendUpdates.specialization = updates.specialization;
+
+      const hasBackendFields = Object.keys(backendUpdates).length > 0;
+
       const [res] = await Promise.all([
-        (async () => {
-          if (isOwnerProfile && currentStaff.id === userProfile?.id) {
-            if (updates.name || updates.phone) {
-              return await supabase.from('profiles').update({
-                full_name: updates.name || currentStaff.name,
-                phone: updates.phone || currentStaff.phone
-              }).eq('id', userProfile.id);
-            }
-            return { error: null };
-          }
-          return await supabase.from('staff').update(updates).eq('id', currentStaff.id);
-        })(),
+        hasBackendFields
+          ? (async () => {
+              const token = await getAuthToken();
+              await api.updateStaff(token, String(currentStaff.id), backendUpdates);
+            })()
+          : Promise.resolve(),
         new Promise(resolve => setTimeout(resolve, 600))
       ]);
 
-      if (res.error) throw res.error;
       if (notify) showToast("Зміни успішно збережено", "success");
     } catch (err: any) {
       console.error("Помилка збереження в БД:", err);
-      showToast("Помилка при збереженні даних", "error");
+      showToast(err?.message || "Помилка при збереженні даних", "error");
     } finally {
       setIsSavingStaff(false);
     }
@@ -440,11 +412,12 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     if (!confirm(`Ви впевнені, що хочете звільнити ${currentStaff.name}? Усі майбутні записи потрібно буде перенести вручну.`)) return;
 
     try {
-      await supabase.from('staff').delete().eq('id', currentStaff.id);
+      const token = await getAuthToken();
+      await api.removeStaff(token, String(currentStaff.id));
       setTeam(team.filter((t: any) => String(t.id) !== String(currentStaff.id)));
       setSelectedStaffId(null);
       setStaffActiveTab('general');
-    } catch (err) { alert("Не вдалося видалити співробітника."); }
+    } catch (err: any) { alert(err?.message || "Не вдалося видалити співробітника."); }
   };
 
   // 🟢 ЛОГІКА ПЕРЕДАЧІ ПРАВ ВЛАСНИКА
@@ -454,36 +427,17 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
     setIsTransferring(true);
     try {
-      const targetStaff = team.find((t: any) => String(t.id) === String(newOwnerId));
-      if (!targetStaff || !targetStaff.email) {
-          throw new Error("Не знайдено email вибраного співробітника.");
-      }
-
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', targetStaff.email)
-        .single();
-
-      if (profileError || !profileData) {
-        throw new Error("Цей співробітник ще не зареєстрував свій акаунт у системі. Передача неможлива.");
-      }
-
-      const { error: bizError } = await supabase
-        .from('businesses')
-        .update({ owner_id: profileData.id })
-        .eq('id', business.id);
-
-      if (bizError) throw new Error("Не вдалося оновити дані бізнесу: " + bizError.message);
-
-      await supabase.from('staff').update({ role: 'owner' }).eq('id', targetStaff.id);
-      await supabase.from('staff').update({ role: 'admin' }).eq('id', currentStaff.id);
+      // Один запит замість трьох окремих (businesses.update + 2x staff.update) -
+      // бекенд сам перевіряє, що це РЕАЛЬНИЙ власник (не просто хтось із
+      // доступом до CRM), і атомарно міняє і owner_id, і ролі обох сторін.
+      const token = await getAuthToken();
+      await api.transferOwnership(token, business.id, String(newOwnerId));
 
       alert("Права власності успішно передано!");
       window.location.reload();
 
     } catch (err: any) {
-      alert("Помилка: " + err.message);
+      alert("Помилка: " + (err?.message || "Невідома помилка"));
     } finally {
       setIsTransferring(false);
       setIsTransferModalOpen(false);
@@ -948,86 +902,24 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                 {/* 🟢 М'ЯТНИЙ ВІДЖЕТ ЗАРОБІТКУ ТА ПОДАТКІВ */}
                 {(() => {
-                  const lastPayoutDate = currentStaff.last_payout_date ? new Date(currentStaff.last_payout_date) : null;
-                  const masterRevenue = unpaidAppointments.reduce((sum:number, app:any) => sum + (services.find((s:any) => String(s.id) === String(app.service_id))?.price || 0), 0);
-
-                  const fixedToPay = currentStaff.fixed_salary || 0;
-                  const commissionEarned = masterRevenue * ((currentStaff.commission_rate || 0) / 100);
-                  const subtotal = fixedToPay + commissionEarned;
-
-                  const taxAmount = subtotal * ((currentStaff.tax_rate || 0) / 100);
-                  const totalPending = Math.round(subtotal - taxAmount);
-
-                  const isPayoutDisabled = totalPending <= 0;
+                  if (!payoutPreview) return null;
+                  const periodStart = payoutPreview.period_start ? new Date(payoutPreview.period_start) : null;
+                  const isPayoutDisabled = payoutPreview.payout_amount <= 0;
 
                   const handlePayout = async () => {
                      if (isPayoutDisabled) return;
-                     if (!confirm(`Зафіксувати виплату ${totalPending.toLocaleString('uk-UA')} ₴ для ${currentStaff.name}? Баланс буде обнулено.`)) return;
-
-                     // 🟢 Формуємо надійну локальну дату (YYYY-MM-DD), щоб уникнути багів часових поясів
-                     const newDate = new Date();
-                     const newDateStr = newDate.toISOString();
-                     const localYMD = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}-${String(newDate.getDate()).padStart(2, '0')}`;
-
-                     const newPayout = {
-                        id: Date.now(),
-                        date: newDateStr,
-                        amount: totalPending,
-                        services_count: unpaidAppointments.length,
-                        revenue: masterRevenue,
-                        fixed_part: fixedToPay,
-                        commission_part: commissionEarned,
-                        tax_deducted: Math.round(taxAmount),
-                        method: currentStaff.payment_method || 'cash' // Додаємо спосіб виплати в історію
-                     };
-
-                     const newHistory = [newPayout, ...(currentStaff.payout_history || [])];
+                     if (!confirm(`Зафіксувати виплату ${payoutPreview.payout_amount.toLocaleString('uk-UA')} ₴ для ${currentStaff.name}?`)) return;
 
                      try {
-                        // 1. Оновлюємо історію майстра з перевіркою помилок
-                        const { error: staffError } = await supabase.from('staff').update({ payout_history: newHistory, last_payout_date: newDateStr }).eq('id', currentStaff.id);
-                        if (staffError) throw new Error(staffError.message);
-
-                        handleUpdateLocalStaff({ payout_history: newHistory, last_payout_date: newDateStr });
-
-                        // 2. Додавання у витрати: Окремо Зарплата, окремо Податок
-                        const expensesToInsert = [];
-
-                        if (totalPending > 0) {
-                           expensesToInsert.push({
-                              business_id: business.id,
-                              amount: totalPending,
-                              category: 'Зарплата',
-                              description: `Виплата майстру: ${currentStaff.name}`,
-                              expense_date: localYMD, // Використовуємо безпечну дату
-                              recurrence: 'none'
-                           });
-                        }
-
-                        if (taxAmount > 0) {
-                           expensesToInsert.push({
-                              business_id: business.id,
-                              amount: Math.round(taxAmount),
-                              category: 'Податки',
-                              description: `Утриманий податок: ${currentStaff.name}`,
-                              expense_date: localYMD,
-                              recurrence: 'none'
-                           });
-                        }
-
-                        // 3. Запис у базу з обробкою помилки
-                        if (expensesToInsert.length > 0) {
-                           const { error: expError } = await supabase.from('expenses').insert(expensesToInsert);
-                           if (expError) {
-                              console.error("Помилка запису витрат:", expError);
-                              alert("Зарплату виплачено, але сталася помилка при додаванні у Витрати: " + expError.message);
-                           }
-                        }
-
-                        setUnpaidAppointments([]);
-                        showToast(`Виплату ${totalPending.toLocaleString('uk-UA')} ₴ успішно зафіксовано!`, "success");
+                        const token = await getAuthToken();
+                        // Бекенд сам: закриває період (щоб той самий візит не
+                        // потрапив у виплату двічі), створює пов'язаний запис
+                        // витрати - раніше це було 3 окремих ручних Supabase-запити.
+                        await api.createPayout(token, business.id, currentStaff.id);
+                        setPayoutPreview({ ...payoutPreview, payout_amount: 0, gross_revenue: 0, completed_appointments_count: 0 });
+                        showToast(`Виплату ${payoutPreview.payout_amount.toLocaleString('uk-UA')} ₴ успішно зафіксовано!`, "success");
                      } catch (err: any) {
-                        showToast("Помилка збереження виплати", "error");
+                        showToast(err?.message || "Помилка збереження виплати", "error");
                      }
                   };
 
@@ -1040,39 +932,23 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                <span style={{ fontWeight: '800', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Невиплачений дохід майстра</span>
                             </div>
 
-                            {/* 🟢 Змінено: забрали календар, повернули текст розрахунку */}
                             <p style={{ fontSize: '0.85rem', color: colors.wMintText, margin: '0 0 1.5rem 0', opacity: 0.8 }}>
-                              Розрахунок з: <b>{lastPayoutDate ? lastPayoutDate.toLocaleDateString('uk-UA') : 'початку роботи'}</b>
-                              {' '}(Виконано: <b>{unpaidAppointments.length}</b> візитів на суму <b>{masterRevenue.toLocaleString('uk-UA')} ₴</b>)
+                              Розрахунок з: <b>{periodStart ? periodStart.toLocaleDateString('uk-UA') : 'початку роботи'}</b>
+                              {' '}(Виконано: <b>{payoutPreview.completed_appointments_count}</b> візитів на суму <b>{payoutPreview.gross_revenue.toLocaleString('uk-UA')} ₴</b>)
                             </p>
 
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1.5rem', flexWrap: 'wrap' }}>
                               <div>
-                                <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Ставка</div>
-                                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{fixedToPay.toLocaleString('uk-UA')} ₴</div>
+                                <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Відсоток ({payoutPreview.commission_rate}%)</div>
+                                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{payoutPreview.gross_revenue.toLocaleString('uk-UA')} ₴</div>
                               </div>
-                              <div style={{ fontSize: '1.1rem', color: colors.wMintBorder, paddingBottom: '2px' }}>+</div>
-                              <div>
-                                <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Відсоток ({currentStaff.commission_rate || 0}%)</div>
-                                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{commissionEarned.toLocaleString('uk-UA')} ₴</div>
-                              </div>
-
-                              {taxAmount > 0 && (
-                                <>
-                                  <div style={{ fontSize: '1.1rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>-</div>
-                                  <div>
-                                    <div style={{ fontSize: '0.75rem', color: colors.red, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Податок ({currentStaff.tax_rate}%)</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.red }}>{Math.round(taxAmount).toLocaleString('uk-UA')} ₴</div>
-                                  </div>
-                                </>
-                              )}
 
                               <div style={{ fontSize: '1.1rem', color: colors.wMintBorder, paddingBottom: '2px', marginLeft: '0.5rem' }}>=</div>
 
                               <div style={{ marginLeft: '0.5rem' }}>
                                 <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', fontWeight: '800', textTransform: 'uppercase' }}>До виплати</div>
                                 <div style={{ fontSize: '2rem', fontWeight: '800', color: colors.wMintText, lineHeight: 1, letterSpacing: '-1px' }}>
-                                  {totalPending.toLocaleString('uk-UA')} <span style={{fontSize: '1.2rem', opacity: 0.8}}>₴</span>
+                                  {payoutPreview.payout_amount.toLocaleString('uk-UA')} <span style={{fontSize: '1.2rem', opacity: 0.8}}>₴</span>
                                 </div>
                               </div>
                             </div>
@@ -1089,11 +965,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                >
                                  <Icons.CheckCircle /> {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати'}
                                </button>
-                               {!isPayoutDisabled && (
-                                  <div style={{ fontSize: '0.75rem', color: colors.wMintText, fontWeight: '600', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                     {currentStaff.payment_method === 'card' ? <><CreditCardIcon /> На картку</> : <><WalletIcon /> Готівкою</>}
-                                  </div>
-                               )}
                             </div>
                           )}
                       </div>

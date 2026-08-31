@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, date
 
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Numeric, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date, Numeric, Text, JSON
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -30,6 +30,12 @@ class Client(Base):
     is_blacklisted = Column(Boolean, default=False)
     balance = Column(Numeric(10, 2), default=0)  # під майбутню фічу балів/балансу
 
+    birthday = Column(Date, nullable=True)
+    instagram = Column(String, nullable=True)
+    formulas = Column(Text, nullable=True)  # рецепти фарби/формули процедур
+    consent_photo = Column(Boolean, default=False)
+    consent_procedure = Column(Boolean, default=False)
+
     visits_count = Column(Integer, default=0)
     total_spent = Column(Numeric(10, 2), default=0)
     last_visit_at = Column(DateTime, nullable=True)
@@ -40,6 +46,13 @@ class Client(Base):
 
     business = relationship("Business", back_populates="clients")
     appointments = relationship("Appointment", back_populates="client")
+    links = relationship("ClientLink", foreign_keys="ClientLink.client_id", cascade="all, delete-orphan")
+
+    @property
+    def linked_client_ids(self) -> list:
+        """Обчислюване поле для API-відповіді. Викликач має заздалегідь
+        підвантажити links через selectinload, інакше впаде MissingGreenlet."""
+        return [link.linked_client_id for link in self.links]
 
 
 class ClientLink(Base):

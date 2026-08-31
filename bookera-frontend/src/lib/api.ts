@@ -89,6 +89,11 @@ export interface Client {
   total_spent: number;
   last_visit_at?: string;
   medical_pdf_url?: string;
+  birthday?: string;
+  instagram?: string;
+  formulas?: string;
+  consent_photo?: boolean;
+  consent_procedure?: boolean;
   created_at?: string;
 }
 
@@ -401,7 +406,7 @@ export const api = {
     return authFetch(`/crm/clients?${query}`, token);
   },
 
-  async createClient(token: string, payload: { business_id: number; name: string; phone?: string; email?: string; notes?: string; allergies?: string; tags?: string[] }): Promise<Client> {
+  async createClient(token: string, payload: { business_id: number; name: string; phone?: string; email?: string; notes?: string; allergies?: string; tags?: string[]; birthday?: string; instagram?: string }): Promise<Client> {
     return authFetch(`/crm/clients`, token, { method: 'POST', body: JSON.stringify(payload) });
   },
 

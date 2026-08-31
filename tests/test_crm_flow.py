@@ -60,7 +60,28 @@ async def test_full_business_onboarding_flow(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_client_with_appointment_history_cannot_be_deleted(client, auth_headers):
+async def test_client_link_and_unlink(client, auth_headers):
+    headers = auth_headers("link-owner")
+    r = await client.post("/crm/businesses", json={"name": "Link Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Мама"}, headers=headers)
+    client_a = r.json()["id"]
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Донька"}, headers=headers)
+    client_b = r.json()["id"]
+
+    r = await client.post(f"/crm/clients/{client_a}/link/{client_b}", headers=headers)
+    assert r.status_code == 200
+    assert client_b in r.json()["linked_client_ids"]
+
+    # симетричність - у другого теж має з'явитись зв'язок
+    r = await client.get(f"/crm/clients?business_id={business_id}", headers=headers)
+    by_id = {c["id"]: c for c in r.json()}
+    assert client_a in by_id[client_b]["linked_client_ids"]
+
+    r = await client.delete(f"/crm/clients/{client_a}/link/{client_b}", headers=headers)
+    assert r.status_code == 200
+    assert client_b not in r.json()["linked_client_ids"]
     """
     Регресійний тест: раніше видалення клієнта з бронюваннями мовчки
     обнуляло client_id на його історії відвідувань (побічний ефект ORM),

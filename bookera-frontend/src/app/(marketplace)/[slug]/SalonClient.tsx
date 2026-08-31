@@ -158,10 +158,15 @@ export default function SalonClient({
     }
   }, [isModalOpen, selectedDate, selectedService, selectedMasterId, fetchAvailableSlots]);
 
+  // Салон дає клієнтам своє "пряме" посилання (Instagram-біо тощо) з ?dl=ТОКЕН -
+  // такі візити не обкладаються комісією. Токен лише зберігається тут;
+  // фінальне рішення "прямий чи маркетплейс" ухвалює сервер, звіряючи його
+  // з business.direct_link_token. Раніше було навпаки: будь-яка URL БЕЗ
+  // параметра ?ref=bookera автоматично рахувалась "прямою", тобто уникнути
+  // комісії можна було просто прибравши параметр з адреси.
   useEffect(() => {
-    const refParam = searchParams.get('ref')?.toLowerCase();
-    const source: BookingSource = refParam === 'bookera' ? 'BOOKERA' : 'DIRECT';
-    localStorage.setItem('booking_source', source);
+    const dl = searchParams.get('dl');
+    if (dl) localStorage.setItem('direct_link_token', dl);
   }, [searchParams]);
 
   useEffect(() => {
@@ -459,7 +464,7 @@ export default function SalonClient({
           business_id: salon.id,
           service_id: selectedService?.id,
           start_time: `${selectedDate}T${selectedTime}:00`,
-          client_id: userId || undefined
+          session_token: userId || undefined
         });
       } catch (e) {
         console.warn(e);
@@ -482,7 +487,11 @@ export default function SalonClient({
       return;
     }
 
-    const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
+    // Джерело візиту (прямий/маркетплейс) визначає СЕРВЕР, звіряючи цей
+    // токен з business.direct_link_token. Раніше фронтенд сам заявляв
+    // 'DIRECT', і це приймалось без перевірки - тобто комісії можна було
+    // уникнути, просто не додавши параметр в URL.
+    const directLinkToken = localStorage.getItem('direct_link_token') || undefined;
 
     try {
       const lockRes = await api.lockTimeSlot({
@@ -490,8 +499,8 @@ export default function SalonClient({
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: selectedMasterId ? String(selectedMasterId) : "0",
-        client_id: userId || undefined,
-        source: bookingSource
+        session_token: userId || undefined,
+        direct_link_token: directLinkToken
       });
 
       setPendingBookingId(lockRes.booking_id);
@@ -505,71 +514,33 @@ export default function SalonClient({
 
   const handleConfirmBooking = async () => {
     try {
-      const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
+      const directLinkToken = localStorage.getItem('direct_link_token') || undefined;
       const safePhone = localStorage.getItem('userPhone') || '';
       const clientDisplayName = userName || 'Гість';
       const { data: { user } } = await supabase.auth.getUser();
       const clientUserEmail = user?.email || loginEmail || '';
 
+      // client_id тут навмисно НЕ передається: це FK на CRM-контакт салону,
+      // а не ідентифікатор залогіненого відвідувача маркетплейсу (різні речі -
+      // одна людина може бути клієнтом багатьох салонів). Контакт створює сервер.
       await api.createAppointment({
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: String(selectedMasterId || "0"),
-        client_id: user?.id || userId || undefined,
+        session_token: user?.id || userId || undefined,
         client_name: clientDisplayName,
         client_phone: safePhone,
         client_email: clientUserEmail,
-        source: bookingSource
+        direct_link_token: directLinkToken
       });
 
-      const servicePrice = Number(selectedService?.price || 0);
-
-      try {
-        let existingClient = null;
-
-        if (safePhone) {
-          const { data } = await supabase
-            .from('clients')
-            .select('*')
-            .eq('business_id', salon.id)
-            .eq('phone', safePhone)
-            .maybeSingle();
-          existingClient = data;
-        }
-
-        if (!existingClient && clientDisplayName !== 'Гість') {
-          const { data } = await supabase
-            .from('clients')
-            .select('*')
-            .eq('business_id', salon.id)
-            .eq('name', clientDisplayName)
-            .maybeSingle();
-          existingClient = data;
-        }
-
-        if (existingClient) {
-          await supabase.from('clients').update({
-            last_visit: selectedDate,
-            visits: (existingClient.visits || 0) + 1,
-            spent: (existingClient.spent || 0) + servicePrice,
-          }).eq('id', existingClient.id);
-        } else {
-          await supabase.from('clients').insert([{
-            business_id: salon.id,
-            name: clientDisplayName,
-            phone: safePhone || null,
-            email: clientUserEmail || null,
-            last_visit: selectedDate,
-            visits: 1,
-            spent: servicePrice,
-            balance: 0,
-            tags: ['Онлайн-запис']
-          }]);
-        }
-      } catch (clientSyncErr) {
-        console.warn("Помилка синхронізації клієнта в CRM:", clientSyncErr);
-      }
+      // ПРИМІТКА: тут раніше анонімний відвідувач сайту писав НАПРЯМУ в
+      // CRM-таблицю клієнтів салону (select + update/insert без жодної
+      // авторизації) - тобто будь-хто з консолі браузера міг створювати
+      // й змінювати клієнтські картки БУДЬ-ЯКОГО бізнесу в системі.
+      // Прибрано: CRM-контакт створює сам сервер при обробці бронювання
+      // (за телефоном), і навіть нараховує салону бали за нового клієнта.
 
       setBookingSuccess(true);
       void fetchBookings(salon.id);
@@ -593,25 +564,23 @@ export default function SalonClient({
 
     setIsSubmittingReview(true);
     try {
-      const newReview = {
-        id: Date.now().toString(),
+      // Через FastAPI - там стоїть rate limiting (5 відгуків/год з однієї IP).
+      // При прямому записі в Supabase жодного обмеження не було: можна було
+      // залити тисячу фейкових відгуків за хвилину.
+      const created = await api.createReview({
         business_id: salon.id,
-        client_name: userName || 'Гість',
+        author_name: userName || 'Гість',
         rating: reviewRating,
         comment: reviewText,
-        created_at: new Date().toISOString()
-      };
+      });
 
-      const { error } = await supabase.from('reviews').insert([newReview]);
-      if (error) throw error;
-
-      setReviews([newReview, ...reviews]);
+      setReviews([created, ...reviews]);
       setReviewRating(0);
       setHoverRating(0);
       setReviewText('');
       showToast('Дякуємо за ваш відгук!', 'success');
-    } catch {
-      showToast('Не вдалося відправити відгук.', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося відправити відгук.', 'error');
     } finally {
       setIsSubmittingReview(false);
     }

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { isOwnerRole } from '@/lib/roles';
 import { Icons } from '@/components/shared';
 
 
@@ -219,7 +220,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     currentStaff = { ...currentStaff };
 
     // Перевірка: чи це дійсно профіль власника (навіть якщо роль збилась)
-    isOwnerProfile = currentStaff.name?.includes('Власник') || currentStaff.role === 'owner' || (isSystemOwner && currentStaff.email === userProfile?.email);
+    isOwnerProfile = currentStaff.name?.includes('Власник') || isOwnerRole(currentStaff.role) || (isSystemOwner && currentStaff.email === userProfile?.email);
 
     if (isOwnerProfile) {
       currentStaff.role = 'owner'; // Примусово повертаємо права
@@ -468,14 +469,14 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `grafik_${currentStaff.name.replace(/\s+/g, '_')}.ics`);
+    link.setAttribute('download', `grafik_${(currentStaff.name || 'staff').replace(/\s+/g, '_')}.ics`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const getRoleBadge = (staff: any) => {
-    if (staff.name.includes('Власник') || staff.role === 'owner') return { label: 'Власник бізнесу', color: colors.blue, bg: colors.blueLight };
+    if ((staff.name || '').includes('Власник') || isOwnerRole(staff.role)) return { label: 'Власник бізнесу', color: colors.blue, bg: colors.blueLight };
     if (staff.role === 'admin') return { label: 'Адміністратор', color: '#5856d6', bg: '#f2f2f7' };
     return { label: 'Спеціаліст', color: colors.green, bg: '#dcfce7' };
   };
@@ -484,7 +485,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   const currentPhoneDisplay = currentStaff?.phone?.startsWith('+380') ? currentStaff.phone : '+380' + (currentStaff?.phone ? currentStaff.phone.replace(/\D/g, '').replace(/^380/, '') : '');
 
-  const filteredTeam = team.filter((member: any) => member.name.toLowerCase().includes(staffSearchQuery.toLowerCase()));
+  const filteredTeam = team.filter((member: any) => (member.name || member.full_name || '').toLowerCase().includes(staffSearchQuery.toLowerCase()));
 
   // 🟢 Реактивна кнопка збереження зі спінером та станом "Збереження..."
   const ActionSaveButton = ({ onClick, text = "Зберегти дані" }: { onClick: () => Promise<void>; text?: string }) => {

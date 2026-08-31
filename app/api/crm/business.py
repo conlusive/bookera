@@ -135,6 +135,16 @@ async def update_business(
     return result.scalars().first()
 
 
+@router.get("/{business_id}/hours", response_model=List[BusinessHoursItem])
+async def get_business_hours(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Публічне читання (потрібне і клієнтському сайту, і CRM) - лише запис через PUT захищений."""
+    result = await db.execute(select(BusinessHours).where(BusinessHours.business_id == business_id))
+    return result.scalars().all()
+
+
 @router.put("/{business_id}/hours", response_model=List[BusinessHoursItem])
 async def set_business_hours(
     business_id: int,

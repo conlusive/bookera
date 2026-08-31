@@ -358,6 +358,13 @@ export const api = {
 
   // === CRM: БІЗНЕС ===
 
+  async getMyProfile(token: string): Promise<{
+    id: string; email: string; full_name?: string; role: string | null;
+    business_id: number | null; business: Business | null;
+  }> {
+    return authFetch(`/crm/businesses/me`, token);
+  },
+
   async registerBusiness(
     token: string,
     payload: {

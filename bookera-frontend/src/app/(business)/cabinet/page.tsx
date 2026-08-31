@@ -297,51 +297,36 @@ export default function BusinessCabinet() {
 
         const userId = session.user.id;
         const userEmail = session.user.email;
+        const token = session.access_token;
 
-        const [profileRes, bizRes] = await Promise.all([
-          supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-          supabase.from('businesses').select('*').eq('owner_id', userId)
-        ]);
+        // GET /crm/businesses/me замінює стару таблицю 'profiles' (її більше
+        // немає) - business_id власника/персоналу тепер визначає сам бекенд.
+        const me = await api.getMyProfile(token);
 
         if (!isMounted) return;
 
-        const allBiz = bizRes.data || [];
-        const isOwner = allBiz.length > 0;
-
-        // 🟢 Гарантуємо наявність id та ролі vendor для власника бізнесу
-        const profileData = profileRes.data || {};
         setUserProfile({
           id: userId,
           email: userEmail,
-          full_name: profileData.full_name || session.user.user_metadata?.full_name || userEmail,
-          role: profileData.role || (isOwner ? 'vendor' : 'client'),
-          ...profileData
+          full_name: me.full_name || session.user.user_metadata?.full_name || userEmail,
+          role: me.role || 'client',
         });
 
-        if (allBiz.length > 0) {
-          setMyBusinesses(allBiz);
+        if (me.business && me.business_id) {
+          setMyBusinesses([me.business]);
+          setBusiness(me.business);
+          localStorage.setItem('bookera_active_biz_id', String(me.business.id));
 
-          const savedBizId = localStorage.getItem('bookera_active_biz_id');
-          const targetBiz = (savedBizId && allBiz.find(b => String(b.id) === String(savedBizId)))
-            ? allBiz.find(b => String(b.id) === String(savedBizId))
-            : allBiz[0];
-
-          setBusiness(targetBiz);
-          localStorage.setItem('bookera_active_biz_id', String(targetBiz.id));
-
-          if (targetBiz.cal_settings) setCalSettings(targetBiz.cal_settings);
-          if (targetBiz.shifts) setShifts(targetBiz.shifts);
-
-          const [srvsRes, mastersRes, clientsRes] = await Promise.all([
-            supabase.from('services').select('*').eq('business_id', targetBiz.id).order('order_index', { ascending: true }),
-            supabase.from('staff').select('*').eq('business_id', targetBiz.id),
-            supabase.from('clients').select('*').eq('business_id', targetBiz.id).order('last_visit', { ascending: false })
+          const [srvsData, teamData, clientsData] = await Promise.all([
+            api.getBusinessServices(me.business.id),
+            api.listStaff(token, me.business.id),
+            api.listClients(token, me.business.id),
           ]);
 
           if (isMounted) {
-            setServices(srvsRes.data || []);
-            setTeam(mastersRes.data || []);
-            if (clientsRes.data) setClientsList(clientsRes.data);
+            setServices(srvsData || []);
+            setTeam(teamData || []);
+            if (clientsData) setClientsList(clientsData);
           }
         }
       } catch (error) {

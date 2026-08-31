@@ -269,7 +269,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           return;
         }
 
-        const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', data.user.id).single();
+        // full_name/role вже є в user_metadata (записані туди під час
+        // реєстрації нижче) - окремого запиту до 'profiles' не потрібно,
+        // такої таблиці більше немає.
+        const profile = data.user?.user_metadata;
 
         let finalName = profile?.full_name || data.user?.user_metadata?.full_name || 'Користувач';
         if (finalName.includes('@')) finalName = 'Користувач';
@@ -310,16 +313,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           return;
         }
 
-        // 2. Якщо реєстрація успішна — записуємо профіль
-        if (data?.user) {
-          await supabase.from('profiles').upsert({
-            id: data.user.id,
-            full_name: targetFullName,
-            phone: targetPhone || null,
-            email: targetEmail,
-            role: 'client'
-          });
-        }
+        // Дані вже збережені в user_metadata (переданому в signUp вище) -
+        // окремого запису в 'profiles' не потрібно, такої таблиці немає.
 
         localStorage.setItem('userName', targetFullName);
         localStorage.setItem('userRole', 'client');

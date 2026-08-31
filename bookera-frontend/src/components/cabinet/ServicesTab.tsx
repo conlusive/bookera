@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 
 // Локальні іконки
 const CopyIcon = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>);
@@ -176,11 +177,14 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     if (selectedServices.length === 0) return;
     try {
       setServices(prev => prev.map(s => selectedServices.includes(s.id) ? { ...s, is_active: makeActive } : s));
-      await supabase.from('services').update({ is_active: makeActive }).in('id', selectedServices);
+      const token = await getAuthToken();
+      // Бекенд не має "масового" ендпоінта - викликаємо існуючий по одному
+      // на кожну обрану послугу (прийнятно для дії "виділив кілька -> дію").
+      await Promise.all(selectedServices.map(id => api.updateService(token, Number(id), { is_active: makeActive })));
       showToast(makeActive ? `Показано послуг: ${selectedServices.length}` : `Приховано послуг: ${selectedServices.length}`, 'success');
       setSelectedServices([]);
-    } catch (error) {
-      showToast('Помилка оновлення статусу', 'error');
+    } catch (error: any) {
+      showToast(error?.message || 'Помилка оновлення статусу', 'error');
     }
   };
 
@@ -189,11 +193,12 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     if (!confirm(`Ви впевнені, що хочете видалити ${selectedServices.length} послуг?`)) return;
     try {
       setServices(prev => prev.filter(s => !selectedServices.includes(s.id)));
-      await supabase.from('services').delete().in('id', selectedServices);
+      const token = await getAuthToken();
+      await Promise.all(selectedServices.map(id => api.deleteService(token, Number(id))));
       showToast(`Видалено послуг: ${selectedServices.length}`, 'success');
       setSelectedServices([]);
-    } catch (error) {
-      showToast('Помилка при видаленні', 'error');
+    } catch (error: any) {
+      showToast(error?.message || 'Помилка при видаленні', 'error');
     }
   };
 
@@ -230,8 +235,9 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
       if (business) {
         try {
+          const token = await getAuthToken();
           await Promise.all(updatedServices.map(srv =>
-            supabase.from('services').update({ order_index: srv.order_index }).eq('id', srv.id)
+            api.updateService(token, Number(srv.id), { order_index: srv.order_index })
           ));
         } catch (error) {
           showToast("Помилка збереження порядку в БД", "error");
@@ -274,9 +280,11 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       setActiveSort(null);
 
       if (business) {
-        Promise.all(updatedServices.map(srv =>
-          supabase.from('services').update({ order_index: srv.order_index }).eq('id', srv.id)
-        )).catch(() => showToast("Помилка збереження порядку", "error"));
+        getAuthToken().then(token =>
+          Promise.all(updatedServices.map(srv =>
+            api.updateService(token, Number(srv.id), { order_index: srv.order_index })
+          ))
+        ).catch(() => showToast("Помилка збереження порядку", "error"));
       }
     }
     setDraggedIndex(null);
@@ -289,7 +297,8 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     const newStatus = !service.is_active;
     setServices(services.map(s => s.id === service.id ? { ...s, is_active: newStatus } : s));
     try {
-      await supabase.from('services').update({ is_active: newStatus }).eq('id', service.id);
+      const token = await getAuthToken();
+      await api.updateService(token, Number(service.id), { is_active: newStatus });
       showToast(newStatus ? "Доступно онлайн" : "Приховано", "info");
     } catch (error) {
       setServices(services.map(s => s.id === service.id ? { ...s, is_active: !newStatus } : s));
@@ -299,25 +308,19 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
   const handleDuplicate = async (service: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    const duplicatedService = {
-        business_id: business.id,
-        name: `${service.name} (Копія)`,
-        duration: service.duration,
-        price: service.price,
-        category: service.category,
-        description: service.description,
-        is_active: false,
-        order_index: services.length,
-        addon_services: service.addon_services || []
-    };
-
     try {
-        const { data, error } = await supabase.from('services').insert([duplicatedService]).select().single();
-        if (error) throw error;
-        setServices(prev => [...prev, data]);
+        const token = await getAuthToken();
+        const created = await api.createService(token, {
+          business_id: business.id,
+          name: `${service.name} (Копія)`,
+          duration_minutes: service.duration_minutes,
+          price: service.price,
+          addon_service_ids: service.addon_service_ids || [],
+        });
+        setServices(prev => [...prev, created]);
         showToast("Послугу здубльовано", "success");
-    } catch (error) {
-        showToast("Не вдалося здублювати", "error");
+    } catch (error: any) {
+        showToast(error?.message || "Не вдалося здублювати", "error");
     }
   };
 
@@ -346,34 +349,33 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
     setIsServiceSaving(true);
     try {
+      const token = await getAuthToken();
+
       if (editingService) {
-        const { data, error } = await supabase.from('services').update(serviceForm).eq('id', editingService.id).select().single();
-        if (error) throw error;
-        setServices(prev => prev.map(s => s.id === editingService.id ? data : s));
+        const updated = await api.updateService(token, editingService.id, {
+          name: serviceForm.name,
+          duration_minutes: serviceForm.duration,
+          price: serviceForm.price,
+          description: serviceForm.description,
+          is_active: serviceForm.is_active,
+          addon_service_ids: serviceForm.addon_services,
+        });
+        setServices(prev => prev.map(s => s.id === editingService.id ? updated : s));
         showToast("Послугу оновлено", "success");
       } else {
-        const order_index = services.length;
-        // 🟢 Збереження через FastAPI бекенд із fallback на Supabase
-        try {
-          await api.createService({
-            business_id: business.id,
-            name: serviceForm.name,
-            duration_minutes: serviceForm.duration,
-            price: serviceForm.price,
-            addon_service_ids: serviceForm.addon_services,
-          } as any);
-        } catch (apiErr) {
-          console.warn("API createService fallback:", apiErr);
-        }
-
-        const { data, error } = await supabase.from('services').insert({ ...serviceForm, business_id: business.id, order_index }).select().single();
-        if (error) throw error;
-        setServices(prev => [...prev, data]);
+        const created = await api.createService(token, {
+          business_id: business.id,
+          name: serviceForm.name,
+          duration_minutes: serviceForm.duration,
+          price: serviceForm.price,
+          addon_service_ids: serviceForm.addon_services,
+        });
+        setServices(prev => [...prev, created]);
         showToast("Послугу додано", "success");
       }
       setIsServiceModalOpen(false);
-    } catch (error) {
-      showToast("Помилка бази даних", "error");
+    } catch (error: any) {
+      showToast(error?.message || "Помилка збереження послуги", "error");
     } finally {
       setIsServiceSaving(false);
     }
@@ -383,14 +385,14 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     if (e) e.stopPropagation();
     if (!confirm("Ви впевнені, що хочете видалити цю послугу?")) return;
     try {
-      const { error } = await supabase.from('services').delete().eq('id', id);
-      if (error) throw error;
+      const token = await getAuthToken();
+      await api.deleteService(token, id);
       setServices(prev => prev.filter(s => s.id !== id));
       setSelectedServices(prev => prev.filter(sId => sId !== id));
       showToast("Послугу видалено", "info");
       setIsServiceModalOpen(false);
-    } catch (error) {
-      showToast("Помилка видалення", "error");
+    } catch (error: any) {
+      showToast(error?.message || "Помилка видалення", "error");
     }
   };
 

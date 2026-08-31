@@ -38,7 +38,6 @@ export default function SalonProfile() {
   const [salon, setSalon] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
   const [team, setTeam] = useState<any[]>([]);
-  const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -129,11 +128,22 @@ export default function SalonProfile() {
     }
   }, [isModalOpen, selectedDate, selectedService, selectedMasterId, fetchAvailableSlots]);
 
-  // Джерело переходу
+  // Джерело переходу: якщо в URL є ?dl=ТОКЕН і він належить саме цьому
+  // закладу - це "прямий" візит (без комісії). Інакше - маркетплейс за
+  // замовчуванням. Раніше тут працювало навпаки (?ref=bookera позначав
+  // маркетплейс, а будь-яка URL без цього параметра рахувалась "прямою" -
+  // досить було просто не докласти параметр, щоб уникнути комісії).
+  // Тепер джерело все одно перевіряє сервер проти business.direct_link_token,
+  // це поле - лише кандидат, який намагається передати браузер.
+  const [directLinkToken, setDirectLinkToken] = useState<string | null>(null);
   useEffect(() => {
-    const refParam = searchParams.get('ref')?.toLowerCase();
-    const source: BookingSource = refParam === 'bookera' ? 'BOOKERA' : 'DIRECT';
-    localStorage.setItem('booking_source', source);
+    const dl = searchParams.get('dl');
+    if (dl) {
+      localStorage.setItem('direct_link_token', dl);
+      setDirectLinkToken(dl);
+    } else {
+      setDirectLinkToken(localStorage.getItem('direct_link_token'));
+    }
   }, [searchParams]);
 
   // Таймер 10 хвилин
@@ -285,15 +295,11 @@ export default function SalonProfile() {
   const loadData = useCallback(async () => {
     if (!slug) return;
     try {
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug as string);
+      // api.getBusiness приймає і slug, і числовий id - бекенд сам розрізняє,
+      // тому окрема перевірка на UUID більше не потрібна.
+      const bizData = await api.getBusiness(slug as string);
 
-      const { data: bizData, error: bizErr } = await supabase
-        .from('businesses')
-        .select('*')
-        .eq(isUUID ? 'id' : 'slug', slug)
-        .maybeSingle();
-
-      if (bizErr || !bizData) {
+      if (!bizData) {
         setNotFound(true);
         setLoading(false);
         return;
@@ -302,36 +308,37 @@ export default function SalonProfile() {
       setSalon(bizData);
       setLoading(false);
 
-      const [servicesRes, staffRes, reviewsRes, bookingsRes] = await Promise.all([
-        supabase.from('services').select('*').eq('business_id', bizData.id).order('price', { ascending: true }),
-        supabase.from('users').select('*').eq('business_id', bizData.id).eq('role', 'master'),
-        supabase.from('reviews').select('*').eq('business_id', bizData.id).order('created_at', { ascending: false }),
-        supabase.from('appointments').select('*').eq('business_id', bizData.id).neq('status', 'cancelled')
+      const [servicesData, mastersData, reviewsData] = await Promise.all([
+        api.getBusinessServices(bizData.id),
+        api.listPublicMasters(bizData.id),
+        api.listReviews(bizData.id),
       ]);
 
-      if (servicesRes.data) setServices(servicesRes.data);
-      if (staffRes.data) setTeam(staffRes.data);
-      if (reviewsRes.data) setReviews(reviewsRes.data);
-      if (bookingsRes.data) setBookedAppointments(bookingsRes.data);
+      if (servicesData) setServices(servicesData);
+      // Публічний список майстрів віддає лише безпечні поля (без телефону/
+      // email/комісії) - на відміну від CRM-ендпоінта, який раніше тут
+      // фактично й запитувався напряму з таблиці users.
+      if (mastersData) setTeam(mastersData.map(m => ({ ...m, name: m.full_name })));
+      if (reviewsData) setReviews(reviewsData);
     } catch (error) {
       console.error("Помилка завантаження:", error);
       setNotFound(true);
       setLoading(false);
     }
-  }, [slug, supabase]);
+  }, [slug]);
 
   useEffect(() => {
     if (slug) void loadData();
   }, [slug, loadData]);
 
-  const fetchBookings = useCallback(async (bizId: number) => {
-    const { data } = await supabase
-      .from('appointments')
-      .select('*')
-      .eq('business_id', bizId)
-      .neq('status', 'cancelled');
-    if (data) setBookedAppointments(data);
-  }, [supabase]);
+  // ПРИМІТКА: тут раніше був fetchBookings, який тягнув УСІ бронювання
+  // закладу (з іменами й телефонами клієнтів) напряму в браузер будь-якого
+  // відвідувача сайту - витік персональних даних. Результат при цьому
+  // ніде не використовувався. Актуальні вільні слоти й так приходять
+  // з /appointments/available-slots, який віддає лише час і зайнятість.
+  const fetchBookings = useCallback(async (_bizId: number) => {
+    void fetchAvailableSlots();
+  }, [fetchAvailableSlots]);
 
   // Realtime підписка на зміни слотів
   useEffect(() => {
@@ -551,7 +558,7 @@ export default function SalonProfile() {
           business_id: salon.id,
           service_id: selectedService?.id,
           start_time: `${selectedDate}T${selectedTime}:00`,
-          client_id: userId || undefined
+          session_token: userId || undefined
         });
       } catch (e) {
         console.warn(e);
@@ -571,16 +578,14 @@ export default function SalonProfile() {
       return;
     }
 
-    const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
-
     try {
       const lockRes = await api.lockTimeSlot({
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: selectedMasterId ? String(selectedMasterId) : "0",
-        client_id: userId || undefined,
-        source: bookingSource
+        session_token: userId || undefined,
+        direct_link_token: directLinkToken || undefined
       });
 
       setPendingBookingId(lockRes.booking_id);
@@ -594,73 +599,35 @@ export default function SalonProfile() {
 
 const handleConfirmBooking = async () => {
     try {
-      const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
       const safePhone = localStorage.getItem('userPhone') || '';
       const clientDisplayName = userName || 'Гість';
       const { data: { user } } = await supabase.auth.getUser();
       const clientUserEmail = user?.email || loginEmail || '';
 
-      // Створення запису у FastAPI + автоматична фонова відправка Email (SMTP)
+      // Створення запису у FastAPI + автоматична фонова відправка Email (SMTP).
+      // client_id тут навмисно НЕ передається - це тепер FK на реальний CRM-
+      // контакт бізнесу, а не ідентифікатор залогіненого відвідувача маркетплейсу
+      // (це різні речі: клієнт може бронювати в багатьох закладах, кожен з
+      // яких заводить його як окремий CRM-контакт лише коли сам захоче).
       await api.createAppointment({
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: String(selectedMasterId || "0"),
-        client_id: user?.id || userId || undefined,
+        session_token: user?.id || userId || undefined,
         client_name: clientDisplayName,
         client_phone: safePhone,
         client_email: clientUserEmail,
-        source: bookingSource
+        direct_link_token: directLinkToken || undefined
       });
 
       const servicePrice = Number(selectedService?.price || 0);
 
-      // Синхронізація клієнта в базу даних CRM
-      try {
-        let existingClient = null;
-
-        if (safePhone) {
-          const { data } = await supabase
-            .from('clients')
-            .select('*')
-            .eq('business_id', salon.id)
-            .eq('phone', safePhone)
-            .maybeSingle();
-          existingClient = data;
-        }
-
-        if (!existingClient && clientDisplayName !== 'Гість') {
-          const { data } = await supabase
-            .from('clients')
-            .select('*')
-            .eq('business_id', salon.id)
-            .eq('name', clientDisplayName)
-            .maybeSingle();
-          existingClient = data;
-        }
-
-        if (existingClient) {
-          await supabase.from('clients').update({
-            last_visit: selectedDate,
-            visits: (existingClient.visits || 0) + 1,
-            spent: (existingClient.spent || 0) + servicePrice,
-          }).eq('id', existingClient.id);
-        } else {
-          await supabase.from('clients').insert([{
-            business_id: salon.id,
-            name: clientDisplayName,
-            phone: safePhone || null,
-            email: clientUserEmail || null,
-            last_visit: selectedDate,
-            visits: 1,
-            spent: servicePrice,
-            balance: 0,
-            tags: ['Онлайн-запис']
-          }]);
-        }
-      } catch (clientSyncErr) {
-        console.warn("Помилка синхронізації клієнта в CRM:", clientSyncErr);
-      }
+      // ПРИМІТКА: тут раніше анонімний відвідувач сайту писав НАПРЯМУ в
+      // CRM-таблицю клієнтів салону (select + update/insert) - тобто будь-хто
+      // без авторизації міг створювати й змінювати клієнтські картки чужого
+      // бізнесу. Прибрано: створення CRM-контакту - справа бекенду, який
+      // робить це сам за телефоном при обробці запису.
 
       setBookingSuccess(true);
       void fetchBookings(salon.id);
@@ -680,31 +647,23 @@ const handleConfirmBooking = async () => {
 
     setIsSubmittingReview(true);
     try {
-      const newReview = {
-        id: Date.now().toString(),
+      // Через FastAPI - там же й rate limiting (5 відгуків/год з IP),
+      // якого при прямому записі в Supabase не було зовсім.
+      const created = await api.createReview({
         business_id: salon.id,
-        client_name: userName || 'Гість',
+        author_name: userName || 'Гість',
         rating: reviewRating,
         comment: reviewText,
-        created_at: new Date().toISOString()
-      };
+      });
 
-      const { error } = await supabase.from('reviews').insert([newReview]);
-
-      if (error) {
-        alert('Сталася помилка при відправці відгуку.');
-        setIsSubmittingReview(false);
-        return;
-      }
-
-      setReviews([newReview, ...reviews]);
+      setReviews([created, ...reviews]);
       setReviewRating(0);
       setHoverRating(0);
       setReviewText('');
       setReviewFilter('all');
       setCurrentReviewPage(1);
-    } catch {
-      alert('Непередбачена помилка при відправці відгуку.');
+    } catch (err: any) {
+      alert(err?.message || 'Сталася помилка при відправці відгуку.');
     } finally {
       setIsSubmittingReview(false);
     }

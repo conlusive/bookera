@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
 
 export default function StatsTab({ services, team, business }: any) {
@@ -123,9 +125,13 @@ export default function StatsTab({ services, team, business }: any) {
   useEffect(() => {
     async function fetchExpenses() {
       if (!business?.id) return;
-      const { data, error } = await supabase.from('expenses').select('*').eq('business_id', business.id);
-      if (error) console.error("Помилка завантаження витрат:", error);
-      if (data) setDbExpenses(data);
+      try {
+        const token = await getAuthToken();
+        const data = await api.listExpenses(token, business.id);
+        setDbExpenses(data);
+      } catch (err) {
+        console.error("Помилка завантаження витрат:", err);
+      }
     }
     fetchExpenses().catch(console.error);
   }, [business?.id]);

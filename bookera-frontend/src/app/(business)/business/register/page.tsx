@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 
 export default function BusinessRegisterWizard() {
   const router = useRouter();
-  const supabase = createClient();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState('');
@@ -130,78 +130,61 @@ export default function BusinessRegisterWizard() {
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
-      const userId = localStorage.getItem('userId');
-      if (!userId) throw new Error('Користувача не знайдено в сесії');
+      // owner_id більше НЕ передається звідси - раніше бралось з
+      // localStorage.getItem('userId'), яке будь-хто міг підмінити в DevTools.
+      // Тепер сервер сам визначає власника з перевіреного JWT-токена.
+      const token = await getAuthToken();
 
-      const dayMap: Record<string, string> = { monday: 'Понеділок', tuesday: 'Вівторок', wednesday: 'Середа', thursday: 'Четвер', friday: 'П\'ятниця', saturday: 'Субота', sunday: 'Неділя' };
-      const mappedShifts = Object.entries(formData.hours).map(([key, value]) => ({
-        day: dayMap[key],
-        active: value.isOpen,
-        start: value.open,
-        end: value.close
+      // ISO-порядок днів (0=понеділок...6=неділя), замість українських назв,
+      // які писались у JSON-поле shifts, якого в новій схемі більше немає -
+      // натомість окрема таблиця business_hours.
+      const weekdayOrder: (keyof typeof formData.hours)[] =
+        ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+      const hoursPayload = weekdayOrder.map((day, index) => ({
+        weekday: index,
+        is_open: formData.hours[day].isOpen,
+        open_time: formData.hours[day].open,
+        close_time: formData.hours[day].close,
       }));
 
-      // 1. Створюємо бізнес
-      const generatedSlug = formData.businessName
-        .toLowerCase()
-        .trim()
-        .replace(/[^\w\sа-їієґ-]/g, '')
-        .replace(/[\s_-]+/g, '-') + '-' + Math.random().toString(36).substring(2, 7);
+      // 1. Створюємо бізнес через FastAPI (не напряму в Supabase)
+      const business = await api.registerBusiness(token, {
+        name: formData.businessName,
+        category: formData.businessCategory,
+        business_type: formData.businessType,
+        workspace_type: formData.workspace,
+        address: formData.workspace === 'client_place'
+          ? formData.city.trim()
+          : `${formData.city}, ${formData.street} ${formData.addressDetails}`.trim(),
+        phone: `+380${formData.phone}`,
+        hours: hoursPayload,
+      });
 
-      const { data: business, error: bizError } = await supabase
-        .from('businesses')
-        .insert({
-          owner_id: userId,
-          name: formData.businessName,
-          slug: generatedSlug,
-          category: formData.businessCategory,
-          business_type: formData.businessType,
-          workspace_type: formData.workspace,
-          address: formData.workspace === 'client_place'
-             ? formData.city.trim()
-             : `${formData.city}, ${formData.street} ${formData.addressDetails}`.trim(),
-          phone: `+380${formData.phone}`,
-          shifts: mappedShifts,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (bizError) throw bizError;
-
-      // 2. Зберігаємо послуги
-      if (formData.services.length > 0) {
-        const servicesToInsert = formData.services.map((s, index) => ({
+      // 2. Зберігаємо послуги (кожна - окремим запитом, бекенд не має bulk-create)
+      for (const s of formData.services) {
+        await api.createService(token, {
           business_id: business.id,
           name: s.name,
           price: Number(s.price),
-          duration: s.duration,
-          order_index: index
-        }));
-        await supabase.from('services').insert(servicesToInsert);
+          duration_minutes: s.duration,
+        });
       }
 
-      // 3. ВІДПРАВЛЯЄМО ЗАПРОШЕННЯ КОМАНДІ ЧЕРЕЗ FASTAPI
-      if (formData.staff.length > 0) {
-        for (const member of formData.staff) {
-          const isOwner = member.name.includes('Власник');
-
-          if (!isOwner && member.email) {
-            // Звертаємося до нашого бекенду, який відправить реальний email
-            await fetch(`http://127.0.0.1:8000/businesses/${business.id}/invites`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                email: member.email,
-                role: member.role.toLowerCase().includes('адмін') ? 'admin' : 'master'
-              })
-            });
-          }
+      // 3. Запрошення команді через FastAPI (тепер з токеном - раніше йшло
+      // без жодної авторизації на хардкоджений 127.0.0.1:8000, що в проді
+      // взагалі нікуди не вело)
+      for (const member of formData.staff) {
+        const isOwner = member.name.includes('Власник');
+        if (!isOwner && member.email) {
+          await api.inviteStaff(token, business.id, {
+            email: member.email,
+            role: member.role.toLowerCase().includes('адмін') ? 'admin' : 'master',
+          });
         }
       }
 
-      // 4. Оновлюємо роль власника
-      await supabase.from('profiles').update({ role: 'owner' }).eq('id', userId);
+      // Роль власника FastAPI вже виставив сам усередині registerBusiness -
+      // окремого оновлення 'profiles' більше не потрібно (такої таблиці нема).
       localStorage.setItem('userRole', 'owner');
 
       router.push('/cabinet');

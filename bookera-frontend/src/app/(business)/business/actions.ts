@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 
 export async function signUpUser(formData: { email: string; password: string; fullName?: string } & any) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // 1. Реєстрація користувача в системі Supabase Auth
   const { data, error } = await supabase.auth.signUp({
@@ -15,22 +15,12 @@ export async function signUpUser(formData: { email: string; password: string; fu
     return { success: false, error: error.message }
   }
 
-  if (data.user) {
-    // 2. Створення запису у нашій таблиці profiles
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert([
-        {
-          id: data.user.id,
-          full_name: formData.fullName,
-          role: 'client',
-        },
-      ])
-
-    if (profileError) {
-      return { success: false, error: profileError.message }
-    }
-  }
+  // ПРИМІТКА: раніше тут одразу писався рядок у таблицю Supabase 'profiles' -
+  // такої таблиці більше немає в новій схемі (замінена на 'users' на бекенді).
+  // Запис у users створюється лише тоді, коли він реально потрібен - при
+  // реєстрації бізнесу (api.registerBusiness) або прийнятті запрошення
+  // (api.acceptStaffInvite). Просто зареєстрований відвідувач-клієнт власного
+  // рядка в users поки не потребує - гостьове бронювання цього не вимагає.
 
   return { success: true }
 }

@@ -37,6 +37,25 @@ class Business(Base):
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
+    # Гнучкі JSON-налаштування - не потребують окремих таблиць, бо ніколи
+    # не фільтруються/не JOIN'яться, лише читаються й перезаписуються цілком.
+    accent_color = Column(String, nullable=True)
+    layout_config = Column(JSON, nullable=True)
+    workplace_photos = Column(JSON, default=list)
+    booking_settings = Column(JSON, nullable=True)
+    security_settings = Column(JSON, nullable=True)
+    notification_settings = Column(JSON, nullable=True)
+    payments_settings = Column(JSON, nullable=True)
+
+    # === Монетизація ===
+    # Унікальний токен для "прямого" посилання бізнесу (Instagram-біо тощо) -
+    # клієнти, що прийшли через нього, НЕ рахуються комісією. На відміну від
+    # старого коду, де "звідки прийшов клієнт" визначав сам фронтенд (можна
+    # було підмінити), тут це перевіряється на бекенді проти цього токена.
+    direct_link_token = Column(String, unique=True, index=True, nullable=True)
+    commission_rate = Column(Numeric(5, 2), default=10.00, nullable=False)  # % з завершеного візиту
+    points_balance = Column(Integer, default=0, nullable=False)
+
     owner = relationship("User", back_populates="owned_businesses", foreign_keys=[owner_id])
     staff = relationship("User", back_populates="business", foreign_keys="User.business_id")
     services = relationship("Service", back_populates="business", cascade="all, delete-orphan")
@@ -47,6 +66,10 @@ class Business(Base):
     reviews = relationship("Review", back_populates="business", cascade="all, delete-orphan")
     inventory_items = relationship("InventoryItem", back_populates="business", cascade="all, delete-orphan")
     expenses = relationship("Expense", back_populates="business", cascade="all, delete-orphan")
+    points_entries = relationship("PointsLedgerEntry", back_populates="business", cascade="all, delete-orphan")
+    commissions = relationship("ReferralCommission", back_populates="business", cascade="all, delete-orphan")
+    radar_boosts = relationship("RadarBoost", back_populates="business", cascade="all, delete-orphan")
+    gift_certificates = relationship("GiftCertificate", back_populates="business", cascade="all, delete-orphan")
 
 
 class BusinessHours(Base):

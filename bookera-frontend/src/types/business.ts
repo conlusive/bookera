@@ -21,10 +21,10 @@ export interface TaskItem {
 
 export interface Business {
   id: number;
-  owner_id: string;
+  owner_id?: string;
   name: string;
   slug: string;
-  address: string;
+  address?: string;
   category?: string;
   city?: string;
   description?: string;

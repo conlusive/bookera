@@ -33,8 +33,8 @@ class Client(Base):
     birthday = Column(Date, nullable=True)
     instagram = Column(String, nullable=True)
     formulas = Column(Text, nullable=True)  # рецепти фарби/формули процедур
-    consent_photo = Column(Boolean, default=False)
-    consent_procedure = Column(Boolean, default=False)
+    consent_photo = Column(Boolean, default=False, nullable=False)
+    consent_procedure = Column(Boolean, default=False, nullable=False)
 
     visits_count = Column(Integer, default=0)
     total_spent = Column(Numeric(10, 2), default=0)

@@ -11,11 +11,15 @@ from app.core.auth import CurrentUser, assert_business_access, get_current_user
 from app.core.time_utils import utc_now
 from app.core.rate_limit import rate_limit
 from app.models import Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
+from app.models import Expense, StaffPayout, User
+from app.services.monetization import calculate_payout_preview
 from app.schemas.monetization import (
     GiftCertificateCreate, GiftCertificateResponse,
     GiftCertificateRedeemRequest, GiftCertificateRedeemResponse,
     RadarActivateRequest, RadarStatusResponse,
     PointsLedgerItem, CommissionItem, MonetizationSummaryResponse,
+    PayoutPreviewResponse, StaffPayoutCreate, StaffPayoutResponse,
+    TransferOwnershipRequest,
 )
 
 router = APIRouter(tags=["CRM - Monetization"])
@@ -224,3 +228,127 @@ async def check_gift_certificate(
     if cert.expires_at and cert.expires_at < utc_now():
         return GiftCertificateRedeemResponse(valid=False, message="Термін дії сертифіката сплив")
     return GiftCertificateRedeemResponse(valid=True, remaining_amount=cert.remaining_amount, message="Сертифікат дійсний")
+
+
+# === Виплати майстрам ===
+
+@router.get("/crm/businesses/{business_id}/staff/{staff_id}/payout-preview", response_model=PayoutPreviewResponse)
+async def get_payout_preview(
+    business_id: int,
+    staff_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Скільки належить майстру ЗАРАЗ, без фіксації - можна дивитись скільки завгодно раз."""
+    await assert_business_access(db, current_user, business_id)
+    preview = await calculate_payout_preview(db, business_id, staff_id)
+    return PayoutPreviewResponse(**preview)
+
+
+@router.post("/crm/businesses/{business_id}/staff/{staff_id}/payouts", response_model=StaffPayoutResponse, status_code=status.HTTP_201_CREATED)
+async def create_payout(
+    business_id: int,
+    staff_id: str,
+    payload: StaffPayoutCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Фіксує виплату - на відміну від preview, ЗАКРИВАЄ період (наступний
+    preview почнеться вже звідси, той самий візит не потрапить у виплату
+    двічі) і одразу створює пов'язаний запис витрати для обліку.
+    """
+    await assert_business_access(db, current_user, business_id)
+    preview = await calculate_payout_preview(db, business_id, staff_id)
+
+    if preview["payout_amount"] <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Немає нарахувань для виплати за цей період")
+
+    staff_res = await db.execute(select(User).where(User.id == staff_id))
+    staff = staff_res.scalars().first()
+    staff_label = (staff.full_name or staff.email) if staff else staff_id
+
+    expense = Expense(
+        business_id=business_id,
+        category="Виплата майстру",
+        description=f"Виплата комісії: {staff_label}",
+        amount=preview["payout_amount"],
+    )
+    db.add(expense)
+    await db.flush()
+
+    payout = StaffPayout(
+        business_id=business_id,
+        staff_id=staff_id,
+        period_start=preview["period_start"],
+        period_end=preview["period_end"],
+        gross_revenue=preview["gross_revenue"],
+        commission_rate_applied=preview["commission_rate"],
+        payout_amount=preview["payout_amount"],
+        notes=payload.notes,
+        expense_id=expense.id,
+    )
+    db.add(payout)
+    await db.commit()
+    await db.refresh(payout)
+    return payout
+
+
+@router.get("/crm/businesses/{business_id}/staff/{staff_id}/payouts", response_model=List[StaffPayoutResponse])
+async def list_payouts(
+    business_id: int,
+    staff_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    await assert_business_access(db, current_user, business_id)
+    result = await db.execute(
+        select(StaffPayout).where(StaffPayout.business_id == business_id, StaffPayout.staff_id == staff_id)
+        .order_by(StaffPayout.paid_at.desc())
+    )
+    return result.scalars().all()
+
+
+# === Передача власності ===
+
+@router.post("/crm/businesses/{business_id}/transfer-ownership")
+async def transfer_ownership(
+    business_id: int,
+    payload: TransferOwnershipRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Свідомо СУВОРІШЕ за звичайну CRM-дію: перевіряє, що викликає САМЕ
+    поточний власник (не просто staff з доступом до закладу), і що новий
+    власник - реально активний співробітник цього ж закладу. Стара роль
+    перетворюється на 'admin' (не втрачає доступ, але вже не власник).
+    """
+    biz_res = await db.execute(select(Business).where(Business.id == business_id))
+    business = biz_res.scalars().first()
+    if not business:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заклад не знайдено")
+
+    if not business.owner_id or str(business.owner_id) != str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Лише поточний власник може передати права")
+
+    if str(payload.new_owner_user_id) == str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Не можна передати права самому собі")
+
+    target_res = await db.execute(
+        select(User).where(User.id == payload.new_owner_user_id, User.business_id == business_id, User.is_active == True)
+    )
+    target = target_res.scalars().first()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Активного співробітника з таким id не знайдено в цьому закладі")
+
+    old_owner_res = await db.execute(select(User).where(User.id == current_user.id))
+    old_owner = old_owner_res.scalars().first()
+
+    business.owner_id = target.id
+    target.role = "business_owner"
+    if old_owner:
+        old_owner.role = "admin"
+
+    await db.commit()
+    return {"status": "success", "new_owner_id": target.id, "former_owner_id": current_user.id}

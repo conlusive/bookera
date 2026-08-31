@@ -78,3 +78,37 @@ class MonetizationSummaryResponse(BaseModel):
     total_commission_owed: Decimal
     radar_active: bool
     radar_expires_at: Optional[datetime] = None
+
+
+class PayoutPreviewResponse(BaseModel):
+    staff_id: str
+    period_start: datetime
+    period_end: datetime
+    gross_revenue: Decimal
+    commission_rate: Decimal
+    payout_amount: Decimal
+    completed_appointments_count: int
+
+
+class StaffPayoutCreate(BaseModel):
+    notes: Optional[str] = None
+
+
+class StaffPayoutResponse(BaseModel):
+    id: int
+    business_id: int
+    staff_id: str
+    period_start: datetime
+    period_end: datetime
+    gross_revenue: Decimal
+    commission_rate_applied: Decimal
+    payout_amount: Decimal
+    status: str
+    paid_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TransferOwnershipRequest(BaseModel):
+    new_owner_user_id: str

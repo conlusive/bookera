@@ -85,3 +85,56 @@ async def charge_commission_if_applicable(db: AsyncSession, appointment: Appoint
         )
     )
     logger.info(f"Нараховано комісію {amount} UAH business_id={business.id} appointment_id={appointment.id}")
+
+
+async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id: str) -> dict:
+    """
+    Рахує, скільки належить майстру за завершені візити з часу ОСТАННЬОЇ
+    виплати (щоб той самий візит ніколи не увійшов у дві виплати підряд).
+    Якщо виплат ще не було - період починається з дати створення закладу.
+    """
+    from app.models import StaffPayout, User
+
+    last_payout_res = await db.execute(
+        select(StaffPayout)
+        .where(StaffPayout.business_id == business_id, StaffPayout.staff_id == staff_id)
+        .order_by(StaffPayout.period_end.desc())
+        .limit(1)
+    )
+    last_payout = last_payout_res.scalars().first()
+
+    if last_payout:
+        period_start = last_payout.period_end
+    else:
+        biz_res = await db.execute(select(Business).where(Business.id == business_id))
+        business = biz_res.scalars().first()
+        period_start = business.created_at if business else utc_now()
+
+    period_end = utc_now()
+
+    staff_res = await db.execute(select(User).where(User.id == staff_id))
+    staff = staff_res.scalars().first()
+    rate = (staff.commission_rate if staff and staff.commission_rate is not None else Decimal("0"))
+
+    appts_stmt = select(Appointment).where(
+        Appointment.business_id == business_id,
+        Appointment.master_id == staff_id,
+        Appointment.status == "completed",
+        Appointment.start_time >= period_start,
+        Appointment.start_time <= period_end,
+    )
+    appts_res = await db.execute(appts_stmt)
+    appointments = appts_res.scalars().all()
+
+    gross_revenue = sum((Decimal(str(a.price)) for a in appointments if a.price), Decimal("0"))
+    payout_amount = (gross_revenue * rate / Decimal("100")).quantize(Decimal("0.01"))
+
+    return {
+        "staff_id": staff_id,
+        "period_start": period_start,
+        "period_end": period_end,
+        "gross_revenue": gross_revenue,
+        "commission_rate": rate,
+        "payout_amount": payout_amount,
+        "completed_appointments_count": len(appointments),
+    }

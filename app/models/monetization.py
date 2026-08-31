@@ -108,3 +108,29 @@ class Payment(Base):
     status = Column(String, default="pending", nullable=False)  # pending, completed, failed, refunded
     created_at = Column(DateTime, default=utc_now)
     completed_at = Column(DateTime, nullable=True)
+
+
+class StaffPayout(Base):
+    """
+    Виплата комісії майстру за виконані візити. Прив'язана до конкретного
+    періоду (від попередньої виплати до моменту нарахування), щоб той самий
+    завершений візит ніколи не увійшов у дві різні виплати.
+    """
+    __tablename__ = "staff_payouts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
+    staff_id = Column(String, ForeignKey("users.id"), nullable=False)
+
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    gross_revenue = Column(Numeric(10, 2), nullable=False)  # сума завершених візитів за період
+    commission_rate_applied = Column(Numeric(5, 2), nullable=False)  # % майстра на момент виплати
+    payout_amount = Column(Numeric(10, 2), nullable=False)
+
+    status = Column(String, default="paid", nullable=False)  # paid (виплата - завжди доконаний факт)
+    paid_at = Column(DateTime, default=utc_now)
+    notes = Column(Text, nullable=True)
+    expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # пов'язаний запис витрати
+
+    created_at = Column(DateTime, default=utc_now)

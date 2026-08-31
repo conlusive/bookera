@@ -82,6 +82,10 @@ async def test_client_link_and_unlink(client, auth_headers):
     r = await client.delete(f"/crm/clients/{client_a}/link/{client_b}", headers=headers)
     assert r.status_code == 200
     assert client_b not in r.json()["linked_client_ids"]
+
+
+@pytest.mark.asyncio
+async def test_client_with_appointment_history_cannot_be_deleted(client, auth_headers):
     """
     Регресійний тест: раніше видалення клієнта з бронюваннями мовчки
     обнуляло client_id на його історії відвідувань (побічний ефект ORM),
@@ -107,6 +111,10 @@ async def test_client_link_and_unlink(client, auth_headers):
 
     r = await client.delete(f"/crm/clients/{client_id}", headers=headers)
     assert r.status_code == 409, "Клієнта з історією бронювань не можна видаляти без явного попередження"
+
+
+@pytest.mark.asyncio
+async def test_service_with_addon_ids_does_not_crash(client, auth_headers):
     """Регресійний тест: раніше падало з 500 через відсутню колонку в БД."""
     headers = auth_headers("addon-test-owner")
     r = await client.post("/crm/businesses", json={"name": "Addon Salon", "city": "Львів"}, headers=headers)

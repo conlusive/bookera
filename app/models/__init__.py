@@ -7,7 +7,7 @@ from app.models.appointment import Appointment, AppointmentStatus, BookingSource
 from app.models.extras import Review, InventoryItem, Expense
 from app.models.monetization import (
     PointsLedgerEntry, PointsReasonEnum, ReferralCommission,
-    RadarBoost, GiftCertificate, Payment,
+    RadarBoost, GiftCertificate, Payment, StaffPayout,
 )
 
 __all__ = [
@@ -18,5 +18,5 @@ __all__ = [
     "Appointment", "AppointmentStatus", "BookingSourceEnum",
     "Review", "InventoryItem", "Expense",
     "PointsLedgerEntry", "PointsReasonEnum", "ReferralCommission",
-    "RadarBoost", "GiftCertificate", "Payment",
+    "RadarBoost", "GiftCertificate", "Payment", "StaffPayout",
 ]

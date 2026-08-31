@@ -1,22 +1,33 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
+// ============ Типи ============
+
+export interface BusinessHoursItem {
+  weekday: number; // 0=понеділок ... 6=неділя
+  is_open: boolean;
+  open_time: string; // "09:00"
+  close_time: string; // "20:00"
+}
+
 export interface Business {
   id: number;
   name: string;
   slug: string;
   category?: string;
+  business_type?: string;
+  workspace_type?: string;
+  description?: string;
   address?: string;
   city?: string;
   phone?: string;
+  email?: string;
   rating?: number;
   reviews_count?: number;
   cover_photo?: string;
   logo?: string;
   tags?: string[];
-  open_time?: string;
-  close_time?: string;
-  days_off?: number[];
   is_active?: boolean;
+  services?: Service[];
 }
 
 export interface Service {
@@ -29,6 +40,8 @@ export interface Service {
   is_group?: boolean;
   max_participants?: number;
   is_active?: boolean;
+  order_index?: number;
+  addon_service_ids?: number[];
 }
 
 export interface SlotStatusItem {
@@ -48,7 +61,7 @@ export interface Appointment {
   id: number;
   business_id: number;
   service_id: number;
-  client_id?: string;
+  client_id?: number;
   master_id?: string;
   start_time: string;
   end_time: string;
@@ -61,13 +74,166 @@ export interface Appointment {
   created_at?: string;
 }
 
+export interface Client {
+  id: number;
+  business_id: number;
+  name: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  allergies?: string;
+  tags?: string[];
+  is_blacklisted: boolean;
+  balance: number;
+  visits_count: number;
+  total_spent: number;
+  last_visit_at?: string;
+  medical_pdf_url?: string;
+  created_at?: string;
+}
+
+export interface StaffInvite {
+  id: number;
+  business_id: number;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface StaffMember {
+  id: string;
+  email: string;
+  full_name?: string;
+  phone?: string;
+  role: string;
+  specialization?: string;
+  commission_rate?: number;
+  is_active: boolean;
+}
+
+export interface BusinessStats {
+  period_start: string;
+  period_end: string;
+  total_appointments: number;
+  completed_appointments: number;
+  cancelled_appointments: number;
+  upcoming_appointments: number;
+  revenue_completed: number;
+  revenue_expected: number;
+  new_clients: number;
+  top_services: { service_id: number; name: string; bookings_count: number; revenue: number }[];
+}
+
+export interface MonetizationSummary {
+  points_balance: number;
+  direct_link_token?: string;
+  commission_rate: number;
+  total_commission_owed: number;
+  radar_active: boolean;
+  radar_expires_at?: string;
+}
+
+export interface GiftCertificate {
+  id: number;
+  business_id: number;
+  code: string;
+  initial_amount: number;
+  remaining_amount: number;
+  status: string;
+  purchaser_name?: string;
+  message?: string;
+  created_at?: string;
+  expires_at?: string;
+}
+
+export interface Review {
+  id: number;
+  business_id: number;
+  appointment_id?: number;
+  author_name?: string;
+  rating: number;
+  comment?: string;
+  business_reply?: string;
+  created_at?: string;
+}
+
+export interface InventoryItem {
+  id: number;
+  business_id: number;
+  name: string;
+  quantity: number;
+  unit: string;
+  low_stock_threshold?: number;
+  cost_per_unit?: number;
+}
+
+export interface Expense {
+  id: number;
+  business_id: number;
+  category?: string;
+  description?: string;
+  amount: number;
+  expense_date: string;
+  is_recurring: boolean;
+}
+
+// ============ Внутрішні хелпери ============
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function handle(res: Response) {
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `Помилка ${res.status}` }));
+    throw new ApiError(err.detail || `Помилка ${res.status}`, res.status);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+/** Публічні запити - без токена авторизації. */
+async function publicFetch(path: string, options: RequestInit = {}) {
+  const res = await fetch(`${API_URL}${path}`, {
+    cache: 'no-store',
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  });
+  return handle(res);
+}
+
+/**
+ * Авторизовані запити (CRM) - token дістає компонент-викликач із Supabase-сесії
+ * (createClient().auth.getSession() на клієнті, або await createClient() на сервері)
+ * і передає сюди явно. api.ts свідомо не знає, звідки взявся токен - це працює
+ * однаково і в Server Components, і в Client Components.
+ */
+async function authFetch(path: string, token: string, options: RequestInit = {}) {
+  const res = await fetch(`${API_URL}${path}`, {
+    cache: 'no-store',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
+    },
+  });
+  return handle(res);
+}
+
+// ============ API ============
+
 export const api = {
-  // === КЛІЄНТСЬКИЙ МАРКЕТПЛЕЙС ===
+  // === КЛІЄНТСЬКИЙ МАРКЕТПЛЕЙС (публічно, без токена) ===
 
   async getBusiness(slugOrId: string | number): Promise<Business> {
-    const res = await fetch(`${API_URL}/businesses/${slugOrId}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Заклад не знайдено');
-    return res.json();
+    return publicFetch(`/businesses/${slugOrId}`);
   },
 
   async searchAvailableBusinesses(params: {
@@ -82,15 +248,12 @@ export const api = {
       time_period: params.time_period || 'Будь-коли',
       category: params.category || 'all',
     });
-
-    const res = await fetch(`${API_URL}/businesses/search-available?${query.toString()}`, {
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('Помилка пошуку закладів');
-    return res.json();
+    return publicFetch(`/businesses/search-available?${query}`);
   },
 
-  // === РОЗРАХУНОК СЛОТІВ ТА БРОНЮВАННЯ ===
+  async listBusinesses(limit = 50, offset = 0): Promise<Business[]> {
+    return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`);
+  },
 
   async getAvailableSlots(params: {
     business_id: number;
@@ -106,47 +269,30 @@ export const api = {
       master_id: params.master_id || '0',
       step_minutes: String(params.step_minutes || 15),
     });
-
-    const res = await fetch(`${API_URL}/appointments/available-slots?${query.toString()}`, {
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('Не вдалося завантажити вільні слоти');
-    return res.json();
+    return publicFetch(`/appointments/available-slots?${query}`);
   },
 
+  /** session_token - випадковий рядок з localStorage браузера (crypto.randomUUID()),
+   * НЕ id клієнта - потрібен лише щоб браузер міг прибрати власний прострочений lock. */
   async lockTimeSlot(payload: {
     business_id: number;
     service_id: number;
     start_time: string;
     master_id?: string;
-    client_id?: string;
-    source?: string;
+    session_token?: string;
+    client_id?: number;
+    direct_link_token?: string;
   }): Promise<{ status: string; booking_id: number; message: string }> {
-    const res = await fetch(`${API_URL}/appointments/lock`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Слот зайнято' }));
-      throw new Error(err.detail || 'Цей час щойно зайняли');
-    }
-    return res.json();
+    return publicFetch(`/appointments/lock`, { method: 'POST', body: JSON.stringify(payload) });
   },
 
   async unlockTimeSlot(payload: {
     business_id: number;
     service_id: number;
     start_time: string;
-    client_id?: string;
+    session_token?: string;
   }): Promise<{ status: string }> {
-    const res = await fetch(`${API_URL}/appointments/unlock`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    return res.json();
+    return publicFetch(`/appointments/unlock`, { method: 'POST', body: JSON.stringify(payload) });
   },
 
   async createAppointment(payload: {
@@ -154,51 +300,259 @@ export const api = {
     service_id: number;
     start_time: string;
     master_id?: string;
-    client_id?: string;
+    session_token?: string;
+    client_id?: number;
     client_name?: string;
     client_phone?: string;
     client_email?: string;
-    source?: string;
+    direct_link_token?: string;
+    gift_certificate_code?: string;
   }): Promise<Appointment> {
-    const res = await fetch(`${API_URL}/appointments`, {
+    return publicFetch(`/appointments`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  /** Клієнт переглядає своє бронювання за токеном з листа - без логіну. */
+  async getAppointmentForClient(appointmentId: number, token: string): Promise<Appointment> {
+    return publicFetch(`/appointments/${appointmentId}/manage?token=${encodeURIComponent(token)}`);
+  },
+
+  /** Клієнт скасовує своє бронювання за тим самим токеном. */
+  async cancelAppointmentByClient(appointmentId: number, token: string): Promise<Appointment> {
+    return publicFetch(`/appointments/${appointmentId}/cancel`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ token }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Помилка оформлення' }));
-      throw new Error(err.detail || 'Не вдалося створити візит');
-    }
-    return res.json();
   },
 
-  // === КАБІНЕТ БІЗНЕСУ (CRM) ===
+  async listReviews(businessId: number): Promise<Review[]> {
+    return publicFetch(`/public/reviews?business_id=${businessId}`);
+  },
 
-  async getBookedAppointments(businessId: number, masterId?: string): Promise<Appointment[]> {
+  async createReview(payload: {
+    business_id: number;
+    appointment_id?: number;
+    author_name?: string;
+    rating: number;
+    comment?: string;
+  }): Promise<Review> {
+    return publicFetch(`/public/reviews`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async checkGiftCertificate(code: string, businessId: number): Promise<{ valid: boolean; remaining_amount?: number; message: string }> {
+    return publicFetch(`/public/gift-certificates/check`, {
+      method: 'POST',
+      body: JSON.stringify({ code, business_id: businessId }),
+    });
+  },
+
+  async acceptStaffInvite(token: string, inviteToken: string): Promise<{ status: string; business_id: number; role: string }> {
+    return authFetch(`/public/invites/accept`, token, { method: 'POST', body: JSON.stringify({ token: inviteToken }) });
+  },
+
+  // === CRM: БІЗНЕС ===
+
+  async registerBusiness(
+    token: string,
+    payload: {
+      name: string;
+      category?: string;
+      description?: string;
+      address?: string;
+      city?: string;
+      phone?: string;
+      email?: string;
+      hours?: BusinessHoursItem[];
+    }
+  ): Promise<Business> {
+    return authFetch(`/crm/businesses`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async updateBusiness(token: string, businessId: number, payload: Partial<Business>): Promise<Business> {
+    return authFetch(`/crm/businesses/${businessId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async setBusinessHours(token: string, businessId: number, hours: BusinessHoursItem[]): Promise<BusinessHoursItem[]> {
+    return authFetch(`/crm/businesses/${businessId}/hours`, token, { method: 'PUT', body: JSON.stringify(hours) });
+  },
+
+  // === CRM: ПОСЛУГИ ===
+
+  async createService(token: string, payload: Partial<Service> & { business_id: number; name: string; duration_minutes: number; price: number }): Promise<Service> {
+    return authFetch(`/services`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async getBusinessServices(businessId: number): Promise<Service[]> {
+    return publicFetch(`/services/business/${businessId}`);
+  },
+
+  async updateService(token: string, serviceId: number, payload: Partial<Service>): Promise<Service> {
+    return authFetch(`/services/${serviceId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async deleteService(token: string, serviceId: number): Promise<void> {
+    await authFetch(`/services/${serviceId}`, token, { method: 'DELETE' });
+  },
+
+  // === CRM: КЛІЄНТИ ===
+
+  async listClients(token: string, businessId: number, search?: string): Promise<Client[]> {
     const query = new URLSearchParams({ business_id: String(businessId) });
-    if (masterId && masterId !== '0' && masterId !== 'all') {
-      query.append('master_id', masterId);
-    }
-
-    const res = await fetch(`${API_URL}/appointments/booked?${query.toString()}`, {
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('Помилка завантаження розкладу');
-    return res.json();
+    if (search) query.append('search', search);
+    return authFetch(`/crm/clients?${query}`, token);
   },
 
-  async updateAppointmentStatus(
-    appointmentId: number,
-    status: 'confirmed' | 'completed' | 'cancelled'
-  ): Promise<Appointment> {
-    const res = await fetch(`${API_URL}/appointments/${appointmentId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
+  async createClient(token: string, payload: { business_id: number; name: string; phone?: string; email?: string; notes?: string; allergies?: string; tags?: string[] }): Promise<Client> {
+    return authFetch(`/crm/clients`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
 
-    if (!res.ok) throw new Error('Не вдалося оновити статус');
-    return res.json();
+  async updateClient(token: string, clientId: number, payload: Partial<Client>): Promise<Client> {
+    return authFetch(`/crm/clients/${clientId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async deleteClient(token: string, clientId: number): Promise<void> {
+    await authFetch(`/crm/clients/${clientId}`, token, { method: 'DELETE' });
+  },
+
+  async linkClients(token: string, clientId: number, targetClientId: number): Promise<void> {
+    await authFetch(`/crm/clients/${clientId}/link/${targetClientId}`, token, { method: 'POST' });
+  },
+
+  // === CRM: ПЕРСОНАЛ ===
+
+  async inviteStaff(token: string, businessId: number, payload: { email: string; role: string }): Promise<StaffInvite> {
+    return authFetch(`/crm/businesses/${businessId}/invites`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async listInvites(token: string, businessId: number): Promise<StaffInvite[]> {
+    return authFetch(`/crm/businesses/${businessId}/invites`, token);
+  },
+
+  async listStaff(token: string, businessId: number): Promise<StaffMember[]> {
+    return authFetch(`/crm/businesses/${businessId}/staff`, token);
+  },
+
+  async updateStaff(token: string, staffId: string, payload: Partial<StaffMember>): Promise<StaffMember> {
+    return authFetch(`/crm/staff/${staffId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async removeStaff(token: string, staffId: string): Promise<void> {
+    await authFetch(`/crm/staff/${staffId}`, token, { method: 'DELETE' });
+  },
+
+  // === CRM: ЗАПИСИ ===
+
+  async getBookedAppointments(token: string, businessId: number, masterId?: string): Promise<Appointment[]> {
+    const query = new URLSearchParams({ business_id: String(businessId) });
+    if (masterId && masterId !== '0' && masterId !== 'all') query.append('master_id', masterId);
+    return authFetch(`/appointments/booked?${query}`, token);
+  },
+
+  async updateAppointmentStatus(token: string, appointmentId: number, status: 'confirmed' | 'completed' | 'cancelled'): Promise<Appointment> {
+    return authFetch(`/appointments/${appointmentId}/status`, token, { method: 'PATCH', body: JSON.stringify({ status }) });
+  },
+
+  /** Ручний запис персоналом (дзвінок/walk-in) - на відміну від createAppointment,
+   * потребує токена і фіксує, хто саме зі staff його вніс. */
+  async createManualAppointment(
+    token: string,
+    payload: {
+      business_id: number;
+      service_id: number;
+      start_time: string;
+      master_id?: string;
+      client_id?: number;
+      client_name?: string;
+      client_phone?: string;
+      client_email?: string;
+      notes?: string;
+    }
+  ): Promise<Appointment> {
+    return authFetch(`/crm/appointments`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  // === CRM: СТАТИСТИКА ===
+
+  async getBusinessStats(token: string, businessId: number, dateFrom?: string, dateTo?: string): Promise<BusinessStats> {
+    const query = new URLSearchParams();
+    if (dateFrom) query.append('date_from', dateFrom);
+    if (dateTo) query.append('date_to', dateTo);
+    const qs = query.toString();
+    return authFetch(`/crm/businesses/${businessId}/stats${qs ? `?${qs}` : ''}`, token);
+  },
+
+  // === CRM: МОНЕТИЗАЦІЯ ===
+
+  async getMonetizationSummary(token: string, businessId: number): Promise<MonetizationSummary> {
+    return authFetch(`/crm/businesses/${businessId}/monetization`, token);
+  },
+
+  async getPointsLedger(token: string, businessId: number) {
+    return authFetch(`/crm/businesses/${businessId}/points-ledger`, token);
+  },
+
+  async getCommissions(token: string, businessId: number) {
+    return authFetch(`/crm/businesses/${businessId}/commissions`, token);
+  },
+
+  async getRadarStatus(token: string, businessId: number): Promise<{ active: boolean; expires_at?: string; points_balance: number }> {
+    return authFetch(`/crm/businesses/${businessId}/radar`, token);
+  },
+
+  async activateRadarWithPoints(token: string, businessId: number, days: number) {
+    return authFetch(`/crm/businesses/${businessId}/radar/activate-with-points`, token, {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+    });
+  },
+
+  async createGiftCertificate(
+    token: string,
+    payload: { business_id: number; amount: number; purchaser_name?: string; purchaser_email?: string; message?: string; valid_days?: number }
+  ): Promise<GiftCertificate> {
+    return authFetch(`/crm/gift-certificates`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async listGiftCertificates(token: string, businessId: number): Promise<GiftCertificate[]> {
+    return authFetch(`/crm/gift-certificates?business_id=${businessId}`, token);
+  },
+
+  async replyToReview(token: string, reviewId: number, businessReply: string): Promise<Review> {
+    return authFetch(`/crm/reviews/${reviewId}/reply`, token, { method: 'PATCH', body: JSON.stringify({ business_reply: businessReply }) });
+  },
+
+  // === CRM: СКЛАД ===
+
+  async listInventory(token: string, businessId: number): Promise<InventoryItem[]> {
+    return authFetch(`/crm/inventory?business_id=${businessId}`, token);
+  },
+
+  async createInventoryItem(token: string, payload: { business_id: number; name: string; quantity?: number; unit?: string; low_stock_threshold?: number; cost_per_unit?: number }): Promise<InventoryItem> {
+    return authFetch(`/crm/inventory`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async updateInventoryItem(token: string, itemId: number, payload: Partial<InventoryItem>): Promise<InventoryItem> {
+    return authFetch(`/crm/inventory/${itemId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async deleteInventoryItem(token: string, itemId: number): Promise<void> {
+    await authFetch(`/crm/inventory/${itemId}`, token, { method: 'DELETE' });
+  },
+
+  // === CRM: ВИТРАТИ ===
+
+  async listExpenses(token: string, businessId: number): Promise<Expense[]> {
+    return authFetch(`/crm/expenses?business_id=${businessId}`, token);
+  },
+
+  async createExpense(token: string, payload: { business_id: number; category?: string; description?: string; amount: number; expense_date?: string; is_recurring?: boolean }): Promise<Expense> {
+    return authFetch(`/crm/expenses`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async updateExpense(token: string, expenseId: number, payload: Partial<Expense>): Promise<Expense> {
+    return authFetch(`/crm/expenses/${expenseId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async deleteExpense(token: string, expenseId: number): Promise<void> {
+    await authFetch(`/crm/expenses/${expenseId}`, token, { method: 'DELETE' });
   },
 };

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Icons, MASTER_COLORS, toLocalDateStr, checkSameDay, CurrentTimeIndicator } from '@/components/shared';
 import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 
 // Іконка для чекбоксу в стилі Apple
@@ -163,7 +164,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
       if (!business) return;
 
       try {
-        const apiData = await api.getBookedAppointments(business.id);
+        const token = await getAuthToken();
+        const apiData = await api.getBookedAppointments(token, business.id);
         if (apiData && apiData.length > 0) {
           const mapped = apiData.map((app: any) => ({
             ...app,

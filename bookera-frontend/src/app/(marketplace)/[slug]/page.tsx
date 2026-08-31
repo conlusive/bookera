@@ -129,11 +129,22 @@ export default function SalonProfile() {
     }
   }, [isModalOpen, selectedDate, selectedService, selectedMasterId, fetchAvailableSlots]);
 
-  // Джерело переходу
+  // Джерело переходу: якщо в URL є ?dl=ТОКЕН і він належить саме цьому
+  // закладу - це "прямий" візит (без комісії). Інакше - маркетплейс за
+  // замовчуванням. Раніше тут працювало навпаки (?ref=bookera позначав
+  // маркетплейс, а будь-яка URL без цього параметра рахувалась "прямою" -
+  // досить було просто не докласти параметр, щоб уникнути комісії).
+  // Тепер джерело все одно перевіряє сервер проти business.direct_link_token,
+  // це поле - лише кандидат, який намагається передати браузер.
+  const [directLinkToken, setDirectLinkToken] = useState<string | null>(null);
   useEffect(() => {
-    const refParam = searchParams.get('ref')?.toLowerCase();
-    const source: BookingSource = refParam === 'bookera' ? 'BOOKERA' : 'DIRECT';
-    localStorage.setItem('booking_source', source);
+    const dl = searchParams.get('dl');
+    if (dl) {
+      localStorage.setItem('direct_link_token', dl);
+      setDirectLinkToken(dl);
+    } else {
+      setDirectLinkToken(localStorage.getItem('direct_link_token'));
+    }
   }, [searchParams]);
 
   // Таймер 10 хвилин
@@ -551,7 +562,7 @@ export default function SalonProfile() {
           business_id: salon.id,
           service_id: selectedService?.id,
           start_time: `${selectedDate}T${selectedTime}:00`,
-          client_id: userId || undefined
+          session_token: userId || undefined
         });
       } catch (e) {
         console.warn(e);
@@ -571,16 +582,14 @@ export default function SalonProfile() {
       return;
     }
 
-    const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
-
     try {
       const lockRes = await api.lockTimeSlot({
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: selectedMasterId ? String(selectedMasterId) : "0",
-        client_id: userId || undefined,
-        source: bookingSource
+        session_token: userId || undefined,
+        direct_link_token: directLinkToken || undefined
       });
 
       setPendingBookingId(lockRes.booking_id);
@@ -594,23 +603,26 @@ export default function SalonProfile() {
 
 const handleConfirmBooking = async () => {
     try {
-      const bookingSource = (localStorage.getItem('booking_source') as any) || 'DIRECT';
       const safePhone = localStorage.getItem('userPhone') || '';
       const clientDisplayName = userName || 'Гість';
       const { data: { user } } = await supabase.auth.getUser();
       const clientUserEmail = user?.email || loginEmail || '';
 
-      // Створення запису у FastAPI + автоматична фонова відправка Email (SMTP)
+      // Створення запису у FastAPI + автоматична фонова відправка Email (SMTP).
+      // client_id тут навмисно НЕ передається - це тепер FK на реальний CRM-
+      // контакт бізнесу, а не ідентифікатор залогіненого відвідувача маркетплейсу
+      // (це різні речі: клієнт може бронювати в багатьох закладах, кожен з
+      // яких заводить його як окремий CRM-контакт лише коли сам захоче).
       await api.createAppointment({
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: String(selectedMasterId || "0"),
-        client_id: user?.id || userId || undefined,
+        session_token: user?.id || userId || undefined,
         client_name: clientDisplayName,
         client_phone: safePhone,
         client_email: clientUserEmail,
-        source: bookingSource
+        direct_link_token: directLinkToken || undefined
       });
 
       const servicePrice = Number(selectedService?.price || 0);

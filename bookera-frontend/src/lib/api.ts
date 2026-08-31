@@ -94,6 +94,7 @@ export interface Client {
   formulas?: string;
   consent_photo?: boolean;
   consent_procedure?: boolean;
+  linked_client_ids?: number[];
   created_at?: string;
 }
 
@@ -361,6 +362,8 @@ export const api = {
     payload: {
       name: string;
       category?: string;
+      business_type?: string;
+      workspace_type?: string;
       description?: string;
       address?: string;
       city?: string;
@@ -418,8 +421,12 @@ export const api = {
     await authFetch(`/crm/clients/${clientId}`, token, { method: 'DELETE' });
   },
 
-  async linkClients(token: string, clientId: number, targetClientId: number): Promise<void> {
-    await authFetch(`/crm/clients/${clientId}/link/${targetClientId}`, token, { method: 'POST' });
+  async linkClients(token: string, clientId: number, targetClientId: number): Promise<Client> {
+    return authFetch(`/crm/clients/${clientId}/link/${targetClientId}`, token, { method: 'POST' });
+  },
+
+  async unlinkClients(token: string, clientId: number, targetClientId: number): Promise<Client> {
+    return authFetch(`/crm/clients/${clientId}/link/${targetClientId}`, token, { method: 'DELETE' });
   },
 
   // === CRM: ПЕРСОНАЛ ===

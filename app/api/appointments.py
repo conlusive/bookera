@@ -1,4 +1,6 @@
 from datetime import date, datetime, time, timedelta, timezone
+import os
+import secrets
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy import and_, delete, or_, select
@@ -15,9 +17,13 @@ from app.schemas.appointment import (
     AppointmentResponse,
     AvailableSlotsResponse,
     LockSlotRequest,
+    ManageBookingRequest,
+    ManualAppointmentCreate,
     SlotStatusItem,
 )
 from app.core.email import send_booking_confirmation_email
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
@@ -401,6 +407,7 @@ async def create_appointment(
             client_phone=appointment_in.client_phone,
             client_email=appointment_in.client_email,
             source=str(appointment_in.source or "direct"),
+            manage_token=secrets.token_urlsafe(24),
             created_at=now,
         )
         db.add(appointment)
@@ -410,6 +417,7 @@ async def create_appointment(
         appointment.client_name = appointment_in.client_name
         appointment.client_phone = appointment_in.client_phone
         appointment.client_email = appointment_in.client_email
+        appointment.manage_token = secrets.token_urlsafe(24)
         if appointment_in.source:
             appointment.source = str(appointment_in.source)
 
@@ -431,9 +439,52 @@ async def create_appointment(
             booking_date=appointment.start_time.strftime("%d.%m.%Y"),
             booking_time=appointment.start_time.strftime("%H:%M"),
             price=float(service.price or 0),
-            address=f"{business.city}, {business.address or ''}"
+            address=f"{business.city}, {business.address or ''}",
+            manage_url=f"{FRONTEND_URL}/my-booking/{appointment.id}?token={appointment.manage_token}",
         )
 
+    return appointment
+
+
+@router.get("/{appointment_id}/manage", response_model=AppointmentResponse)
+async def get_appointment_for_client(
+    appointment_id: int,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Дозволяє клієнту переглянути СВОЄ бронювання за токеном з листа -
+    без потреби реєструватись/логінитись (гостьове бронювання).
+    """
+    result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+    appointment = result.scalars().first()
+    if not appointment or not appointment.manage_token or appointment.manage_token != token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
+    return appointment
+
+
+@router.post("/{appointment_id}/cancel", response_model=AppointmentResponse)
+async def cancel_appointment_by_client(
+    appointment_id: int,
+    payload: ManageBookingRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Клієнт скасовує власне бронювання за токеном - без авторизації бізнесу."""
+    result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+    appointment = result.scalars().first()
+    if not appointment or not appointment.manage_token or appointment.manage_token != payload.token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
+
+    if appointment.status == "cancelled":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Це бронювання вже скасоване")
+    if appointment.status == "completed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Візит вже відбувся, скасування неможливе")
+    if appointment.start_time <= get_utc_now():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Час візиту вже настав")
+
+    appointment.status = "cancelled"
+    await db.commit()
+    await db.refresh(appointment)
     return appointment
 
 

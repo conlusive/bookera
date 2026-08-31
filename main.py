@@ -12,7 +12,14 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import businesses, services, appointments
-from app.api.crm import clients as crm_clients, staff as crm_staff, business as crm_business, extras as crm_extras
+from app.api.crm import (
+    clients as crm_clients,
+    staff as crm_staff,
+    business as crm_business,
+    extras as crm_extras,
+    appointments as crm_appointments,
+    stats as crm_stats,
+)
 from app.core.database import engine, AsyncSessionLocal
 from app.core.logging_config import logger
 
@@ -124,6 +131,8 @@ app.include_router(crm_clients.router)
 app.include_router(crm_staff.router)
 app.include_router(crm_business.router)
 app.include_router(crm_extras.router)
+app.include_router(crm_appointments.router)
+app.include_router(crm_stats.router)
 
 
 @app.get("/")

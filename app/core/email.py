@@ -40,8 +40,17 @@ async def send_booking_confirmation_email(
         booking_date: str,
         booking_time: str,
         price: float,
-        address: str
+        address: str,
+        manage_url: str = "",
 ):
+    manage_block = f"""
+      <div style="text-align: center; margin-top: 16px;">
+        <a href="{manage_url}" style="display: inline-block; background-color: #111827; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 600;">
+          Керувати візитом / скасувати
+        </a>
+      </div>
+    """ if manage_url else ""
+
     html_template = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 24px; border: 1px solid #f1f5f9; border-radius: 18px; color: #111827;">
       <h2 style="margin: 0 0 8px 0; font-size: 20px;">Візит підтверджено! </h2>
@@ -67,10 +76,7 @@ async def send_booking_confirmation_email(
           </div>
         </div>
       </div>
-
-      <p style="font-size: 12px; color: #94a3b8; text-align: center; margin: 0;">
-        Керувати візитом або скасувати його можна у вашому особистому профілі BookEra.
-      </p>
+      {manage_block}
     </div>
     """
 

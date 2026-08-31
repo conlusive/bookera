@@ -43,10 +43,27 @@ class AppointmentCreate(BaseModel):
     source: Optional[BookingSourceEnum] = BookingSourceEnum.DIRECT
 
 
+class ManualAppointmentCreate(BaseModel):
+    """Для CRM-календаря: staff вручну вносить запис (дзвінок/walk-in)."""
+    business_id: int
+    service_id: int
+    start_time: datetime
+    master_id: Optional[str] = None
+    client_id: Optional[int] = None  # існуючий CRM-контакт
+    client_name: Optional[str] = None  # або новий контакт "з голови"
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class AppointmentStatusUpdate(BaseModel):
     # Раніше було просто `str` - приймало будь-яке значення і могло зламати
     # фільтри в іншому коді, які звіряються з конкретними рядками.
     status: Literal["confirmed", "completed", "cancelled"]
+
+
+class ManageBookingRequest(BaseModel):
+    token: str
 
 
 class AppointmentResponse(BaseModel):

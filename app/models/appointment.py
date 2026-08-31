@@ -56,6 +56,11 @@ class Appointment(Base):
 
     expires_at = Column(DateTime, nullable=True)  # для 10-хв блокування
 
+    # Дозволяє клієнту переглянути/скасувати СВОЄ бронювання без повної
+    # автентифікації (гостьове бронювання не вимагає акаунта). Токен іде
+    # в лист-підтвердження як частина посилання "Керувати візитом".
+    manage_token = Column(String, nullable=True, index=True)
+
     # Ключ для DB-рівневого захисту від перетинів (exclusion constraint
     # у міграції). Якщо є майстер - ключ = master_id, інакше = сам заклад.
     booking_key = Column(

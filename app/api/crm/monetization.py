@@ -7,7 +7,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.auth import CurrentUser, assert_business_admin, get_current_user
 from app.core.time_utils import utc_now
 from app.core.rate_limit import rate_limit
 from app.models import Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
@@ -35,7 +35,7 @@ async def get_monetization_summary(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     biz_res = await db.execute(select(Business).where(Business.id == business_id))
     business = biz_res.scalars().first()
 
@@ -69,7 +69,7 @@ async def get_points_ledger(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     result = await db.execute(
         select(PointsLedgerEntry).where(PointsLedgerEntry.business_id == business_id)
         .order_by(PointsLedgerEntry.created_at.desc()).limit(100)
@@ -83,7 +83,7 @@ async def get_commissions(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     result = await db.execute(
         select(ReferralCommission).where(ReferralCommission.business_id == business_id)
         .order_by(ReferralCommission.created_at.desc()).limit(100)
@@ -99,7 +99,7 @@ async def get_radar_status(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     biz_res = await db.execute(select(Business).where(Business.id == business_id))
     business = biz_res.scalars().first()
 
@@ -128,7 +128,7 @@ async def activate_radar_with_points(
     Оплата реальними грошима - окремий ендпоінт /radar/activate-with-payment,
     коли будуть підключені реквізити WayForPay.
     """
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     biz_res = await db.execute(select(Business).where(Business.id == business_id))
     business = biz_res.scalars().first()
 
@@ -175,7 +175,7 @@ async def create_gift_certificate(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, payload.business_id)
+    await assert_business_admin(db, current_user, payload.business_id)
     from datetime import timedelta
 
     code = secrets.token_hex(4).upper()
@@ -201,7 +201,7 @@ async def list_gift_certificates(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     result = await db.execute(
         select(GiftCertificate).where(GiftCertificate.business_id == business_id).order_by(GiftCertificate.created_at.desc())
     )
@@ -240,7 +240,7 @@ async def get_payout_preview(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Скільки належить майстру ЗАРАЗ, без фіксації - можна дивитись скільки завгодно раз."""
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     preview = await calculate_payout_preview(db, business_id, staff_id)
     return PayoutPreviewResponse(**preview)
 
@@ -258,7 +258,7 @@ async def create_payout(
     preview почнеться вже звідси, той самий візит не потрапить у виплату
     двічі) і одразу створює пов'язаний запис витрати для обліку.
     """
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     preview = await calculate_payout_preview(db, business_id, staff_id)
 
     if preview["payout_amount"] <= 0:
@@ -301,7 +301,7 @@ async def list_payouts(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     result = await db.execute(
         select(StaffPayout).where(StaffPayout.business_id == business_id, StaffPayout.staff_id == staff_id)
         .order_by(StaffPayout.paid_at.desc())

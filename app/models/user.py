@@ -51,6 +51,15 @@ class User(Base):
     shifts = Column(JSON, nullable=True)
     assigned_services = Column(JSON, default=list)
     provides_services = Column(Boolean, default=True, nullable=False)
+
+    # Правила виплат конкретному майстру (періодичність, день, що входить
+    # у розрахунок). Раніше ці перемикачі в CRM нічого не зберігали -
+    # виглядали робочими, але значення губились при перезавантаженні.
+    payout_period = Column(String, nullable=True)  # weekly / monthly
+    payout_day = Column(String, nullable=True)     # 'monday' або число дня місяця
+    tips_full = Column(Boolean, default=True, nullable=False)       # майстер забирає 100% чайових
+    deduct_materials = Column(Boolean, default=False, nullable=False)  # віднімати вартість матеріалів
+    auto_reset_balance = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)

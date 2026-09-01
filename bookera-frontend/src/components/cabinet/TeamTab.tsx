@@ -392,6 +392,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       if (updates.assigned_services !== undefined) backendUpdates.assigned_services = updates.assigned_services;
       if (updates.provides_services !== undefined) backendUpdates.provides_services = updates.provides_services;
       if (updates.avatar_url !== undefined) backendUpdates.avatar_url = updates.avatar_url;
+      if (updates.payout_period !== undefined) backendUpdates.payout_period = updates.payout_period;
+      if (updates.payout_day !== undefined) backendUpdates.payout_day = String(updates.payout_day);
+      if (updates.tips_full !== undefined) backendUpdates.tips_full = updates.tips_full;
+      if (updates.deduct_materials !== undefined) backendUpdates.deduct_materials = updates.deduct_materials;
+      if (updates.auto_reset_balance !== undefined) backendUpdates.auto_reset_balance = updates.auto_reset_balance;
 
       const hasBackendFields = Object.keys(backendUpdates).length > 0;
 

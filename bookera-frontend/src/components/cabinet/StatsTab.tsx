@@ -910,7 +910,7 @@ export default function StatsTab({ services, team, business }: any) {
 
             let srcInsta = 0, srcWidget = 0, srcRec = 0;
             uniqueClients.forEach(c => {
-               const s = c.source.toLowerCase();
+               const s = String(c?.source ?? '').toLowerCase();
                if (s.includes('inst') || s.includes('інст')) srcInsta++;
                else if (s.includes('widg') || s.includes('відж') || s.includes('onl') || s.includes('онлайн')) srcWidget++;
                else if (s.includes('rec') || s.includes('реком') || s.includes('friend') || s.includes('друг')) srcRec++;

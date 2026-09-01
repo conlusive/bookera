@@ -92,8 +92,8 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
     if (debouncedSearch) {
       result = result.filter(s =>
-        s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        (s.category && s.category.toLowerCase().includes(debouncedSearch.toLowerCase()))
+        String(s?.name ?? '').toLowerCase().includes(String(debouncedSearch ?? '').toLowerCase()) ||
+        (s.category && String(s.category).toLowerCase().includes(String(debouncedSearch ?? '').toLowerCase()))
       );
     }
 
@@ -134,7 +134,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     const filtered = services.filter(s =>
       s.id !== editingService?.id &&
       !serviceForm.addon_services.includes(s.id) &&
-      s.name.toLowerCase().includes(addonSearch.toLowerCase())
+      String(s?.name ?? '').toLowerCase().includes(String(addonSearch ?? '').toLowerCase())
     );
 
     const groups: { [key: string]: any[] } = {};
@@ -401,7 +401,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     const inactive = services.filter(s => s.is_active === false).length;
     if (services.length < 4) return { title: "Розширте асортимент", text: "Додайте супутні сервіси (наприклад, 'Миття голови'), щоб збільшити середній чек." };
     if (inactive > 0) return { title: "Увага до прихованих", text: `У вас ${inactive} прихованих послуг. Вони не доступні для клієнтів.` };
-    if (!services.some(s => s.name.toLowerCase().includes('комплекс'))) return { title: "Створіть комбо", text: "Об'єднайте декілька послуг у 'Комплекс' зі знижкою." };
+    if (!services.some(s => String(s?.name ?? '').toLowerCase().includes('комплекс'))) return { title: "Створіть комбо", text: "Об'єднайте декілька послуг у 'Комплекс' зі знижкою." };
     return { title: "Ідеальний баланс", text: "Ваш прайс-лист відмінно налаштований!" };
   };
 

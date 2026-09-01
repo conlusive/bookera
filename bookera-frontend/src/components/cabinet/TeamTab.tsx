@@ -815,7 +815,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                          {services.map((srv: any) => {
                             const isAssigned = localAssignedServices.includes(String(srv.id));
-                            if (staffServiceSearchQuery && !srv.name.toLowerCase().includes(staffServiceSearchQuery.toLowerCase())) return null;
+                            if (staffServiceSearchQuery && !String(srv?.name ?? '').toLowerCase().includes(String(staffServiceSearchQuery ?? '').toLowerCase())) return null;
                             return (
                                <div key={srv.id} onClick={() => {
                                   if (!hasAdminRights) return;

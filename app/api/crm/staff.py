@@ -90,7 +90,7 @@ async def accept_invite(
     user_res = await db.execute(select(User).where(User.id == current_user.id))
     user = user_res.scalars().first()
     if not user:
-        user = User(id=current_user.id, email=current_user.email or invite.email, role=invite.role)
+        user = User(id=current_user.id, email=current_user.email or invite.email, role=invite.role, full_name=current_user.full_name)
         db.add(user)
 
     user.business_id = invite.business_id

@@ -98,11 +98,13 @@ async def register_business(
     user_res = await db.execute(select(User).where(User.id == current_user.id))
     user = user_res.scalars().first()
     if not user:
-        user = User(id=current_user.id, email=current_user.email or "", role="business_owner")
+        user = User(id=current_user.id, email=current_user.email or "", role="business_owner", full_name=current_user.full_name)
         db.add(user)
         await db.flush()
     else:
         user.role = "business_owner"
+        if not user.full_name and current_user.full_name:
+            user.full_name = current_user.full_name
 
     business = Business(
         **data,

@@ -457,7 +457,7 @@ export default function InventoryTab({ business, team }: any) {
   // --- ФІЛЬТРАЦІЯ, СОРТУВАННЯ ТА ПАГІНАЦІЯ ---
   const filteredExpenses = currentExpenses.filter(e =>
     (e.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    e.category.toLowerCase().includes(searchQuery.toLowerCase())
+    String(e?.category ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase())
   );
 
   const requestSort = (key: 'expense_date' | 'category' | 'amount') => {
@@ -489,7 +489,7 @@ export default function InventoryTab({ business, team }: any) {
   const totalExpensePages = Math.ceil(sortedExpenses.length / ITEMS_PER_PAGE);
   const paginatedExpenses = sortedExpenses.slice((expensePage - 1) * ITEMS_PER_PAGE, expensePage * ITEMS_PER_PAGE);
 
-  const filteredInventory = inventory.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredInventory = (inventory || []).filter(i => String(i?.name ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase()));
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
   const paginatedInventory = filteredInventory.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE);
 

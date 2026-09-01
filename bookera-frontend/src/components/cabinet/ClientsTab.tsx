@@ -97,7 +97,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
   const filteredAndSortedClients = useMemo(() => {
     let filtered = clientsList.filter((c: any) => {
-      const searchLower = debouncedSearch.toLowerCase();
+      const searchLower = String(debouncedSearch ?? '').toLowerCase();
       return (c.name || '').toLowerCase().includes(searchLower) || (c.phone || '').includes(debouncedSearch);
     });
 
@@ -893,7 +893,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                  {clientsList.filter((c: any) =>
                      c.id !== viewingClient.id && // Не показувати себе
                      !(viewingClient.linked_client_ids || []).includes(c.id) && // Не показувати вже доданих
-                     c.name.toLowerCase().includes(familySearch.toLowerCase())
+                     String(c?.name ?? '').toLowerCase().includes(String(familySearch ?? '').toLowerCase())
                  ).map((c: any) => (
                     <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem', borderBottom: '1px solid #f1f5f9' }}>
                        <span style={{ fontWeight: '600', color: '#0f172a' }}>{c.name}</span>
@@ -902,7 +902,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                        </button>
                     </div>
                  ))}
-                 {clientsList.filter((c: any) => c.id !== viewingClient.id && !(viewingClient.linked_client_ids || []).includes(c.id) && c.name.toLowerCase().includes(familySearch.toLowerCase())).length === 0 && (
+                 {clientsList.filter((c: any) => c.id !== viewingClient.id && !(viewingClient.linked_client_ids || []).includes(c.id) && String(c?.name ?? '').toLowerCase().includes(String(familySearch ?? '').toLowerCase())).length === 0 && (
                      <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.9rem' }}>Нікого не знайдено</div>
                  )}
               </div>

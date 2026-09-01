@@ -181,8 +181,8 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   };
 
   const filteredCards = businessSettingsCards.filter(card =>
-    card.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    card.desc.toLowerCase().includes(searchQuery.toLowerCase())
+    String(card?.title ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase()) ||
+    String(card?.desc ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase())
   );
 
   return (

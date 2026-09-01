@@ -485,7 +485,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   const currentPhoneDisplay = currentStaff?.phone?.startsWith('+380') ? currentStaff.phone : '+380' + (currentStaff?.phone ? currentStaff.phone.replace(/\D/g, '').replace(/^380/, '') : '');
 
-  const filteredTeam = team.filter((member: any) => (member.name || member.full_name || '').toLowerCase().includes(staffSearchQuery.toLowerCase()));
+  // Захищаємо ОБИДВІ сторони порівняння: і поле співробітника, і сам
+  // пошуковий рядок. Компонент може відрендеритись до того, як стан
+  // ініціалізувався, і тоді staffSearchQuery ще undefined - через це
+  // падав увесь кабінет, а не лише вкладка "Команда".
+  const filteredTeam = (team || []).filter((member: any) => {
+    const label = String(member?.name ?? member?.full_name ?? '');
+    const query = String(staffSearchQuery ?? '');
+    return label.toLowerCase().includes(query.toLowerCase());
+  });
 
   // 🟢 Реактивна кнопка збереження зі спінером та станом "Збереження..."
   const ActionSaveButton = ({ onClick, text = "Зберегти дані" }: { onClick: () => Promise<void>; text?: string }) => {

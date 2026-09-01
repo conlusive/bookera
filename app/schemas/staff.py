@@ -37,6 +37,11 @@ class StaffUpdate(BaseModel):
     shifts: Optional[List[dict]] = None
     assigned_services: Optional[List[int]] = None
     provides_services: Optional[bool] = None
+    payout_period: Optional[str] = None
+    payout_day: Optional[str] = None
+    tips_full: Optional[bool] = None
+    deduct_materials: Optional[bool] = None
+    auto_reset_balance: Optional[bool] = None
     is_active: Optional[bool] = None
 
 
@@ -51,6 +56,11 @@ class StaffResponse(BaseModel):
     shifts: Optional[List[dict]] = None
     assigned_services: Optional[List[int]] = []
     provides_services: bool = True
+    payout_period: Optional[str] = None
+    payout_day: Optional[str] = None
+    tips_full: bool = True
+    deduct_materials: bool = False
+    auto_reset_balance: bool = False
     phone: Optional[str] = None
     role: str
     specialization: Optional[str] = None

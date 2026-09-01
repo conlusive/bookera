@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.core.rate_limit import rate_limit
 from app.models import Review, InventoryItem, Expense
 from app.schemas.extras import (
@@ -124,7 +124,7 @@ def _generate_future_dates(start_date, recurrence: str, count: int) -> List:
 
 @router.get("/crm/expenses", response_model=List[ExpenseResponse])
 async def list_expenses(business_id: int = Query(...), db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     result = await db.execute(select(Expense).where(Expense.business_id == business_id).order_by(Expense.expense_date.desc()))
     return result.scalars().all()
 
@@ -137,7 +137,7 @@ async def create_expense(expense_in: ExpenseCreate, db: AsyncSession = Depends(g
     у старому фронтенд-коді), усі під одним recurrence_group_id, щоб
     їх можна було надійно знайти й змінити разом пізніше.
     """
-    await assert_business_access(db, current_user, expense_in.business_id)
+    await assert_business_admin(db, current_user, expense_in.business_id)
 
     group_id = str(uuid.uuid4()) if expense_in.recurrence != "none" else None
     expense = Expense(**expense_in.model_dump(), recurrence_group_id=group_id)
@@ -169,7 +169,7 @@ async def update_expense(expense_id: int, payload: ExpenseUpdate, db: AsyncSessi
     expense = result.scalars().first()
     if not expense:
         raise HTTPException(status_code=404, detail="Витрату не знайдено")
-    await assert_business_access(db, current_user, expense.business_id)
+    await assert_business_admin(db, current_user, expense.business_id)
 
     old_date = expense.expense_date
     apply_to_future = payload.apply_to_future
@@ -208,7 +208,7 @@ async def delete_expense(
     expense = result.scalars().first()
     if not expense:
         raise HTTPException(status_code=404, detail="Витрату не знайдено")
-    await assert_business_access(db, current_user, expense.business_id)
+    await assert_business_admin(db, current_user, expense.business_id)
 
     if delete_future and expense.recurrence_group_id:
         await db.execute(

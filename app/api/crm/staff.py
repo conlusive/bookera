@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.core.email import send_email_sync
 from app.core.time_utils import utc_now
 from app.models import StaffInvite, User, Business
@@ -26,7 +26,7 @@ async def create_invite(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
 
     biz_res = await db.execute(select(Business).where(Business.id == business_id))
     business = biz_res.scalars().first()
@@ -62,7 +62,7 @@ async def list_invites(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     result = await db.execute(select(StaffInvite).where(StaffInvite.business_id == business_id))
     return result.scalars().all()
 
@@ -124,9 +124,31 @@ async def update_staff(
     staff = result.scalars().first()
     if not staff or not staff.business_id:
         raise HTTPException(status_code=404, detail="Співробітника не знайдено")
-    await assert_business_access(db, current_user, staff.business_id)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    # Кожен може редагувати ВЛАСНУ картку (імʼя, телефон, спеціалізація),
+    # але змінювати чужі - лише адмін/власник.
+    is_self = str(staff.id) == str(current_user.id)
+    if is_self:
+        await assert_business_access(db, current_user, staff.business_id)
+    else:
+        await assert_business_admin(db, current_user, staff.business_id)
+
+    data = payload.model_dump(exclude_unset=True)
+
+    # Навіть про себе звичайний майстер не може підняти собі роль чи
+    # переписати власну ставку - це справа адміністрації.
+    if is_self:
+        level_res = await db.execute(select(User).where(User.id == str(current_user.id)))
+        me = level_res.scalars().first()
+        from app.core.auth import ADMIN_ROLES
+        biz_res = await db.execute(select(Business).where(Business.id == staff.business_id))
+        biz = biz_res.scalars().first()
+        is_admin = (biz and str(biz.owner_id) == str(current_user.id)) or (me and me.role in ADMIN_ROLES)
+        if not is_admin:
+            for protected in ("role", "commission_rate", "fixed_salary", "tax_rate", "is_active"):
+                data.pop(protected, None)
+
+    for field, value in data.items():
         setattr(staff, field, value)
     await db.commit()
     await db.refresh(staff)
@@ -143,7 +165,7 @@ async def remove_staff(
     staff = result.scalars().first()
     if not staff or not staff.business_id:
         raise HTTPException(status_code=404, detail="Співробітника не знайдено")
-    await assert_business_access(db, current_user, staff.business_id)
+    await assert_business_admin(db, current_user, staff.business_id)
     if str(staff.id) == str(current_user.id):
         raise HTTPException(status_code=400, detail="Не можна видалити самого себе")
 

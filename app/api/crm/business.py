@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.models import Business, BusinessHours, User
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessOut, BusinessHoursItem
 
@@ -137,7 +137,7 @@ async def update_business(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
     result = await db.execute(select(Business).where(Business.id == business_id))
     business = result.scalars().first()
 
@@ -170,7 +170,7 @@ async def set_business_hours(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
 
     existing = await db.execute(select(BusinessHours).where(BusinessHours.business_id == business_id))
     by_weekday = {h.weekday: h for h in existing.scalars().all()}

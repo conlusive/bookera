@@ -142,8 +142,14 @@ async def get_current_user(
     )
 
 
-async def assert_business_access(db: AsyncSession, current_user: CurrentUser, business_id: int) -> None:
-    """Перевіряє, що поточний користувач - власник або staff цього закладу."""
+# Ролі, які дають адміністративні права всередині закладу (фінанси,
+# керування персоналом, налаштування). Звичайний майстер їх не має:
+# він бачить свій розклад і своїх клієнтів, але не чужі зарплати.
+ADMIN_ROLES = {"business_owner", "vendor", "owner", "admin"}
+
+
+async def _get_access_level(db: AsyncSession, current_user: CurrentUser, business_id: int) -> str:
+    """Повертає 'owner' | 'admin' | 'staff', або кидає 403/404."""
     from app.models import Business, User  # локальний імпорт, щоб уникнути циклу
 
     result = await db.execute(select(Business).where(Business.id == business_id))
@@ -152,15 +158,39 @@ async def assert_business_access(db: AsyncSession, current_user: CurrentUser, bu
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заклад не знайдено")
 
     if business.owner_id is not None and str(business.owner_id) == str(current_user.id):
-        return
+        return "owner"
 
     staff_result = await db.execute(
         select(User).where(User.id == str(current_user.id), User.business_id == business_id)
     )
-    if staff_result.scalars().first():
-        return
+    staff = staff_result.scalars().first()
+    if not staff:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Немає доступу до цього закладу")
+    if not staff.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ваш доступ до цього закладу деактивований")
 
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Немає доступу до цього закладу")
+    return "admin" if staff.role in ADMIN_ROLES else "staff"
+
+
+async def assert_business_access(db: AsyncSession, current_user: CurrentUser, business_id: int) -> None:
+    """Базовий доступ: будь-який активний співробітник закладу."""
+    await _get_access_level(db, current_user, business_id)
+
+
+async def assert_business_admin(db: AsyncSession, current_user: CurrentUser, business_id: int) -> None:
+    """
+    Підвищений доступ: лише власник або адміністратор. Використовується
+    там, де дія стосується грошей чи інших людей - зарплати, виплати,
+    керування персоналом, налаштування закладу. Раніше сюди пускало
+    будь-якого майстра, тобто працівник міг подивитись чужі зарплати
+    або звільнити колегу.
+    """
+    level = await _get_access_level(db, current_user, business_id)
+    if level == "staff":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Для цієї дії потрібні права адміністратора або власника",
+        )
 
 
 async def require_business_access(

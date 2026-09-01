@@ -130,6 +130,11 @@ export interface StaffMember {
   shifts?: Record<string, any>[];
   assigned_services?: number[];
   provides_services?: boolean;
+  payout_period?: string;
+  payout_day?: string;
+  tips_full?: boolean;
+  deduct_materials?: boolean;
+  auto_reset_balance?: boolean;
   is_active: boolean;
 }
 

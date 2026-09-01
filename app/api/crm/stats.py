@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.auth import CurrentUser, assert_business_admin, get_current_user
 from app.core.time_utils import utc_now
 from app.models import Appointment, Client, Service
 
@@ -42,7 +42,7 @@ async def get_business_stats(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_access(db, current_user, business_id)
+    await assert_business_admin(db, current_user, business_id)
 
     today = utc_now().date()
     period_start = date_from or today.replace(day=1)

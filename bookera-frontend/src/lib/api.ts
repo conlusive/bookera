@@ -122,7 +122,14 @@ export interface StaffMember {
   phone?: string;
   role: string;
   specialization?: string;
+  avatar_url?: string;
   commission_rate?: number;
+  fixed_salary?: number;
+  tax_rate?: number;
+  payment_method?: string;
+  shifts?: Record<string, any>[];
+  assigned_services?: number[];
+  provides_services?: boolean;
   is_active: boolean;
 }
 

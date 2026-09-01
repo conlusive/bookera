@@ -372,19 +372,24 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     handleUpdateLocalStaff(updates);
 
     try {
-      // Бекенд підтримує: full_name, phone, specialization, role,
-      // commission_rate, is_active. Поля assigned_services/shifts/
-      // provides_services - деталізація на рівні "які послуги виконує САМЕ
-      // цей майстер" і "особистий графік майстра окремо від графіка
-      // закладу" - такого рівня в моделі User на бекенді поки немає,
-      // тому ці поля лишаються лише в локальному стані цього сеансу
-      // (не губляться одразу, але й не переживуть перезавантаження сторінки).
+      // Бекенд тепер підтримує ВСІ поля картки співробітника, включно з
+      // оплатою праці (оклад/податок/спосіб виплати), особистим графіком
+      // і переліком послуг конкретного майстра. Раніше цих колонок не було,
+      // і я тимчасово прибрав їх з інтерфейсу - це було помилкою, бо для
+      // частини салонів фіксована ставка є основним способом оплати.
       const backendUpdates: Record<string, any> = {};
       if (updates.name !== undefined) backendUpdates.full_name = updates.name;
       if (updates.phone !== undefined) backendUpdates.phone = updates.phone;
       if (updates.role !== undefined) backendUpdates.role = updates.role;
       if (updates.commission_rate !== undefined) backendUpdates.commission_rate = updates.commission_rate;
       if (updates.specialization !== undefined) backendUpdates.specialization = updates.specialization;
+      if (updates.fixed_salary !== undefined) backendUpdates.fixed_salary = updates.fixed_salary;
+      if (updates.tax_rate !== undefined) backendUpdates.tax_rate = updates.tax_rate;
+      if (updates.payment_method !== undefined) backendUpdates.payment_method = updates.payment_method;
+      if (updates.shifts !== undefined) backendUpdates.shifts = updates.shifts;
+      if (updates.assigned_services !== undefined) backendUpdates.assigned_services = updates.assigned_services;
+      if (updates.provides_services !== undefined) backendUpdates.provides_services = updates.provides_services;
+      if (updates.avatar_url !== undefined) backendUpdates.avatar_url = updates.avatar_url;
 
       const hasBackendFields = Object.keys(backendUpdates).length > 0;
 

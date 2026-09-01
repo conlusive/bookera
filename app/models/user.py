@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Numeric
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Numeric, JSON
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -36,6 +36,21 @@ class User(Base):
     specialization = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     commission_rate = Column(Numeric(5, 2), nullable=True)  # % комісії майстра
+
+    # Оплата праці: у салонах поширені три моделі - лише відсоток, лише
+    # оклад, або комбінація. Раніше цих полів не було на бекенді, і я
+    # прибрав їх з інтерфейсу - неправильно, бо для частини закладів
+    # фіксована ставка це основний спосіб оплати.
+    fixed_salary = Column(Numeric(10, 2), nullable=True)
+    tax_rate = Column(Numeric(5, 2), nullable=True)  # % утримання (ФОП/ЄСВ тощо)
+    payment_method = Column(String, nullable=True)  # cash / card
+
+    # Особистий графік майстра (може відрізнятись від графіка закладу) та
+    # перелік послуг, які саме він виконує. JSON, бо читаються й
+    # перезаписуються цілком, ніколи не фільтруються по вмісту.
+    shifts = Column(JSON, nullable=True)
+    assigned_services = Column(JSON, default=list)
+    provides_services = Column(Boolean, default=True, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)

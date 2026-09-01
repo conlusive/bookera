@@ -102,6 +102,7 @@ class CurrentUser:
     id: str
     email: Optional[str]
     role: Optional[str]
+    full_name: Optional[str] = None
 
 
 async def get_current_user(
@@ -130,8 +131,15 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недійсний токен")
 
-    role = (payload.get("user_metadata") or {}).get("role")
-    return CurrentUser(id=user_id, email=payload.get("email"), role=role)
+    metadata = payload.get("user_metadata") or {}
+    return CurrentUser(
+        id=user_id,
+        email=payload.get("email"),
+        role=metadata.get("role"),
+        # Імʼя, вказане при реєстрації акаунта - щоб картка власника в CRM
+        # не показувала email замість імені.
+        full_name=metadata.get("full_name"),
+    )
 
 
 async def assert_business_access(db: AsyncSession, current_user: CurrentUser, business_id: int) -> None:

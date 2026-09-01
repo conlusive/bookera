@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
-import { isOwnerRole } from '@/lib/roles';
+import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
 import { Icons } from '@/components/shared';
 
 
@@ -177,21 +177,23 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
 // --- ЛОГІКА МАЙСТРА ТА ДОСТУПІВ ---
   // 🟢 Залізобетонна перевірка прав власника за ID, роллю або email
+  // isOwnerRole приймає всі історичні назви ролі власника ('business_owner'
+  // з бекенду, а також старі 'vendor'/'owner'). Раніше тут звірялось лише
+  // з 'vendor'/'owner' - і власник із роллю 'business_owner' не отримував
+  // прав на редагування власної ж картки.
   const isSystemOwner = Boolean(
     (userProfile?.id && business?.owner_id && String(userProfile.id) === String(business.owner_id)) ||
-    userProfile?.role === 'vendor' ||
-    userProfile?.role === 'owner' ||
-    (userProfile?.email && business?.owner_id && business.owner_id === userProfile.id)
+    isOwnerRole(userProfile?.role)
   );
 
   const currentLoggedInStaff = (team || []).find((t: any) => t.email === userProfile?.email || String(t.id) === String(userProfile?.id));
-  const currentUserRole = isSystemOwner ? 'owner' : (currentLoggedInStaff?.role || 'master');
-  const hasAdminRights = isSystemOwner || currentUserRole === 'admin' || currentUserRole === 'owner';
+  const currentUserRole = isSystemOwner ? OWNER_ROLE : (currentLoggedInStaff?.role || 'master');
+  const hasAdminRights = isSystemOwner || currentUserRole === 'admin' || isOwnerRole(currentUserRole);
 
   // Гарантуємо наявність картки власника, навіть якщо база staff ще порожня
   const effectiveTeam = useMemo(() => {
     let list = [...(team || [])];
-    const hasOwnerInList = list.some((t: any) => t.role === 'owner' || t.email === userProfile?.email || String(t.id) === String(userProfile?.id));
+    const hasOwnerInList = list.some((t: any) => isOwnerRole(t.role) || t.email === userProfile?.email || String(t.id) === String(userProfile?.id));
 
     if (!hasOwnerInList && isSystemOwner && userProfile) {
       list.unshift({

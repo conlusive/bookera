@@ -74,10 +74,20 @@ async def run_async_migrations() -> None:
 
     """
 
+    # connect_args обовʼязкові для Supabase Transaction Pooler (порт 6543):
+    # pgbouncer у transaction-режимі не підтримує server-side prepared
+    # statements, і без цього міграції падають з
+    # DuplicatePreparedStatementError. Ті самі налаштування вже стоять
+    # у app/core/database.py для самого застосунку - Alembic їх не
+    # успадковує, бо створює власне підключення.
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={
+            "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
+        },
     )
 
     async with connectable.connect() as connection:

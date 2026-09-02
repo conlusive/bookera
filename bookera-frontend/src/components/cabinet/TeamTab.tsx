@@ -190,6 +190,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const currentUserRole = isSystemOwner ? OWNER_ROLE : (currentLoggedInStaff?.role || 'master');
   const hasAdminRights = isSystemOwner || currentUserRole === 'admin' || isOwnerRole(currentUserRole);
 
+
   // Гарантуємо наявність картки власника, навіть якщо база staff ще порожня
   const effectiveTeam = useMemo(() => {
     let list = [...(team || [])];
@@ -220,6 +221,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   if (currentStaff) {
     currentStaff = { ...currentStaff };
+
 
     // Перевірка: чи це дійсно профіль власника (навіть якщо роль збилась)
     isOwnerProfile = currentStaff.name?.includes('Власник') || isOwnerRole(currentStaff.role) || (isSystemOwner && currentStaff.email === userProfile?.email);
@@ -267,11 +269,12 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   useEffect(() => {
     if (currentStaff) {
       setLocalAssignedServices(currentStaff.assigned_services || services.map((s: any) => String(s.id)));
-      if (staffActiveTab === 'finance') {
-        fetchUnpaidAppointments(currentStaff.id, currentStaff.last_payout_date);
-      }
+      // Вантажимо розрахунок ОДРАЗУ при виборі співробітника, а не при
+      // відкритті вкладки "Зарплата" - раніше через це зелений блок
+      // зʼявлявся ривком, окремо від решти картки.
+      fetchUnpaidAppointments(currentStaff.id, currentStaff.last_payout_date);
     }
-  }, [selectedStaffId, team, services, staffActiveTab]);
+  }, [selectedStaffId, services]);
 
   const fetchUnpaidAppointments = async (staffId: string, lastPayoutDate: string | null) => {
     setIsLoadingFinance(true);
@@ -369,7 +372,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
 // 🟢 Надійне збереження в базу з реактивним станом кнопки та Toast-сповіщенням
   const handleSaveSettingsDB = async (updates: any, notify: boolean = true) => {
-    if (!currentStaff || !hasAdminRights || isSavingStaff) return;
+    // Раніше тут стояло !hasAdminRights - і майстер не міг зберегти навіть
+    // власне імʼя. Тепер пускаємо, якщо це адмін АБО власна картка; бекенд
+    // усе одно відкине спробу майстра змінити собі ставку чи роль.
+    if (!currentStaff || isSavingStaff) return;
+    if (!hasAdminRights && !isOwnCard) return;
     setIsSavingStaff(true);
     handleUpdateLocalStaff(updates);
 
@@ -379,24 +386,45 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       // і переліком послуг конкретного майстра. Раніше цих колонок не було,
       // і я тимчасово прибрав їх з інтерфейсу - це було помилкою, бо для
       // частини салонів фіксована ставка є основним способом оплати.
+      // Назви полів у CRM і на бекенді історично розійшлись (title проти
+      // specialization, keeps_tips проти tips_full тощо). Раніше ці поля
+      // просто не потрапляли в запит - виглядало наче збереглось, а після
+      // перезавантаження значення зникало. Тепер мапінг єдиною таблицею.
+      const FIELD_MAP: Record<string, string> = {
+        name: 'full_name',
+        title: 'specialization',
+        specialization: 'specialization',
+        phone: 'phone',
+        avatar_url: 'avatar_url',
+        role: 'role',
+        commission_rate: 'commission_rate',
+        fixed_salary: 'fixed_salary',
+        tax_rate: 'tax_rate',
+        payment_method: 'payment_method',
+        card_number: 'card_number',
+        bank_name: 'bank_name',
+        shifts: 'shifts',
+        assigned_services: 'assigned_services',
+        provides_services: 'provides_services',
+        payout_period: 'payout_period',
+        payout_day: 'payout_day',
+        keeps_tips: 'tips_full',
+        tips_full: 'tips_full',
+        deduct_materials: 'deduct_materials',
+        auto_payout: 'auto_reset_balance',
+        auto_reset_balance: 'auto_reset_balance',
+        is_active: 'is_active',
+      };
+
       const backendUpdates: Record<string, any> = {};
-      if (updates.name !== undefined) backendUpdates.full_name = updates.name;
-      if (updates.phone !== undefined) backendUpdates.phone = updates.phone;
-      if (updates.role !== undefined) backendUpdates.role = updates.role;
-      if (updates.commission_rate !== undefined) backendUpdates.commission_rate = updates.commission_rate;
-      if (updates.specialization !== undefined) backendUpdates.specialization = updates.specialization;
-      if (updates.fixed_salary !== undefined) backendUpdates.fixed_salary = updates.fixed_salary;
-      if (updates.tax_rate !== undefined) backendUpdates.tax_rate = updates.tax_rate;
-      if (updates.payment_method !== undefined) backendUpdates.payment_method = updates.payment_method;
-      if (updates.shifts !== undefined) backendUpdates.shifts = updates.shifts;
-      if (updates.assigned_services !== undefined) backendUpdates.assigned_services = updates.assigned_services;
-      if (updates.provides_services !== undefined) backendUpdates.provides_services = updates.provides_services;
-      if (updates.avatar_url !== undefined) backendUpdates.avatar_url = updates.avatar_url;
-      if (updates.payout_period !== undefined) backendUpdates.payout_period = updates.payout_period;
-      if (updates.payout_day !== undefined) backendUpdates.payout_day = String(updates.payout_day);
-      if (updates.tips_full !== undefined) backendUpdates.tips_full = updates.tips_full;
-      if (updates.deduct_materials !== undefined) backendUpdates.deduct_materials = updates.deduct_materials;
-      if (updates.auto_reset_balance !== undefined) backendUpdates.auto_reset_balance = updates.auto_reset_balance;
+      for (const [key, value] of Object.entries(updates)) {
+        const backendKey = FIELD_MAP[key];
+        if (!backendKey || value === undefined) continue;
+        backendUpdates[backendKey] = backendKey === 'payout_day' ? String(value) : value;
+      }
+      // email не редагується тут: він належить обліковому запису Supabase,
+      // змінити його можна лише через процедуру зміни пошти самим
+      // користувачем (з підтвердженням), а не адміністратором CRM.
 
       const hasBackendFields = Object.keys(backendUpdates).length > 0;
 
@@ -486,6 +514,19 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     link.click();
     document.body.removeChild(link);
   };
+
+  // Три рівні, дзеркально до перевірок на бекенді:
+  //   isSystemOwner  - власник: усе, включно з передачею прав
+  //   hasAdminRights - адміністратор: усе, крім передачі власності
+  //   isOwnCard      - майстер про себе: контакти й графік, але не ставка/роль
+  const isOwnCard = Boolean(
+    currentStaff && userProfile &&
+    (String(currentStaff.id) === String(userProfile.id) || currentStaff.email === userProfile.email)
+  );
+  const canEditContacts = hasAdminRights || isOwnCard;   // імʼя, телефон, посада
+  const canEditSchedule = hasAdminRights || isOwnCard;   // власний графік
+  const canEditFinance = hasAdminRights;                 // ставка, відсоток, податок
+  const canEditServices = hasAdminRights;                // які послуги виконує
 
   const getRoleBadge = (staff: any) => {
     if ((staff.name || '').includes('Власник') || isOwnerRole(staff.role)) return { label: 'Власник бізнесу', color: colors.blue, bg: colors.blueLight };
@@ -729,7 +770,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         name: currentStaff.name,
                         title: currentStaff.title,
                         phone: currentStaff.phone,
-                        email: currentStaff.email
                       })}
                       style={{
                         padding: '0.65rem 1.4rem',
@@ -773,19 +813,19 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>ПІБ співробітника</label>
-                    <input type="text" value={currentStaff.name || ''} onChange={e => handleUpdateLocalStaff({ name: e.target.value })} disabled={!hasAdminRights} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <input type="text" value={currentStaff.name || ''} onChange={e => handleUpdateLocalStaff({ name: e.target.value })} disabled={!canEditContacts} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Посада (Для клієнтів)</label>
-                    <input type="text" value={currentStaff.title || ''} placeholder="Наприклад: Топ-Барбер" onChange={e => handleUpdateLocalStaff({ title: e.target.value })} disabled={!hasAdminRights} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <input type="text" value={currentStaff.title || ''} placeholder="Наприклад: Топ-Барбер" onChange={e => handleUpdateLocalStaff({ title: e.target.value })} disabled={!canEditContacts} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Телефон</label>
-                    <input type="text" value={currentPhoneDisplay} onChange={e => { if (!hasAdminRights) return; let val = e.target.value; if (!val.startsWith('+380')) val = '+380'; const digits = val.slice(4).replace(/\D/g, ''); handleUpdateLocalStaff({ phone: '+380' + digits.slice(0, 9) }); }} disabled={!hasAdminRights} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <input type="text" value={currentPhoneDisplay} onChange={e => { if (!canEditContacts) return; let val = e.target.value; if (!val.startsWith('+380')) val = '+380'; const digits = val.slice(4).replace(/\D/g, ''); handleUpdateLocalStaff({ phone: '+380' + digits.slice(0, 9) }); }} disabled={!canEditContacts} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Email</label>
-                    <input type="email" value={currentStaff.email || ''} onChange={e => handleUpdateLocalStaff({ email: e.target.value })} disabled={!hasAdminRights} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <input type="email" value={currentStaff.email || ''} readOnly disabled title="Пошта належить обліковому запису і змінюється власником акаунта" style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
                   </div>
                 </div>
               </div>
@@ -807,7 +847,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         </div>
 
                         {/* КНОПКА ВИБРАТИ ВСІ (Автозбереження) */}
-                        {hasAdminRights && (
+                        {canEditServices && (
                           <button
                             onClick={() => {
                               const allAssigned = localAssignedServices.length === services.length;
@@ -819,7 +859,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                             onMouseOver={e => e.currentTarget.style.background = '#dbeafe'}
                             onMouseOut={e => e.currentTarget.style.background = colors.blueLight}
                           >
-                            {localAssignedServices.length === services.length ? 'Зняти всі' : 'Вибрати всі'}
+                            {localAssignedServices.length === services.length ? 'Зняти всі' : `Вибрати всі (${services.length})`}
                           </button>
                         )}
                       </div>
@@ -877,12 +917,16 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderBottom: idx !== staffShifts.length - 1 ? `1px solid ${colors.surface}` : 'none' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '180px' }}>
                             <div onClick={() => {
-                               if (!hasAdminRights) return;
-                               const newShifts = [...staffShifts];
-                               newShifts[idx].active = !schedule.active;
+                               if (!canEditSchedule) return;
+                               // map замість мутації елемента: staffShifts - результат
+                               // useMemo, і зміна "на місці" не створює новий масив,
+                               // тому React міг не перемалювати рядок.
+                               const newShifts = staffShifts.map((s: any, i: number) =>
+                                 i === idx ? { ...s, active: !schedule.active } : s
+                               );
                                handleUpdateLocalStaff({ shifts: newShifts });
                                handleSaveSettingsDB({ shifts: newShifts }); // Автозбереження тогла
-                            }} style={{ width: '40px', height: '22px', borderRadius: '12px', background: schedule.active ? (hasAdminRights ? colors.green : colors.textSecondary) : colors.border, position: 'relative', cursor: hasAdminRights ? 'pointer' : 'default', transition: 'background 0.3s', flexShrink: 0 }}>
+                            }} style={{ width: '40px', height: '22px', borderRadius: '12px', background: schedule.active ? (canEditSchedule ? colors.green : colors.textSecondary) : colors.border, position: 'relative', cursor: canEditSchedule ? 'pointer' : 'default', transition: 'background 0.3s', flexShrink: 0 }}>
                               <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
                             </div>
                             <div style={{ fontWeight: '600', color: schedule.active ? colors.textPrimary : colors.textSecondary, fontSize: '0.95rem' }}>{schedule.day}</div>
@@ -891,21 +935,37 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             {schedule.active ? (
                               <>
-                                <input disabled={!hasAdminRights} type="time" value={schedule.start} onChange={(e) => {
-                                   const newShifts = [...staffShifts];
-                                   newShifts[idx].start = e.target.value;
+                                <input disabled={!canEditSchedule} type="time" value={schedule.start} onChange={(e) => {
+                                   // map, а не мутація: [...staffShifts] копіює лише
+                                   // зовнішній масив, самі обʼєкти лишаються спільними,
+                                   // тому запис "на місці" міняв і вихідні дані теж.
+                                   const newShifts = staffShifts.map((s: any, i: number) =>
+                                     i === idx ? { ...s, start: e.target.value } : s
+                                   );
                                    handleUpdateLocalStaff({ shifts: newShifts });
-                                }} onBlur={(e) => {
-                                   handleSaveSettingsDB({ shifts: staffShifts }); // Зберігаємо коли прибрали фокус
-                                }} style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }} />
+                                }} onBlur={() => {
+                                   // Зберігаємо АКТУАЛЬНИЙ графік із currentStaff, а не
+                                   // staffShifts: цей useMemo міг ще не перерахуватись,
+                                   // і на бекенд ішло старе значення - через це зміна
+                                   // часу не зберігалась.
+                                   handleSaveSettingsDB({ shifts: currentStaff.shifts || staffShifts });
+                                }} style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: canEditSchedule ? 1 : 0.7 }} />
                                 <span style={{ color: colors.textSecondary, fontWeight: '400' }}>—</span>
-                                <input disabled={!hasAdminRights} type="time" value={schedule.end} onChange={(e) => {
-                                   const newShifts = [...staffShifts];
-                                   newShifts[idx].end = e.target.value;
+                                <input disabled={!canEditSchedule} type="time" value={schedule.end} onChange={(e) => {
+                                   // map, а не мутація: [...staffShifts] копіює лише
+                                   // зовнішній масив, самі обʼєкти лишаються спільними,
+                                   // тому запис "на місці" міняв і вихідні дані теж.
+                                   const newShifts = staffShifts.map((s: any, i: number) =>
+                                     i === idx ? { ...s, end: e.target.value } : s
+                                   );
                                    handleUpdateLocalStaff({ shifts: newShifts });
-                                }} onBlur={(e) => {
-                                   handleSaveSettingsDB({ shifts: staffShifts }); // Зберігаємо коли прибрали фокус
-                                }} style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: hasAdminRights ? 1 : 0.7 }} />
+                                }} onBlur={() => {
+                                   // Зберігаємо АКТУАЛЬНИЙ графік із currentStaff, а не
+                                   // staffShifts: цей useMemo міг ще не перерахуватись,
+                                   // і на бекенд ішло старе значення - через це зміна
+                                   // часу не зберігалась.
+                                   handleSaveSettingsDB({ shifts: currentStaff.shifts || staffShifts });
+                                }} style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: canEditSchedule ? 1 : 0.7 }} />
                               </>
                             ) : <div style={{ padding: '0.5rem 2rem', color: colors.textSecondary, fontWeight: '500', fontSize: '0.95rem', background: colors.surface, borderRadius: '8px', border: `1px dashed ${colors.border}` }}>Вихідний</div>}
                           </div>
@@ -923,7 +983,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                 {/* 🟢 М'ЯТНИЙ ВІДЖЕТ ЗАРОБІТКУ ТА ПОДАТКІВ */}
                 {(() => {
-                  if (!payoutPreview) return null;
+                  if (!payoutPreview) {
+                    // Скелетон тієї ж висоти, що й готовий блок - щоб картка
+                    // не «стрибала», коли розрахунок довантажиться.
+                    return (
+                      <div style={{ background: colors.wMintBg, border: `1.5px dashed ${colors.wMintBorder}`, borderRadius: '16px', padding: '1.5rem', minHeight: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.wMintText, opacity: 0.7, fontSize: '0.9rem', fontWeight: 600 }}>
+                        Рахуємо невиплачений дохід…
+                      </div>
+                    );
+                  }
                   const periodStart = payoutPreview.period_start ? new Date(payoutPreview.period_start) : null;
                   const isPayoutDisabled = payoutPreview.payout_amount <= 0;
 
@@ -1061,7 +1129,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         <input
                            type="number"
                            value={currentStaff.commission_rate || 0}
-                           onChange={e => hasAdminRights && handleUpdateLocalStaff({ commission_rate: Number(e.target.value) })}
+                           onChange={e => canEditFinance && handleUpdateLocalStaff({ commission_rate: Number(e.target.value) })}
                            disabled={!hasAdminRights}
                            style={{ width: '100%', padding: '0.8rem 1rem', paddingRight: '2.5rem', background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary, outline: 'none' }}
                         />
@@ -1074,7 +1142,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         <input
                            type="number"
                            value={currentStaff.fixed_salary || 0}
-                           onChange={e => hasAdminRights && handleUpdateLocalStaff({ fixed_salary: Number(e.target.value) })}
+                           onChange={e => canEditFinance && handleUpdateLocalStaff({ fixed_salary: Number(e.target.value) })}
                            disabled={!hasAdminRights}
                            style={{ width: '100%', padding: '0.8rem 1rem', paddingRight: '2.5rem', background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary, outline: 'none' }}
                         />
@@ -1087,7 +1155,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         <input
                            type="number"
                            value={currentStaff.tax_rate || 0}
-                           onChange={e => hasAdminRights && handleUpdateLocalStaff({ tax_rate: Number(e.target.value) })}
+                           onChange={e => canEditFinance && handleUpdateLocalStaff({ tax_rate: Number(e.target.value) })}
                            disabled={!hasAdminRights}
                            style={{ width: '100%', padding: '0.8rem 1rem', paddingRight: '2.5rem', background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary, outline: 'none' }}
                         />

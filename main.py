@@ -34,9 +34,45 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
         logger.info("Успішне підключення до бази даних")
+
+        # Звіряємо версію схеми в базі з останньою міграцією в коді.
+        # Без цієї перевірки розбіжність вилазила пізніше і виглядала як
+        # незрозуміла "Тимчасова проблема з базою даних" десь посеред
+        # роботи - хоча насправді просто забули `alembic upgrade head`.
+        await _warn_if_migrations_pending()
     except Exception as e:
         logger.error(f"Проблема при старті/підключенні до БД: {e}")
     yield
+
+
+
+async def _warn_if_migrations_pending() -> None:
+    """Порівнює alembic_version у базі з головою міграцій у коді."""
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+    except ImportError:
+        return  # alembic не встановлений - перевірку просто пропускаємо
+
+    try:
+        script = ScriptDirectory.from_config(Config("alembic.ini"))
+        head = script.get_current_head()
+
+        async with engine.begin() as conn:
+            result = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            current = result.scalar()
+
+        if current != head:
+            logger.error(
+                "СХЕМА БАЗИ ЗАСТАРІЛА: у базі %s, у коді %s. "
+                "Виконайте: alembic upgrade head — інакше частина запитів "
+                "падатиме з помилкою про відсутні колонки.",
+                current, head,
+            )
+        else:
+            logger.info("Схема бази актуальна (%s)", head)
+    except Exception as e:
+        logger.warning(f"Не вдалося перевірити версію схеми: {e}")
 
 
 app = FastAPI(

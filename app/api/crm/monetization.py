@@ -285,6 +285,10 @@ async def create_payout(
         gross_revenue=preview["gross_revenue"],
         commission_rate_applied=preview["commission_rate"],
         payout_amount=preview["payout_amount"],
+        commission_part=preview.get("commission_part"),
+        fixed_part=preview.get("fixed_part"),
+        tax_amount=preview.get("tax_amount"),
+        appointments_count=preview.get("completed_appointments_count"),
         notes=payload.notes,
         expense_id=expense.id,
     )

@@ -116,9 +116,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [staffServiceSearchQuery, setStaffServiceSearchQuery] = useState('');
 
   // 🟢 СТЕЙТ ДЛЯ ЗАРПЛАТИ
+  const [payoutHistory, setPayoutHistory] = useState<any[]>([]);
   const [payoutPreview, setPayoutPreview] = useState<{
     gross_revenue: number; commission_rate: number; payout_amount: number;
     completed_appointments_count: number; period_start: string;
+    commission_part?: number; fixed_part?: number; tax_rate?: number; tax_amount?: number;
   } | null>(null);
   const [isLoadingFinance, setIsLoadingFinance] = useState(false);
 
@@ -283,8 +285,12 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       // Розрахунок тепер повністю на бекенді (той самий period-based підхід,
       // що не дає одному й тому ж візиту потрапити у дві виплати підряд) -
       // раніше фронтенд сам тягнув сирі 'bookings' і рахував суму на клієнті.
-      const preview = await api.getPayoutPreview(token, business.id, staffId);
+      const [preview, history] = await Promise.all([
+        api.getPayoutPreview(token, business.id, staffId),
+        api.listPayouts(token, business.id, staffId).catch(() => []),
+      ]);
       setPayoutPreview(preview);
+      setPayoutHistory(Array.isArray(history) ? history : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -926,7 +932,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                );
                                handleUpdateLocalStaff({ shifts: newShifts });
                                handleSaveSettingsDB({ shifts: newShifts }); // Автозбереження тогла
-                            }} style={{ width: '40px', height: '22px', borderRadius: '12px', background: schedule.active ? (canEditSchedule ? colors.green : colors.textSecondary) : colors.border, position: 'relative', cursor: canEditSchedule ? 'pointer' : 'default', transition: 'background 0.3s', flexShrink: 0 }}>
+                            }} style={{ userSelect: 'none', WebkitUserSelect: 'none', width: '40px', height: '22px', borderRadius: '12px', background: schedule.active ? (canEditSchedule ? colors.green : colors.textSecondary) : colors.border, position: 'relative', cursor: canEditSchedule ? 'pointer' : 'default', transition: 'background 0.3s', flexShrink: 0 }}>
                               <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
                             </div>
                             <div style={{ fontWeight: '600', color: schedule.active ? colors.textPrimary : colors.textSecondary, fontSize: '0.95rem' }}>{schedule.day}</div>
@@ -1005,7 +1011,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         // потрапив у виплату двічі), створює пов'язаний запис
                         // витрати - раніше це було 3 окремих ручних Supabase-запити.
                         await api.createPayout(token, business.id, currentStaff.id);
-                        setPayoutPreview({ ...payoutPreview, payout_amount: 0, gross_revenue: 0, completed_appointments_count: 0 });
+                        await fetchUnpaidAppointments(currentStaff.id, null);
                         showToast(`Виплату ${payoutPreview.payout_amount.toLocaleString('uk-UA')} ₴ успішно зафіксовано!`, "success");
                      } catch (err: any) {
                         showToast(err?.message || "Помилка збереження виплати", "error");
@@ -1023,14 +1029,34 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                             <p style={{ fontSize: '0.85rem', color: colors.wMintText, margin: '0 0 1.5rem 0', opacity: 0.8 }}>
                               Розрахунок з: <b>{periodStart ? periodStart.toLocaleDateString('uk-UA') : 'початку роботи'}</b>
-                              {' '}(Виконано: <b>{payoutPreview.completed_appointments_count}</b> візитів на суму <b>{payoutPreview.gross_revenue.toLocaleString('uk-UA')} ₴</b>)
+                              {' '}(Виконано: <b>{payoutPreview.completed_appointments_count}</b> візитів на суму <b>{Number(payoutPreview.gross_revenue).toLocaleString('uk-UA')} ₴</b>)
                             </p>
 
                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1.5rem', flexWrap: 'wrap' }}>
                               <div>
                                 <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Відсоток ({payoutPreview.commission_rate}%)</div>
-                                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{payoutPreview.gross_revenue.toLocaleString('uk-UA')} ₴</div>
+                                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{Number(payoutPreview.commission_part || 0).toLocaleString('uk-UA')} ₴</div>
                               </div>
+
+                              {Number(payoutPreview.fixed_part) > 0 && (
+                                <>
+                                  <div style={{ fontSize: '1.1rem', color: colors.wMintBorder, paddingBottom: '2px' }}>+</div>
+                                  <div>
+                                    <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Ставка</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{Number(payoutPreview.fixed_part).toLocaleString('uk-UA')} ₴</div>
+                                  </div>
+                                </>
+                              )}
+
+                              {Number(payoutPreview.tax_amount) > 0 && (
+                                <>
+                                  <div style={{ fontSize: '1.1rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>−</div>
+                                  <div>
+                                    <div style={{ fontSize: '0.75rem', color: colors.red, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Податок ({payoutPreview.tax_rate}%)</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.red }}>{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
+                                  </div>
+                                </>
+                              )}
 
                               <div style={{ fontSize: '1.1rem', color: colors.wMintBorder, paddingBottom: '2px', marginLeft: '0.5rem' }}>=</div>
 
@@ -1232,7 +1258,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                      </div>
 
                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '0.5rem' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: canEditFinance ? 'pointer' : 'default', opacity: canEditFinance ? 1 : 0.7, userSelect: 'none', WebkitUserSelect: 'none' }}>
                           <div style={{ position: 'relative', display: 'inline-block', width: '40px', height: '22px', flexShrink: 0 }}>
                              <input type="checkbox" checked={currentStaff.auto_payout || false} onChange={e => {
                                 if(hasAdminRights) {
@@ -1244,7 +1270,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                           <span style={{ fontSize: '0.9rem', fontWeight: '500', color: colors.textPrimary }}>Автоматично обнуляти баланс</span>
                         </label>
 
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: canEditFinance ? 'pointer' : 'default', opacity: canEditFinance ? 1 : 0.7, userSelect: 'none', WebkitUserSelect: 'none' }}>
                           <div style={{ position: 'relative', display: 'inline-block', width: '40px', height: '22px', flexShrink: 0 }}>
                              <input type="checkbox" checked={currentStaff.keeps_tips !== false} onChange={e => {
                                 if(hasAdminRights) {
@@ -1256,7 +1282,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                           <span style={{ fontSize: '0.9rem', fontWeight: '500', color: colors.textPrimary }}>Майстер отримує 100% чайових</span>
                         </label>
 
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: hasAdminRights ? 'pointer' : 'default', opacity: hasAdminRights ? 1 : 0.7 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: canEditFinance ? 'pointer' : 'default', opacity: canEditFinance ? 1 : 0.7, userSelect: 'none', WebkitUserSelect: 'none' }}>
                           <div style={{ position: 'relative', display: 'inline-block', width: '40px', height: '22px', flexShrink: 0 }}>
                              <input type="checkbox" checked={currentStaff.deduct_materials || false} onChange={e => {
                                 if(hasAdminRights) {
@@ -1343,27 +1369,27 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                      <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.textPrimary, margin: 0 }}>Історія виплат</h3>
                    </div>
                    <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', maxHeight: '400px', overflowY: 'auto' }}>
-                     {currentStaff.payout_history && currentStaff.payout_history.length > 0 ? (
+                     {payoutHistory.length > 0 ? (
                        <div style={{ border: `1px solid ${colors.border}`, borderRadius: '12px', overflow: 'hidden' }}>
-                         {currentStaff.payout_history.map((payout: any, i: number) => (
-                           <div key={payout.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', background: '#fff', borderBottom: i !== currentStaff.payout_history.length - 1 ? `1px solid ${colors.surface}` : 'none' }}>
+                         {payoutHistory.map((payout: any, i: number) => (
+                           <div key={payout.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', background: '#fff', borderBottom: i !== payoutHistory.length - 1 ? `1px solid ${colors.surface}` : 'none' }}>
                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                 <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: colors.surface, color: colors.green, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icons.CheckCircle /></div>
                                 <div>
                                   <div style={{ fontWeight: '600', color: colors.textPrimary, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                     Виплата • {new Date(payout.date).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                     {payout.method === 'card' ? (
+                                     Виплата • {new Date(payout.paid_at || payout.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                     {currentStaff.payment_method === 'card' ? (
                                         <span style={{ fontSize: '0.65rem', background: colors.blueLight, color: colors.blue, padding: '2px 6px', borderRadius: '6px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '2px' }}><CreditCardIcon /> На картку</span>
                                      ) : (
                                         <span style={{ fontSize: '0.65rem', background: colors.surface, color: colors.textSecondary, padding: '2px 6px', borderRadius: '6px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '2px' }}><WalletIcon /> Готівкою</span>
                                      )}
                                   </div>
                                   <div style={{ fontSize: '0.75rem', color: colors.textSecondary, marginTop: '4px', fontWeight: '500' }}>
-                                    Ставка: {payout.fixed_part || 0} ₴ • Комісія: {payout.commission_part || 0} ₴ {payout.tax_deducted ? `• Податок: -${payout.tax_deducted} ₴` : ''}
+                                    Візитів: {payout.appointments_count ?? 0} • Ставка: {Number(payout.fixed_part || 0).toLocaleString('uk-UA')} ₴ • Комісія: {Number(payout.commission_part || 0).toLocaleString('uk-UA')} ₴{Number(payout.tax_amount) > 0 ? ` • Податок: -${Number(payout.tax_amount).toLocaleString('uk-UA')} ₴` : ''}
                                   </div>
                                 </div>
                              </div>
-                             <div style={{ fontWeight: '700', color: colors.green, fontSize: '1.1rem' }}>{payout.amount.toLocaleString('uk-UA')} ₴</div>
+                             <div style={{ fontWeight: '700', color: colors.green, fontSize: '1.1rem' }}>{Number(payout.payout_amount).toLocaleString('uk-UA')} ₴</div>
                            </div>
                          ))}
                        </div>
@@ -1509,7 +1535,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             </div>
 
             {newOwnerId && (
-               <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.8rem', cursor: 'pointer', marginBottom: '2rem', padding: '1rem', background: '#fff', border: `1px solid ${colors.red}`, borderRadius: '12px' }}>
+               <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.8rem', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none', marginBottom: '2rem', padding: '1rem', background: '#fff', border: `1px solid ${colors.red}`, borderRadius: '12px' }}>
                  <input
                    type="checkbox"
                    checked={transferConfirmed}

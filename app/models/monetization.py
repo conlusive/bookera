@@ -128,6 +128,14 @@ class StaffPayout(Base):
     commission_rate_applied = Column(Numeric(5, 2), nullable=False)  # % майстра на момент виплати
     payout_amount = Column(Numeric(10, 2), nullable=False)
 
+    # Розбивка на момент виплати. Зберігається окремо, бо ставку майстра
+    # можуть змінити пізніше - тоді перерахувати минулу виплату вже не
+    # вийде, і в історії були б неправильні цифри.
+    commission_part = Column(Numeric(10, 2), nullable=True)
+    fixed_part = Column(Numeric(10, 2), nullable=True)
+    tax_amount = Column(Numeric(10, 2), nullable=True)
+    appointments_count = Column(Integer, nullable=True)
+
     status = Column(String, default="paid", nullable=False)  # paid (виплата - завжди доконаний факт)
     paid_at = Column(DateTime, default=utc_now)
     notes = Column(Text, nullable=True)

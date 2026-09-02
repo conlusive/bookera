@@ -97,3 +97,52 @@ async def test_transfer_ownership(client, auth_headers):
     # відхиляється - це і є справжній доказ, що owner_id реально змінився.
     r = await client.post(f"/crm/businesses/{business_id}/transfer-ownership", json={"new_owner_user_id": "transfer-owner"}, headers=owner_headers)
     assert r.status_code == 403, "Колишній власник більше не має права передавати права - owner_id реально змінився"
+
+
+@pytest.mark.asyncio
+async def test_payout_includes_fixed_salary_and_tax(client, auth_headers):
+    """
+    Повна формула: (відсоток від виручки + оклад) - податок.
+    Раніше рахувався лише відсоток, тому майстру з окладом показувало 0.
+    """
+    headers = auth_headers("full-formula-owner")
+    r = await client.post("/crm/businesses", json={"name": "Formula Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+    r = await client.post("/services", json={"business_id": business_id, "name": "Стрижка", "duration_minutes": 30, "price": 1000}, headers=headers)
+    service_id = r.json()["id"]
+
+    import asyncpg
+    conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/bookera_test")
+    await conn.execute(
+        "INSERT INTO users (id, email, role, business_id, commission_rate, fixed_salary, tax_rate, is_active, created_at) "
+        "VALUES ($1,$2,'master',$3,40.0,5000.0,10.0,true,now()) "
+        "ON CONFLICT (id) DO UPDATE SET business_id=$3, commission_rate=40.0, fixed_salary=5000.0, tax_rate=10.0",
+        "formula-master", "formula@test.com", business_id,
+    )
+    await conn.close()
+
+    slot = datetime.now(timezone.utc).replace(tzinfo=None)
+    r = await client.post("/crm/appointments", json={
+        "business_id": business_id, "service_id": service_id, "start_time": slot.isoformat(),
+        "master_id": "formula-master", "client_name": "Клієнт",
+    }, headers=headers)
+    appt_id = r.json()["id"]
+    await client.patch(f"/appointments/{appt_id}/status", json={"status": "completed"}, headers=headers)
+
+    r = await client.get(f"/crm/businesses/{business_id}/staff/formula-master/payout-preview", headers=headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+
+    # 1000 * 40% = 400 комісії; + 5000 окладу = 5400; -10% податку = 4860
+    assert float(data["commission_part"]) == 400.0
+    assert float(data["fixed_part"]) == 5000.0
+    assert float(data["tax_amount"]) == 540.0
+    assert float(data["payout_amount"]) == 4860.0
+
+    # Виплата зберігає розбивку, щоб історія лишалась правильною навіть
+    # після зміни ставки майстра
+    r = await client.post(f"/crm/businesses/{business_id}/staff/formula-master/payouts", json={}, headers=headers)
+    assert r.status_code == 201
+    assert float(r.json()["fixed_part"]) == 5000.0
+    assert float(r.json()["tax_amount"]) == 540.0
+    assert r.json()["appointments_count"] == 1

@@ -127,12 +127,30 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
     appointments = appts_res.scalars().all()
 
     gross_revenue = sum((Decimal(str(a.price)) for a in appointments if a.price), Decimal("0"))
-    payout_amount = (gross_revenue * rate / Decimal("100")).quantize(Decimal("0.01"))
+
+    # Повна формула оплати праці, як її показує CRM:
+    #   (відсоток від виручки + фіксована ставка) - податок/утримання
+    # Раніше рахувався ЛИШЕ відсоток: якщо майстру поставили оклад,
+    # до виплати показувало 0, хоча в картці стояла ставка.
+    commission_part = (gross_revenue * rate / Decimal("100")).quantize(Decimal("0.01"))
+    fixed_part = Decimal(str(staff.fixed_salary)) if staff and staff.fixed_salary else Decimal("0")
+    subtotal = commission_part + fixed_part
+
+    tax_rate = Decimal(str(staff.tax_rate)) if staff and staff.tax_rate else Decimal("0")
+    tax_amount = (subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+
+    payout_amount = (subtotal - tax_amount).quantize(Decimal("0.01"))
+    if payout_amount < 0:
+        payout_amount = Decimal("0.00")
 
     return {
         "staff_id": staff_id,
         "period_start": period_start,
         "period_end": period_end,
+        "commission_part": commission_part,
+        "fixed_part": fixed_part,
+        "tax_rate": tax_rate,
+        "tax_amount": tax_amount,
         "gross_revenue": gross_revenue,
         "commission_rate": rate,
         "payout_amount": payout_amount,

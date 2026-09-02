@@ -84,9 +84,13 @@ class PayoutPreviewResponse(BaseModel):
     staff_id: str
     period_start: datetime
     period_end: datetime
-    gross_revenue: Decimal
-    commission_rate: Decimal
-    payout_amount: Decimal
+    gross_revenue: Decimal          # виручка за виконані візити
+    commission_rate: Decimal        # % майстра
+    commission_part: Decimal = Decimal("0")   # скільки з цього відсотка
+    fixed_part: Decimal = Decimal("0")        # фіксована ставка
+    tax_rate: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")        # утримано
+    payout_amount: Decimal          # підсумок до виплати
     completed_appointments_count: int
 
 
@@ -103,6 +107,10 @@ class StaffPayoutResponse(BaseModel):
     gross_revenue: Decimal
     commission_rate_applied: Decimal
     payout_amount: Decimal
+    commission_part: Optional[Decimal] = None
+    fixed_part: Optional[Decimal] = None
+    tax_amount: Optional[Decimal] = None
+    appointments_count: Optional[int] = None
     status: str
     paid_at: Optional[datetime] = None
     notes: Optional[str] = None

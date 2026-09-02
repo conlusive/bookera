@@ -48,6 +48,10 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
   // Спеціальні стани для Розумного пошуку додаткових послуг (Upsell)
   const [addonSearch, setAddonSearch] = useState('');
+  // Матеріали, що витрачаються на цю послугу. Списуються зі складу
+  // автоматично, коли візит позначають виконаним.
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [serviceMaterials, setServiceMaterials] = useState<{ inventory_item_id: number; quantity_per_use: number }[]>([]);
   const [isAddonDropdownOpen, setIsAddonDropdownOpen] = useState(false);
 
   // Тости
@@ -342,6 +346,29 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     setIsServiceModalOpen(true);
   };
 
+  // Підвантажуємо склад і поточні матеріали при відкритті модалки послуги
+  useEffect(() => {
+    if (!isServiceModalOpen || !business?.id) return;
+    void (async () => {
+      try {
+        const token = await getAuthToken();
+        const items = await api.listInventory(token, business.id);
+        setInventoryItems(items || []);
+        if (editingService?.id) {
+          const mats = await api.getServiceMaterials(token, editingService.id);
+          setServiceMaterials((mats || []).map((m: any) => ({
+            inventory_item_id: m.inventory_item_id,
+            quantity_per_use: m.quantity_per_use,
+          })));
+        } else {
+          setServiceMaterials([]);
+        }
+      } catch {
+        setInventoryItems([]);
+      }
+    })();
+  }, [isServiceModalOpen, editingService?.id, business?.id]);
+
   const handleSaveService = async () => {
     if (!serviceForm.name || serviceForm.price < 0 || serviceForm.duration <= 0) {
       return showToast("Перевірте правильність заповнення полів", "error");
@@ -361,6 +388,8 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
           addon_service_ids: serviceForm.addon_services,
         });
         setServices(prev => prev.map(s => s.id === editingService.id ? updated : s));
+        // Матеріали - окремий ендпоінт: список перезаписується цілком
+        await api.setServiceMaterials(token, editingService.id, serviceMaterials.filter(m => m.quantity_per_use > 0));
         showToast("Послугу оновлено", "success");
       } else {
         const created = await api.createService(token, {
@@ -371,6 +400,9 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
           addon_service_ids: serviceForm.addon_services,
         });
         setServices(prev => [...prev, created]);
+        if (serviceMaterials.length > 0) {
+          await api.setServiceMaterials(token, created.id, serviceMaterials.filter(m => m.quantity_per_use > 0));
+        }
         showToast("Послугу додано", "success");
       }
       setIsServiceModalOpen(false);
@@ -904,6 +936,73 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                           </div>
                        )}
                      </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Матеріали зі складу */}
+            <div style={{ padding: '0 2rem 1.5rem 2rem' }}>
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.3rem' }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f172a' }}>Матеріали зі складу</label>
+                  {serviceMaterials.length > 0 && (
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                      {serviceMaterials.reduce((sum, m) => {
+                        const item = inventoryItems.find((i: any) => i.id === m.inventory_item_id);
+                        return sum + (Number(item?.cost_per_unit || 0) * Number(m.quantity_per_use || 0));
+                      }, 0).toLocaleString('uk-UA')} ₴ собівартість
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 1rem 0' }}>
+                  Списуються автоматично, коли візит позначають виконаним.
+                </p>
+
+                {inventoryItems.length === 0 ? (
+                  <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '10px', fontSize: '0.85rem', color: '#64748b', textAlign: 'center' }}>
+                    Спочатку додайте позиції у вкладці «Склад і Витрати».
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {inventoryItems.map((item: any) => {
+                      const linked = serviceMaterials.find(m => m.inventory_item_id === item.id);
+                      return (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.6rem 0.9rem', background: linked ? '#f0f9ff' : '#fff', border: `1px solid ${linked ? '#bae6fd' : '#e2e8f0'}`, borderRadius: '10px' }}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(linked)}
+                            onChange={e => {
+                              setServiceMaterials(prev => e.target.checked
+                                ? [...prev, { inventory_item_id: item.id, quantity_per_use: 1 }]
+                                : prev.filter(m => m.inventory_item_id !== item.id));
+                            }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500, color: '#0f172a' }}>
+                            {item.name}
+                            <span style={{ color: '#94a3b8', fontWeight: 400 }}> · залишок {Number(item.quantity).toLocaleString('uk-UA')} {item.unit}</span>
+                          </span>
+                          {linked && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={linked.quantity_per_use}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  setServiceMaterials(prev => prev.map(m =>
+                                    m.inventory_item_id === item.id ? { ...m, quantity_per_use: val } : m));
+                                }}
+                                style={{ width: '80px', padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', textAlign: 'right' }}
+                              />
+                              <span style={{ fontSize: '0.85rem', color: '#64748b', minWidth: '30px' }}>{item.unit}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

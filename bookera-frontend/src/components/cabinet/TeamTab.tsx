@@ -117,6 +117,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   // 🟢 СТЕЙТ ДЛЯ ЗАРПЛАТИ
   const [payoutHistory, setPayoutHistory] = useState<any[]>([]);
+  const [duePayouts, setDuePayouts] = useState<any[]>([]);
   const [payoutPreview, setPayoutPreview] = useState<{
     gross_revenue: number; commission_rate: number; payout_amount: number;
     completed_appointments_count: number; period_start: string;
@@ -278,6 +279,22 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       fetchUnpaidAppointments(currentStaff.id, currentStaff.last_payout_date);
     }
   }, [selectedStaffId, services]);
+
+  // Нагадування "кому вже пора платити" - за періодичністю з картки майстра.
+  // Свідомо не автосписання: система нагадує, рішення ухвалює власник.
+  useEffect(() => {
+    if (!business?.id || !hasAdminRights) return;
+    void (async () => {
+      try {
+        const token = await getAuthToken();
+        const res = await api.listDuePayouts(token, business.id);
+        setDuePayouts(res.due || []);
+      } catch {
+        // Нагадування - річ допоміжна: якщо не завантажилось, решта
+        // вкладки має працювати як звичайно.
+      }
+    })();
+  }, [business?.id, hasAdminRights, payoutHistory.length]);
 
   const fetchUnpaidAppointments = async (staffId: string, lastPayoutDate: string | null) => {
     setIsLoadingFinance(true);
@@ -678,6 +695,28 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
               </button>
             )}
           </div>
+
+          {duePayouts.length > 0 && (
+            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '0.9rem 1rem', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#9a3412', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                Час виплати
+              </div>
+              {duePayouts.map((d: any) => (
+                <div
+                  key={d.staff_id}
+                  onClick={() => handleStaffSelect(d.staff_id)}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0', cursor: 'pointer' }}
+                >
+                  <span style={{ fontSize: '0.85rem', color: '#7c2d12', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {d.staff_name}
+                  </span>
+                  <span style={{ fontSize: '0.85rem', color: '#9a3412', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    {Number(d.amount_due).toLocaleString('uk-UA')} ₴
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div style={{ position: 'relative' }}>
             <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary }}><Icons.Search /></div>

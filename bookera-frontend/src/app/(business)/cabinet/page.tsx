@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { useToast } from '@/context/ToastContext';
 import { Business } from '@/types';
 
 // 🟢 ІМПОРТУЄМО ІКОНКИ ТА КОНСТАНТИ З ТВОГО ОКРЕМОГО ФАЙЛУ
@@ -36,6 +37,7 @@ function normalizeStaff(list: any[]): any[] {
 }
 
 export default function BusinessCabinet() {
+  const { showToast } = useToast();
   const router = useRouter();
   const supabase = createClient();
 
@@ -96,14 +98,14 @@ export default function BusinessCabinet() {
   };
 
   const handleSaveNewClient = async () => {
-    if (!business) return alert("Помилка: закладу не обрано!");
-    if (!newClientForm.name.trim()) return alert("Введіть ім'я клієнта!");
+    if (!business) return showToast('Заклад не обрано', 'error');
+    if (!newClientForm.name.trim()) return showToast("Введіть ім'я клієнта", 'error');
 
     let finalPhone = '';
     if (newClientForm.phone && newClientForm.phone !== '+380') {
       const phoneStripped = newClientForm.phone.replace(/\D/g, '');
       if (phoneStripped.length !== 12) {
-        return alert("Некоректний номер телефону! Введіть 9 цифр після +380.");
+        return showToast('Некоректний номер: потрібно 9 цифр після +380', 'error');
       }
       finalPhone = '+' + phoneStripped;
     }
@@ -111,7 +113,7 @@ export default function BusinessCabinet() {
     const emailTrimmed = newClientForm.email.trim();
     if (emailTrimmed) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
-        return alert("Некоректний формат Email (має бути щось типу: example@mail.com)!");
+        return showToast('Некоректна пошта — приклад: example@mail.com', 'error');
       }
     }
 
@@ -131,7 +133,7 @@ export default function BusinessCabinet() {
       setNewClientForm({ name: '', phone: '+380', email: '' });
     } catch (err: any) {
       console.error(err);
-      alert(err?.message || "Помилка при створенні клієнта");
+      showToast(err?.message || 'Не вдалося створити клієнта', 'error');
     } finally {
       setIsSavingClient(false);
     }
@@ -148,7 +150,7 @@ export default function BusinessCabinet() {
       // Бекенд свідомо забороняє видаляти клієнтів з історією бронювань
       // або нарахованими балами (409) - показуємо причину, а не спільну помилку.
       console.error("Помилка видалення клієнта:", err);
-      alert(err?.message || "Не вдалося видалити клієнта.");
+      showToast(err?.message || 'Не вдалося видалити клієнта', 'error');
     }
   };
 
@@ -160,10 +162,10 @@ export default function BusinessCabinet() {
       const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, notes: editingClientNotes, allergies: editingClientAllergies } : c);
       setClientsList(updatedClients);
       setViewingClient({ ...viewingClient, notes: editingClientNotes, allergies: editingClientAllergies });
-      alert("Зміни успішно збережено!");
+      // Підтвердження показує сама кнопка - тост тут був би зайвим шумом.
     } catch (err: any) {
       console.error("Системна помилка:", err);
-      alert(err?.message || "Не вдалося зберегти зміни.");
+      showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
     }
   };
 
@@ -185,7 +187,7 @@ export default function BusinessCabinet() {
     if (!newTag || newTag.trim() === '') return;
 
     const currentTags = viewingClient.tags || [];
-    if (currentTags.includes(newTag.trim())) return alert("Такий тег вже існує у цього клієнта!");
+    if (currentTags.includes(newTag.trim())) return showToast('Такий тег уже є', 'error');
 
     const updatedTags = [...currentTags, newTag.trim()];
 
@@ -505,20 +507,20 @@ export default function BusinessCabinet() {
         }));
         await api.setBusinessHours(token, business.id, hoursPayload);
       } catch (err: any) {
-        alert(err?.message || "Не вдалося зберегти графік роботи");
+        showToast(err?.message || 'Не вдалося зберегти графік', 'error');
       }
     }
     setShowShiftsModal(false);
   };
 
   const handleSaveAppointment = async () => {
-    if (!business) return alert("Помилка: бізнес не обрано.");
+    if (!business) return showToast('Заклад не обрано', 'error');
 
     let finalPhone = '';
     if (!isBlockMode && apptForm.client_phone && apptForm.client_phone !== '+380') {
       const phoneStripped = apptForm.client_phone.replace(/\D/g, '');
       if (phoneStripped.length !== 12) {
-        return alert("Некоректний номер телефону! Введіть 9 цифр після +380.");
+        return showToast('Некоректний номер: потрібно 9 цифр після +380', 'error');
       }
       finalPhone = '+' + phoneStripped;
     }
@@ -527,7 +529,7 @@ export default function BusinessCabinet() {
       const token = await getAuthToken();
 
       const selectedService = services.find(s => String(s.id) === String(apptForm.service_id));
-      if (!isBlockMode && !selectedService) return alert("Оберіть існуючу послугу.");
+      if (!isBlockMode && !selectedService) return showToast('Оберіть послугу', 'error');
 
       const [hours, minutes] = apptForm.time.split(':').map(Number);
       const startDateTime = new Date(`${apptForm.date}T00:00:00`);
@@ -565,7 +567,7 @@ export default function BusinessCabinet() {
       setIsBlockMode(false);
     } catch (err: any) {
       console.error("Системна помилка створення запису:", err);
-      alert(`Помилка: ${err.message || 'Невідома помилка'}`);
+      showToast(err?.message || 'Не вдалося створити запис', 'error');
     }
   };
 
@@ -582,7 +584,7 @@ export default function BusinessCabinet() {
       }
     } catch (err: any) {
       console.error(err);
-      alert(err?.message || "Системна помилка при оновленні статусу запису.");
+      showToast(err?.message || 'Не вдалося оновити статус', 'error');
     }
   };
 
@@ -616,7 +618,7 @@ export default function BusinessCabinet() {
          await api.rescheduleAppointment(token, app.id, newStartIso.toISOString());
        } catch (err: any) {
          console.error(err);
-         alert(err?.message || "Не вдалося перенести запис");
+         showToast(err?.message || 'Не вдалося перенести запис', 'error');
        }
     }
   };
@@ -657,7 +659,7 @@ export default function BusinessCabinet() {
          await api.rescheduleAppointment(token, updatedApp.id, newStartIso.toISOString());
        } catch (err: any) {
          console.error(err);
-         alert(err?.message || "Не вдалося перенести запис");
+         showToast(err?.message || 'Не вдалося перенести запис', 'error');
        }
      }
   };
@@ -679,7 +681,7 @@ export default function BusinessCabinet() {
       setSelectedBooking(null);
     } catch (err: any) {
       console.error(err);
-      alert(err?.message || "Системна помилка при скасуванні.");
+      showToast(err?.message || 'Не вдалося скасувати запис', 'error');
     }
   };
 

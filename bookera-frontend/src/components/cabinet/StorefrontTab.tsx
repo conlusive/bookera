@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { useToast } from '@/context/ToastContext';
 
 interface StorefrontTabProps {
   business: any;
@@ -15,6 +16,7 @@ interface StorefrontTabProps {
 }
 
 export default function StorefrontTab({ business, services, team, Icons, setActiveTab }: StorefrontTabProps) {
+  const { showToast } = useToast();
   const router = useRouter();
   const supabase = createClient();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -117,10 +119,10 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         workplace_photos: workplacePhotos,
       });
 
-      alert("Дані успішно збережено!");
+      // Підтвердження показує сама кнопка (SaveButton) - тост тут зайвий.
     } catch (err: any) {
       console.error("Непередбачена помилка:", err);
-      alert(`Помилка при збереженні: ${err.message || 'Невідома помилка'}`);
+      showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -132,19 +134,19 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
     // 1. ПЕРЕВІРКА ТИПУ ФАЙЛУ
     if (!file.type.startsWith('image/')) {
-      alert('Будь ласка, завантажуйте лише зображення (JPG, PNG, WebP тощо).');
+      showToast('Підтримуються лише зображення: JPG, PNG, WebP', 'error');
       return;
     }
 
     // 2. ОБМЕЖЕННЯ РОЗМІРУ (5 MB)
     const MAX_FILE_SIZE_MB = 5;
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      alert(`Файл занадто великий. Максимальний розмір — ${MAX_FILE_SIZE_MB} МБ.`);
+      showToast(`Файл завеликий. Максимум — ${MAX_FILE_SIZE_MB} МБ`, 'error');
       return;
     }
 
     if (type === 'workplace' && workplacePhotos.length >= MAX_WORKPLACE_PHOTOS) {
-      alert(`Досягнуто ліміт фотографій інтер'єру`);
+      showToast("Досягнуто ліміт фотографій інтер'єру", 'error');
       return;
     }
 
@@ -170,7 +172,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
     } catch (error: any) {
       console.error("Помилка завантаження фото:", error.message);
-      alert(`Не вдалося завантажити фотографію: ${error.message}`);
+      showToast(error?.message || 'Не вдалося завантажити фотографію', 'error');
     }
   };
 

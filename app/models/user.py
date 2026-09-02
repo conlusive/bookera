@@ -60,6 +60,11 @@ class User(Base):
     tips_full = Column(Boolean, default=True, nullable=False)       # майстер забирає 100% чайових
     deduct_materials = Column(Boolean, default=False, nullable=False)  # віднімати вартість матеріалів
     auto_reset_balance = Column(Boolean, default=False, nullable=False)
+
+    # Реквізити для виплати на картку - є у формі CRM, але даних не було де
+    # зберігати, тому введене зникало при перезавантаженні.
+    card_number = Column(String, nullable=True)
+    bank_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)

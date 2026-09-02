@@ -42,6 +42,8 @@ class StaffUpdate(BaseModel):
     tips_full: Optional[bool] = None
     deduct_materials: Optional[bool] = None
     auto_reset_balance: Optional[bool] = None
+    card_number: Optional[str] = None
+    bank_name: Optional[str] = None
     is_active: Optional[bool] = None
 
 
@@ -61,6 +63,8 @@ class StaffResponse(BaseModel):
     tips_full: bool = True
     deduct_materials: bool = False
     auto_reset_balance: bool = False
+    card_number: Optional[str] = None
+    bank_name: Optional[str] = None
     phone: Optional[str] = None
     role: str
     specialization: Optional[str] = None

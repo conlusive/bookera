@@ -504,6 +504,41 @@ export const api = {
     return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/payouts`, token);
   },
 
+  /** Скасування помилкової виплати - візити повертаються в наступний розрахунок. */
+  async cancelPayout(token: string, businessId: number, staffId: string, payoutId: number, reason = '') {
+    return authFetch(
+      `/crm/businesses/${businessId}/staff/${staffId}/payouts/${payoutId}?reason=${encodeURIComponent(reason)}`,
+      token, { method: 'DELETE' }
+    );
+  },
+
+  /** Кому вже пора платити за налаштованою періодичністю. */
+  async listDuePayouts(token: string, businessId: number): Promise<{
+    business_id: number; checked_at: string;
+    due: { staff_id: string; staff_name: string; payout_period: string; amount_due: number; appointments_count: number }[];
+  }> {
+    return authFetch(`/crm/businesses/${businessId}/payouts/due`, token);
+  },
+
+  /** Матеріали, що витрачаються на одну послугу. */
+  async getServiceMaterials(token: string, serviceId: number): Promise<{
+    id: number; inventory_item_id: number; inventory_item_name?: string;
+    unit?: string; quantity_per_use: number; cost_per_use?: number;
+  }[]> {
+    return authFetch(`/crm/services/${serviceId}/materials`, token);
+  },
+
+  async setServiceMaterials(token: string, serviceId: number, materials: { inventory_item_id: number; quantity_per_use: number }[]) {
+    return authFetch(`/crm/services/${serviceId}/materials`, token, {
+      method: 'PUT', body: JSON.stringify(materials),
+    });
+  },
+
+  /** Історія руху позиції складу - видно, куди дівся залишок. */
+  async getInventoryMovements(token: string, itemId: number) {
+    return authFetch(`/crm/inventory/${itemId}/movements`, token);
+  },
+
   async transferOwnership(token: string, businessId: number, newOwnerUserId: string) {
     return authFetch(`/crm/businesses/${businessId}/transfer-ownership`, token, {
       method: 'POST',

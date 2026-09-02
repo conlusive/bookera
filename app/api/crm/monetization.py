@@ -288,6 +288,7 @@ async def create_payout(
         commission_part=preview.get("commission_part"),
         fixed_part=preview.get("fixed_part"),
         tax_amount=preview.get("tax_amount"),
+        materials_cost=preview.get("materials_cost"),
         appointments_count=preview.get("completed_appointments_count"),
         notes=payload.notes,
         expense_id=expense.id,
@@ -356,3 +357,117 @@ async def transfer_ownership(
 
     await db.commit()
     return {"status": "success", "new_owner_id": target.id, "former_owner_id": current_user.id}
+
+
+@router.delete("/crm/businesses/{business_id}/staff/{staff_id}/payouts/{payout_id}", response_model=StaffPayoutResponse)
+async def cancel_payout(
+    business_id: int,
+    staff_id: str,
+    payout_id: int,
+    reason: str = Query("", description="Причина скасування"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Скасовує помилкову виплату. Не видаляє запис, а позначає статусом:
+    історія має лишатись повною для обліку.
+
+    Важливо: візити з цієї виплати автоматично повертаються в наступний
+    розрахунок, бо calculate_payout_preview бере за початок періоду лише
+    ОСТАННЮ НЕ скасовану виплату. Інакше гроші за ці візити зникли б.
+    """
+    await assert_business_admin(db, current_user, business_id)
+
+    result = await db.execute(
+        select(StaffPayout).where(
+            StaffPayout.id == payout_id,
+            StaffPayout.business_id == business_id,
+            StaffPayout.staff_id == staff_id,
+        )
+    )
+    payout = result.scalars().first()
+    if not payout:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Виплату не знайдено")
+    if payout.status == "cancelled":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цю виплату вже скасовано")
+
+    payout.status = "cancelled"
+    payout.cancelled_at = utc_now()
+    payout.cancel_reason = reason or None
+
+    # Прибираємо повʼязану витрату, щоб скасована виплата не спотворювала
+    # звітність по витратах закладу.
+    if payout.expense_id:
+        exp_res = await db.execute(select(Expense).where(Expense.id == payout.expense_id))
+        expense = exp_res.scalars().first()
+        if expense:
+            await db.delete(expense)
+        payout.expense_id = None
+
+    await db.commit()
+    await db.refresh(payout)
+    return payout
+
+
+@router.get("/crm/businesses/{business_id}/payouts/due")
+async def list_due_payouts(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Кому вже пора платити - за налаштованою періодичністю (payout_period
+    і payout_day у картці майстра).
+
+    Свідомо зроблено як запит на вимогу, а не фоновий процес: автоматичне
+    списання грошей без відома власника - надто ризикована поведінка.
+    CRM показує список "час виплати", а рішення ухвалює людина.
+    """
+    await assert_business_admin(db, current_user, business_id)
+
+    staff_res = await db.execute(
+        select(User).where(User.business_id == business_id, User.is_active == True)
+    )
+    now = utc_now()
+    due = []
+
+    for staff in staff_res.scalars().all():
+        if not staff.payout_period or staff.payout_period == "none":
+            continue
+
+        last_res = await db.execute(
+            select(StaffPayout)
+            .where(
+                StaffPayout.business_id == business_id,
+                StaffPayout.staff_id == staff.id,
+                StaffPayout.status != "cancelled",
+            )
+            .order_by(StaffPayout.paid_at.desc())
+            .limit(1)
+        )
+        last = last_res.scalars().first()
+        last_date = last.paid_at if last else None
+
+        if staff.payout_period == "weekly":
+            is_due = last_date is None or (now - last_date).days >= 7
+        else:  # monthly
+            is_due = last_date is None or (now - last_date).days >= 30
+
+        if not is_due:
+            continue
+
+        preview = await calculate_payout_preview(db, business_id, staff.id)
+        if preview["payout_amount"] <= 0:
+            continue
+
+        due.append({
+            "staff_id": staff.id,
+            "staff_name": staff.full_name or staff.email,
+            "payout_period": staff.payout_period,
+            "payout_day": staff.payout_day,
+            "last_payout_at": last_date,
+            "amount_due": preview["payout_amount"],
+            "appointments_count": preview["completed_appointments_count"],
+        })
+
+    return {"business_id": business_id, "checked_at": now, "due": due}

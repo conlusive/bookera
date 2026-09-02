@@ -1,6 +1,6 @@
 from datetime import datetime, date as dt_date
 
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Numeric, Text, SmallInteger, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Numeric, Text, SmallInteger, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -59,3 +59,42 @@ class Expense(Base):
     created_at = Column(DateTime, default=utc_now)
 
     business = relationship("Business", back_populates="expenses")
+
+
+class ServiceMaterial(Base):
+    """
+    Скільки матеріалу зі складу витрачається на одну послугу.
+    Потрібно для двох речей: автоматичного списання зі складу при
+    завершенні візиту і опції "вираховувати вартість матеріалів"
+    при розрахунку зарплати майстра.
+    """
+    __tablename__ = "service_materials"
+    __table_args__ = (UniqueConstraint("service_id", "inventory_item_id", name="uq_service_material"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_id = Column(Integer, ForeignKey("services.id", ondelete="CASCADE"), nullable=False, index=True)
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
+    quantity_per_use = Column(Numeric(10, 3), nullable=False, default=1)
+
+    created_at = Column(DateTime, default=utc_now)
+
+    inventory_item = relationship("InventoryItem")
+
+
+class InventoryMovement(Base):
+    """
+    Історія руху складу. Без неї списання було б "невидимим": залишок
+    змінюється, а чому - незрозуміло. Також дозволяє повернути матеріали
+    назад, якщо візит скасували після завершення.
+    """
+    __tablename__ = "inventory_movements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True, index=True)
+
+    quantity_delta = Column(Numeric(10, 3), nullable=False)  # відʼємне = списання
+    cost_at_moment = Column(Numeric(10, 2), nullable=True)   # вартість на момент руху
+    reason = Column(String, nullable=False)  # service_usage / manual / restock / revert
+    created_at = Column(DateTime, default=utc_now)

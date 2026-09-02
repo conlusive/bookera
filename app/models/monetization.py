@@ -135,8 +135,13 @@ class StaffPayout(Base):
     fixed_part = Column(Numeric(10, 2), nullable=True)
     tax_amount = Column(Numeric(10, 2), nullable=True)
     appointments_count = Column(Integer, nullable=True)
+    materials_cost = Column(Numeric(10, 2), nullable=True)
 
-    status = Column(String, default="paid", nullable=False)  # paid (виплата - завжди доконаний факт)
+    # paid | cancelled. Скасована виплата НЕ закриває період: візити з неї
+    # знову потрапляють у наступний розрахунок, інакше гроші б "зникли".
+    status = Column(String, default="paid", nullable=False)
+    cancelled_at = Column(DateTime, nullable=True)
+    cancel_reason = Column(String, nullable=True)
     paid_at = Column(DateTime, default=utc_now)
     notes = Column(Text, nullable=True)
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # пов'язаний запис витрати

@@ -95,9 +95,16 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
     """
     from app.models import StaffPayout, User
 
+    # status != 'cancelled' - принципово: скасована виплата НЕ закриває
+    # період, тому візити з неї повертаються в наступний розрахунок.
+    # Без цієї умови гроші за них зникли б після скасування.
     last_payout_res = await db.execute(
         select(StaffPayout)
-        .where(StaffPayout.business_id == business_id, StaffPayout.staff_id == staff_id)
+        .where(
+            StaffPayout.business_id == business_id,
+            StaffPayout.staff_id == staff_id,
+            StaffPayout.status != "cancelled",
+        )
         .order_by(StaffPayout.period_end.desc())
         .limit(1)
     )
@@ -136,6 +143,13 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
     fixed_part = Decimal(str(staff.fixed_salary)) if staff and staff.fixed_salary else Decimal("0")
     subtotal = commission_part + fixed_part
 
+    # Вартість матеріалів віднімається, лише якщо для майстра увімкнено
+    # відповідну опцію в картці - інакше показуємо її просто для інформації.
+    from app.services.inventory import materials_cost_for_period
+    materials_cost = await materials_cost_for_period(db, business_id, staff_id, period_start, period_end)
+    if staff and staff.deduct_materials:
+        subtotal = subtotal - materials_cost
+
     tax_rate = Decimal(str(staff.tax_rate)) if staff and staff.tax_rate else Decimal("0")
     tax_amount = (subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
 
@@ -151,6 +165,8 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
         "fixed_part": fixed_part,
         "tax_rate": tax_rate,
         "tax_amount": tax_amount,
+        "materials_cost": materials_cost,
+        "materials_deducted": bool(staff and staff.deduct_materials),
         "gross_revenue": gross_revenue,
         "commission_rate": rate,
         "payout_amount": payout_amount,

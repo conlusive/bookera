@@ -121,6 +121,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     gross_revenue: number; commission_rate: number; payout_amount: number;
     completed_appointments_count: number; period_start: string;
     commission_part?: number; fixed_part?: number; tax_rate?: number; tax_amount?: number;
+    materials_cost?: number; materials_deducted?: boolean;
   } | null>(null);
   const [isLoadingFinance, setIsLoadingFinance] = useState(false);
 
@@ -1048,6 +1049,22 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                 </>
                               )}
 
+                              {Number(payoutPreview.materials_cost) > 0 && (
+                                <>
+                                  <div style={{ fontSize: '1.1rem', color: payoutPreview.materials_deducted ? colors.red : colors.wMintBorder, opacity: 0.6, paddingBottom: '2px' }}>
+                                    {payoutPreview.materials_deducted ? '−' : '·'}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize: '0.75rem', color: payoutPreview.materials_deducted ? colors.red : colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>
+                                      Матеріали{!payoutPreview.materials_deducted && ' (довідково)'}
+                                    </div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: payoutPreview.materials_deducted ? colors.red : colors.wMintText, opacity: payoutPreview.materials_deducted ? 1 : 0.6 }}>
+                                      {Number(payoutPreview.materials_cost).toLocaleString('uk-UA')} ₴
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+
                               {Number(payoutPreview.tax_amount) > 0 && (
                                 <>
                                   <div style={{ fontSize: '1.1rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>−</div>
@@ -1385,11 +1402,39 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                      )}
                                   </div>
                                   <div style={{ fontSize: '0.75rem', color: colors.textSecondary, marginTop: '4px', fontWeight: '500' }}>
-                                    Візитів: {payout.appointments_count ?? 0} • Ставка: {Number(payout.fixed_part || 0).toLocaleString('uk-UA')} ₴ • Комісія: {Number(payout.commission_part || 0).toLocaleString('uk-UA')} ₴{Number(payout.tax_amount) > 0 ? ` • Податок: -${Number(payout.tax_amount).toLocaleString('uk-UA')} ₴` : ''}
+                                    Візитів: {payout.appointments_count ?? 0} • Ставка: {Number(payout.fixed_part || 0).toLocaleString('uk-UA')} ₴ • Комісія: {Number(payout.commission_part || 0).toLocaleString('uk-UA')} ₴{Number(payout.tax_amount) > 0 ? ` • Податок: -${Number(payout.tax_amount).toLocaleString('uk-UA')} ₴` : ''}{Number(payout.materials_cost) > 0 ? ` • Матеріали: -${Number(payout.materials_cost).toLocaleString('uk-UA')} ₴` : ''}
                                   </div>
                                 </div>
                              </div>
-                             <div style={{ fontWeight: '700', color: colors.green, fontSize: '1.1rem' }}>{Number(payout.payout_amount).toLocaleString('uk-UA')} ₴</div>
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                               <div style={{ fontWeight: '700', color: payout.status === 'cancelled' ? colors.textSecondary : colors.green, fontSize: '1.1rem', textDecoration: payout.status === 'cancelled' ? 'line-through' : 'none' }}>
+                                 {Number(payout.payout_amount).toLocaleString('uk-UA')} ₴
+                               </div>
+                               {payout.status === 'cancelled' ? (
+                                 <span style={{ fontSize: '0.7rem', background: colors.surface, color: colors.textSecondary, padding: '3px 8px', borderRadius: '6px', fontWeight: '700' }}>Скасовано</span>
+                               ) : hasAdminRights && (
+                                 <button
+                                   onClick={async () => {
+                                     const reason = window.prompt('Причина скасування виплати (необовʼязково):');
+                                     if (reason === null) return;
+                                     if (!confirm('Скасувати цю виплату? Візити з неї повернуться в наступний розрахунок.')) return;
+                                     try {
+                                       const token = await getAuthToken();
+                                       await api.cancelPayout(token, business.id, currentStaff.id, payout.id, reason);
+                                       await fetchUnpaidAppointments(currentStaff.id, null);
+                                       showToast('Виплату скасовано, суму повернуто в розрахунок', 'info');
+                                     } catch (err: any) {
+                                       showToast(err?.message || 'Не вдалося скасувати виплату', 'error');
+                                     }
+                                   }}
+                                   style={{ background: 'transparent', border: `1px solid ${colors.border}`, color: colors.textSecondary, fontSize: '0.75rem', fontWeight: 600, padding: '0.35rem 0.7rem', borderRadius: '8px', cursor: 'pointer' }}
+                                   onMouseOver={e => { e.currentTarget.style.borderColor = colors.red; e.currentTarget.style.color = colors.red; }}
+                                   onMouseOut={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.textSecondary; }}
+                                 >
+                                   Скасувати
+                                 </button>
+                               )}
+                             </div>
                            </div>
                          ))}
                        </div>

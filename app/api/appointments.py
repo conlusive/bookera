@@ -24,6 +24,7 @@ from app.schemas.appointment import (
 )
 from app.core.email import send_booking_confirmation_email
 from app.services.monetization import charge_commission_if_applicable, award_points_for_new_client
+from app.services.inventory import consume_materials_for_appointment, revert_materials_for_appointment
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -594,6 +595,7 @@ async def update_appointment_status(
     # доступу тут ручна (assert_business_access), а не через FastAPI-залежність.
     await assert_business_access(db, current_user, appointment.business_id)
 
+    previous_status = appointment.status
     appointment.status = payload.status
 
     if payload.status == "completed":
@@ -601,6 +603,12 @@ async def update_appointment_status(
         business = biz_res.scalars().first()
         if business:
             await charge_commission_if_applicable(db, appointment, business)
+        # Списуємо матеріали зі складу за фактом наданої послуги
+        await consume_materials_for_appointment(db, appointment)
+    elif previous_status == "completed" and payload.status in ("cancelled", "confirmed"):
+        # Візит помилково позначили завершеним - повертаємо матеріали,
+        # інакше залишки на складі зникали б безслідно.
+        await revert_materials_for_appointment(db, appointment)
 
     await db.commit()
     await db.refresh(appointment)

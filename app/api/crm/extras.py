@@ -1,6 +1,7 @@
 import uuid
 from datetime import timedelta
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict, Field
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -220,3 +221,133 @@ async def delete_expense(
     else:
         await db.delete(expense)
     await db.commit()
+
+
+# === Матеріали, потрібні для послуги ===
+
+class ServiceMaterialIn(BaseModel):
+    inventory_item_id: int
+    quantity_per_use: float = Field(..., gt=0)
+
+
+class ServiceMaterialOut(BaseModel):
+    id: int
+    service_id: int
+    inventory_item_id: int
+    inventory_item_name: Optional[str] = None
+    unit: Optional[str] = None
+    quantity_per_use: float
+    cost_per_use: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("/crm/services/{service_id}/materials", response_model=List[ServiceMaterialOut])
+async def list_service_materials(
+    service_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from app.models import Service, ServiceMaterial, InventoryItem
+
+    srv_res = await db.execute(select(Service).where(Service.id == service_id))
+    service = srv_res.scalars().first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Послугу не знайдено")
+    await assert_business_access(db, current_user, service.business_id)
+
+    result = await db.execute(
+        select(ServiceMaterial, InventoryItem)
+        .join(InventoryItem, InventoryItem.id == ServiceMaterial.inventory_item_id)
+        .where(ServiceMaterial.service_id == service_id)
+    )
+    out = []
+    for material, item in result.all():
+        qty = float(material.quantity_per_use or 0)
+        unit_cost = float(item.cost_per_unit or 0)
+        out.append(ServiceMaterialOut(
+            id=material.id,
+            service_id=material.service_id,
+            inventory_item_id=item.id,
+            inventory_item_name=item.name,
+            unit=item.unit,
+            quantity_per_use=qty,
+            cost_per_use=round(qty * unit_cost, 2),
+        ))
+    return out
+
+
+@router.put("/crm/services/{service_id}/materials", response_model=List[ServiceMaterialOut])
+async def set_service_materials(
+    service_id: int,
+    materials: List[ServiceMaterialIn],
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Перезаписує весь перелік матеріалів послуги - простіше й надійніше
+    за додавання/видалення по одному, бо UI редагує список цілком."""
+    from app.models import Service, ServiceMaterial, InventoryItem
+
+    srv_res = await db.execute(select(Service).where(Service.id == service_id))
+    service = srv_res.scalars().first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Послугу не знайдено")
+    await assert_business_admin(db, current_user, service.business_id)
+
+    # Перевіряємо, що всі позиції належать цьому ж закладу - інакше можна
+    # було б підчепити матеріал чужого бізнесу за прямим id.
+    for m in materials:
+        item_res = await db.execute(
+            select(InventoryItem).where(
+                InventoryItem.id == m.inventory_item_id,
+                InventoryItem.business_id == service.business_id,
+            )
+        )
+        if not item_res.scalars().first():
+            raise HTTPException(status_code=404, detail=f"Позицію складу {m.inventory_item_id} не знайдено")
+
+    await db.execute(ServiceMaterial.__table__.delete().where(ServiceMaterial.service_id == service_id))
+    for m in materials:
+        db.add(ServiceMaterial(
+            service_id=service_id,
+            inventory_item_id=m.inventory_item_id,
+            quantity_per_use=m.quantity_per_use,
+        ))
+    await db.commit()
+
+    return await list_service_materials(service_id, db, current_user)
+
+
+@router.get("/crm/inventory/{item_id}/movements")
+async def list_inventory_movements(
+    item_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Історія руху позиції складу - видно, куди дівся залишок."""
+    from app.models import InventoryMovement
+
+    item_res = await db.execute(select(InventoryItem).where(InventoryItem.id == item_id))
+    item = item_res.scalars().first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Позицію не знайдено")
+    await assert_business_access(db, current_user, item.business_id)
+
+    result = await db.execute(
+        select(InventoryMovement)
+        .where(InventoryMovement.inventory_item_id == item_id)
+        .order_by(InventoryMovement.created_at.desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "id": m.id,
+            "quantity_delta": float(m.quantity_delta),
+            "cost_at_moment": float(m.cost_at_moment) if m.cost_at_moment else None,
+            "reason": m.reason,
+            "appointment_id": m.appointment_id,
+            "created_at": m.created_at,
+        }
+        for m in result.scalars().all()
+    ]

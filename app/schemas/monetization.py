@@ -90,6 +90,8 @@ class PayoutPreviewResponse(BaseModel):
     fixed_part: Decimal = Decimal("0")        # фіксована ставка
     tax_rate: Decimal = Decimal("0")
     tax_amount: Decimal = Decimal("0")        # утримано
+    materials_cost: Decimal = Decimal("0")    # витрачено матеріалів
+    materials_deducted: bool = False          # чи віднімається від виплати
     payout_amount: Decimal          # підсумок до виплати
     completed_appointments_count: int
 
@@ -110,6 +112,7 @@ class StaffPayoutResponse(BaseModel):
     commission_part: Optional[Decimal] = None
     fixed_part: Optional[Decimal] = None
     tax_amount: Optional[Decimal] = None
+    materials_cost: Optional[Decimal] = None
     appointments_count: Optional[int] = None
     status: str
     paid_at: Optional[datetime] = None

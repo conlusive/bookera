@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useToast } from '@/context/ToastContext';
 
 interface SmartSlot {
   id: string;
@@ -67,6 +68,7 @@ export default function MarketingTab({
   availableSlots = [],
   averageTicketPrice = 500
 }: MarketingTabProps) {
+  const { showToast } = useToast();
 
   const [marketingView, setMarketingView] = useState<'overview' | 'campaigns' | 'promotions' | 'radar' | 'smm'>('overview');
   const [campaignTab, setCampaignTab] = useState<'automated' | 'mass'>('automated');
@@ -75,7 +77,6 @@ export default function MarketingTab({
   const [activePromos, setActivePromos] = useState<any[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-  const [toastMessage, setToastMessage] = useState('');
   const [marketingForm, setMarketingForm] = useState({ type: 'sms', audience: 'all', message: '' });
   const [selectedPromoForMessage, setSelectedPromoForMessage] = useState('');
   const [isSendingPromo, setIsSendingPromo] = useState(false);
@@ -186,7 +187,7 @@ export default function MarketingTab({
   };
 
   const handleSavePromo = () => {
-    if (!newPromo.code || !newPromo.discount) return alert('Заповніть код та відсоток знижки');
+    if (!newPromo.code || !newPromo.discount) return showToast('Заповніть код і відсоток знижки', 'error');
     const formattedDiscount = newPromo.discount.includes('%') ? newPromo.discount : `${newPromo.discount}%`;
     const cleanCode = newPromo.code.toUpperCase().replace(/\s+/g, '');
     const maxUsesVal = newPromo.maxUses ? parseInt(newPromo.maxUses) : null;
@@ -215,14 +216,9 @@ export default function MarketingTab({
     showToast('Налаштування збережено');
   };
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 3000);
-  };
-
   const handleSendMarketing = async () => {
-    if (!marketingForm.message || marketingForm.message.trim() === '') return showToast('Введіть текст перед відправкою.');
-    if (clientsList?.length === 0) return showToast('У вас ще немає клієнтів.');
+    if (!marketingForm.message || marketingForm.message.trim() === '') return showToast('Введіть текст перед відправкою', 'error');
+    if (clientsList?.length === 0) return showToast('У вас ще немає клієнтів', 'error');
 
     setIsSendingPromo(true);
     setTimeout(() => {
@@ -934,11 +930,6 @@ export default function MarketingTab({
           </div>
         )}
 
-        {toastMessage && (
-          <div style={{ position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', background: '#0f172a', color: '#fff', padding: '0.8rem 1.2rem', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem', zIndex: 3000, animation: 'slideUpFade 0.2s ease-out', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)' }}>
-            <SvgCheck /> {toastMessage}
-          </div>
-        )}
       </div>
     </>
   );

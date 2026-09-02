@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
+import SaveButton from '@/components/ui/SaveButton';
 import { Icons } from '@/components/shared';
 
 
@@ -25,65 +26,7 @@ const CreditCardIcon = () => (
 );
 
 // 🟢 Кнопка збереження зі спінером
-const ActionSaveButton = ({ onClick, text = "Зберегти дані" }: { onClick: () => Promise<void>; text?: string }) => {
-  const [isSaving, setIsSaving] = useState(false);
 
-  const handleClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (isSaving) return;
-    setIsSaving(true);
-    try {
-      await Promise.all([
-        onClick(),
-        new Promise(resolve => setTimeout(resolve, 500))
-      ]);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <button
-      onClick={handleClick}
-      disabled={isSaving}
-      style={{
-        padding: '0.65rem 1.4rem',
-        borderRadius: '10px',
-        border: 'none',
-        background: isSaving ? '#334155' : '#0f172a',
-        fontWeight: '700',
-        color: '#ffffff',
-        fontSize: '0.9rem',
-        cursor: isSaving ? 'not-allowed' : 'pointer',
-        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.55rem',
-        boxShadow: isSaving ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
-        opacity: isSaving ? 0.85 : 1,
-      }}
-      onMouseOver={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-      onMouseOut={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(0)'; }}
-    >
-      {isSaving ? (
-        <>
-          <span style={{
-            width: '13px',
-            height: '13px',
-            border: '2px solid rgba(255, 255, 255, 0.3)',
-            borderTopColor: '#ffffff',
-            borderRadius: '50%',
-            display: 'inline-block',
-            animation: 'spin 0.6s linear infinite'
-          }}></span>
-          <span>Збереження...</span>
-        </>
-      ) : (
-        <span>{text}</span>
-      )}
-    </button>
-  );
-};
 
 export default function TeamTab({ business, team = [], setTeam, services = [], userProfile, setActiveTab, setFilterMaster, globalShifts = [] }: any) {
   const supabase = useMemo(() => createClient(), []);
@@ -324,14 +267,14 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   const handleInviteStaff = async () => {
     const targetEmail = inviteForm.email.trim().toLowerCase();
-    if (!targetEmail) return alert("Введіть електронну пошту співробітника.");
-    if (!business?.id) return alert("Помилка: бізнес не обрано.");
+    if (!targetEmail) return showToast('Введіть електронну пошту співробітника', 'error');
+    if (!business?.id) return showToast('Заклад не обрано', 'error');
 
     setIsInvitingStaff(true);
     try {
       const existingInTeam = (team || []).find((t: any) => t.email?.toLowerCase() === targetEmail);
       if (existingInTeam) {
-        alert("Співробітник з таким email вже є у вашій команді.");
+        showToast('Співробітник із такою поштою вже у команді', 'error');
         setIsInvitingStaff(false);
         return;
       }
@@ -372,7 +315,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
       if (error) {
         console.error("Помилка додавання в staff:", error);
-        alert(`Помилка бази даних: ${error.message}`);
+        showToast(error?.message || 'Не вдалося зберегти', 'error');
         return;
       }
 
@@ -380,10 +323,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       setSelectedStaffId(data.id);
       setIsInviteStaffModalOpen(false);
       setInviteForm({ email: '', role: 'master' });
-      alert(`Співробітника ${data.name} успішно додано до команди!`);
+      showToast(`Запрошення надіслано: ${data.name}`, 'info');
     } catch (err: any) {
       console.error(err);
-      alert(`Помилка: ${err.message || 'Не вдалося додати співробітника'}`);
+      showToast(err?.message || 'Не вдалося додати співробітника', 'error');
     } finally {
       setIsInvitingStaff(false);
     }
@@ -473,7 +416,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   const handleDeleteStaff = async () => {
     if (!currentStaff || !hasAdminRights) return;
-    if (isOwnerProfile) return alert("Неможливо видалити профіль власника бізнесу.");
+    if (isOwnerProfile) return showToast('Профіль власника видалити не можна', 'error');
     if (!confirm(`Ви впевнені, що хочете звільнити ${currentStaff.name}? Усі майбутні записи потрібно буде перенести вручну.`)) return;
 
     try {
@@ -482,13 +425,13 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       setTeam(team.filter((t: any) => String(t.id) !== String(currentStaff.id)));
       setSelectedStaffId(null);
       setStaffActiveTab('general');
-    } catch (err: any) { alert(err?.message || "Не вдалося видалити співробітника."); }
+    } catch (err: any) { showToast(err?.message || 'Не вдалося видалити співробітника', 'error'); }
   };
 
   // 🟢 ЛОГІКА ПЕРЕДАЧІ ПРАВ ВЛАСНИКА
   const handleTransferOwnership = async () => {
-    if (!newOwnerId) return alert("Оберіть співробітника зі списку.");
-    if (!transferConfirmed) return alert("Підтвердіть передачу прав, поставивши галочку.");
+    if (!newOwnerId) return showToast('Оберіть співробітника зі списку', 'error');
+    if (!transferConfirmed) return showToast('Підтвердіть передачу прав галочкою', 'error');
 
     setIsTransferring(true);
     try {
@@ -498,11 +441,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       const token = await getAuthToken();
       await api.transferOwnership(token, business.id, String(newOwnerId));
 
-      alert("Права власності успішно передано!");
+      showToast('Права власності передано', 'info');
       window.location.reload();
 
     } catch (err: any) {
-      alert("Помилка: " + (err?.message || "Невідома помилка"));
+      showToast(err?.message || 'Не вдалося передати права', 'error');
     } finally {
       setIsTransferring(false);
       setIsTransferModalOpen(false);
@@ -573,61 +516,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   });
 
   // 🟢 Реактивна кнопка збереження зі спінером та станом "Збереження..."
-  const ActionSaveButton = ({ onClick, text = "Зберегти дані" }: { onClick: () => Promise<void>; text?: string }) => {
-    const [isSaving, setIsSaving] = useState(false);
 
-    const handleClick = async () => {
-      if (isSaving) return;
-      setIsSaving(true);
-      try {
-        await onClick();
-      } finally {
-        setTimeout(() => setIsSaving(false), 400);
-      }
-    };
-
-    return (
-      <button
-        onClick={handleClick}
-        disabled={isSaving}
-        style={{
-          padding: '0.65rem 1.4rem',
-          borderRadius: '10px',
-          border: 'none',
-          background: isSaving ? '#334155' : colors.textPrimary,
-          fontWeight: '700',
-          color: '#ffffff',
-          fontSize: '0.9rem',
-          cursor: isSaving ? 'not-allowed' : 'pointer',
-          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          boxShadow: isSaving ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
-          opacity: isSaving ? 0.85 : 1,
-        }}
-        onMouseOver={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-        onMouseOut={e => { if (!isSaving) e.currentTarget.style.transform = 'translateY(0)'; }}
-      >
-        {isSaving ? (
-          <>
-            <span style={{
-              width: '13px',
-              height: '13px',
-              border: '2px solid rgba(255, 255, 255, 0.3)',
-              borderTopColor: '#ffffff',
-              borderRadius: '50%',
-              display: 'inline-block',
-              animation: 'spin 0.6s linear infinite'
-            }}></span>
-            <span>Збереження...</span>
-          </>
-        ) : (
-          <span>{text}</span>
-        )}
-      </button>
-    );
-  };
 
   return (
     <div style={{ display: 'flex', height: '100%', width: '100%', backgroundColor: colors.bg, overflow: 'hidden' }}>

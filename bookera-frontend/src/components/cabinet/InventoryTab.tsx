@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { useToast } from '@/context/ToastContext';
 import { Icons, toLocalDateStr } from '@/components/shared';
 
 export default function InventoryTab({ business, team }: any) {
+  const { showToast } = useToast();
   const [activeMode, setActiveMode] = useState<'expenses' | 'stock'>('expenses');
 
   // 🟢 СТЕЙТИ ДАНИХ
@@ -286,7 +288,7 @@ export default function InventoryTab({ business, team }: any) {
   });
 
   const handleSaveExpense = async () => {
-    if (!expForm.amount || Number(expForm.amount) <= 0) return alert('Введіть коректну суму більше нуля');
+    if (!expForm.amount || Number(expForm.amount) <= 0) return showToast('Введіть коректну суму більше нуля', 'error');
     setIsSaving(true);
     try {
       const token = await getAuthToken();
@@ -333,14 +335,14 @@ export default function InventoryTab({ business, team }: any) {
       setAllExpenses(refreshed);
       closeExpModal();
     } catch (err: any) {
-      alert(`Помилка: ${err.message}`);
+      showToast(err?.message || 'Не вдалося зберегти', 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleSaveInventory = async () => {
-    if (!invForm.name.trim()) return alert('Введіть назву товару');
+    if (!invForm.name.trim()) return showToast('Введіть назву товару', 'error');
     setIsSaving(true);
     try {
       const token = await getAuthToken();
@@ -361,7 +363,7 @@ export default function InventoryTab({ business, team }: any) {
 
       closeInvModal();
     } catch (err: any) {
-      alert(`Помилка: ${err.message}`);
+      showToast(err?.message || 'Не вдалося зберегти', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -380,7 +382,7 @@ export default function InventoryTab({ business, team }: any) {
       await api.deleteExpense(token, Number(id), deleteFuture);
       const refreshed = await api.listExpenses(token, business.id);
       setAllExpenses(refreshed);
-    } catch (error: any) { alert(error?.message || 'Помилка видалення'); }
+    } catch (error: any) { showToast(error?.message || 'Не вдалося видалити', 'error'); }
   };
 
   const deleteInventory = async (id: string) => {
@@ -389,7 +391,7 @@ export default function InventoryTab({ business, team }: any) {
       const token = await getAuthToken();
       await api.deleteInventoryItem(token, Number(id));
       setInventory(inventory.filter(i => i.id !== id));
-    } catch (error: any) { alert(error?.message || 'Помилка видалення'); }
+    } catch (error: any) { showToast(error?.message || 'Не вдалося видалити', 'error'); }
   };
 
   const shiftPickerMonth = (direction: number) => {

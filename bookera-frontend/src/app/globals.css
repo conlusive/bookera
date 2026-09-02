@@ -128,3 +128,114 @@
     @apply font-sans;
   }
 }
+/* ============================================================
+   ЄДИНІ КОМПОНЕНТИ ІНТЕРФЕЙСУ
+   Раніше кожна вкладка описувала кнопки й поля власними
+   інлайновими стилями - через це вони всі трохи різнились.
+   Тут один набір, який використовують усі екрани: змінюєш тут -
+   міняється всюди.
+   ============================================================ */
+
+:root {
+  --bk-ink: #222222;          /* основний текст і темні кнопки */
+  --bk-ink-soft: #5C6B5E;     /* другорядний текст */
+  --bk-line: #DEE6DC;         /* межі полів і карток */
+  --bk-surface: #F6F9F6;      /* фон блоків */
+  --bk-accent: #C2D8C4;       /* фірмовий м'ятний */
+  --bk-accent-deep: #3A4E3D;  /* текст на м'ятному */
+  --bk-danger: #B4413C;       /* приглушена цегла замість різкого червоного */
+  --bk-warn: #9A6A2F;
+
+  --bk-radius: 10px;
+  --bk-radius-lg: 14px;
+  --bk-speed: 0.18s;
+}
+
+/* --- Кнопки --- */
+.bk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1.15rem;
+  border-radius: var(--bk-radius);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--bk-speed), border-color var(--bk-speed),
+              color var(--bk-speed), opacity var(--bk-speed);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.bk-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.bk-btn:focus-visible { outline: 2px solid var(--bk-accent-deep); outline-offset: 2px; }
+
+.bk-btn--sm { padding: 0.45rem 0.85rem; font-size: 0.82rem; }
+.bk-btn--block { width: 100%; }
+
+.bk-btn--primary { background: var(--bk-ink); color: #fff; }
+.bk-btn--primary:hover:not(:disabled) { background: #000; }
+
+.bk-btn--ghost { background: transparent; color: var(--bk-ink); border-color: var(--bk-line); }
+.bk-btn--ghost:hover:not(:disabled) { background: var(--bk-surface); }
+
+.bk-btn--danger { background: transparent; color: var(--bk-danger); border-color: var(--bk-line); }
+.bk-btn--danger:hover:not(:disabled) { background: #fdf3f2; border-color: var(--bk-danger); }
+
+/* Стани збереження: колір несе сенс, але текст лишається головним -
+   тому не покладаємось лише на колір (важливо для дальтоніків). */
+.bk-btn.is-saved { background: var(--bk-accent); color: var(--bk-accent-deep); border-color: var(--bk-accent); }
+.bk-btn.is-error { background: #fdf3f2; color: var(--bk-danger); border-color: var(--bk-danger); }
+
+.bk-spinner {
+  width: 13px; height: 13px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: bk-spin 0.6s linear infinite;
+}
+@keyframes bk-spin { to { transform: rotate(360deg); } }
+
+/* --- Поля вводу --- */
+.bk-input,
+.bk-select {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--bk-line);
+  border-radius: var(--bk-radius);
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--bk-ink);
+  transition: border-color var(--bk-speed);
+}
+.bk-input:focus,
+.bk-select:focus { outline: none; border-color: var(--bk-accent-deep); }
+.bk-input:disabled,
+.bk-select:disabled { background: var(--bk-surface); color: var(--bk-ink-soft); cursor: not-allowed; }
+
+.bk-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--bk-ink-soft);
+  margin-bottom: 0.4rem;
+}
+
+/* --- Картка --- */
+.bk-card {
+  background: #fff;
+  border: 1px solid var(--bk-line);
+  border-radius: var(--bk-radius-lg);
+  padding: 1.5rem;
+}
+
+/* Шанобливо до людей, яким рух заважає */
+@media (prefers-reduced-motion: reduce) {
+  .bk-btn, .bk-input, .bk-select { transition: none; }
+  .bk-spinner { animation-duration: 2s; }
+}

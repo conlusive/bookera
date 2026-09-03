@@ -239,3 +239,22 @@
   .bk-btn, .bk-input, .bk-select { transition: none; }
   .bk-spinner { animation-duration: 2s; }
 }
+
+
+/* Спливаючі повідомлення. Анімації тут, а не в інлайновому <style> усередині
+   React-компонента: інлайновий стиль спричиняв помилку гідратації, бо сервер
+   і клієнт могли віддати різні версії правил. */
+@keyframes bkToastIn {
+  from { opacity: 0; transform: translate(-50%, 10px) scale(0.97); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes bkToastOut {
+  from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, 6px) scale(0.98); }
+}
+.bk-toast     { animation: bkToastIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.bk-toast-out { animation: bkToastOut 0.18s ease-in both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-toast, .bk-toast-out { animation: none; }
+}

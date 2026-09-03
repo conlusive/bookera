@@ -59,16 +59,6 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
     <ToastContext.Provider value={{ showToast }}>
       {children}
 
-      <style>{`
-        @keyframes bkToastIn  { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-        @keyframes bkToastOut { from { opacity: 1; } to { opacity: 0; } }
-        .bk-toast     { animation: bkToastIn 0.2s ease-out both; }
-        .bk-toast-out { animation: bkToastOut 0.2s ease-in both; }
-        @media (prefers-reduced-motion: reduce) {
-          .bk-toast, .bk-toast-out { animation: none; }
-        }
-      `}</style>
-
       {toast && (
         <div
           role={toast.type === 'error' ? 'alert' : 'status'}
@@ -76,27 +66,55 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
           onClick={dismiss}
           style={{
             position: 'fixed',
-            bottom: '1.5rem',
+            bottom: '1.75rem',
             left: '50%',
-            transform: 'translateX(-50%)',
-            maxWidth: 'min(440px, calc(100vw - 3rem))',
-            background: '#fff',
-            border: `1px solid ${toast.type === 'error' ? 'var(--bk-danger, #B4413C)' : 'var(--bk-line, #DEE6DC)'}`,
-            borderLeft: `3px solid ${toast.type === 'error' ? 'var(--bk-danger, #B4413C)' : 'var(--bk-ink-soft, #5C6B5E)'}`,
-            color: toast.type === 'error' ? 'var(--bk-danger, #B4413C)' : 'var(--bk-ink, #222)',
-            padding: '0.7rem 1rem',
-            borderRadius: '10px',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+            // transform лишається за анімацією (translate(-50%, …)) - якщо
+            // задати його тут, він перезапише анімацію і плашка стрибне.
+            maxWidth: 'min(400px, calc(100vw - 3rem))',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+            // Матове скло: напівпрозорий фон + розмиття того, що під ним.
+            // Плашка лишається легкою, не перекриває контент повністю і
+            // не читається як ще один суцільний блок інтерфейсу.
+            background: toast.type === 'error'
+              ? 'rgba(254, 245, 245, 0.82)'
+              : 'rgba(244, 250, 245, 0.82)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            // Волосяна лінія замість помітної рамки - вона лише окреслює
+            // край на світлому тлі, а не малює навколо плашки контур.
+            border: toast.type === 'error'
+              ? '0.5px solid rgba(180, 65, 60, 0.18)'
+              : '0.5px solid rgba(94, 122, 97, 0.16)',
+            color: toast.type === 'error' ? '#8C2F2B' : '#2E3A30',
+            padding: '0.7rem 1.05rem',
+            borderRadius: '14px',
+            // Мʼяка розсіяна тінь замість різкої: створює відчуття
+            // легкого підняття над сторінкою, а не наліпленого блоку.
+            boxShadow: '0 6px 24px rgba(31, 36, 31, 0.10), 0 1px 3px rgba(31, 36, 31, 0.05)',
             zIndex: 9999,
             fontSize: '0.875rem',
-            fontWeight: 500,
-            lineHeight: 1.4,
+            fontWeight: 450,
+            letterSpacing: '-0.01em',
+            lineHeight: 1.45,
             cursor: 'pointer',
           }}
         >
-          {toast.msg}
+          <span
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: toast.type === 'error' ? '#C2605B' : '#8FAE93',
+            }}
+          />
+          <span>{toast.msg}</span>
         </div>
       )}
+
     </ToastContext.Provider>
   );
 };

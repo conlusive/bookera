@@ -71,6 +71,10 @@ class BusinessUpdate(BaseModel):
 class BusinessOut(BusinessBase):
     id: int
     slug: str
+    # Без цього поля інтерфейс не міг визначити власника: перевірка
+    # userProfile.id === business.owner_id завжди давала false, і кнопки
+    # для адміністратора зникали.
+    owner_id: Optional[str] = None
     rating: Optional[Decimal] = Decimal("5.0")
     reviews_count: Optional[int] = 0
     is_active: bool = True

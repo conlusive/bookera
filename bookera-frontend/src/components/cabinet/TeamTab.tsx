@@ -755,7 +755,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <div style={{ position: 'relative', width: '300px' }}>
                           <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary }}><Icons.Search /></div>
-                          <input type="text" placeholder="Знайти послугу..." value={staffServiceSearchQuery} onChange={(e) => setStaffServiceSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.2rem', borderRadius: '10px', border: `1px solid ${colors.border}`, background: '#fff', fontSize: '0.9rem', outline: 'none', transition: '0.2s' }} />
+                          <input type="text" placeholder="Знайти послугу..." value={staffServiceSearchQuery} onChange={(e) => setStaffServiceSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.2rem', borderRadius: '10px', border: `1px solid ${colors.border}`, background: '#fff', color: colors.textPrimary, fontSize: '0.9rem', outline: 'none', transition: '0.2s' }} />
                         </div>
 
                         {/* КНОПКА ВИБРАТИ ВСІ (Автозбереження) */}

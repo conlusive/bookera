@@ -21,9 +21,10 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
  *   - сюди потрапляють лише помилки й фонові події — те, що сталось
  *     не під курсором і що можна пропустити.
  *
- * Виклики showToast(..., 'success') свідомо не показуються: щоб не
- * переписувати одразу сотні місць у восьми вкладках, вони просто тихо
- * ігноруються, а кнопки поступово переводяться на SaveButton.
+ * Показуються всі типи. Раніше 'success' тихо ігнорувався - і це було
+ * помилкою: людина натискала «Зберегти» і не отримувала ЖОДНОГО
+ * підтвердження, бо SaveButton стоїть далеко не скрізь. Краще коротке
+ * повідомлення, ніж тиша у відповідь на дію.
  */
 export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const [toast, setToast] = useState<{ msg: string; type: ToastType; exiting: boolean } | null>(null);
@@ -41,9 +42,6 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const showToast = useCallback((msg: string, type: ToastType = 'success') => {
-    // Успіх показує кнопка — тут він лише зайвий шум.
-    if (type === 'success') return;
-
     clearTimers();
     setToast({ msg, type, exiting: false });
 

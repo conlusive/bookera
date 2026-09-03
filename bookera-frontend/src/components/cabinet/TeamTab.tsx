@@ -558,28 +558,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             )}
           </div>
 
-          {duePayouts.length > 0 && (
-            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '0.9rem 1rem', marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#9a3412', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                Час виплати
-              </div>
-              {duePayouts.map((d: any) => (
-                <div
-                  key={d.staff_id}
-                  onClick={() => handleStaffSelect(d.staff_id)}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0', cursor: 'pointer' }}
-                >
-                  <span style={{ fontSize: '0.85rem', color: '#7c2d12', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {d.staff_name}
-                  </span>
-                  <span style={{ fontSize: '0.85rem', color: '#9a3412', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    {Number(d.amount_due).toLocaleString('uk-UA')} ₴
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div style={{ position: 'relative' }}>
             <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary }}><Icons.Search /></div>
             <input type="text" placeholder="Пошук..." value={staffSearchQuery} onChange={(e) => setStaffSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.2rem', borderRadius: '10px', border: `1px solid ${colors.border}`, fontSize: '0.9rem', outline: 'none', transition: '0.2s', backgroundColor: colors.bg, color: colors.textPrimary }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border}/>
@@ -591,6 +569,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             const isSelected = String(selectedStaffId) === String(member.id) || (selectedStaffId === null && member.id === team[0]?.id);
             const isPending = member.status === 'pending';
             const badge = getRoleBadge(member);
+            // Замість окремого банера над списком - позначка прямо на картці:
+            // видно, кому пора платити, не відводячи погляд від людини.
+            const due = duePayouts.find((d: any) => String(d.staff_id) === String(member.id));
 
             if (!hasAdminRights && String(member.id) !== String(currentLoggedInStaff?.id)) return null;
 
@@ -605,6 +586,29 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     {isPending ? <><span style={{width: 6, height: 6, borderRadius: '50%', background: '#f59e0b'}}></span> Очікує</> : badge.label}
                   </div>
                 </div>
+
+                {due && (
+                  <span
+                    title={`До виплати ${Number(due.amount_due).toLocaleString('uk-UA')} ₴`}
+                    style={{
+                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      color: '#8A5A1E',
+                      background: '#FDF6E9',
+                      border: '0.5px solid rgba(180, 130, 40, 0.22)',
+                      padding: '3px 8px',
+                      borderRadius: '20px',
+                      lineHeight: 1,
+                    }}
+                  >
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D99A2B', flexShrink: 0 }} />
+                    {Number(due.amount_due).toLocaleString('uk-UA')} ₴
+                  </span>
+                )}
               </div>
             )
           })}
@@ -968,10 +972,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                               {Number(payoutPreview.tax_amount) > 0 && (
                                 <>
-                                  <div className="bk-btn bk-btn-danger bk-btn-sm">−</div>
+                                  <div style={{ fontSize: '1.1rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>−</div>
                                   <div>
-                                    <div className="bk-btn bk-btn-danger bk-btn-sm">Податок ({payoutPreview.tax_rate}%)</div>
-                                    <div className="bk-btn bk-btn-danger bk-btn-sm">{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
+                                    <div style={{ fontSize: '0.75rem', color: colors.red, marginBottom: '4px', opacity: 0.85, fontWeight: '600' }}>Податок ({payoutPreview.tax_rate}%)</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.red }}>{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
                                   </div>
                                 </>
                               )}
@@ -992,7 +996,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                <button
                                  onClick={handlePayout}
                                  disabled={isPayoutDisabled}
-className="bk-btn bk-btn-outline"
+                                 className="bk-btn bk-btn-primary"
                                >
                                  <Icons.CheckCircle /> {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати'}
                                </button>
@@ -1394,7 +1398,7 @@ className="bk-btn bk-btn-outline"
                 {!isOwnerProfile ? (
                   <div style={{ background: '#fef2f2', border: `1px dashed ${colors.red}`, borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                     <div>
-                      <h3 className="bk-btn bk-btn-danger bk-btn-sm">Звільнення співробітника</h3>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: colors.red, margin: 0 }}>Звільнення співробітника</h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0 }}>Назавжди видалити доступ цієї особи до системи. Історія записів залишиться в базі.</p>
                     </div>
                     <button onClick={handleDeleteStaff} style={{ background: colors.red, color: '#fff', border: 'none', padding: '0.8rem 1.5rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.opacity = '0.8'} onMouseOut={e => e.currentTarget.style.opacity = '1'}>

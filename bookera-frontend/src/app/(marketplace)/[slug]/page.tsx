@@ -14,6 +14,12 @@ export default async function SalonPage({ params }: { params: Promise<{ slug: st
   // майстрів віддає лише з безпечними полями (без телефонів/email
   // персоналу, які раніше тягнулись у браузер кожного відвідувача
   // запитом select('*') по таблиці users).
+  // Браузер сам просить /favicon.ico, /apple-touch-icon.png тощо. Якщо
+  // таких файлів немає в public/, запит доходить сюди - і ми марно йшли
+  // в базу шукати «заклад» із назвою icon-192x192.png, засмічуючи логи.
+  // Слаг ніколи не містить крапки, тому це надійна ознака запиту файлу.
+  if (slug.includes('.')) notFound();
+
   let salon;
   try {
     salon = await api.getBusiness(slug);

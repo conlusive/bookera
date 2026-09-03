@@ -59,16 +59,6 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
     <ToastContext.Provider value={{ showToast }}>
       {children}
 
-      <style>{`
-        @keyframes bkToastIn  { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-        @keyframes bkToastOut { from { opacity: 1; } to { opacity: 0; } }
-        .bk-toast     { animation: bkToastIn 0.2s ease-out both; }
-        .bk-toast-out { animation: bkToastOut 0.2s ease-in both; }
-        @media (prefers-reduced-motion: reduce) {
-          .bk-toast, .bk-toast-out { animation: none; }
-        }
-      `}</style>
-
       {toast && (
         <div
           role={toast.type === 'error' ? 'alert' : 'status'}
@@ -76,27 +66,43 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
           onClick={dismiss}
           style={{
             position: 'fixed',
-            bottom: '1.5rem',
+            bottom: '1.75rem',
             left: '50%',
-            transform: 'translateX(-50%)',
-            maxWidth: 'min(440px, calc(100vw - 3rem))',
-            background: '#fff',
-            border: `1px solid ${toast.type === 'error' ? 'var(--bk-danger, #B4413C)' : 'var(--bk-line, #DEE6DC)'}`,
-            borderLeft: `3px solid ${toast.type === 'error' ? 'var(--bk-danger, #B4413C)' : 'var(--bk-ink-soft, #5C6B5E)'}`,
-            color: toast.type === 'error' ? 'var(--bk-danger, #B4413C)' : 'var(--bk-ink, #222)',
-            padding: '0.7rem 1rem',
-            borderRadius: '10px',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+            // transform задає анімація (translate(-50%, …)) - тут його немає,
+            // інакше він перезаписав би керування анімації й плашка стрибала б.
+            maxWidth: 'min(420px, calc(100vw - 3rem))',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem',
+            // Суцільна темна плашка замість кольорової з рамкою: вона не
+            // конкурує з контентом за увагу і однаково читається на будь-якому
+            // тлі - а рамка + світлий фон виглядали як ще один блок інтерфейсу.
+            background: toast.type === 'error' ? '#7f1d1d' : '#1F241F',
+            color: '#fff',
+            padding: '0.7rem 1.1rem',
+            borderRadius: '12px',
+            boxShadow: '0 8px 28px rgba(0, 0, 0, 0.18)',
             zIndex: 9999,
             fontSize: '0.875rem',
             fontWeight: 500,
-            lineHeight: 1.4,
+            lineHeight: 1.45,
             cursor: 'pointer',
           }}
         >
-          {toast.msg}
+          <span
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: toast.type === 'error' ? '#fca5a5' : '#C2D8C4',
+            }}
+          />
+          <span>{toast.msg}</span>
         </div>
       )}
+
     </ToastContext.Provider>
   );
 };

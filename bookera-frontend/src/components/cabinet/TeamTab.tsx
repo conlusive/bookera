@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
+import { useToast } from '@/context/ToastContext';
 import SaveButton from '@/components/ui/SaveButton';
 import { Icons } from '@/components/shared';
 
@@ -78,23 +79,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [isInvitingStaff, setIsInvitingStaff] = useState(false);
 
   // 🟢 Стейт та плавний показ Toast-сповіщень (з анімацією випливання і запливання)
-  const [toast, setToast] = useState<{ show: boolean; msg: string; type: 'success' | 'error' | 'info'; isExiting: boolean }>({
-    show: false,
-    msg: '',
-    type: 'success',
-    isExiting: false,
-  });
-
-  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ show: true, msg, type, isExiting: false });
-    setTimeout(() => {
-      // Запускаємо анімацію запливання за 300мс до повного зникнення
-      setToast(prev => ({ ...prev, isExiting: true }));
-      setTimeout(() => {
-        setToast({ show: false, msg: '', type: 'success', isExiting: false });
-      }, 300);
-    }, 2700);
-  };
+  // Використовуємо СПІЛЬНУ систему повідомлень замість власної: раніше тут
+  // була окрема реалізація зі своєю плашкою, через що на екрані могли
+  // зʼявитись дві різні плашки, а success показувався всупереч загальному
+  // правилу (успіх підтверджує сама кнопка, а не тост у кутку).
+  const { showToast } = useToast();
 
   // ПРИМІТКА: тут раніше був useEffect, що синхронізував ім'я/телефон
   // співробітника з таблиці 'profiles' (auth-профіль) у таблицю 'staff'.
@@ -1590,57 +1579,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       )}
 
       {/* 🟢 Стилізоване Toast-сповіщення у кольорах BookEra */}
-      {toast.show && (
-        <div
-          className={toast.isExiting ? 'toast-out' : 'toast-in'}
-          style={{
-            position: 'fixed',
-            bottom: '2rem',
-            right: '2rem',
-            background: toast.type === 'error' ? '#fff1f2' : (toast.type === 'info' ? '#eff6ff' : '#f0fdf4'),
-            border: `1.5px solid ${toast.type === 'error' ? '#fecdd3' : (toast.type === 'info' ? '#bfdbfe' : '#86efac')}`,
-            color: toast.type === 'error' ? '#991b1b' : (toast.type === 'info' ? '#1e40af' : '#166534'),
-            padding: '0.75rem 1.25rem',
-            borderRadius: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            boxShadow: toast.type === 'error'
-              ? '0 12px 30px rgba(239, 68, 68, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04)'
-              : '0 12px 30px rgba(16, 185, 129, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04)',
-            zIndex: 9999,
-            fontWeight: '700',
-            fontSize: '0.9rem',
-            pointerEvents: 'none',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          <div style={{
-            width: '24px',
-            height: '24px',
-            borderRadius: '50%',
-            background: toast.type === 'error' ? '#fee2e2' : (toast.type === 'info' ? '#dbeafe' : '#dcfce7'),
-            color: toast.type === 'error' ? '#dc2626' : (toast.type === 'info' ? '#2563eb' : '#16a34a'),
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            {toast.type === 'error' ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            )}
-          </div>
-          <span style={{ letterSpacing: '-0.2px' }}>{toast.msg}</span>
-        </div>
-      )}
     </div>
   );
 }

@@ -305,35 +305,41 @@
   box-shadow: 0 0 0 3px rgba(143, 174, 147, 0.35);
 }
 
-/* Основна дія. Одна на екран — якщо основних дві, жодна не головна. */
+/* Основна дія. Одна на екран — якщо основних дві, жодна не головна.
+   Dusty Coal #222222 з вашої палітри. */
 .bk-btn-primary {
   background: #222222;
   color: #F6F9F6;
 }
-.bk-btn-primary:not(:disabled):hover { background: #3A423B; }
+.bk-btn-primary:not(:disabled):hover { background: #383838; }
 
-/* Другорядна: матчева заливка. Достатньо помітна, щоб читатись як
-   кнопка, і достатньо світла, щоб не змагатися з основною. */
+/* Другорядна: Matcha Mist #C2D8C4 у повну силу, як у референсі палітри.
+   Раніше тут був розмитий відтінок (#E4EEE3) — він губився на білому.
+   Пара «повна матча + чорнило» читається одразу й лишається легкою,
+   бо сам колір світлий. */
 .bk-btn-secondary {
-  background: #E4EEE3;
-  color: #24301F;
-  border-color: rgba(94, 122, 97, 0.14);
+  background: #C2D8C4;
+  color: #222222;
+  border-color: transparent;
 }
-.bk-btn-secondary:not(:disabled):hover { background: #D7E6D6; }
+.bk-btn-secondary:not(:disabled):hover { background: #B0CCB3; }
 
-/* Нейтральна: тепло-сіра заливка замість білої з рамкою. Біла кнопка
-   на білій картці не читається як кнопка, поки на неї не навели —
-   тому тут саме заливка, а не лише контур. */
+/* Нейтральна: біла заливка з виразною межею кольору чорнила. Межа тут
+   навмисно помітніша за волосяну — саме вона робить кнопку кнопкою
+   на білій картці. */
 .bk-btn-outline {
-  background: #F1F3F0;
-  color: #2E3A30;
-  border-color: rgba(34, 34, 34, 0.09);
+  background: #FFFFFF;
+  color: #222222;
+  border: 1px solid rgba(34, 34, 34, 0.22);
 }
-.bk-btn-outline:not(:disabled):hover { background: #E7EBE6; border-color: rgba(34, 34, 34, 0.16); }
+.bk-btn-outline:not(:disabled):hover {
+  background: #F6F9F6;
+  border-color: rgba(34, 34, 34, 0.45);
+}
 
 /* Спокійна дія — без фону. Тільки там, де кнопка стоїть у зрозумілому
-   контейнері (панель інструментів, рядок таблиці) і сама по собі не
-   має бути помітною. Не використовувати як звичайну другорядну. */
+   контейнері (рядок таблиці, панель інструментів) і сама по собі не
+   має бути помітною. Не заміна другорядної кнопки. */
 .bk-btn-ghost {
   background: transparent;
   color: #5C6B5E;
@@ -344,17 +350,18 @@
   color: #222222;
 }
 
-/* Небезпечна дія: ледь помітна заливка замість прозорого фону —
-   кнопка видима, але не притягує погляд і не провокує випадковий клік. */
+/* Небезпечна дія: видима, але приглушена — не притягує погляд
+   і не провокує випадковий клік. */
 .bk-btn-danger {
   background: #FBF0EF;
   color: #A83934;
-  border-color: rgba(180, 65, 60, 0.16);
+  border: 1px solid rgba(168, 57, 52, 0.22);
 }
 .bk-btn-danger:not(:disabled):hover {
-  background: #F6E3E1;
-  border-color: rgba(180, 65, 60, 0.32);
+  background: #F5DEDC;
+  border-color: rgba(168, 57, 52, 0.45);
 }
+
 
 .bk-btn-sm { height: 32px; padding: 0 0.75rem; font-size: 0.8125rem; border-radius: 9px; }
 .bk-btn-lg { height: 44px; padding: 0 1.35rem; font-size: 0.9375rem; border-radius: 12px; }

@@ -68,23 +68,35 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
             position: 'fixed',
             bottom: '1.75rem',
             left: '50%',
-            // transform задає анімація (translate(-50%, …)) - тут його немає,
-            // інакше він перезаписав би керування анімації й плашка стрибала б.
-            maxWidth: 'min(420px, calc(100vw - 3rem))',
+            // transform лишається за анімацією (translate(-50%, …)) - якщо
+            // задати його тут, він перезапише анімацію і плашка стрибне.
+            maxWidth: 'min(400px, calc(100vw - 3rem))',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.65rem',
-            // Суцільна темна плашка замість кольорової з рамкою: вона не
-            // конкурує з контентом за увагу і однаково читається на будь-якому
-            // тлі - а рамка + світлий фон виглядали як ще один блок інтерфейсу.
-            background: toast.type === 'error' ? '#7f1d1d' : '#1F241F',
-            color: '#fff',
-            padding: '0.7rem 1.1rem',
-            borderRadius: '12px',
-            boxShadow: '0 8px 28px rgba(0, 0, 0, 0.18)',
+            gap: '0.6rem',
+            // Матове скло: напівпрозорий фон + розмиття того, що під ним.
+            // Плашка лишається легкою, не перекриває контент повністю і
+            // не читається як ще один суцільний блок інтерфейсу.
+            background: toast.type === 'error'
+              ? 'rgba(254, 245, 245, 0.82)'
+              : 'rgba(244, 250, 245, 0.82)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            // Волосяна лінія замість помітної рамки - вона лише окреслює
+            // край на світлому тлі, а не малює навколо плашки контур.
+            border: toast.type === 'error'
+              ? '0.5px solid rgba(180, 65, 60, 0.18)'
+              : '0.5px solid rgba(94, 122, 97, 0.16)',
+            color: toast.type === 'error' ? '#8C2F2B' : '#2E3A30',
+            padding: '0.7rem 1.05rem',
+            borderRadius: '14px',
+            // Мʼяка розсіяна тінь замість різкої: створює відчуття
+            // легкого підняття над сторінкою, а не наліпленого блоку.
+            boxShadow: '0 6px 24px rgba(31, 36, 31, 0.10), 0 1px 3px rgba(31, 36, 31, 0.05)',
             zIndex: 9999,
             fontSize: '0.875rem',
-            fontWeight: 500,
+            fontWeight: 450,
+            letterSpacing: '-0.01em',
             lineHeight: 1.45,
             cursor: 'pointer',
           }}
@@ -96,7 +108,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
               width: '6px',
               height: '6px',
               borderRadius: '50%',
-              background: toast.type === 'error' ? '#fca5a5' : '#C2D8C4',
+              background: toast.type === 'error' ? '#C2605B' : '#8FAE93',
             }}
           />
           <span>{toast.msg}</span>

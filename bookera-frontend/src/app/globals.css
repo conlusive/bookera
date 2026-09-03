@@ -1,8 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-/* Єдині стилі інтерфейсу (кнопки, поля, картки) - див. src/styles/design-system.css */
-@import "../styles/design-system.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -185,8 +183,22 @@
 .bk-btn--ghost { background: transparent; color: var(--bk-ink); border-color: var(--bk-line); }
 .bk-btn--ghost:hover:not(:disabled) { background: var(--bk-surface); }
 
-.bk-btn--danger { background: transparent; color: var(--bk-danger); border-color: var(--bk-line); }
-.bk-btn--danger:hover:not(:disabled) { background: #fdf3f2; border-color: var(--bk-danger); }
+.bk-btn--danger { background: #fbf0ef; color: var(--bk-danger); border-color: rgba(168, 57, 52, 0.22); }
+.bk-btn--danger:hover:not(:disabled) { background: #f5dedc; border-color: rgba(168, 57, 52, 0.45); }
+
+/* Matcha Mist у повну силу - для другорядних дій, які мають лишатись
+   помітними. Прозорий фон (ghost) на білій картці не читається як кнопка,
+   поки на неї не навели. */
+.bk-btn--secondary { background: var(--bk-accent); color: var(--bk-ink); border-color: transparent; }
+.bk-btn--secondary:hover:not(:disabled) { background: #b0ccb3; }
+
+/* Нейтральна: біла заливка з виразною межею - саме межа робить її
+   кнопкою на світлому тлі. */
+.bk-btn--outline { background: #fff; color: var(--bk-ink); border-color: rgba(34, 34, 34, 0.22); }
+.bk-btn--outline:hover:not(:disabled) { background: var(--bk-surface); border-color: rgba(34, 34, 34, 0.45); }
+
+.bk-btn--lg { padding: 0.85rem 1.4rem; font-size: 0.95rem; }
+.bk-btn--icon { padding: 0.65rem; }
 
 /* Стани збереження: колір несе сенс, але текст лишається головним -
    тому не покладаємось лише на колір (важливо для дальтоніків). */
@@ -247,15 +259,18 @@
    React-компонента: інлайновий стиль спричиняв помилку гідратації, бо сервер
    і клієнт могли віддати різні версії правил. */
 @keyframes bkToastIn {
-  from { opacity: 0; transform: translateX(16px) scale(0.97); }
+  from { opacity: 0; transform: translateX(28px) scale(0.96); }
   to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 @keyframes bkToastOut {
   from { opacity: 1; transform: translateX(0) scale(1); }
-  to   { opacity: 0; transform: translateX(12px) scale(0.98); }
+  to   { opacity: 0; transform: translateX(20px) scale(0.97); }
 }
-.bk-toast     { animation: bkToastIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.bk-toast-out { animation: bkToastOut 0.18s ease-in both; }
+/* Довша поява з мʼяким сповільненням наприкінці: плашка ніби
+   пригальмовує, коли доїжджає на місце, а не встає різко.
+   Зникнення трохи швидше - зайшло, прочитали, пішло. */
+.bk-toast     { animation: bkToastIn 0.42s cubic-bezier(0.22, 1, 0.28, 1) both; }
+.bk-toast-out { animation: bkToastOut 0.3s cubic-bezier(0.4, 0, 0.7, 0.2) both; }
 
 @media (prefers-reduced-motion: reduce) {
   .bk-toast, .bk-toast-out { animation: none; }

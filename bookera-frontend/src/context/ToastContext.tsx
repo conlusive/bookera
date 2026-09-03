@@ -38,7 +38,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const dismiss = useCallback(() => {
     clearTimers();
     setToast(prev => (prev ? { ...prev, exiting: true } : null));
-    timers.current.push(setTimeout(() => setToast(null), 200));
+    timers.current.push(setTimeout(() => setToast(null), 300));
   }, []);
 
   const showToast = useCallback((msg: string, type: ToastType = 'success') => {
@@ -49,7 +49,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
     const life = type === 'error' ? 6000 : 3500;
     timers.current.push(setTimeout(() => {
       setToast(prev => (prev ? { ...prev, exiting: true } : null));
-      timers.current.push(setTimeout(() => setToast(null), 200));
+      timers.current.push(setTimeout(() => setToast(null), 300));
     }, life));
   }, []);
 
@@ -92,6 +92,8 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
             // легкого підняття над сторінкою, а не наліпленого блоку.
             boxShadow: '0 10px 32px rgba(31, 36, 31, 0.16), 0 2px 6px rgba(31, 36, 31, 0.08)',
             zIndex: 9999,
+            // Ті самі параметри тексту, що в кнопках (.bk-btn) - щоб
+            // повідомлення читалось як частина інтерфейсу, а не сторонній блок.
             fontSize: '0.9rem',
             fontWeight: 600,
             letterSpacing: '-0.01em',

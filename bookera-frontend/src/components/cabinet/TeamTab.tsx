@@ -550,7 +550,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>Команда</h2>
             {hasAdminRights && (
               <button
-                className="bk-btn bk-btn-primary bk-btn-sm"
+                className="bk-btn bk-btn--primary bk-btn--sm"
                 onClick={() => setIsInviteStaffModalOpen(true)}
               >
                 <Icons.Plus /> Додати
@@ -996,7 +996,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                <button
                                  onClick={handlePayout}
                                  disabled={isPayoutDisabled}
-                                 className="bk-btn bk-btn-primary"
+                                 className="bk-btn bk-btn--primary"
                                >
                                  <Icons.CheckCircle /> {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати'}
                                </button>
@@ -1330,7 +1330,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                        showToast(err?.message || 'Не вдалося скасувати виплату', 'error');
                                      }
                                    }}
-                                   className="bk-btn bk-btn-danger bk-btn-sm"
+                                   className="bk-btn bk-btn--danger bk-btn--sm"
                                  >
                                    Скасувати
                                  </button>
@@ -1552,7 +1552,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             </div>
 
             <button
-              className="bk-btn bk-btn-primary bk-btn-lg bk-btn-block"
+              className="bk-btn bk-btn--primary bk-btn--lg bk-btn--block"
               style={{ marginTop: '2rem' }}
               onClick={handleInviteStaff}
               disabled={isInvitingStaff}

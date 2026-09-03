@@ -390,8 +390,21 @@ export default function BusinessLandingPage() {
           setUserRole('client');
           router.push('/business/register');
         }
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        // Сесія могла закінчитись, поки вкладка була відкрита: у
+        // localStorage людина ще "залогінена", а справжнього токена вже
+        // немає. Тоді правильна відповідь - запропонувати увійти, а не
+        // вести на реєстрацію бізнесу, ніби нічого не сталося.
+        const sessionGone = String(err?.message || '').includes('Сесія');
+        if (sessionGone) {
+          localStorage.removeItem('userName');
+          localStorage.removeItem('userRole');
+          setIsLoggedIn(false);
+          setIsLoginView(true);
+          setIsAuthModalOpen(true);
+          return;
+        }
+        console.error('Не вдалося перевірити бізнес:', err);
         router.push('/business/register');
       }
     } else {

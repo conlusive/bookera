@@ -258,3 +258,148 @@
 @media (prefers-reduced-motion: reduce) {
   .bk-toast, .bk-toast-out { animation: none; }
 }
+
+/* ============================================================
+   Кнопки та поля вводу — єдиний набір для всього кабінету.
+
+   До цього кожна вкладка описувала стилі прямо в атрибуті style
+   кожної кнопки (199 місць у 9 файлах), тому вони й різнились
+   розмірами, відступами та радіусами. Тут один набір класів:
+   зміна вигляду в одному місці міняє його всюди.
+
+   Принципи: колір несе сенс (матча — дія, приглушений червоний —
+   небезпека, решта — відтінки чорнила); межі волосяні; тіні мʼякі
+   й лише там, де елемент справді підноситься над сторінкою.
+   ============================================================ */
+
+.bk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 38px;
+  padding: 0 1rem;
+  border-radius: 10px;
+  border: 0.5px solid transparent;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  /* Швидкий, але не миттєвий перехід: рух має бути помітним, проте
+     не має затримувати відчуття відгуку на клік. */
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+              color 0.15s ease, opacity 0.15s ease;
+}
+
+.bk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Натискання: ледь помітне зміщення вниз замість зміни масштабу —
+   так кнопка не «дихає» розміром і не зсуває сусідні елементи. */
+.bk-btn:not(:disabled):active { transform: translateY(0.5px); }
+
+.bk-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(143, 174, 147, 0.35);
+}
+
+/* Основна дія. Одна на екран — якщо основних дві, жодна не головна. */
+.bk-btn-primary {
+  background: #222222;
+  color: #F6F9F6;
+}
+.bk-btn-primary:not(:disabled):hover { background: #3A423B; }
+
+/* Другорядна: та сама вага, менше галасу. */
+.bk-btn-secondary {
+  background: #EAF1E9;
+  color: #263229;
+}
+.bk-btn-secondary:not(:disabled):hover { background: #DDE8DC; }
+
+/* Спокійна дія в щільних місцях — межа зʼявляється лише при наведенні. */
+.bk-btn-ghost {
+  background: transparent;
+  color: #5C6B5E;
+  border-color: transparent;
+}
+.bk-btn-ghost:not(:disabled):hover {
+  background: #F2F6F1;
+  color: #222222;
+}
+
+/* Обведена: коли дія рівноцінна сусіднім і жодна не головна. */
+.bk-btn-outline {
+  background: #fff;
+  color: #2E3A30;
+  border-color: #DEE6DC;
+}
+.bk-btn-outline:not(:disabled):hover { background: #F6F9F6; border-color: #C8D6C9; }
+
+/* Небезпечна дія: приглушена, поки на неї не навели — щоб не
+   притягувала погляд і не провокувала випадковий клік. */
+.bk-btn-danger {
+  background: transparent;
+  color: #B4413C;
+  border-color: rgba(180, 65, 60, 0.25);
+}
+.bk-btn-danger:not(:disabled):hover {
+  background: rgba(180, 65, 60, 0.07);
+  border-color: rgba(180, 65, 60, 0.45);
+}
+
+.bk-btn-sm { height: 32px; padding: 0 0.75rem; font-size: 0.8125rem; border-radius: 9px; }
+.bk-btn-lg { height: 44px; padding: 0 1.35rem; font-size: 0.9375rem; border-radius: 12px; }
+.bk-btn-icon { width: 38px; padding: 0; }
+.bk-btn-icon.bk-btn-sm { width: 32px; }
+.bk-btn-block { width: 100%; }
+
+/* Поля вводу */
+.bk-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 0.85rem;
+  border-radius: 10px;
+  border: 0.5px solid #DEE6DC;
+  background: #fff;
+  color: #222222;
+  font-family: inherit;
+  font-size: 0.9rem;
+  letter-spacing: -0.01em;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.bk-input::placeholder { color: #A5AEA3; }
+.bk-input:hover:not(:disabled) { border-color: #C8D6C9; }
+.bk-input:focus {
+  border-color: #8FAE93;
+  box-shadow: 0 0 0 3px rgba(143, 174, 147, 0.18);
+}
+.bk-input:disabled { background: #F6F9F6; color: #6B756A; cursor: not-allowed; }
+
+textarea.bk-input { height: auto; min-height: 90px; padding: 0.7rem 0.85rem; line-height: 1.5; resize: vertical; }
+
+.bk-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #5C6B5E;
+  margin-bottom: 0.4rem;
+  letter-spacing: -0.005em;
+}
+
+/* Картка: волосяна межа замість тіні — тінь означала б, що блок
+   підноситься над сторінкою, а звичайна картка лежить у потоці. */
+.bk-card {
+  background: #fff;
+  border: 0.5px solid #E4EBE3;
+  border-radius: 14px;
+  padding: 1.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-btn, .bk-input { transition: none; }
+  .bk-btn:not(:disabled):active { transform: none; }
+}

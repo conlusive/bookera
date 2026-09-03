@@ -550,24 +550,8 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>Команда</h2>
             {hasAdminRights && (
               <button
+                className="bk-btn bk-btn-primary bk-btn-sm"
                 onClick={() => setIsInviteStaffModalOpen(true)}
-                style={{
-                  padding: '0.45rem 0.9rem',
-                  background: colors.textPrimary,
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  transition: '0.2s',
-                  boxShadow: '0 2px 6px rgba(15, 23, 42, 0.12)'
-                }}
-                onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
-                onMouseOut={e => e.currentTarget.style.opacity = '1'}
               >
                 <Icons.Plus /> Додати
               </button>
@@ -984,10 +968,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                               {Number(payoutPreview.tax_amount) > 0 && (
                                 <>
-                                  <div style={{ fontSize: '1.1rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>−</div>
+                                  <div className="bk-btn bk-btn-danger bk-btn-sm">−</div>
                                   <div>
-                                    <div style={{ fontSize: '0.75rem', color: colors.red, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Податок ({payoutPreview.tax_rate}%)</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.red }}>{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
+                                    <div className="bk-btn bk-btn-danger bk-btn-sm">Податок ({payoutPreview.tax_rate}%)</div>
+                                    <div className="bk-btn bk-btn-danger bk-btn-sm">{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
                                   </div>
                                 </>
                               )}
@@ -1008,9 +992,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                <button
                                  onClick={handlePayout}
                                  disabled={isPayoutDisabled}
-                                 style={{ background: isPayoutDisabled ? 'rgba(255,255,255,0.5)' : '#fff', color: colors.wMintText, border: `1px solid ${colors.wMintBorder}`, padding: '0.8rem 1.5rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: isPayoutDisabled ? 'not-allowed' : 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '0.6rem', boxShadow: isPayoutDisabled ? 'none' : '0 4px 12px rgba(22, 101, 52, 0.15)' }}
-                                 onMouseOver={e => { if(!isPayoutDisabled) e.currentTarget.style.transform = 'translateY(-2px)' }}
-                                 onMouseOut={e => { if(!isPayoutDisabled) e.currentTarget.style.transform = 'translateY(0)' }}
+className="bk-btn bk-btn-outline"
                                >
                                  <Icons.CheckCircle /> {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати'}
                                </button>
@@ -1344,9 +1326,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                        showToast(err?.message || 'Не вдалося скасувати виплату', 'error');
                                      }
                                    }}
-                                   style={{ background: 'transparent', border: `1px solid ${colors.border}`, color: colors.textSecondary, fontSize: '0.75rem', fontWeight: 600, padding: '0.35rem 0.7rem', borderRadius: '8px', cursor: 'pointer' }}
-                                   onMouseOver={e => { e.currentTarget.style.borderColor = colors.red; e.currentTarget.style.color = colors.red; }}
-                                   onMouseOut={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.color = colors.textSecondary; }}
+                                   className="bk-btn bk-btn-danger bk-btn-sm"
                                  >
                                    Скасувати
                                  </button>
@@ -1414,7 +1394,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 {!isOwnerProfile ? (
                   <div style={{ background: '#fef2f2', border: `1px dashed ${colors.red}`, borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                     <div>
-                      <h3 style={{ fontSize: '1rem', fontWeight: '700', color: colors.red, margin: '0 0 0.4rem 0' }}>Звільнення співробітника</h3>
+                      <h3 className="bk-btn bk-btn-danger bk-btn-sm">Звільнення співробітника</h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0 }}>Назавжди видалити доступ цієї особи до системи. Історія записів залишиться в базі.</p>
                     </div>
                     <button onClick={handleDeleteStaff} style={{ background: colors.red, color: '#fff', border: 'none', padding: '0.8rem 1.5rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.opacity = '0.8'} onMouseOut={e => e.currentTarget.style.opacity = '1'}>
@@ -1568,9 +1548,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             </div>
 
             <button
+              className="bk-btn bk-btn-primary bk-btn-lg bk-btn-block"
+              style={{ marginTop: '2rem' }}
               onClick={handleInviteStaff}
               disabled={isInvitingStaff}
-              style={{ width: '100%', marginTop: '2rem', padding: '0.85rem', backgroundColor: colors.blue, color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '0.95rem', cursor: isInvitingStaff ? 'not-allowed' : 'pointer', opacity: isInvitingStaff ? 0.7 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
             >
               {isInvitingStaff ? 'Додавання...' : 'Додати в команду'}
             </button>

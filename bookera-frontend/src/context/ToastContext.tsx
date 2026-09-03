@@ -64,10 +64,10 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
           onClick={dismiss}
           style={{
             position: 'fixed',
-            bottom: '1.75rem',
-            left: '50%',
-            // transform лишається за анімацією (translate(-50%, …)) - якщо
-            // задати його тут, він перезапише анімацію і плашка стрибне.
+            bottom: '1.5rem',
+            // Справа внизу: там плашка не перекриває основний робочий
+            // простір і не тягне погляд від того, з чим людина працює.
+            right: '1.5rem',
             maxWidth: 'min(400px, calc(100vw - 3rem))',
             display: 'flex',
             alignItems: 'center',
@@ -76,24 +76,24 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
             // Плашка лишається легкою, не перекриває контент повністю і
             // не читається як ще один суцільний блок інтерфейсу.
             background: toast.type === 'error'
-              ? 'rgba(254, 245, 245, 0.82)'
-              : 'rgba(244, 250, 245, 0.82)',
+              ? 'rgba(253, 240, 239, 0.96)'
+              : 'rgba(238, 247, 239, 0.96)',
             backdropFilter: 'blur(20px) saturate(180%)',
             WebkitBackdropFilter: 'blur(20px) saturate(180%)',
             // Волосяна лінія замість помітної рамки - вона лише окреслює
             // край на світлому тлі, а не малює навколо плашки контур.
             border: toast.type === 'error'
-              ? '0.5px solid rgba(180, 65, 60, 0.18)'
-              : '0.5px solid rgba(94, 122, 97, 0.16)',
-            color: toast.type === 'error' ? '#8C2F2B' : '#2E3A30',
+              ? '1px solid rgba(168, 57, 52, 0.28)'
+              : '1px solid rgba(94, 122, 97, 0.30)',
+            color: toast.type === 'error' ? '#8C2F2B' : '#22301F',
             padding: '0.7rem 1.05rem',
             borderRadius: '14px',
             // Мʼяка розсіяна тінь замість різкої: створює відчуття
             // легкого підняття над сторінкою, а не наліпленого блоку.
-            boxShadow: '0 6px 24px rgba(31, 36, 31, 0.10), 0 1px 3px rgba(31, 36, 31, 0.05)',
+            boxShadow: '0 10px 32px rgba(31, 36, 31, 0.16), 0 2px 6px rgba(31, 36, 31, 0.08)',
             zIndex: 9999,
-            fontSize: '0.875rem',
-            fontWeight: 450,
+            fontSize: '0.9rem',
+            fontWeight: 600,
             letterSpacing: '-0.01em',
             lineHeight: 1.45,
             cursor: 'pointer',
@@ -103,10 +103,10 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
             aria-hidden
             style={{
               flexShrink: 0,
-              width: '6px',
-              height: '6px',
+              width: '7px',
+              height: '7px',
               borderRadius: '50%',
-              background: toast.type === 'error' ? '#C2605B' : '#8FAE93',
+              background: toast.type === 'error' ? '#A83934' : '#6F9273',
             }}
           />
           <span>{toast.msg}</span>

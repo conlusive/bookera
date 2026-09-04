@@ -6,9 +6,29 @@ export async function middleware(request: NextRequest) {
     request,
   });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // Без цієї перевірки одна відсутня змінна оточення валила КОЖНУ
+  // сторінку застосунку голим «Internal Server Error» - без натяку, що
+  // саме не так. Middleware виконується для всіх запитів, тому його
+  // збій = повністю мертвий сайт.
+  //
+  // Тепер пропускаємо запит далі: сторінки самі перевіряють авторизацію,
+  // тож у найгіршому разі людина побачить екран входу, а розробник -
+  // зрозумілу причину в терміналі.
+  if (!supabaseUrl || !supabaseKey) {
+    console.error(
+      '[middleware] Немає NEXT_PUBLIC_SUPABASE_URL або NEXT_PUBLIC_SUPABASE_ANON_KEY. ' +
+      'Перевірте bookera-frontend/.env.local і перезапустіть dev-сервер. ' +
+      'Перевірку сесії пропущено.'
+    );
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {

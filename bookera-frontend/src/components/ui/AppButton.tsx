@@ -39,31 +39,31 @@ const PALETTE = {
 const VARIANTS: Record<ButtonVariant, { base: React.CSSProperties; hover: React.CSSProperties }> = {
   // Основна дія. Одна на екран: якщо основних дві, жодна не головна.
   primary: {
-    base: { background: PALETTE.ink, color: '#FFFFFF', borderColor: 'transparent' },
-    hover: { background: PALETTE.inkHover },
+    base: { backgroundColor: PALETTE.ink, color: '#FFFFFF', borderColor: 'transparent' },
+    hover: { backgroundColor: PALETTE.inkHover },
   },
   // Друга за важливістю. Матча в повну силу — світла, але помітна.
   secondary: {
-    base: { background: PALETTE.matcha, color: PALETTE.ink, borderColor: 'transparent' },
-    hover: { background: PALETTE.matchaHover },
+    base: { backgroundColor: PALETTE.matcha, color: PALETTE.ink, borderColor: 'transparent' },
+    hover: { backgroundColor: PALETTE.matchaHover },
   },
   // Нейтральна. Саме межа робить її кнопкою на білій картці —
   // без неї біле на білому не читається.
   outline: {
-    base: { background: '#FFFFFF', color: PALETTE.ink, borderColor: PALETTE.line },
-    hover: { background: PALETTE.surface, borderColor: PALETTE.lineStrong },
+    base: { backgroundColor: '#FFFFFF', color: PALETTE.ink, borderColor: PALETTE.line },
+    hover: { backgroundColor: PALETTE.surface, borderColor: PALETTE.lineStrong },
   },
   // Спокійна: лише для кнопок усередині зрозумілого контейнера
   // (рядок таблиці, панель), де вони й не мають бути помітними.
   ghost: {
-    base: { background: 'transparent', color: PALETTE.muted, borderColor: 'transparent' },
-    hover: { background: PALETTE.surface, color: PALETTE.ink },
+    base: { backgroundColor: 'transparent', color: PALETTE.muted, borderColor: 'transparent' },
+    hover: { backgroundColor: PALETTE.surface, color: PALETTE.ink },
   },
   // Небезпечна: видима, але приглушена — не притягує погляд
   // і не провокує випадковий клік.
   danger: {
-    base: { background: PALETTE.dangerBg, color: PALETTE.danger, borderColor: PALETTE.dangerLine },
-    hover: { background: PALETTE.dangerBgHover, borderColor: PALETTE.dangerLineStrong },
+    base: { backgroundColor: PALETTE.dangerBg, color: PALETTE.danger, borderColor: PALETTE.dangerLine },
+    hover: { backgroundColor: PALETTE.dangerBgHover, borderColor: PALETTE.dangerLineStrong },
   },
 };
 
@@ -95,6 +95,7 @@ export default function AppButton({
 
   return (
     <button
+      data-btn="v2"
       {...rest}
       disabled={disabled}
       onMouseEnter={e => { setHovered(true); rest.onMouseEnter?.(e); }}

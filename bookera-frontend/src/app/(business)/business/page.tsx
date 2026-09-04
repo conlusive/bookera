@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
-import { getAuthToken } from '@/lib/auth-token-client';
+import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole } from '@/lib/roles';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
@@ -380,7 +380,20 @@ export default function BusinessLandingPage() {
       // /crm/businesses/me (єдине надійне джерело "мого бізнесу"),
       // а не пряме звернення в базу.
       try {
-        const token = await getAuthToken();
+        // getAuthTokenOrNull, а не getAuthToken: людина могла не увійти
+        // або сесія добігла кінця, поки вкладка була відкрита. Це
+        // звичайний стан, а не аварія - виняток тут лише засмічував
+        // консоль помилкою «Сесія закінчилась».
+        const token = await getAuthTokenOrNull();
+        if (!token) {
+          localStorage.removeItem('userName');
+          localStorage.removeItem('userRole');
+          setIsLoggedIn(false);
+          setIsLoginView(true);
+          setIsAuthModalOpen(true);
+          return;
+        }
+
         const me = await api.getMyProfile(token);
 
         if (me.business_id) {
@@ -391,19 +404,8 @@ export default function BusinessLandingPage() {
           router.push('/business/register');
         }
       } catch (err: any) {
-        // Сесія могла закінчитись, поки вкладка була відкрита: у
-        // localStorage людина ще "залогінена", а справжнього токена вже
-        // немає. Тоді правильна відповідь - запропонувати увійти, а не
-        // вести на реєстрацію бізнесу, ніби нічого не сталося.
-        const sessionGone = String(err?.message || '').includes('Сесія');
-        if (sessionGone) {
-          localStorage.removeItem('userName');
-          localStorage.removeItem('userRole');
-          setIsLoggedIn(false);
-          setIsLoginView(true);
-          setIsAuthModalOpen(true);
-          return;
-        }
+        // Сюди тепер потрапляють лише справжні збої (бекенд недоступний
+        // тощо) - відсутність сесії обробляється вище, до запиту.
         console.error('Не вдалося перевірити бізнес:', err);
         router.push('/business/register');
       }

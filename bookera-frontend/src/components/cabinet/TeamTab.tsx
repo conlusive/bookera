@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
 import { useToast } from '@/context/ToastContext';
+import Button from '@/components/ui/AppButton';
 import SaveButton from '@/components/ui/SaveButton';
 import { Icons } from '@/components/shared';
 
@@ -549,12 +550,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>Команда</h2>
             {hasAdminRights && (
-              <button
-                className="bk-btn bk-btn--primary bk-btn--sm"
-                onClick={() => setIsInviteStaffModalOpen(true)}
-              >
+              <Button size="sm" onClick={() => setIsInviteStaffModalOpen(true)}>
                 <Icons.Plus /> Додати
-              </button>
+              </Button>
             )}
           </div>
 
@@ -639,9 +637,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
               </div>
 
               {providesServices && (
-                <button onClick={() => { setActiveTab('Calendar'); setFilterMaster(currentStaff.id); }} style={{ padding: '0.7rem 1.2rem', borderRadius: '10px', border: 'none', background: colors.blueLight, fontWeight: '600', fontSize: '0.9rem', color: colors.blue, cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onMouseOver={e => e.currentTarget.style.background = '#dbeafe'} onMouseOut={e => e.currentTarget.style.background = colors.blueLight}>
+                <Button variant="secondary" onClick={() => { setActiveTab('Calendar'); setFilterMaster(currentStaff.id); }}>
                   <Icons.Calendar /> Відкрити розклад
-                </button>
+                </Button>
               )}
             </div>
 
@@ -675,7 +673,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
               <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 {hasAdminRights && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-1rem' }}>
-                    <button
+                    <Button
                       type="button"
                       disabled={isSavingStaff}
                       onClick={() => handleSaveSettingsDB({
@@ -683,24 +681,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         title: currentStaff.title,
                         phone: currentStaff.phone,
                       })}
-                      style={{
-                        padding: '0.65rem 1.4rem',
-                        borderRadius: '10px',
-                        border: 'none',
-                        background: isSavingStaff ? '#334155' : colors.textPrimary,
-                        fontWeight: '700',
-                        color: '#ffffff',
-                        fontSize: '0.9rem',
-                        cursor: isSavingStaff ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.55rem',
-                        boxShadow: isSavingStaff ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
-                        opacity: isSavingStaff ? 0.85 : 1,
-                      }}
-                      onMouseOver={e => { if (!isSavingStaff) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                      onMouseOut={e => { if (!isSavingStaff) e.currentTarget.style.transform = 'translateY(0)'; }}
                     >
                       {isSavingStaff ? (
                         <>
@@ -718,7 +698,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       ) : (
                         <span>Зберегти дані</span>
                       )}
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -760,19 +740,18 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                         {/* КНОПКА ВИБРАТИ ВСІ (Автозбереження) */}
                         {canEditServices && (
-                          <button
+                          <Button
                             onClick={() => {
                               const allAssigned = localAssignedServices.length === services.length;
                               const newAssigned = allAssigned ? [] : services.map((s:any) => String(s.id));
                               setLocalAssignedServices(newAssigned);
                               handleSaveSettingsDB({ assigned_services: newAssigned });
                             }}
-                            style={{ background: colors.blueLight, border: 'none', color: colors.blue, fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', padding: '0.6rem 1rem', borderRadius: '8px', transition: '0.2s', whiteSpace: 'nowrap' }}
-                            onMouseOver={e => e.currentTarget.style.background = '#dbeafe'}
-                            onMouseOut={e => e.currentTarget.style.background = colors.blueLight}
+                            variant="secondary"
+                            size="sm"
                           >
                             {localAssignedServices.length === services.length ? 'Зняти всі' : `Вибрати всі (${services.length})`}
-                          </button>
+                          </Button>
                         )}
                       </div>
 
@@ -818,9 +797,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                          <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0 }}>Зміни зберігаються автоматично.</p>
                       </div>
                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                         <button onClick={handleExportToCalendar} style={{ fontSize: '0.85rem', color: colors.blue, fontWeight: '600', background: colors.blueLight, border: 'none', cursor: 'pointer', padding: '0.6rem 1rem', borderRadius: '8px', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '0.4rem' }} onMouseOver={e => e.currentTarget.style.background = '#dbeafe'} onMouseOut={e => e.currentTarget.style.background = colors.blueLight}>
+                         <Button variant="secondary" size="sm" onClick={handleExportToCalendar}>
                            <Icons.Calendar /> Експорт
-                         </button>
+                         </Button>
                       </div>
                     </div>
 
@@ -993,13 +972,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                           {hasAdminRights && (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-                               <button
-                                 onClick={handlePayout}
-                                 disabled={isPayoutDisabled}
-                                 className="bk-btn bk-btn--primary"
-                               >
+                               <Button onClick={handlePayout} disabled={isPayoutDisabled}>
                                  <Icons.CheckCircle /> {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати'}
-                               </button>
+                               </Button>
                             </div>
                           )}
                       </div>
@@ -1015,9 +990,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                        <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0 }}>Параметри автоматичного розрахунку.</p>
                      </div>
                      {hasAdminRights && (
-                        <button
-                           type="button"
-                           disabled={isSavingStaff}
+                        <Button
+                          type="button"
+                          disabled={isSavingStaff}
                            onClick={() => handleSaveSettingsDB({
                               commission_rate: currentStaff.commission_rate || 0,
                               fixed_salary: currentStaff.fixed_salary || 0,
@@ -1031,22 +1006,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                               card_number: currentStaff.card_number || '',
                               bank_name: currentStaff.bank_name || ''
                            })}
-                           style={{
-                              padding: '0.65rem 1.4rem',
-                              borderRadius: '10px',
-                              border: 'none',
-                              background: isSavingStaff ? '#334155' : colors.textPrimary,
-                              fontWeight: '700',
-                              color: '#ffffff',
-                              fontSize: '0.9rem',
-                              cursor: isSavingStaff ? 'not-allowed' : 'pointer',
-                              transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.55rem',
-                              boxShadow: isSavingStaff ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
-                              opacity: isSavingStaff ? 0.85 : 1,
-                           }}
                         >
                            {isSavingStaff ? (
                               <>
@@ -1064,7 +1023,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                            ) : (
                               <span>Зберегти</span>
                            )}
-                        </button>
+                        </Button>
                      )}
                   </div>
 
@@ -1316,7 +1275,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                {payout.status === 'cancelled' ? (
                                  <span style={{ fontSize: '0.7rem', background: colors.surface, color: colors.textSecondary, padding: '3px 8px', borderRadius: '6px', fontWeight: '700' }}>Скасовано</span>
                                ) : hasAdminRights && (
-                                 <button
+                                 <Button
                                    onClick={async () => {
                                      const reason = window.prompt('Причина скасування виплати (необовʼязково):');
                                      if (reason === null) return;
@@ -1330,10 +1289,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                        showToast(err?.message || 'Не вдалося скасувати виплату', 'error');
                                      }
                                    }}
-                                   className="bk-btn bk-btn--danger bk-btn--sm"
+                                   variant="danger"
+                                   size="sm"
                                  >
                                    Скасувати
-                                 </button>
+                                 </Button>
                                )}
                              </div>
                            </div>
@@ -1401,9 +1361,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: colors.red, margin: 0 }}>Звільнення співробітника</h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0 }}>Назавжди видалити доступ цієї особи до системи. Історія записів залишиться в базі.</p>
                     </div>
-                    <button onClick={handleDeleteStaff} style={{ background: colors.red, color: '#fff', border: 'none', padding: '0.8rem 1.5rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.opacity = '0.8'} onMouseOut={e => e.currentTarget.style.opacity = '1'}>
+                    <Button variant="danger" onClick={handleDeleteStaff}>
                       Звільнити майстра
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div style={{ background: colors.surface, border: `1px dashed ${colors.border}`, borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
@@ -1412,9 +1372,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0, maxWidth: '400px', lineHeight: 1.4 }}>Щоб звільнити цей профіль, потрібно спочатку передати права власності на бізнес іншому адміністратору.</p>
                     </div>
                     {isSystemOwner ? (
-                        <button onClick={() => setIsTransferModalOpen(true)} style={{ background: '#fff', color: colors.textPrimary, border: `1px solid ${colors.border}`, padding: '0.8rem 1.5rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }} onMouseOver={e => e.currentTarget.style.background = colors.surface} onMouseOut={e => e.currentTarget.style.background = '#fff'}>
+                        <Button variant="outline" onClick={() => setIsTransferModalOpen(true)}>
                           Передати права
-                        </button>
+                        </Button>
                     ) : (
                         <div style={{ fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, padding: '0.8rem 1.5rem', background: '#f1f5f9', borderRadius: '10px' }}>
                           Лише власник
@@ -1494,13 +1454,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                </label>
             )}
 
-            <button
+            <Button
+              variant="danger"
+              size="lg"
+              block
               onClick={handleTransferOwnership}
               disabled={isTransferring || !newOwnerId || !transferConfirmed}
-              style={{ width: '100%', padding: '0.85rem', backgroundColor: colors.red, color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: (isTransferring || !newOwnerId || !transferConfirmed) ? 'not-allowed' : 'pointer', opacity: (isTransferring || !newOwnerId || !transferConfirmed) ? 0.5 : 1, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
             >
               {isTransferring ? 'Передача...' : 'Підтвердити передачу прав'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1551,19 +1513,19 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
               </div>
             </div>
 
-            <button
-              className="bk-btn bk-btn--primary bk-btn--lg bk-btn--block"
+            <Button
+              size="lg"
+              block
               style={{ marginTop: '2rem' }}
               onClick={handleInviteStaff}
               disabled={isInvitingStaff}
             >
               {isInvitingStaff ? 'Додавання...' : 'Додати в команду'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      {/* 🟢 Стилізоване Toast-сповіщення у кольорах BookEra */}
     </div>
   );
 }

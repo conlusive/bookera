@@ -743,6 +743,55 @@ export default function CalendarTab({ business, team = [], services = [], refres
    * манікюри й тригодинне фарбування - різна завантаженість при
    * однаковому лічильнику.
    */
+  /**
+   * Вільні проміжки між записами - куди ще можна когось поставити.
+   *
+   * Показуємо лише вікна від 30 хвилин: коротші не мають практичного
+   * сенсу для салону, а підсвічувати кожні 10 хвилин - зробити сітку
+   * рябою й марною.
+   *
+   * Рахуємо в межах робочого дня: вільний час до відкриття й після
+   * закриття - не вікно, а просто неробочий час, він уже показаний
+   * штрихуванням.
+   */
+  const getFreeGaps = useCallback((date: Date) => {
+    const shiftIdx = date.getDay() === 0 ? 6 : date.getDay() - 1;
+    const shift = shifts?.[shiftIdx];
+    if (!shift?.active) return [];
+
+    const toMin = (t: string) => {
+      const [h, m] = String(t).split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+
+    const dayStart = toMin(shift.start);
+    const dayEnd = toMin(shift.end);
+    if (dayEnd <= dayStart) return [];
+
+    const busy = (appointmentsByDate.get(toLocalDateStr(date)) || [])
+      .filter((a: any) => a.status !== 'cancelled')
+      .map((a: any) => {
+        const s = toMin(a.start_time);
+        let e = toMin(a.end_time);
+        if (e < s) e += 24 * 60;
+        return { s, e };
+      })
+      .sort((a, b) => a.s - b.s);
+
+    const gaps: { start: number; end: number }[] = [];
+    let cursor = dayStart;
+    for (const b of busy) {
+      if (b.s - cursor >= 30) gaps.push({ start: cursor, end: b.s });
+      cursor = Math.max(cursor, b.e);
+    }
+    if (dayEnd - cursor >= 30) gaps.push({ start: cursor, end: dayEnd });
+
+    // Порожній день - це не «вікно», а просто вільний день: підсвічувати
+    // його цілком означало б кричати там, де й так усе видно.
+    if (busy.length === 0) return [];
+    return gaps;
+  }, [appointmentsByDate, shifts]);
+
   const getDayLoad = useCallback((date: Date) => {
     const apps = appointmentsByDate.get(toLocalDateStr(date)) || [];
     const real = apps.filter((a: any) => a.status !== 'blocked' && a.color !== 'blocked' && a.status !== 'cancelled');
@@ -1001,8 +1050,11 @@ export default function CalendarTab({ business, team = [], services = [], refres
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
 
         {/* Топ бар календаря */}
-        <div className="cal-toolbar">
-          <div className="cal-toolbar__left">
+        <div
+          className="cal-toolbar"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'nowrap', padding: '1rem 2rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', position: 'relative', zIndex: 100 }}
+        >
+          <div className="cal-toolbar__left" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', minWidth: 0, flex: '1 1 auto' }}>
             <button
               onClick={() => { setCurrentDate(new Date()); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
               style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: '600', backgroundColor: '#f1f5f9', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }}
@@ -1057,8 +1109,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={masterFilterRef}>
                 <div
                   onClick={() => { if (!isMasterUser) setIsMasterFilterOpen(!isMasterFilterOpen); }}
@@ -1124,7 +1176,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
               </div>
 
               {/* Пошук клієнта по всіх записах */}
-              <div className="cal-toolbar__search" style={{ position: 'relative' }}>
+              <div className="cal-toolbar__search" style={{ position: 'relative', flex: '0 1 190px', minWidth: '130px' }}>
                 <input
                   type="text"
                   value={clientSearch}
@@ -1169,7 +1221,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
               </div>
             </div>
 
-            <div className="cal-toolbar__right" style={{ background: 'transparent' }}>
+            <div className="cal-toolbar__right" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'transparent', flexShrink: 0 }}>
               {['day', 'week', 'month'].map(view => {
                 const labels: any = { day: 'День', week: 'Тиждень', month: 'Місяць' };
                 const isActive = calendarView === view;
@@ -1223,6 +1275,37 @@ export default function CalendarTab({ business, team = [], services = [], refres
                 <div style={{ position: 'absolute', top: 0, bottom: 0, left: '60px', right: 0, pointerEvents: 'none' }}>
                   {renderNonWorkingHours(effectiveShifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
                 </div>
+
+                {/* Вільні вікна між записами - куди ще можна когось поставити.
+                    pointerEvents: none, щоб підсвітка не перехоплювала клік:
+                    натискання по вікну має створювати запис, як і будь-де. */}
+                {getFreeGaps(currentDate).map((gap, i) => {
+                  const top = (gap.start - gridStartHour * 60);
+                  const height = gap.end - gap.start;
+                  if (top < 0 || height <= 0) return null;
+                  const hours = Math.floor(height / 60);
+                  const mins = height % 60;
+                  return (
+                    <div
+                      key={`gap-${i}`}
+                      style={{
+                        position: 'absolute', left: '60px', right: 0,
+                        top: `${top}px`, height: `${height}px`,
+                        background: 'rgba(194, 216, 196, 0.14)',
+                        borderTop: '1px dashed rgba(143, 174, 147, 0.5)',
+                        borderBottom: '1px dashed rgba(143, 174, 147, 0.5)',
+                        pointerEvents: 'none', zIndex: 2,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      {height >= 45 && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6F9273', letterSpacing: '0.01em' }}>
+                          Вільно {hours > 0 ? `${hours} год ` : ''}{mins > 0 ? `${mins} хв` : ''}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
 
                 {processOverlaps(getAppointmentsForDay(currentDate)).map((app: any) => {
                   const serviceName = services.find((s:any) => String(s.id) === String(app.service_id))?.name || app.service_name;

@@ -287,3 +287,23 @@
         .task-action-btn { color: #94a3b8; background: transparent; border: none; cursor: pointer; transition: 0.2s; padding: 0.2rem; display: flex; align-items: center; justify-content: center; }
         .task-action-btn:hover { color: #0f172a; }
         .task-action-btn.delete:hover { color: #ef4444; }
+
+/* Статуси записів у календарі.
+   Компонент проставляв класи status-*, але правил для них не існувало -
+   тому завершені й скасовані візити виглядали так само, як активні. */
+
+/* Завершений: приглушений, але читабельний - це вже історія, не план. */
+.status-completed { opacity: 0.62; }
+
+/* Скасований: перекреслений і ще блідіший. Раніше такі записи просто
+   не приходили з бекенду, тому перевірити «хто і коли скасував» було
+   неможливо. Тепер вони видимі, але явно не претендують на увагу. */
+.status-cancelled {
+  opacity: 0.45;
+  text-decoration: line-through;
+  filter: grayscale(0.8);
+}
+.status-cancelled:hover { opacity: 0.75; }
+
+/* Запізнення - єдиний статус, який має привертати увагу. */
+.status-late { box-shadow: inset 3px 0 0 #D99A2B; }

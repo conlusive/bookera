@@ -34,6 +34,9 @@ export default function CalendarTab({ business, team = [], services = [], refres
   // --- СТАНИ КАЛЕНДАРЯ ---
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
+  // Пошук клієнта по всіх записах: знайти, коли людина записана, було
+  // неможливо - доводилось гортати календар вручну.
+  const [clientSearch, setClientSearch] = useState('');
   const [appointments, setAppointments] = useState<any[]>([]);
   const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean, date: string}[]>([]);
 
@@ -737,6 +740,70 @@ export default function CalendarTab({ business, team = [], services = [], refres
     [appointmentsByDate]
   );
 
+  /**
+   * Наскільки щільно зайнятий день - частка робочого часу під записами.
+   *
+   * Саме частка, а не кількість: «8 записів» нічого не каже, поки не
+   * знаєш, скільки вони тривають і який графік у закладі. Півгодинні
+   * манікюри й тригодинне фарбування - різна завантаженість при
+   * однаковому лічильнику.
+   */
+  const getDayLoad = useCallback((date: Date) => {
+    const apps = appointmentsByDate.get(toLocalDateStr(date)) || [];
+    const real = apps.filter((a: any) => a.status !== 'blocked' && a.color !== 'blocked' && a.status !== 'cancelled');
+    if (real.length === 0) return 0;
+
+    const shiftIdx = date.getDay() === 0 ? 6 : date.getDay() - 1;
+    const shift = shifts?.[shiftIdx];
+    if (!shift?.active) return 1; // запис у вихідний - день зайнятий за визначенням
+
+    const toMin = (t: string) => {
+      const [h, m] = String(t).split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+    const workMinutes = toMin(shift.end) - toMin(shift.start);
+    if (workMinutes <= 0) return 0;
+
+    const busy = real.reduce((sum: number, a: any) => {
+      const start = toMin(a.start_time);
+      let end = toMin(a.end_time);
+      if (end < start) end += 24 * 60; // візит через північ
+      return sum + Math.max(0, end - start);
+    }, 0);
+
+    return Math.min(1, busy / workMinutes);
+  }, [appointmentsByDate, shifts]);
+
+  /**
+   * Пошук записів за іменем або телефоном клієнта.
+   *
+   * Шукає по ВСІХ завантажених записах, а не лише по видимому періоду -
+   * інакше сенс губиться: людина шукає саме тому, що не знає, коли візит.
+   * Показуємо найближчі до сьогодні: спершу майбутні, потім минулі.
+   */
+  const clientSearchResults = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase();
+    if (q.length < 2) return [];
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return filteredAppointments
+      .filter((a: any) => {
+        if (a.status === 'blocked' || a.color === 'blocked') return false;
+        const name = String(a.client_name ?? '').toLowerCase();
+        const phone = String(a.client_phone ?? '').replace(/\D/g, '');
+        return name.includes(q) || (q.replace(/\D/g, '').length >= 3 && phone.includes(q.replace(/\D/g, '')));
+      })
+      .map((a: any) => ({ ...a, _date: new Date(a.booking_date || a.start_time) }))
+      .sort((a: any, b: any) => {
+        const aFuture = a._date >= today, bFuture = b._date >= today;
+        if (aFuture !== bFuture) return aFuture ? -1 : 1;
+        return aFuture ? a._date - b._date : b._date - a._date;
+      })
+      .slice(0, 8);
+  }, [clientSearch, filteredAppointments]);
+
   const currentViewAppointmentsCount = useMemo(() => {
     const countReal = (list: any[]) =>
       list.filter(a => a.status !== 'blocked' && a.color !== 'blocked').length;
@@ -1011,6 +1078,51 @@ export default function CalendarTab({ business, team = [], services = [], refres
               <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', backgroundColor: '#f8fafc', padding: '0.2rem 0.6rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
                 Записів: {currentViewAppointmentsCount}
               </div>
+
+              {/* Пошук клієнта по всіх записах */}
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={clientSearch}
+                  onChange={e => setClientSearch(e.target.value)}
+                  placeholder="Знайти клієнта…"
+                  style={{ width: '190px', height: '32px', padding: '0 0.7rem', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.8rem', color: '#0f172a', background: '#fff', outline: 'none' }}
+                />
+                {clientSearch.trim().length >= 2 && (
+                  <div style={{ position: 'absolute', top: '38px', left: 0, width: '320px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 12px 32px rgba(15,23,42,0.12)', zIndex: 100, overflow: 'hidden' }}>
+                    {clientSearchResults.length === 0 ? (
+                      <div style={{ padding: '0.9rem 1rem', fontSize: '0.82rem', color: '#94a3b8' }}>Нічого не знайдено</div>
+                    ) : clientSearchResults.map((a: any) => {
+                      const isPast = a._date < new Date(new Date().setHours(0, 0, 0, 0));
+                      return (
+                        <div
+                          key={a.id}
+                          onClick={() => {
+                            // Переходимо на день візиту й одразу показуємо картку -
+                            // сенс пошуку в тому, щоб далі не шукати руками.
+                            setCurrentDate(a._date);
+                            setCalendarView('day');
+                            localStorage.setItem('bookera_calendarView', 'day');
+                            setSelectedBooking(a);
+                            setIsBookingDetailsModalOpen(true);
+                            setClientSearch('');
+                          }}
+                          style={{ padding: '0.65rem 1rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', opacity: isPast ? 0.55 : 1 }}
+                          onMouseOver={e => e.currentTarget.style.background = '#f8fafc'}
+                          onMouseOut={e => e.currentTarget.style.background = '#fff'}
+                        >
+                          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>{a.client_name || 'Без імені'}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                            {a._date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}
+                            {' · '}{String(a.start_time || '').slice(0, 5)}
+                            {isPast && ' · минулий'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'transparent' }}>
@@ -1232,6 +1344,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                       const isMDayToday = dObj.toDateString() === now.toDateString();
                       const hasOverdue = hasOverdueTasks(dObj);
                       const dayApps = getAppointmentsForDay(dObj);
+                      const dayLoad = getDayLoad(dObj);
 
                       return (
                           <div key={day} className="month-view-cell" onClick={() => { setCurrentDate(dObj); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
@@ -1247,6 +1360,24 @@ export default function CalendarTab({ business, team = [], services = [], refres
                                   </div>
                                   <span style={{ fontWeight: isMDayToday ? '700' : '500', color: isMDayToday ? '#ffffff' : '#0f172a', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isMDayToday ? '#0f172a' : 'transparent', fontSize: '0.9rem' }}>{day}</span>
                               </div>
+
+                              {dayLoad > 0 && (
+                                <div
+                                  title={`Зайнято ${Math.round(dayLoad * 100)}% робочого часу`}
+                                  style={{ height: '3px', borderRadius: '2px', background: '#eef2f0', overflow: 'hidden', marginBottom: '0.35rem', flexShrink: 0 }}
+                                >
+                                  <div style={{
+                                    width: `${Math.round(dayLoad * 100)}%`,
+                                    height: '100%',
+                                    borderRadius: '2px',
+                                    // Матча для звичайного дня, теплий відтінок ближче
+                                    // до повного - щоб перевантажені дні впадали в око
+                                    // без окремої легенди.
+                                    background: dayLoad >= 0.85 ? '#D99A2B' : dayLoad >= 0.5 ? '#8FAE93' : '#C2D8C4',
+                                    transition: 'width 0.2s ease',
+                                  }} />
+                                </div>
+                              )}
 
                               {dayApps.length > 0 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1, overflow: 'hidden', width: '100%' }}>

@@ -553,6 +553,7 @@ async def cancel_appointment_by_client(
 async def get_booked_appointments(
     business_id: int,
     master_id: Optional[str] = Query(None, description="Фільтр записів за майстром"),
+    include_cancelled: bool = Query(True, description="Чи включати скасовані записи"),
     db: AsyncSession = Depends(get_db),
     _current_user: CurrentUser = Depends(require_business_access),
 ):
@@ -560,10 +561,22 @@ async def get_booked_appointments(
     # Раніше був доступний без жодної авторизації - будь-хто, хто знав
     # business_id, міг вивантажити всі контакти клієнтів закладу.
     now = get_utc_now()
+
+    # 'completed' і 'cancelled' раніше не потрапляли у відповідь узагалі -
+    # завершені візити зникали з календаря, а скасовані неможливо було
+    # перевірити («хто і коли скасував»). Тепер вони приходять, а CRM
+    # сама вирішує, як їх показати (приглушено, окремим фільтром тощо).
+    #
+    # Не віддаємо лише 'pending': це недопідтверджені блокування слоту,
+    # службовий стан на 15 хвилин, який нічого не означає для календаря.
+    statuses = ["confirmed", "completed", "cancelled"]
+    if include_cancelled is False:
+        statuses.remove("cancelled")
+
     query = select(Appointment).where(
         Appointment.business_id == business_id,
         or_(
-            Appointment.status == "confirmed",
+            Appointment.status.in_(statuses),
             and_(Appointment.status == "blocked", Appointment.expires_at > now),
         ),
     )

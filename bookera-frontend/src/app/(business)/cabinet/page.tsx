@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
+import { roleLabel, isOwnerRole } from '@/lib/roles';
 import { Business } from '@/types';
 
 // 🟢 ІМПОРТУЄМО ІКОНКИ ТА КОНСТАНТИ З ТВОГО ОКРЕМОГО ФАЙЛУ
@@ -1149,7 +1150,7 @@ export default function BusinessCabinet() {
                 {business?.logo ? <img src={business.logo} alt="Лого" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : business?.name?.charAt(0).toUpperCase() || 'B'}
               </div>
               <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '130px', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-                <div style={{ color: '#0f172a', fontSize: '1rem', fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden' }}>{business?.name || 'Завантаження'}</div><div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: '500' }}>{userProfile?.role === 'vendor' ? 'Pro Plan' : 'Майстер'}</div>
+                <div style={{ color: '#0f172a', fontSize: '1rem', fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden' }}>{business?.name || 'Завантаження'}</div>
               </div>
             </div>
             <div style={{ color: '#94a3b8', flexShrink: 0, opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', transform: isBizMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
@@ -1202,16 +1203,22 @@ export default function BusinessCabinet() {
           {navItems
             .filter(item => {
               const role = userProfile?.role;
-              // ✂️ Для майстра показуємо лише робочі вкладки
-              if (role === 'master') {
-                return ['Calendar', 'Clients', 'Services', 'Team'].includes(item.id);
-              }
-              // 👔 Для адміністратора приховуємо системні налаштування
+
+              // Власник бачить усе. Перевірка через isOwnerRole, а не
+              // порівняння з одним рядком: роль власника приходить як
+              // 'business_owner', але в старих записах трапляються
+              // 'vendor' і 'owner'.
+              if (isOwnerRole(role)) return true;
+
+              // Адміністратор: усе, крім налаштувань закладу, онлайн-вітрини
+              // й маркетингу - це рішення власника про сам бізнес.
               if (role === 'admin') {
                 return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats'].includes(item.id);
               }
-              // 👑 Власник (owner / vendor) бачить усі вкладки
-              return true;
+
+              // Майстер: лише те, що потрібно для роботи з клієнтами.
+              // Склад, витрати й аналітика - чужі гроші, не його справа.
+              return ['Calendar', 'Clients', 'Services', 'Team'].includes(item.id);
             })
             .map(item => {
             const isActive = activeTab === item.id;
@@ -1299,7 +1306,7 @@ export default function BusinessCabinet() {
               </div>
               <div style={{ flex: isSidebarCollapsed ? 'none' : 1, overflow: 'hidden', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '100%', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
                 <div style={{ color: '#0f172a', fontSize: '0.95rem', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userProfile?.full_name || 'Користувач'}</div>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{userProfile?.role === 'vendor' ? 'Власник' : 'Майстер'}</div>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{roleLabel(userProfile?.role)}</div>
               </div>
             </div>
 

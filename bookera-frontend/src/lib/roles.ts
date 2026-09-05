@@ -21,3 +21,17 @@ export function isOwnerRole(role?: string | null): boolean {
   if (!role) return false;
   return ['business_owner', 'vendor', 'owner'].includes(role);
 }
+
+/**
+ * Людська назва ролі для інтерфейсу.
+ *
+ * Раніше підпис рахувався як `role === 'vendor' ? 'Власник' : 'Майстер'`,
+ * тому власник із роллю 'business_owner' підписувався «Майстер» - у двох
+ * місцях бічної панелі одночасно.
+ */
+export function roleLabel(role?: string | null): string {
+  if (isOwnerRole(role)) return 'Власник';
+  if (role === 'admin') return 'Адміністратор';
+  if (role === 'master') return 'Майстер';
+  return 'Співробітник';
+}

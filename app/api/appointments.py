@@ -569,7 +569,9 @@ async def get_booked_appointments(
     #
     # Не віддаємо лише 'pending': це недопідтверджені блокування слоту,
     # службовий стан на 15 хвилин, який нічого не означає для календаря.
-    statuses = ["confirmed", "completed", "cancelled"]
+    # 'late' і 'no-show' теж мають повертатись: без них запис ЗНИКАВ би
+    # з календаря одразу після того, як його позначили запізненням.
+    statuses = ["confirmed", "completed", "cancelled", "late", "no-show"]
     if include_cancelled is False:
         statuses.remove("cancelled")
 

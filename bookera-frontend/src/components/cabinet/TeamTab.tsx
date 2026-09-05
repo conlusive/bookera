@@ -187,6 +187,20 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const providesServices = currentStaff?.provides_services !== false;
 
   // 🟢 Безпечний розбір масиву змін із захистом від null/undefined/string
+  /**
+   * Графік ЗАКЛАДУ - рамка, у межах якої існує графік майстра.
+   *
+   * Без цього звʼязку майстра можна було поставити працювати в день,
+   * коли салон зачинений: два графіки жили окремо й ніде не звірялись.
+   */
+  const salonShifts = useMemo(() => {
+    let g: any = globalShifts;
+    if (typeof g === 'string') {
+      try { g = JSON.parse(g); } catch { g = null; }
+    }
+    return Array.isArray(g) && g.length === 7 ? g : null;
+  }, [globalShifts]);
+
   const staffShifts = useMemo(() => {
     let s = currentStaff?.shifts;
     if (typeof s === 'string') {
@@ -809,6 +823,13 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '180px' }}>
                             <div onClick={() => {
                                if (!canEditSchedule) return;
+                               // Салон зачинений - майстер не може працювати.
+                               // Пояснюємо причину замість мовчазної відмови.
+                               const salonDay = salonShifts?.[idx];
+                               if (salonDay && !salonDay.active && !schedule.active) {
+                                 showToast('Цього дня заклад зачинений — спершу змініть графік закладу', 'error');
+                                 return;
+                               }
                                // map замість мутації елемента: staffShifts - результат
                                // useMemo, і зміна "на місці" не створює новий масив,
                                // тому React міг не перемалювати рядок.
@@ -820,7 +841,18 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                             }} style={{ userSelect: 'none', WebkitUserSelect: 'none', width: '40px', height: '22px', borderRadius: '12px', background: schedule.active ? (canEditSchedule ? colors.green : colors.textSecondary) : colors.border, position: 'relative', cursor: canEditSchedule ? 'pointer' : 'default', transition: 'background 0.3s', flexShrink: 0 }}>
                               <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
                             </div>
-                            <div style={{ fontWeight: '600', color: schedule.active ? colors.textPrimary : colors.textSecondary, fontSize: '0.95rem' }}>{schedule.day}</div>
+                            <div>
+                              <div style={{ fontWeight: '600', color: schedule.active ? colors.textPrimary : colors.textSecondary, fontSize: '0.95rem' }}>{schedule.day}</div>
+                              {/* Години закладу як рамка: видно, чому саме такі
+                                  межі допустимі, без переходу в іншу вкладку. */}
+                              {salonShifts?.[idx] && (
+                                <div style={{ fontSize: '0.7rem', color: colors.textSecondary, opacity: 0.75, marginTop: '2px' }}>
+                                  {salonShifts[idx].active
+                                    ? `Заклад: ${salonShifts[idx].start}–${salonShifts[idx].end}`
+                                    : 'Заклад зачинений'}
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

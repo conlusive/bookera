@@ -70,7 +70,12 @@ class AppointmentRescheduleRequest(BaseModel):
 class AppointmentStatusUpdate(BaseModel):
     # Раніше було просто `str` - приймало будь-яке значення і могло зламати
     # фільтри в іншому коді, які звіряються з конкретними рядками.
-    status: Literal["confirmed", "completed", "cancelled"]
+    #
+    # 'late' і 'no-show' CRM надсилала давно (кнопки «Запізнення» і
+    # «Не прийшов»), але схема їх не приймала - кожне натискання давало
+    # помилку. Це реальні стани візиту, і саме вони потрібні для
+    # статистики неявок, тому додані, а не прибрані з інтерфейсу.
+    status: Literal["confirmed", "completed", "cancelled", "late", "no-show"]
 
 
 class ManageBookingRequest(BaseModel):

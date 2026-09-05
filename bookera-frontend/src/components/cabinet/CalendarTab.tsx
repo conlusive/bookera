@@ -1771,97 +1771,134 @@ export default function CalendarTab({ business, team = [], services = [], refres
         </div>
       )}
 
-      {/* --- МОДАЛКА ДЕТАЛЕЙ ЗАПИСУ --- */}
-      {isBookingDetailsModalOpen && selectedBooking && (
-        <div className="modal-overlay" onClick={() => setIsBookingDetailsModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '400px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
-                {selectedBooking.status === 'blocked' || selectedBooking.color === 'blocked' ? 'Деталі перерви' : 'Деталі запису'}
-              </h2>
-              <button onClick={() => setIsBookingDetailsModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-            </div>
+      {/* --- ДЕТАЛІ ЗАПИСУ --- */}
+      {isBookingDetailsModalOpen && selectedBooking && (() => {
+        const isBlock = selectedBooking.status === 'blocked' || selectedBooking.color === 'blocked';
+        const serviceName = services.find((s: any) => String(s.id) === String(selectedBooking.service_id))?.name;
+        const masterName = team.find((m: any) => String(m.id) === String(selectedBooking.staff_id))?.name;
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-              {selectedBooking.status !== 'blocked' && selectedBooking.color !== 'blocked' ? (
-                <>
-                  <div>
-                    <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', display: 'block' }}>Клієнт</span>
-                    <span style={{ fontSize: '1.05rem', fontWeight: '700', color: '#0f172a' }}>{selectedBooking.client_name}</span>
-                    {selectedBooking.client_phone && <div style={{ fontSize: '0.9rem', color: '#475569', marginTop: '2px' }}>{selectedBooking.client_phone}</div>}
+        const duration = (() => {
+          const s = selectedBooking.start_time, e = selectedBooking.end_time;
+          if (!s || !e || String(s).includes('T')) return null;
+          const [sH, sM] = String(s).split(':').map(Number);
+          let [eH, eM] = String(e).split(':').map(Number);
+          if (eH < sH) eH += 24;
+          const mins = (eH * 60 + eM) - (sH * 60 + sM);
+          if (mins <= 0) return null;
+          const h = Math.floor(mins / 60), m = mins % 60;
+          return `${h ? h + ' год ' : ''}${m ? m + ' хв' : ''}`.trim();
+        })();
+
+        // Статуси однаковою вагою в один ряд: раніше кожен мав власний
+        // яскравий колір із рамкою, і вікно перетворювалось на світлофор.
+        // Тепер виділяється лише ПОТОЧНИЙ стан, решта спокійні.
+        const statuses = [
+          { key: 'completed', label: 'Завершено' },
+          { key: 'late', label: 'Запізнення' },
+          { key: 'no-show', label: 'Не прийшов' },
+        ];
+
+        return (
+          <div className="modal-overlay" onClick={() => setIsBookingDetailsModalOpen(false)}>
+            <div
+              className="modal-content"
+              onClick={e => e.stopPropagation()}
+              style={{ animation: 'slideUp 0.25s ease', maxWidth: '400px', width: '100%', background: '#fff', borderRadius: '18px', padding: '1.5rem' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#222222', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {isBlock ? 'Перерва' : (selectedBooking.client_name || 'Без імені')}
                   </div>
-                  <div>
-                    <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', display: 'block' }}>Послуга</span>
-                    <span style={{ fontSize: '1rem', fontWeight: '600', color: '#0f172a' }}>
-                      {services.find((s:any) => s.id === selectedBooking.service_id)?.name || selectedBooking.service_name || 'Невідома послуга'}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', display: 'block' }}>Причина блокування</span>
-                  <span style={{ fontSize: '1.05rem', fontWeight: '700', color: '#0f172a' }}>{selectedBooking.service_name || 'Перерва'}</span>
+                  {!isBlock && selectedBooking.client_phone && (
+                    <a href={`tel:${selectedBooking.client_phone}`} style={{ fontSize: '0.85rem', color: '#5C6B5E', textDecoration: 'none' }}>
+                      {selectedBooking.client_phone}
+                    </a>
+                  )}
                 </div>
-              )}
-
-              <div>
-                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', display: 'block' }}>Майстер</span>
-                <span style={{ fontSize: '0.95rem', fontWeight: '500', color: '#0f172a' }}>
-                  {team.find((m:any) => m.id === selectedBooking.staff_id)?.name || selectedBooking.master_name || 'Будь-який (Не вказано)'}
-                </span>
+                <button
+                  onClick={() => setIsBookingDetailsModalOpen(false)}
+                  style={{ flexShrink: 0, width: '30px', height: '30px', borderRadius: '50%', border: 'none', background: '#F2F6F1', color: '#5C6B5E', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
+                >
+                  ×
+                </button>
               </div>
 
-              <div style={{ display: 'flex', gap: '2rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', display: 'block', textTransform: 'uppercase' }}>Час початку</span>
-                  <input
-                    type="time"
-                    value={selectedBooking.start_time.substring(0, 5)}
-                    onChange={(e) => handleUpdateBookingTime(e.target.value)}
-                    style={{ fontSize: '1.1rem', fontWeight: '800', color: '#3b82f6', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', display: 'block', textTransform: 'uppercase' }}>Тривалість</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a' }}>
-                    {selectedBooking.start_time && selectedBooking.end_time && !selectedBooking.start_time.includes('NaN') ? (
-                      (() => {
-                        const [sH, sM] = selectedBooking.start_time.split(':').map(Number);
-                        const [eH, eM] = selectedBooking.end_time.split(':').map(Number);
-                        let duration = (eH * 60 + eM) - (sH * 60 + sM);
-                        if (duration < 0) duration += 24 * 60;
-                        return isNaN(duration) ? '...' : duration;
-                      })()
-                    ) : (
-                      services.find((s:any) => String(s.id) === String(selectedBooking.service_id))?.duration || 60
-                    )} хв
+              {/* Час і тривалість - головне в картці, тому найбільшим кеглем.
+                  Час редагується просто тут: це найчастіша правка. */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginBottom: '1.25rem' }}>
+                <input
+                  type="time"
+                  value={String(selectedBooking.start_time || '').substring(0, 5)}
+                  onChange={e => handleUpdateBookingTime(e.target.value)}
+                  style={{ fontSize: '1.6rem', fontWeight: 700, color: '#222222', border: 'none', background: 'transparent', padding: 0, outline: 'none', width: '105px', letterSpacing: '-0.02em', fontFamily: 'inherit' }}
+                />
+                {duration && <span style={{ fontSize: '0.9rem', color: '#6B756A' }}>{duration}</span>}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingBottom: '1.25rem', borderBottom: '1px solid #EDF1EC', marginBottom: '1.25rem' }}>
+                {!isBlock && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.875rem' }}>
+                    <span style={{ color: '#6B756A' }}>Послуга</span>
+                    <span style={{ color: '#222222', fontWeight: 500, textAlign: 'right' }}>{serviceName || '—'}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.875rem' }}>
+                  <span style={{ color: '#6B756A' }}>Майстер</span>
+                  <span style={{ color: masterName ? '#222222' : '#A5AEA3', fontWeight: 500, textAlign: 'right' }}>
+                    {masterName || 'Не призначено'}
                   </span>
                 </div>
               </div>
+
+              {!isBlock && (
+                <>
+                  <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                    {statuses.map(s => {
+                      const active = selectedBooking.status === s.key;
+                      return (
+                        <button
+                          key={s.key}
+                          onClick={() => handleUpdateBookingStatus(s.key)}
+                          style={{
+                            flex: 1, height: '36px', borderRadius: '9px', cursor: 'pointer',
+                            fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'inherit',
+                            letterSpacing: '-0.01em', transition: 'background-color 0.15s, color 0.15s',
+                            border: '1px solid ' + (active ? 'transparent' : 'rgba(34,34,34,0.12)'),
+                            background: active ? '#222222' : '#fff',
+                            color: active ? '#fff' : '#5C6B5E',
+                          }}
+                        >
+                          {s.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => { setClipboardApp(selectedBooking); setIsBookingDetailsModalOpen(false); showToast('Запис скопійовано — оберіть вільний час', 'info'); }}
+                    style={{ width: '100%', height: '36px', borderRadius: '9px', border: '1px solid rgba(34,34,34,0.12)', background: '#fff', color: '#222222', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'inherit', marginBottom: '1rem' }}
+                  >
+                    Повторити візит
+                  </button>
+                </>
+              )}
+
+              {/* Скасування - текстом, а не великою червоною кнопкою: це
+                  рідкісна й незворотна дія, вона не має тягнути погляд
+                  щоразу, коли відкриваєш картку. */}
+              <button
+                onClick={handleCancelBooking}
+                style={{ width: '100%', height: '34px', background: 'transparent', border: 'none', color: '#A83934', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'inherit', borderRadius: '9px', transition: 'background-color 0.15s' }}
+                onMouseOver={e => e.currentTarget.style.background = '#FBF0EF'}
+                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+              >
+                {isBlock ? 'Видалити перерву' : 'Скасувати запис'}
+              </button>
             </div>
-
-            {selectedBooking.status !== 'blocked' && selectedBooking.color !== 'blocked' && (
-              <div style={{ marginBottom: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
-                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '700', display: 'block', marginBottom: '0.8rem', textTransform: 'uppercase' }}>Дії з візитом</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', marginBottom: '0.6rem' }}>
-                  <button onClick={() => handleUpdateBookingStatus('completed')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #86efac', background: selectedBooking.status === 'completed' ? '#dcfce7' : '#fff', color: '#166534', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}><Icons.CheckCircle /> Завершено</button>
-                  <button onClick={() => handleUpdateBookingStatus('late')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #fde047', background: selectedBooking.status === 'late' ? '#fef08a' : '#fff', color: '#854d0e', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}><Icons.AlertCircle /> Запізнення</button>
-                  <button onClick={() => handleUpdateBookingStatus('no-show')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #fca5a5', background: selectedBooking.status === 'no-show' ? '#fee2e2' : '#fff', color: '#991b1b', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}><Icons.XCircle /> Не прийшов</button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                   <button onClick={() => { setApptForm({ ...apptForm, client_name: selectedBooking.client_name, client_phone: selectedBooking.client_phone || '+380', service_id: selectedBooking.service_id, staff_id: selectedBooking.staff_id, duration: services.find((s:any)=>String(s.id)===String(selectedBooking.service_id))?.duration || 60, date: toLocalDateStr(currentDate) }); setIsBookingDetailsModalOpen(false); setIsBlockMode(false); setIsApptModalOpen(true); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.6rem', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f1f5f9'} onMouseOut={e=>e.currentTarget.style.background='#f8fafc'}><Icons.Calendar /> Повторити</button>
-                   <button onClick={() => { setClipboardApp(selectedBooking); setIsBookingDetailsModalOpen(false); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.6rem', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f1f5f9'} onMouseOut={e=>e.currentTarget.style.background='#f8fafc'}><Icons.Edit /> Копіювати</button>
-                </div>
-              </div>
-            )}
-
-            <button onClick={handleCancelBooking} style={{ width: '100%', padding: '0.85rem', backgroundColor: '#fff', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '10px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#fecaca'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'}>
-              <Icons.Trash />
-              {selectedBooking?.status === 'blocked' || selectedBooking?.color === 'blocked' ? 'Видалити перерву' : 'Скасувати запис повністю'}
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* --- МОДАЛКА ПЕРЕНЕСЕННЯ (DRAG & DROP) --- */}
       {dragConfirmData && (

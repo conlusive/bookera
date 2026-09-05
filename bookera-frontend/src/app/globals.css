@@ -307,3 +307,48 @@
 
 /* Запізнення - єдиний статус, який має привертати увагу. */
 .status-late { box-shadow: inset 3px 0 0 #D99A2B; }
+
+/* Панель керування календарем.
+   Раніше вона мала flex-wrap: wrap і ламалась на два рядки, щойно назва
+   періоду ставала довшою ("Вересень 2026 Р." проти "31 - 6 Вер.").
+   Тепер на широкому екрані все в один рядок: назва має сталу ширину,
+   а поле пошуку стискається першим - воно найменш критичне. */
+.cal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: nowrap;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  position: relative;
+  z-index: 100;
+}
+.cal-toolbar__left,
+.cal-toolbar__right {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.cal-toolbar__left { gap: 1.25rem; flex: 1 1 auto; }
+.cal-toolbar__right { gap: 0.2rem; flex: 0 0 auto; }
+
+/* Стала ширина назви періоду - саме через неї панель і "стрибала"
+   при перемиканні вигляду. */
+.cal-toolbar__title {
+  min-width: 168px;
+  white-space: nowrap;
+}
+
+/* Пошук стискається першим і зникає на вузьких екранах: календар
+   важливіший за поле, яким користуються зрідка. */
+.cal-toolbar__search { flex: 0 1 190px; min-width: 130px; }
+
+@media (max-width: 1180px) {
+  .cal-toolbar__search { display: none; }
+}
+@media (max-width: 900px) {
+  .cal-toolbar { flex-wrap: wrap; }
+  .cal-toolbar__title { min-width: 0; }
+}

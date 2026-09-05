@@ -41,10 +41,13 @@ export default function CalendarTab({ business, team = [], services = [], refres
   const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean, date: string}[]>([]);
 
   const [calSettings, setCalSettings] = useState({
-    // displayMode прибрано: поле зберігалось, але не було ні у формі,
-    // ні в жодній умові - мертві налаштування створюють хибне враження,
-    // ніби щось налаштовується.
-    defaultView: 'day', colorScheme: 'pastel', colorMode: 'master',
+    // Лишився лише вигляд за замовчуванням.
+    //
+    // colorScheme (пастельні/яскраві) і colorMode (за майстром/за послугою)
+    // прибрані свідомо: кожен подвоював гілки в коді забарвлення карток,
+    // а обирали їх один раз і забували. Один продуманий варіант - пастель
+    // із кольором за майстром - працює краще за два посередні.
+    defaultView: 'day',
   });
   const [shifts, setShifts] = useState([
     { day: 'Понеділок', active: true, start: '09:00', end: '20:00' },
@@ -541,17 +544,9 @@ export default function CalendarTab({ business, team = [], services = [], refres
     return MASTER_COLORS[masterIndex % MASTER_COLORS.length];
   };
 
-  const getCardColor = (staffId: string, serviceId?: string) => {
-    if (calSettings.colorMode === 'category' && serviceId) {
-      const srv = services.find((s: any) => String(s.id) === String(serviceId));
-      const identifier = srv?.category?.trim() || srv?.name?.trim() || String(serviceId);
-      let hash = 0;
-      for (let i = 0; i < identifier.length; i++) hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
-      const index = Math.abs(hash) % MASTER_COLORS.length;
-      return MASTER_COLORS[index];
-    }
-    return getMasterColor(staffId);
-  };
+  // Колір картки - завжди за майстром: у салоні з кількома людьми саме
+  // це найшвидше відповідає на питання «чий це запис».
+  const getCardColor = (staffId: string) => getMasterColor(staffId);
 
   // --- РОЗРАХУНКИ СІТКИ ---
   const effectiveShifts = useMemo(() => {
@@ -804,6 +799,30 @@ export default function CalendarTab({ business, team = [], services = [], refres
       .slice(0, 8);
   }, [clientSearch, filteredAppointments]);
 
+  /**
+   * Скільки принесе поточний період.
+   *
+   * Рахуємо лише підтверджені й завершені: скасовані грошей не дають,
+   * а показувати їх у сумі означало б обіцяти дохід, якого не буде.
+   */
+  const currentViewRevenue = useMemo(() => {
+    const sumOf = (list: any[]) => list.reduce((s: number, a: any) => {
+      if (a.status === 'cancelled' || a.status === 'blocked' || a.color === 'blocked') return s;
+      const service = services.find((sv: any) => String(sv.id) === String(a.service_id));
+      return s + Number(a.price ?? service?.price ?? 0);
+    }, 0);
+
+    if (calendarView === 'day') return sumOf(getAppointmentsForDay(currentDate));
+    if (calendarView === 'week') return weekDays.reduce((s, wd) => s + sumOf(getAppointmentsForDay(wd)), 0);
+
+    let total = 0;
+    for (const [key, list] of appointmentsByDate) {
+      const [y, m] = key.split('-').map(Number);
+      if (y === currentDate.getFullYear() && m === currentDate.getMonth() + 1) total += sumOf(list);
+    }
+    return total;
+  }, [calendarView, currentDate, weekDays, appointmentsByDate, getAppointmentsForDay, services]);
+
   const currentViewAppointmentsCount = useMemo(() => {
     const countReal = (list: any[]) =>
       list.filter(a => a.status !== 'blocked' && a.color !== 'blocked').length;
@@ -982,8 +1001,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
 
         {/* Топ бар календаря */}
-        <div style={{ padding: '1rem 2rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', position: 'relative', zIndex: 100 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+        <div className="cal-toolbar">
+          <div className="cal-toolbar__left">
             <button
               onClick={() => { setCurrentDate(new Date()); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
               style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: '600', backgroundColor: '#f1f5f9', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }}
@@ -1008,7 +1027,27 @@ export default function CalendarTab({ business, team = [], services = [], refres
                   setCurrentDate(d);
               }}><Icons.ChevronRight /></button>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
+            {clipboardApp && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                background: '#EEF7EF', border: '1px solid rgba(94,122,97,0.28)',
+                borderRadius: '20px', padding: '0.3rem 0.5rem 0.3rem 0.8rem',
+                fontSize: '0.75rem', fontWeight: 600, color: '#2E3A30', flexShrink: 0,
+              }}>
+                <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  Копія: {clipboardApp.client_name || 'запис'}
+                </span>
+                <button
+                  onClick={() => setClipboardApp(null)}
+                  title="Скасувати копіювання"
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#5C6B5E', fontSize: '1rem', lineHeight: 1, padding: '0 2px' }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            <div className="cal-toolbar__title" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
               {calendarView === 'week'
                 ? `${weekDays[0].getDate()} - ${weekDays[6].getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
                 : calendarView === 'month'
@@ -1077,16 +1116,21 @@ export default function CalendarTab({ business, team = [], services = [], refres
               </div>
               <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', backgroundColor: '#f8fafc', padding: '0.2rem 0.6rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
                 Записів: {currentViewAppointmentsCount}
+                {currentViewRevenue > 0 && (
+                  <span style={{ marginLeft: '0.5rem', paddingLeft: '0.5rem', borderLeft: '1px solid #dbe3dc', color: '#2E3A30' }}>
+                    {currentViewRevenue.toLocaleString('uk-UA')} ₴
+                  </span>
+                )}
               </div>
 
               {/* Пошук клієнта по всіх записах */}
-              <div style={{ position: 'relative' }}>
+              <div className="cal-toolbar__search" style={{ position: 'relative' }}>
                 <input
                   type="text"
                   value={clientSearch}
                   onChange={e => setClientSearch(e.target.value)}
                   placeholder="Знайти клієнта…"
-                  style={{ width: '190px', height: '32px', padding: '0 0.7rem', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.8rem', color: '#0f172a', background: '#fff', outline: 'none' }}
+                  style={{ width: '100%', height: '32px', padding: '0 0.7rem', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.8rem', color: '#0f172a', background: '#fff', outline: 'none' }}
                 />
                 {clientSearch.trim().length >= 2 && (
                   <div style={{ position: 'absolute', top: '38px', left: 0, width: '320px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 12px 32px rgba(15,23,42,0.12)', zIndex: 100, overflow: 'hidden' }}>
@@ -1125,7 +1169,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'transparent' }}>
+            <div className="cal-toolbar__right" style={{ background: 'transparent' }}>
               {['day', 'week', 'month'].map(view => {
                 const labels: any = { day: 'День', week: 'Тиждень', month: 'Місяць' };
                 const isActive = calendarView === view;
@@ -1184,7 +1228,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                   const serviceName = services.find((s:any) => String(s.id) === String(app.service_id))?.name || app.service_name;
                   const staffName = team.find((m:any) => String(m.id) === String(app.staff_id))?.name || app.master_name || 'Без майстра';
                   const isBlock = app.status === 'blocked' || app.color === 'blocked';
-                  const mColors = getCardColor(app.staff_id, app.service_id);
+                  const mColors = getCardColor(app.staff_id);
                   const isCompact = app.heightPx <= 45;
                   const isTiny = app.heightPx <= 25;
                   const widthPercent = 100 / (app.colCount || 1);
@@ -1200,9 +1244,9 @@ export default function CalendarTab({ business, team = [], services = [], refres
                       style={{
                         position: 'absolute', top: `${app.topPx}px`, height: `${app.heightPx}px`,
                         left: `calc(68px + (100% - 76px) * ${leftPercent / 100})`, width: `calc((100% - 76px) * ${widthPercent / 100} - 6px)`,
-                        backgroundColor: isBlock ? 'transparent' : (calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg),
-                        color: isBlock ? '#64748b' : (calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText),
-                        borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.vividBg}`,
+                        backgroundColor: isBlock ? 'transparent' : (mColors.pastelBg),
+                        color: isBlock ? '#64748b' : (mColors.pastelText),
+                        borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${mColors.vividBg}`,
                         borderRadius: '8px',
                         padding: isTiny ? '0.1rem 0.5rem' : (isCompact ? '0.3rem 0.6rem' : '0.5rem 0.75rem'),
                         display: 'flex', flexDirection: isCompact ? 'row' : 'column', alignItems: isCompact ? 'center' : 'flex-start',
@@ -1282,7 +1326,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                           {processOverlaps(dayApps).map((app: any) => {
                             const service = services.find((s:any) => String(s.id) === String(app.service_id));
                             const isBlock = app.status === 'blocked' || app.color === 'blocked';
-                            const mColors = getCardColor(app.staff_id, app.service_id);
+                            const mColors = getCardColor(app.staff_id);
                             const isCompact = app.heightPx <= 45;
                             const isTiny = app.heightPx <= 25;
                             const widthPercent = 100 / (app.colCount || 1);
@@ -1297,15 +1341,15 @@ export default function CalendarTab({ business, team = [], services = [], refres
                                 onClick={(e) => { e.stopPropagation(); openBookingDetails(app, e); }}
                                 style={{
                                   position: 'absolute', top: `${app.topPx}px`, left: `calc(${leftPercent}% + 2px)`, width: `calc(${widthPercent}% - 4px)`, height: `${app.heightPx}px`,
-                                  background: isBlock ? 'transparent' : (calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg),
+                                  background: isBlock ? 'transparent' : (mColors.pastelBg),
                                   borderRadius: '8px',
                                   padding: isTiny ? '0.1rem 0.4rem' : (isCompact ? '0.2rem 0.5rem' : '0.4rem 0.6rem'),
                                   display: 'flex', flexDirection: isCompact ? 'row' : 'column', alignItems: isCompact ? 'center' : 'flex-start',
                                   gap: isCompact ? '0.3rem' : '2px',
-                                  color: isBlock ? '#64748b' : (calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText),
+                                  color: isBlock ? '#64748b' : (mColors.pastelText),
                                   fontSize: isTiny ? '0.65rem' : '0.75rem',
                                   cursor: isBlock ? 'pointer' : 'grab', zIndex: 5 + (app.colIndex || 0),
-                                  borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${calSettings.colorScheme === 'vivid' ? mColors.vividBorder : mColors.vividBg}`,
+                                  borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${mColors.vividBg}`,
                                   overflow: 'hidden', boxShadow: isBlock ? 'none' : '0 1px 3px rgba(0,0,0,0.03)', boxSizing: 'border-box'
                                 }}
                               >
@@ -1383,13 +1427,13 @@ export default function CalendarTab({ business, team = [], services = [], refres
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1, overflow: 'hidden', width: '100%' }}>
                                   {dayApps.slice(0, 4).map((app: any) => {
                                     const isBlock = app.status === 'blocked' || app.color === 'blocked';
-                                    const mColors = getCardColor(app.staff_id, app.service_id);
+                                    const mColors = getCardColor(app.staff_id);
                                     return (
                                       <div key={app.id} draggable={!isBlock} onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData('text/plain', String(app.id)); }} onClick={(e) => openBookingDetails(app, e)}
                                         className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`} style={{
                                         fontSize: '0.7rem',
-                                        backgroundColor: isBlock ? 'transparent' : (calSettings.colorScheme === 'vivid' ? mColors.vividBg : mColors.pastelBg),
-                                        color: isBlock ? '#64748b' : (calSettings.colorScheme === 'vivid' ? '#ffffff' : mColors.pastelText),
+                                        backgroundColor: isBlock ? 'transparent' : (mColors.pastelBg),
+                                        color: isBlock ? '#64748b' : (mColors.pastelText),
                                         padding: '0.25rem 0.5rem', borderRadius: '6px', border: isBlock ? '1px dashed #cbd5e1' : 'none', cursor: isBlock ? 'pointer' : 'grab', opacity: app.status === 'completed' ? 0.6 : 1, textDecoration: app.status === 'no-show' ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: '600', width: '100%', boxSizing: 'border-box', overflow: 'hidden'
                                       }}>
                                         <span style={{ opacity: 0.7, fontWeight: '700', flexShrink: 0 }}>{app.start_time.substring(0, 5)}</span>
@@ -1797,50 +1841,6 @@ export default function CalendarTab({ business, team = [], services = [], refres
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.6rem' }}>Кольорова схема</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
-                  {['pastel', 'vivid'].map(scheme => (
-                    <div
-                      key={scheme}
-                      onClick={() => setCalSettings({...calSettings, colorScheme: scheme})}
-                      style={{
-                        border: `1.5px solid ${calSettings.colorScheme === scheme ? '#0f172a' : '#e2e8f0'}`,
-                        borderRadius: '10px',
-                        padding: '0.8rem',
-                        cursor: 'pointer',
-                        background: calSettings.colorScheme === scheme ? '#f8fafc' : '#fff',
-                        transition: '0.2s'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
-                        <div style={{ width: '14px', height: '14px', borderRadius: '50%', border: calSettings.colorScheme === scheme ? '4px solid #0f172a' : '1.5px solid #cbd5e1', flexShrink: 0 }}></div>
-                        <span style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a' }}>{scheme === 'pastel' ? 'Пастельні' : 'Яскраві'}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <div style={{ flex: 1, height: '8px', borderRadius: '3px', background: scheme === 'pastel' ? '#e0e7ff' : '#3b82f6' }}></div>
-                        <div style={{ flex: 1, height: '8px', borderRadius: '3px', background: scheme === 'pastel' ? '#dcfce7' : '#10b981' }}></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.6rem' }}>Колір карток у розкладі</label>
-                <div style={{ display: 'flex', gap: '1.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', color: '#334155', fontWeight: '500' }}>
-                    <input type="radio" checked={calSettings.colorMode === 'master' || !calSettings.colorMode} onChange={() => setCalSettings({...calSettings, colorMode: 'master'})} style={{ display: 'none' }} />
-                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: (calSettings.colorMode === 'master' || !calSettings.colorMode) ? '5px solid #0f172a' : '1.5px solid #cbd5e1', flexShrink: 0 }}></div>
-                    За майстром
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', color: '#334155', fontWeight: '500' }}>
-                    <input type="radio" checked={calSettings.colorMode === 'category'} onChange={() => setCalSettings({...calSettings, colorMode: 'category'})} style={{ display: 'none' }} />
-                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: calSettings.colorMode === 'category' ? '5px solid #0f172a' : '1.5px solid #cbd5e1', flexShrink: 0 }}></div>
-                    За послугою
-                  </label>
-                </div>
-              </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.85rem' }}>Графік роботи закладу</div>
@@ -1936,7 +1936,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
               <button onClick={() => handleUpdateBookingStatus('completed', contextMenu.app)} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#16a34a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.CheckCircle /> Завершено</button>
               <button onClick={() => handleUpdateBookingStatus('late', contextMenu.app)} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#d97706', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.AlertCircle /> Запізнення</button>
               <button onClick={() => handleUpdateBookingStatus('no-show', contextMenu.app)} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#dc2626', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f1f5f9' }}><Icons.XCircle /> Не прийшов</button>
-              <button onClick={() => { setClipboardApp(contextMenu.app); setContextMenu(null); }} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#0f172a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.Edit /> Скопіювати візит</button>
+              <button onClick={() => { setClipboardApp(contextMenu.app); setContextMenu(null); showToast('Запис скопійовано — оберіть вільний час', 'info'); }} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#0f172a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.Edit /> Скопіювати візит</button>
             </>
           )}
           <button onClick={() => { setSelectedBooking(contextMenu.app); handleCancelBooking(); setContextMenu(null); }} style={{ width: '100%', padding: '0.8rem 1rem', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.9rem', color: '#ef4444', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Icons.Trash /> Скасувати запис</button>

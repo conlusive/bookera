@@ -95,9 +95,19 @@ export default function CalendarTab({ business, team = [], services = [], refres
   // Синхронізація даних при зміні бізнесу
   useEffect(() => {
     if (business) {
-      const savedTasks = localStorage.getItem(`bookera_tasks_${business.id}`);
-      if (savedTasks) setTasks(JSON.parse(savedTasks));
-      else if (business.tasks) setTasks(business.tasks);
+      // Справи тягнемо з бекенду. localStorage більше не читаємо:
+      // старі локальні записи лишились би «привидами», яких немає
+      // на інших пристроях.
+      void (async () => {
+        try {
+          const token = await getAuthToken();
+          const list = await api.listTasks(token, business.id);
+          setTasks(list.map((t: any) => ({ ...t, date: t.task_date })));
+        } catch {
+          // Справи - допоміжний віджет: якщо не завантажились,
+          // календар має працювати як звичайно.
+        }
+      })();
       if (business.cal_settings) setCalSettings(business.cal_settings);
       if (business.shifts) {
         if (Array.isArray(business.shifts)) {
@@ -289,29 +299,72 @@ export default function CalendarTab({ business, team = [], services = [], refres
   };
   const handleAddTaskClick = () => { if (!hasSeenTaskInfo && tasks.length === 0) setShowTaskInfoModal(true); else setIsAddingTask(true); };
   const confirmTaskInfo = () => { setHasSeenTaskInfo(true); setShowTaskInfoModal(false); setIsAddingTask(true); };
+  // Справи тепер на бекенді, а не в localStorage: список, у який
+  // записують робочі справи, має бути видно з будь-якого пристрою
+  // і не зникати при чистці кешу браузера.
+  //
+  // Скрізь оптимістичне оновлення: інтерфейс змінюється одразу, а якщо
+  // запит не пройшов - повертаємо як було й кажемо про це. Чекати на
+  // сервер, щоб побачити галочку, у щоденній роботі дратує.
   const saveNewTask = async () => {
-    if (!newTaskText.trim()) return setIsAddingTask(false);
-    const newTasks = [...tasks, { id: Date.now(), text: newTaskText, completed: false, date: formatDateKey(currentDate) }];
-    setTasks(newTasks); setNewTaskText(''); setIsAddingTask(false);
-    if (business) localStorage.setItem(`bookera_tasks_${business.id}`, JSON.stringify(newTasks));
+    if (!newTaskText.trim() || !business?.id) return setIsAddingTask(false);
+    const text = newTaskText.trim();
+    setNewTaskText(''); setIsAddingTask(false);
+    try {
+      const token = await getAuthToken();
+      const created = await api.createTask(token, {
+        business_id: business.id,
+        task_date: toLocalDateStr(currentDate),
+        text,
+      });
+      setTasks(prev => [...prev, { ...created, date: created.task_date }]);
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося додати справу', 'error');
+    }
   };
+
   const toggleTask = async (id: number) => {
-    const newTasks = tasks.map((t: any) => t.id === id ? { ...t, completed: !t.completed } : t);
-    setTasks(newTasks);
-    if (business) localStorage.setItem(`bookera_tasks_${business.id}`, JSON.stringify(newTasks));
+    const task = tasks.find((t: any) => t.id === id);
+    if (!task) return;
+    const next = !task.completed;
+    setTasks(prev => prev.map((t: any) => t.id === id ? { ...t, completed: next } : t));
+    try {
+      const token = await getAuthToken();
+      await api.updateTask(token, id, { completed: next });
+    } catch (err: any) {
+      setTasks(prev => prev.map((t: any) => t.id === id ? { ...t, completed: !next } : t));
+      showToast(err?.message || 'Не вдалося оновити справу', 'error');
+    }
   };
+
   const startEditTask = (task: any) => { setEditingTaskId(task.id); setEditingTaskText(task.text); };
+
   const saveEditedTask = async (id: number) => {
-    if (!editingTaskText.trim()) return setEditingTaskId(null);
-    const newTasks = tasks.map((t: any) => t.id === id ? { ...t, text: editingTaskText.trim() } : t);
-    setTasks(newTasks); setEditingTaskId(null);
-    if (business) localStorage.setItem(`bookera_tasks_${business.id}`, JSON.stringify(newTasks));
+    const text = editingTaskText.trim();
+    if (!text) return setEditingTaskId(null);
+    const before = tasks.find((t: any) => t.id === id)?.text;
+    setTasks(prev => prev.map((t: any) => t.id === id ? { ...t, text } : t));
+    setEditingTaskId(null);
+    try {
+      const token = await getAuthToken();
+      await api.updateTask(token, id, { text });
+    } catch (err: any) {
+      setTasks(prev => prev.map((t: any) => t.id === id ? { ...t, text: before ?? t.text } : t));
+      showToast(err?.message || 'Не вдалося зберегти справу', 'error');
+    }
   };
+
   const deleteTask = async (id: number) => {
     if (!confirm('Видалити цю справу?')) return;
-    const newTasks = tasks.filter((t: any) => t.id !== id);
-    setTasks(newTasks);
-    if (business) localStorage.setItem(`bookera_tasks_${business.id}`, JSON.stringify(newTasks));
+    const removed = tasks.find((t: any) => t.id === id);
+    setTasks(prev => prev.filter((t: any) => t.id !== id));
+    try {
+      const token = await getAuthToken();
+      await api.deleteTask(token, id);
+    } catch (err: any) {
+      if (removed) setTasks(prev => [...prev, removed]);
+      showToast(err?.message || 'Не вдалося видалити справу', 'error');
+    }
   };
 
 // --- СИСТЕМА ЗАПИСІВ ---
@@ -1052,9 +1105,9 @@ export default function CalendarTab({ business, team = [], services = [], refres
         {/* Топ бар календаря */}
         <div
           className="cal-toolbar"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'nowrap', padding: '1rem 2rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', position: 'relative', zIndex: 100 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'nowrap', padding: '0.85rem 1.25rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', position: 'relative', zIndex: 100 }}
         >
-          <div className="cal-toolbar__left" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', minWidth: 0, flex: '1 1 auto' }}>
+          <div className="cal-toolbar__left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '0 1 auto' }}>
             <button
               onClick={() => { setCurrentDate(new Date()); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
               style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: '600', backgroundColor: '#f1f5f9', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }}
@@ -1099,7 +1152,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
               </div>
             )}
 
-            <div className="cal-toolbar__title" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
+            <div className="cal-toolbar__title" style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize', letterSpacing: '-0.02em', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {calendarView === 'week'
                 ? `${weekDays[0].getDate()} - ${weekDays[6].getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
                 : calendarView === 'month'
@@ -1109,7 +1162,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} ref={masterFilterRef}>
                 <div
@@ -1166,7 +1219,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                   </div>
                 )}
               </div>
-              <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', backgroundColor: '#f8fafc', padding: '0.2rem 0.6rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', backgroundColor: '#f8fafc', padding: '0.2rem 0.6rem', borderRadius: '20px', whiteSpace: 'nowrap', flexShrink: 0, border: '1px solid #f1f5f9' }}>
                 Записів: {currentViewAppointmentsCount}
                 {currentViewRevenue > 0 && (
                   <span style={{ marginLeft: '0.5rem', paddingLeft: '0.5rem', borderLeft: '1px solid #dbe3dc', color: '#2E3A30' }}>
@@ -1176,7 +1229,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
               </div>
 
               {/* Пошук клієнта по всіх записах */}
-              <div className="cal-toolbar__search" style={{ position: 'relative', flex: '0 1 190px', minWidth: '130px' }}>
+              <div className="cal-toolbar__search" style={{ position: 'relative', flex: '0 1 160px', minWidth: '110px' }}>
                 <input
                   type="text"
                   value={clientSearch}

@@ -98,3 +98,31 @@ class InventoryMovement(Base):
     cost_at_moment = Column(Numeric(10, 2), nullable=True)   # вартість на момент руху
     reason = Column(String, nullable=False)  # service_usage / manual / restock / revert
     created_at = Column(DateTime, default=utc_now)
+
+
+class Task(Base):
+    """
+    Справи закладу на день - «замовити шампунь», «передзвонити постачальнику».
+
+    Раніше цей список жив лише в localStorage браузера: зникав при чистці
+    кешу і не бачився з іншого пристрою. Для списку, у який записують
+    робочі справи, це неприйнятно - на нього мають покладатися.
+
+    Привʼязка до дати, а не «просто список»: справи в салоні майже завжди
+    прив'язані до дня, а безстроковий список швидко перетворюється на
+    звалище.
+    """
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    task_date = Column(Date, nullable=False, index=True)
+
+    text = Column(String, nullable=False)
+    completed = Column(Boolean, default=False, nullable=False)
+
+    # Хто створив - у салоні кілька людей мають доступ до кабінету,
+    # і корисно бачити, чия це справа.
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    completed_at = Column(DateTime, nullable=True)

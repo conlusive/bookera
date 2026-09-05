@@ -534,6 +534,29 @@ export const api = {
     });
   },
 
+  // === Справи на день ===
+  // Раніше цей список жив лише в localStorage: зникав при чистці кешу
+  // і не бачився з іншого пристрою.
+
+  async listTasks(token: string, businessId: number, taskDate?: string): Promise<{
+    id: number; business_id: number; task_date: string; text: string; completed: boolean;
+  }[]> {
+    const q = taskDate ? `&task_date=${taskDate}` : '';
+    return authFetch(`/crm/tasks?business_id=${businessId}${q}`, token);
+  },
+
+  async createTask(token: string, payload: { business_id: number; task_date: string; text: string }) {
+    return authFetch(`/crm/tasks`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async updateTask(token: string, taskId: number, payload: { text?: string; completed?: boolean }) {
+    return authFetch(`/crm/tasks/${taskId}`, token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async deleteTask(token: string, taskId: number): Promise<void> {
+    await authFetch(`/crm/tasks/${taskId}`, token, { method: 'DELETE' });
+  },
+
   /** Історія руху позиції складу - видно, куди дівся залишок. */
   async getInventoryMovements(token: string, itemId: number) {
     return authFetch(`/crm/inventory/${itemId}/movements`, token);

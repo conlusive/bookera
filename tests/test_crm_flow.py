@@ -143,3 +143,45 @@ async def test_get_my_profile_replaces_old_profiles_table(client, auth_headers):
     assert data["business_id"] == business_id
     assert data["role"] == "business_owner"
     assert data["business"]["id"] == business_id
+
+
+@pytest.mark.asyncio
+async def test_tasks_crud(client, auth_headers):
+    """Справи на день: раніше жили лише в localStorage браузера."""
+    headers = auth_headers("tasks-owner")
+    r = await client.post("/crm/businesses", json={"name": "Tasks Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.post("/crm/tasks", json={
+        "business_id": business_id, "task_date": "2026-09-05", "text": "Замовити шампунь",
+    }, headers=headers)
+    assert r.status_code == 201, r.text
+    task_id = r.json()["id"]
+    assert r.json()["completed"] is False
+
+    # Фільтр за днем: справа іншого дня не має потрапляти у вибірку
+    await client.post("/crm/tasks", json={
+        "business_id": business_id, "task_date": "2026-09-06", "text": "Інший день",
+    }, headers=headers)
+
+    r = await client.get(f"/crm/tasks?business_id={business_id}&task_date=2026-09-05", headers=headers)
+    assert len(r.json()) == 1
+    assert r.json()[0]["text"] == "Замовити шампунь"
+
+    r = await client.get(f"/crm/tasks?business_id={business_id}", headers=headers)
+    assert len(r.json()) == 2, "без фільтра мають прийти обидві"
+
+    r = await client.patch(f"/crm/tasks/{task_id}", json={"completed": True}, headers=headers)
+    assert r.status_code == 200
+    assert r.json()["completed"] is True
+
+    r = await client.delete(f"/crm/tasks/{task_id}", headers=headers)
+    assert r.status_code == 204
+
+    r = await client.get(f"/crm/tasks?business_id={business_id}", headers=headers)
+    assert len(r.json()) == 1
+
+    # Чужий заклад не має доступу
+    other = auth_headers("tasks-stranger")
+    r = await client.get(f"/crm/tasks?business_id={business_id}", headers=other)
+    assert r.status_code == 403

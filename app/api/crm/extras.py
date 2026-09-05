@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import timedelta, date as dt_date
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.core.rate_limit import rate_limit
+from app.core.time_utils import utc_now
 from app.models import Review, InventoryItem, Expense
 from app.schemas.extras import (
     ReviewCreate, ReviewReply, ReviewResponse,
@@ -351,3 +352,112 @@ async def list_inventory_movements(
         }
         for m in result.scalars().all()
     ]
+
+
+# === Справи на день ===
+
+class TaskIn(BaseModel):
+    business_id: int
+    task_date: dt_date
+    text: str = Field(..., min_length=1, max_length=500)
+
+
+class TaskUpdate(BaseModel):
+    text: Optional[str] = Field(None, min_length=1, max_length=500)
+    completed: Optional[bool] = None
+
+
+class TaskOut(BaseModel):
+    id: int
+    business_id: int
+    task_date: dt_date
+    text: str
+    completed: bool
+    created_by: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("/crm/tasks", response_model=List[TaskOut])
+async def list_tasks(
+    business_id: int = Query(...),
+    task_date: Optional[dt_date] = Query(None, description="Конкретний день; без нього - усі"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Справи закладу. Доступні всьому персоналу: це спільний робочий
+    список, а не особисті нотатки керівника."""
+    from app.models import Task
+
+    await assert_business_access(db, current_user, business_id)
+    stmt = select(Task).where(Task.business_id == business_id)
+    if task_date:
+        stmt = stmt.where(Task.task_date == task_date)
+    stmt = stmt.order_by(Task.completed, Task.created_at)
+
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+@router.post("/crm/tasks", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    payload: TaskIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from app.models import Task
+
+    await assert_business_access(db, current_user, payload.business_id)
+    task = Task(**payload.model_dump(), created_by=current_user.id)
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@router.patch("/crm/tasks/{task_id}", response_model=TaskOut)
+async def update_task(
+    task_id: int,
+    payload: TaskUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from app.models import Task
+
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Справу не знайдено")
+    await assert_business_access(db, current_user, task.business_id)
+
+    data = payload.model_dump(exclude_unset=True)
+    if "completed" in data:
+        # Час виконання фіксуємо разом зі статусом - інакше згодом
+        # неможливо сказати, коли справу насправді закрили.
+        task.completed_at = utc_now() if data["completed"] else None
+    for field, value in data.items():
+        setattr(task, field, value)
+
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@router.delete("/crm/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from app.models import Task
+
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Справу не знайдено")
+    await assert_business_access(db, current_user, task.business_id)
+
+    # Справи видаляємо назовсім: на відміну від записів чи виплат, вони
+    # не є фінансовою історією, тримати «скасовані справи» немає сенсу.
+    await db.delete(task)
+    await db.commit()

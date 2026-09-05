@@ -38,7 +38,10 @@ export default function CalendarTab({ business, team = [], services = [], refres
   const [tasks, setTasks] = useState<{id: number, text: string, completed: boolean, date: string}[]>([]);
 
   const [calSettings, setCalSettings] = useState({
-    defaultView: 'day', displayMode: 'fit', colorScheme: 'pastel', colorMode: 'master',
+    // displayMode прибрано: поле зберігалось, але не було ні у формі,
+    // ні в жодній умові - мертві налаштування створюють хибне враження,
+    // ніби щось налаштовується.
+    defaultView: 'day', colorScheme: 'pastel', colorMode: 'master',
   });
   const [shifts, setShifts] = useState([
     { day: 'Понеділок', active: true, start: '09:00', end: '20:00' },
@@ -103,11 +106,29 @@ export default function CalendarTab({ business, team = [], services = [], refres
     }
   }, [business]);
 
-  // Завантаження збереженого вигляду
+  // Відновлення налаштувань календаря після перезавантаження.
+  // Раніше читався ЛИШЕ поточний вигляд, а кольорова схема й режим
+  // забарвлення карток губились - їх зберігали, але ніколи не читали.
   useEffect(() => {
+    if (!business?.id) return;
+
+    const savedSettings = localStorage.getItem(`bookera_cal_settings_${business.id}`);
+    let restored: any = null;
+    if (savedSettings) {
+      try {
+        restored = JSON.parse(savedSettings);
+        setCalSettings(prev => ({ ...prev, ...restored }));
+      } catch {
+        // Пошкоджений запис не має ламати вкладку - лишаємо усталені значення.
+      }
+    }
+
+    // Поточний вигляд має пріоритет над усталеним: якщо людина перемкнулась
+    // на місяць вручну, після перезавантаження вона очікує побачити місяць.
     const savedView = localStorage.getItem('bookera_calendarView');
     if (savedView) setCalendarView(savedView as any);
-  }, []);
+    else if (restored?.defaultView) setCalendarView(restored.defaultView);
+  }, [business?.id]);
 
   // Закриття меню при кліку зовні
   useEffect(() => {
@@ -218,6 +239,15 @@ export default function CalendarTab({ business, team = [], services = [], refres
       // достатньо зберігати локально в браузері.
       await new Promise(resolve => setTimeout(resolve, 500));
       localStorage.setItem(`bookera_cal_settings_${business.id}`, JSON.stringify(calSettings));
+
+      // Раніше налаштування зберігались, але вигляд НЕ перемикався:
+      // людина обирала «Тиждень», бачила «Збережено» - і лишалась у дні.
+      // Тепер обраний вигляд застосовується одразу і запамʼятовується
+      // окремим ключем, щоб пережити перезавантаження сторінки.
+      const view = calSettings.defaultView as 'day' | 'week' | 'month';
+      setCalendarView(view);
+      localStorage.setItem('bookera_calendarView', view);
+
       showToast('Налаштування календаря збережено', 'success');
       setShowCalSettingsModal(false);
     } catch (err: any) {

@@ -275,3 +275,15 @@
 @media (prefers-reduced-motion: reduce) {
   .bk-toast, .bk-toast-out { animation: none; }
 }
+
+/* ===== Календар ===== */
+/* Спеціальний чекбокс для задач (Apple style) */
+        .min-checkbox { width: 18px; height: 18px; border: 1.5px solid #cbd5e1; border-radius: 5px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; background: #fff; flex-shrink: 0; }
+        .min-checkbox:hover { border-color: #94a3b8; }
+        .min-checkbox.checked { background: #0f172a; border-color: #0f172a; color: #fff; }
+        .min-checkbox svg { width: 12px; height: 12px; opacity: 0; transform: scale(0.5); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .min-checkbox.checked svg { opacity: 1; transform: scale(1); }
+        
+        .task-action-btn { color: #94a3b8; background: transparent; border: none; cursor: pointer; transition: 0.2s; padding: 0.2rem; display: flex; align-items: center; justify-content: center; }
+        .task-action-btn:hover { color: #0f172a; }
+        .task-action-btn.delete:hover { color: #ef4444; }

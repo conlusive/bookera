@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Icons, MASTER_COLORS, toLocalDateStr, checkSameDay, CurrentTimeIndicator } from '@/components/shared';
 import { api } from '@/lib/api';
@@ -659,11 +659,11 @@ export default function CalendarTab({ business, team = [], services = [], refres
   };
 
   const processOverlaps = (appsForDay: any[]) => {
-    const processed = appsForDay.map(app => {
+    const processed = appsForDay.map((app: any) => {
       const serviceDuration = services.find((s: any) => String(s.id) === String(app.service_id))?.duration || app.duration || 60;
       const pos = getCardPosition(app.start_time, app.end_time, serviceDuration);
       return { ...app, startMins: pos.top, endMins: pos.top + pos.height, topPx: pos.top, heightPx: pos.height };
-    }).sort((a, b) => a.startMins - b.startMins || (b.endMins - b.startMins) - (a.endMins - a.startMins));
+    }).sort((a: any, b: any) => a.startMins - b.startMins || (b.endMins - b.startMins) - (a.endMins - a.startMins));
 
     const groups: any[][] = []; let currentGroup: any[] = []; let groupEnd = 0;
     processed.forEach(app => {
@@ -692,7 +692,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
 
   const tasksForSelectedDay = tasks.filter((t: any) => t.date === formatDateKey(currentDate));
 
-  const filteredAppointments = appointments.filter(app => {
+  const filteredAppointments = useMemo(() => appointments.filter(app => {
     // Загальна перерва закладу (без прив'язки до майстра)
     const isGlobalBlock = (app.status === 'blocked' || app.color === 'blocked') && !app.staff_id;
     if (isGlobalBlock) return true;
@@ -702,33 +702,62 @@ export default function CalendarTab({ business, team = [], services = [], refres
       return false;
     }
     return true;
-  });
+  }), [appointments, filterMaster]);
 
-  const currentViewAppointmentsCount = filteredAppointments.filter(app => {
-    if (app.status === 'blocked' || app.color === 'blocked') return false;
-    if (calendarView === 'day') return checkSameDay(app.booking_date || app.start_time, currentDate);
-    else if (calendarView === 'week') return weekDays.some(wd => checkSameDay(app.booking_date || app.start_time, wd));
-    else if (calendarView === 'month') {
-      const appDateObj = new Date(app.booking_date || app.start_time);
-      return appDateObj.getMonth() === currentDate.getMonth() && appDateObj.getFullYear() === currentDate.getFullYear();
+  /**
+   * Записи, згруповані за днем.
+   *
+   * Раніше кожна клітинка календаря проганяла ПОВНИЙ список записів
+   * через filter + checkSameDay. У місячному вигляді це 30+ проходів
+   * по всіх записах закладу на кожен перемальовок, у тижневому - 7.
+   * При кількох сотнях записів це помітно гальмувало прокрутку й
+   * перетягування.
+   *
+   * Тепер один прохід будує індекс за датою, а клітинка бере готовий
+   * масив за ключем - O(1) замість повного сканування.
+   */
+  const appointmentsByDate = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const app of filteredAppointments) {
+      const raw = app.booking_date || app.start_time;
+      if (!raw) continue;
+      // Ключ - локальна дата у форматі YYYY-MM-DD. Саме локальна, а не
+      // ISO: у вечірніх записах UTC-дата може бути вже наступним днем,
+      // і запис поїхав би в сусідню клітинку.
+      const key = toLocalDateStr(new Date(raw));
+      const list = map.get(key);
+      if (list) list.push(app);
+      else map.set(key, [app]);
     }
-    return false;
-  }).length;
+    return map;
+  }, [filteredAppointments]);
+
+  const getAppointmentsForDay = useCallback(
+    (date: Date) => appointmentsByDate.get(toLocalDateStr(date)) || [],
+    [appointmentsByDate]
+  );
+
+  const currentViewAppointmentsCount = useMemo(() => {
+    const countReal = (list: any[]) =>
+      list.filter(a => a.status !== 'blocked' && a.color !== 'blocked').length;
+
+    if (calendarView === 'day') return countReal(getAppointmentsForDay(currentDate));
+    if (calendarView === 'week') return weekDays.reduce((sum, wd) => sum + countReal(getAppointmentsForDay(wd)), 0);
+
+    // Місяць: рахуємо за індексом, без повторного перебору всіх записів
+    let total = 0;
+    for (const [key, list] of appointmentsByDate) {
+      const [y, m] = key.split('-').map(Number);
+      if (y === currentDate.getFullYear() && m === currentDate.getMonth() + 1) total += countReal(list);
+    }
+    return total;
+  }, [calendarView, currentDate, weekDays, appointmentsByDate, getAppointmentsForDay]);
 
   return (
     <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden' }}>
-      <style>{`
-        /* Спеціальний чекбокс для задач (Apple style) */
-        .min-checkbox { width: 18px; height: 18px; border: 1.5px solid #cbd5e1; border-radius: 5px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; background: #fff; flex-shrink: 0; }
-        .min-checkbox:hover { border-color: #94a3b8; }
-        .min-checkbox.checked { background: #0f172a; border-color: #0f172a; color: #fff; }
-        .min-checkbox svg { width: 12px; height: 12px; opacity: 0; transform: scale(0.5); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .min-checkbox.checked svg { opacity: 1; transform: scale(1); }
-        
-        .task-action-btn { color: #94a3b8; background: transparent; border: none; cursor: pointer; transition: 0.2s; padding: 0.2rem; display: flex; align-items: center; justify-content: center; }
-        .task-action-btn:hover { color: #0f172a; }
-        .task-action-btn.delete:hover { color: #ef4444; }
-      `}</style>
+      {/* Стилі календаря - у globals.css. Інлайновий <style> усередині
+          React-компонента ламає гідратацію: сервер і клієнт можуть віддати
+          різний вміст, і React перемальовує все дерево заново. */}
 
       {/* Ліва панель: Міні-календар та віджети */}
       <div className="custom-scroll" style={{ width: '320px', borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', flexShrink: 0, zIndex: 10 }}>
@@ -1039,7 +1068,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                   {renderNonWorkingHours(effectiveShifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
                 </div>
 
-                {processOverlaps(filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, currentDate))).map(app => {
+                {processOverlaps(getAppointmentsForDay(currentDate)).map((app: any) => {
                   const serviceName = services.find((s:any) => String(s.id) === String(app.service_id))?.name || app.service_name;
                   const staffName = team.find((m:any) => String(m.id) === String(app.staff_id))?.name || app.master_name || 'Без майстра';
                   const isBlock = app.status === 'blocked' || app.color === 'blocked';
@@ -1125,7 +1154,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
                     {weekDays.map((weekDay, i) => {
-                      const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, weekDay));
+                      const dayApps = getAppointmentsForDay(weekDay);
                       const dayShift = effectiveShifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
                       const isCurrentDay = weekDay.toDateString() === now.toDateString();
 
@@ -1138,7 +1167,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                                  onDragOver={e => e.preventDefault()} onDrop={e => handleDropAppointment(e, weekDay, gridStartHour + hIdx)}></div>
                           ))}
 
-                          {processOverlaps(dayApps).map(app => {
+                          {processOverlaps(dayApps).map((app: any) => {
                             const service = services.find((s:any) => String(s.id) === String(app.service_id));
                             const isBlock = app.status === 'blocked' || app.color === 'blocked';
                             const mColors = getCardColor(app.staff_id, app.service_id);
@@ -1202,7 +1231,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                       const dObj = new Date(currentYear, currentMonth, day);
                       const isMDayToday = dObj.toDateString() === now.toDateString();
                       const hasOverdue = hasOverdueTasks(dObj);
-                      const dayApps = filteredAppointments.filter(app => checkSameDay(app.booking_date || app.start_time, dObj));
+                      const dayApps = getAppointmentsForDay(dObj);
 
                       return (
                           <div key={day} className="month-view-cell" onClick={() => { setCurrentDate(dObj); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
@@ -1212,8 +1241,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingTop: '4px' }}>
                                     {hasOverdue && <div style={{ width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%' }}></div>}
-                                    {dayApps.filter(a => a.status !== 'blocked').length > 0 && (
-                                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>{dayApps.filter(a => a.status !== 'blocked').length} зап.</span>
+                                    {dayApps.filter((a: any) => a.status !== 'blocked').length > 0 && (
+                                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>{dayApps.filter((a: any) => a.status !== 'blocked').length} зап.</span>
                                     )}
                                   </div>
                                   <span style={{ fontWeight: isMDayToday ? '700' : '500', color: isMDayToday ? '#ffffff' : '#0f172a', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isMDayToday ? '#0f172a' : 'transparent', fontSize: '0.9rem' }}>{day}</span>
@@ -1221,7 +1250,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
 
                               {dayApps.length > 0 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1, overflow: 'hidden', width: '100%' }}>
-                                  {dayApps.slice(0, 4).map(app => {
+                                  {dayApps.slice(0, 4).map((app: any) => {
                                     const isBlock = app.status === 'blocked' || app.color === 'blocked';
                                     const mColors = getCardColor(app.staff_id, app.service_id);
                                     return (

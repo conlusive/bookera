@@ -709,6 +709,61 @@ export default function CalendarTab({ business, team = [], services = [], refres
     return { top: topPx, height: durationMins };
   };
 
+  /**
+   * Колонки майстрів у денному вигляді.
+   *
+   * Повертає null, коли колонки не потрібні - тоді працює звичайний
+   * режим «усі в одній смузі». Це принципово: у майстра-одинака
+   * (манікюр удома, приватний барбер) колонка на одну людину лише
+   * забирає ширину й нічого не пояснює.
+   *
+   * Колонки зʼявляються, коли майстрів справді кілька і не обрано
+   * фільтр по конкретному. Тоді порожня колонка одразу означає
+   * «ця людина вільна» - а це найчастіше питання, коли дзвонить клієнт.
+   */
+  const dayColumns = useMemo(() => {
+    if (filterMaster !== 'all') return null;
+    const masters = (team || []).filter((m: any) => m.provides_services !== false);
+    return masters.length >= 2 ? masters : null;
+  }, [team, filterMaster]);
+
+  /**
+   * Розкладка карток на день.
+   *
+   * Без колонок - як було: записи, що перетинаються, ділять ширину.
+   * З колонками - кожен майстер отримує свою смугу, а всередині неї
+   * його власні накладання діляться далі. Записи без майстра йдуть
+   * в окрему останню смугу: втратити їх гірше, ніж показати осібно.
+   */
+  const layoutDayAppointments = useCallback((apps: any[]) => {
+    if (!dayColumns) {
+      return processOverlaps(apps).map((a: any) => ({
+        ...a,
+        colStart: (a.colIndex || 0) / (a.colCount || 1),
+        colSpan: 1 / (a.colCount || 1),
+      }));
+    }
+
+    const unassigned = apps.filter((a: any) =>
+      !a.staff_id || !dayColumns.some((m: any) => String(m.id) === String(a.staff_id)));
+    const lanes = [
+      ...dayColumns.map((m: any) => ({
+        key: String(m.id),
+        apps: apps.filter((a: any) => String(a.staff_id) === String(m.id)),
+      })),
+      ...(unassigned.length ? [{ key: '__none', apps: unassigned }] : []),
+    ];
+
+    const laneWidth = 1 / lanes.length;
+    return lanes.flatMap((lane, laneIdx) =>
+      processOverlaps(lane.apps).map((a: any) => ({
+        ...a,
+        colStart: laneIdx * laneWidth + ((a.colIndex || 0) / (a.colCount || 1)) * laneWidth,
+        colSpan: laneWidth / (a.colCount || 1),
+      }))
+    );
+  }, [dayColumns, services]);
+
   const processOverlaps = (appsForDay: any[]) => {
     const processed = appsForDay.map((app: any) => {
       const serviceDuration = services.find((s: any) => String(s.id) === String(app.service_id))?.duration || app.duration || 60;
@@ -1306,6 +1361,23 @@ export default function CalendarTab({ business, team = [], services = [], refres
         <div className="animated-calendar" key={currentDate.toISOString() + calendarView} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* --- ДЕНЬ --- */}
+          {calendarView === 'day' && dayColumns && (
+            /* Шапка колонок: без неї смуги нічого не означають.
+               Липка, щоб імена не їхали вгору під час прокрутки дня. */
+            <div style={{ display: 'flex', paddingLeft: '68px', paddingRight: '8px', borderBottom: '1px solid #EDF1EC', background: '#fff', position: 'sticky', top: 0, zIndex: 5, flexShrink: 0 }}>
+              {[...dayColumns, ...(getAppointmentsForDay(currentDate).some((a: any) => !a.staff_id || !dayColumns.some((m: any) => String(m.id) === String(a.staff_id))) ? [{ id: '__none', name: 'Без майстра' }] : [])].map((m: any) => (
+                <div
+                  key={m.id}
+                  onClick={() => m.id !== '__none' && setFilterMaster(String(m.id))}
+                  title={m.id !== '__none' ? 'Показати лише цього майстра' : undefined}
+                  style={{ flex: 1, minWidth: 0, padding: '0.5rem 0.4rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: m.id === '__none' ? '#A5AEA3' : '#2E3A30', cursor: m.id === '__none' ? 'default' : 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                >
+                  {m.name}
+                </div>
+              ))}
+            </div>
+          )}
+
           {calendarView === 'day' && (
             <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minWidth: '600px' }}>
               <div style={{ position: 'relative', height: `${gridTotalHours * 60}px`, flexShrink: 0, zIndex: 1 }}>
@@ -1328,6 +1400,25 @@ export default function CalendarTab({ business, team = [], services = [], refres
                 <div style={{ position: 'absolute', top: 0, bottom: 0, left: '60px', right: 0, pointerEvents: 'none' }}>
                   {renderNonWorkingHours(effectiveShifts[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1])}
                 </div>
+
+                {/* Межі між смугами майстрів. Волосяні: вони мають лише
+                    підказувати, де закінчується одна колонка, а не ділити
+                    екран на клітки. */}
+                {dayColumns && (() => {
+                  const dayApps = getAppointmentsForDay(currentDate);
+                  const hasUnassigned = dayApps.some((a: any) => !a.staff_id || !dayColumns.some((m: any) => String(m.id) === String(a.staff_id)));
+                  const total = dayColumns.length + (hasUnassigned ? 1 : 0);
+                  return Array.from({ length: total - 1 }, (_, i) => (
+                    <div
+                      key={`lane-${i}`}
+                      style={{
+                        position: 'absolute', top: 0, bottom: 0,
+                        left: `calc(68px + (100% - 76px) * ${(i + 1) / total})`,
+                        width: '1px', background: '#EDF1EC', pointerEvents: 'none', zIndex: 1,
+                      }}
+                    />
+                  ));
+                })()}
 
                 {/* Вільні вікна між записами - куди ще можна когось поставити.
                     pointerEvents: none, щоб підсвітка не перехоплювала клік:
@@ -1360,15 +1451,17 @@ export default function CalendarTab({ business, team = [], services = [], refres
                   );
                 })}
 
-                {processOverlaps(getAppointmentsForDay(currentDate)).map((app: any) => {
+                {layoutDayAppointments(getAppointmentsForDay(currentDate)).map((app: any) => {
                   const serviceName = services.find((s:any) => String(s.id) === String(app.service_id))?.name || app.service_name;
                   const staffName = team.find((m:any) => String(m.id) === String(app.staff_id))?.name || app.master_name || 'Без майстра';
                   const isBlock = app.status === 'blocked' || app.color === 'blocked';
                   const mColors = getCardColor(app.staff_id);
                   const isCompact = app.heightPx <= 45;
                   const isTiny = app.heightPx <= 25;
-                  const widthPercent = 100 / (app.colCount || 1);
-                  const leftPercent = (app.colIndex || 0) * widthPercent;
+                  // colStart/colSpan - частки ширини сітки. Вони враховують
+                  // і смугу майстра, і накладання всередині неї.
+                  const leftPercent = (app.colStart ?? 0) * 100;
+                  const widthPercent = (app.colSpan ?? 1) * 100;
 
                   return (
                     <div

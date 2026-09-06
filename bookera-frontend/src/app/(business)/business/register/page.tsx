@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { useToast } from '@/context/ToastContext';
 import { OWNER_ROLE } from '@/lib/roles';
 
 export default function BusinessRegisterWizard() {
+  const { showToast } = useToast();
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -42,7 +44,7 @@ export default function BusinessRegisterWizard() {
     },
     services: [] as any[],
     staff: [
-      { id: 1, name: 'Я (Власник)', role: 'Власник', email: '', phone: '' }
+      { id: 1, name: 'Я (Власник)', role: 'Власник', email: '', phone: '', isOwner: true } as { id: number; name: string; role: string; email: string; phone: string; isOwner?: boolean }
     ]
   });
 
@@ -174,14 +176,27 @@ export default function BusinessRegisterWizard() {
       // 3. Запрошення команді через FastAPI (тепер з токеном - раніше йшло
       // без жодної авторизації на хардкоджений 127.0.0.1:8000, що в проді
       // взагалі нікуди не вело)
+      const failedInvites: string[] = [];
       for (const member of formData.staff) {
-        const isOwner = member.name.includes('Власник');
-        if (!isOwner && member.email) {
+        const isOwner = (member as any).isOwner === true;
+        if (isOwner || !member.email) continue;
+        try {
           await api.inviteStaff(token, business.id, {
             email: member.email,
             role: member.role.toLowerCase().includes('адмін') ? 'admin' : 'master',
           });
+        } catch {
+          // Заклад уже створено - зривати весь процес через одне
+          // запрошення не можна. Але й мовчати не можна: людина
+          // вважатиме, що лист пішов.
+          failedInvites.push(member.email);
         }
+      }
+      if (failedInvites.length > 0) {
+        showToast(
+          `Заклад створено, але не вдалося запросити: ${failedInvites.join(', ')}. Спробуйте у вкладці «Команда».`,
+          'error'
+        );
       }
 
       // Роль власника FastAPI вже виставив сам усередині registerBusiness -
@@ -265,7 +280,7 @@ export default function BusinessRegisterWizard() {
       case 6: return formData.teamSize !== '';
       case 7: return Object.values(formData.hours).some(day => day.isOpen);
       case 8: return formData.services.length > 0;
-      case 9: return formData.staff.length > 0;
+      case 9: return true; // персонал необовʼязковий: майстер може працювати сам
       case 10: return true;
       default: return false;
     }

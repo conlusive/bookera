@@ -63,6 +63,12 @@ class User(Base):
 
     # Реквізити для виплати на картку - є у формі CRM, але даних не було де
     # зберігати, тому введене зникало при перезавантаженні.
+    # Адміністратор ПЛАТФОРМИ (не закладу): може видавати підписки
+    # й бачити всі заклади. Окреме поле, а не роль: роль описує місце
+    # людини в конкретному салоні, а це - рівень усього сервісу.
+    # Ставиться лише вручну в базі: самопризначення тут неприпустиме.
+    is_platform_admin = Column(Boolean, default=False, nullable=False)
+
     card_number = Column(String, nullable=True)
     bank_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)

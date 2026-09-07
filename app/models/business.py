@@ -56,6 +56,18 @@ class Business(Base):
     commission_rate = Column(Numeric(5, 2), default=10.00, nullable=False)  # % з завершеного візиту
     points_balance = Column(Integer, default=0, nullable=False)
 
+    # === Підписка ===
+    #
+    # plan: 'free' | 'pro'. Свідомо рядок, а не enum: тарифи змінюються
+    # частіше за схему бази, і міграція на кожен новий план - зайва тяганина.
+    #
+    # subscription_until: до якої дати діє. NULL при 'pro' означає
+    # безстроковий доступ - так адміністратор платформи може видати
+    # доступ партнеру чи на час тестування, не вигадуючи дату «до 2099».
+    subscription_plan = Column(String, default="free", nullable=False)
+    subscription_until = Column(DateTime, nullable=True)
+    subscription_note = Column(String, nullable=True)  # чому видано вручну
+
     owner = relationship("User", back_populates="owned_businesses", foreign_keys=[owner_id])
     staff = relationship("User", back_populates="business", foreign_keys="User.business_id")
     services = relationship("Service", back_populates="business", cascade="all, delete-orphan")

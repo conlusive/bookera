@@ -155,3 +155,48 @@ async def send_booking_rescheduled_email(
         f"Візит перенесено — {business_name}",
         html,
     )
+
+
+async def send_campaign_email(
+        to_email: str,
+        client_name: str,
+        business_name: str,
+        subject: str,
+        message: str,
+        unsubscribe_url: str = "",
+):
+    """
+    Лист розсилки закладу своїм клієнтам.
+
+    Текст пишe власник, тому екрануємо його перед вставкою в HTML:
+    інакше символи на кшталт < зламали б верстку листа, а в гіршому
+    разі дозволили б вставити чужу розмітку.
+
+    Переноси рядків зберігаємо - людина писала текст абзацами, і
+    злити його в суцільну стіну означає зіпсувати повідомлення.
+    """
+    import html as _html
+
+    safe_message = _html.escape(message).replace("\n", "<br>")
+    safe_name = _html.escape(client_name or "")
+    safe_business = _html.escape(business_name)
+
+    # Посилання на відписку - не формальність: без нього листи швидко
+    # потрапляють у спам, і страждає вся розсилка закладу.
+    unsubscribe_block = f"""
+      <p style="margin:28px 0 0;color:#A5AEA3;font-size:12px;line-height:1.5;">
+        Не хочете отримувати такі листи?
+        <a href="{unsubscribe_url}" style="color:#6B756A;">Відписатись</a>
+      </p>
+    """ if unsubscribe_url else ""
+
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#222222;">
+      <p style="margin:0 0 20px;color:#5C6B5E;font-size:15px;">{safe_name}, вітаємо!</p>
+      <div style="font-size:15px;line-height:1.6;">{safe_message}</div>
+      <p style="margin:28px 0 0;color:#6B756A;font-size:14px;">— {safe_business}</p>
+      {unsubscribe_block}
+    </div>
+    """
+
+    await asyncio.to_thread(send_email_sync, to_email, subject, html)

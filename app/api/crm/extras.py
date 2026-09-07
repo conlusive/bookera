@@ -3,7 +3,7 @@ from datetime import timedelta, date as dt_date
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -461,3 +461,87 @@ async def delete_task(
     # не є фінансовою історією, тримати «скасовані справи» немає сенсу.
     await db.delete(task)
     await db.commit()
+
+
+# === Розсилка клієнтам ===
+
+class CampaignRequest(BaseModel):
+    business_id: int
+    subject: str = Field(..., min_length=3, max_length=150)
+    message: str = Field(..., min_length=10, max_length=3000)
+    # Кому: всі / лише постійні / лише ті, хто давно не був
+    audience: str = Field("all", description="all | regular | lapsed")
+
+
+@router.post("/crm/campaigns")
+async def send_campaign(
+    payload: CampaignRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Надіслати листа клієнтам закладу.
+
+    Раніше кнопка «Відправити» в маркетингу лише показувала
+    повідомлення «Розсилку відправлено» - жоден лист нікуди не йшов.
+
+    Обмеження свідомі:
+    - лише адміністратори: розсилка від імені закладу впливає на
+      репутацію, це не рішення рядового майстра
+    - за підпискою: масова пошта - платна можливість
+    - без email клієнта пропускаємо мовчки, але рахуємо: власник має
+      бачити, скільки контактів насправді досяжні
+    """
+    from app.models import Business, Client
+    from app.core.email import send_campaign_email
+    from app.services.subscription import assert_pro_feature
+
+    await assert_business_admin(db, current_user, payload.business_id)
+
+    biz_res = await db.execute(select(Business).where(Business.id == payload.business_id))
+    business = biz_res.scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    assert_pro_feature(business, "marketing")
+
+    stmt = select(Client).where(
+        Client.business_id == payload.business_id,
+        Client.is_blacklisted.isnot(True),
+    )
+    result = await db.execute(stmt)
+    clients = result.scalars().all()
+
+    now = utc_now()
+    selected = []
+    for c in clients:
+        if not c.email:
+            continue
+        if payload.audience == "regular" and (c.visits_count or 0) < 3:
+            continue
+        if payload.audience == "lapsed":
+            # «Давно не був» - понад 60 днів. Тим, хто був учора,
+            # лист «ми скучили» виглядає безглуздо.
+            if not c.last_visit:
+                continue
+            days = (now.date() - c.last_visit).days if hasattr(c.last_visit, "year") else 0
+            if days < 60:
+                continue
+        selected.append(c)
+
+    for c in selected:
+        background_tasks.add_task(
+            send_campaign_email,
+            to_email=c.email,
+            client_name=c.name or "",
+            business_name=business.name,
+            subject=payload.subject,
+            message=payload.message,
+        )
+
+    return {
+        "queued": len(selected),
+        "total_clients": len(clients),
+        "without_email": sum(1 for c in clients if not c.email),
+    }

@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useToast } from '@/context/ToastContext';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 
 interface SmartSlot {
   id: string;
@@ -79,6 +81,9 @@ export default function MarketingTab({
 
   const [marketingForm, setMarketingForm] = useState({ type: 'sms', audience: 'all', message: '' });
   const [selectedPromoForMessage, setSelectedPromoForMessage] = useState('');
+  // Тема листа: саме її людина бачить у списку пошти, тому без неї
+  // розсилка втрачає половину сенсу.
+  const [marketingSubject, setMarketingSubject] = useState('');
   const [isSendingPromo, setIsSendingPromo] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [comingSoonModal, setComingSoonModal] = useState<{ isOpen: boolean, title: string, desc: string }>({ isOpen: false, title: '', desc: '' });
@@ -217,16 +222,50 @@ export default function MarketingTab({
   };
 
   const handleSendMarketing = async () => {
-    if (!marketingForm.message || marketingForm.message.trim() === '') return showToast('Введіть текст перед відправкою', 'error');
+    const text = (marketingForm.message || '').trim();
+    if (!text) return showToast('Введіть текст перед відправкою', 'error');
+    if (text.length < 10) return showToast('Текст закороткий — напишіть хоча б кілька слів', 'error');
+    if (!business?.id) return showToast('Заклад не обрано', 'error');
     if (clientsList?.length === 0) return showToast('У вас ще немає клієнтів', 'error');
 
+    // Розсилка йде РЕАЛЬНИМ людям і скасувати її неможливо -
+    // підтвердження тут доречне, на відміну від звичайних дій.
+    const audienceLabel = marketingForm.audience === 'vip' ? 'постійним клієнтам'
+      : marketingForm.audience === 'lost' ? 'клієнтам, які давно не були'
+      : 'усім клієнтам';
+    if (!confirm(`Надіслати листа ${audienceLabel}? Скасувати відправку буде неможливо.`)) return;
+
     setIsSendingPromo(true);
-    setTimeout(() => {
+    try {
+      const token = await getAuthToken();
+      // Назви аудиторій у CRM і на бекенді історично різні -
+      // зводимо їх тут, а не плодимо синоніми в API.
+      const audience = marketingForm.audience === 'vip' ? 'regular'
+        : marketingForm.audience === 'lost' ? 'lapsed' : 'all';
+
+      const res = await api.sendCampaign(token, {
+        business_id: business.id,
+        subject: marketingSubject.trim() || `Новини від ${business.name}`,
+        message: selectedPromoForMessage ? `${text}\n\nВаш промокод: ${selectedPromoForMessage}` : text,
+        audience: audience as any,
+      });
+
+      // Кажемо конкретно, скільки пішло. «Відправлено 🚀» не давало
+      // жодного уявлення, чи дійшло бодай щось.
+      if (res.queued === 0) {
+        showToast('Жоден лист не надіслано: у цих клієнтів немає пошти', 'error');
+      } else {
+        const skipped = res.without_email > 0 ? `, без пошти: ${res.without_email}` : '';
+        showToast(`Надіслано листів: ${res.queued}${skipped}`, 'info');
+        setMarketingForm({ audience: 'all', message: '', type: 'sms' });
+        setMarketingSubject('');
+        setSelectedPromoForMessage('');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося надіслати розсилку', 'error');
+    } finally {
       setIsSendingPromo(false);
-      showToast('Розсилку відправлено 🚀');
-      setMarketingForm({ audience: 'all', message: '', type: 'sms' });
-      setSelectedPromoForMessage('');
-    }, 1500);
+    }
   };
 
   const handleAIGenerate = () => {

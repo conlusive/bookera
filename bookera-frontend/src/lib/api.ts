@@ -534,6 +534,19 @@ export const api = {
     });
   },
 
+  /**
+   * Розсилка клієнтам закладу.
+   *
+   * Повертає, скільки листів поставлено в чергу і скільки контактів
+   * узагалі без пошти - власник має розуміти, чому листів менше,
+   * ніж клієнтів у базі.
+   */
+  async sendCampaign(token: string, payload: {
+    business_id: number; subject: string; message: string; audience?: 'all' | 'regular' | 'lapsed';
+  }): Promise<{ queued: number; total_clients: number; without_email: number }> {
+    return authFetch('/crm/campaigns', token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
   // === Справи на день ===
   // Раніше цей список жив лише в localStorage: зникав при чистці кешу
   // і не бачився з іншого пристрою.

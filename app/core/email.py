@@ -45,20 +45,42 @@ async def send_booking_confirmation_email(
         manage_url: str = "",
         cancellation_policy: str = "",
         deposit_due: float | None = None,
+        master_name: str = "",
+        duration_minutes: int | None = None,
+        business_phone: str = "",
 ):
-    """Підтвердження запису."""
-    rows = (
-        info_row("Послуга", service_name)
-        + info_row("Коли", f"{booking_date}, {booking_time}", big=True)
-    )
-    if address.strip(" ,"):
-        rows += info_row("Адреса", address.strip(" ,"))
+    """
+    Підтвердження запису.
+
+    Порядок полів - за тим, що людина шукає першим: коли, до кого,
+    що саме, скільки коштує. Адреса й телефон нижче: вони потрібні
+    в день візиту, а не в момент отримання листа.
+    """
+    when = f"{booking_date}, {booking_time}"
+    if duration_minutes:
+        hours, minutes = divmod(int(duration_minutes), 60)
+        parts = []
+        if hours:
+            parts.append(f"{hours} год")
+        if minutes:
+            parts.append(f"{minutes} хв")
+        if parts:
+            when += " · " + " ".join(parts)
+
+    rows = info_row("Коли", when, big=True)
+    if master_name:
+        rows += info_row("Майстер", master_name)
+    rows += info_row("Послуга", service_name)
     if price:
         rows += info_row("Вартість", f"{price:,.0f} ₴".replace(",", " "))
     if deposit_due:
         # Передоплату називаємо окремо: людина має дізнатись про неї
         # з листа, а не при вході в салон.
         rows += info_row("Передоплата", f"{deposit_due:,.0f} ₴".replace(",", " "))
+    if address.strip(" ,"):
+        rows += info_row("Адреса", address.strip(" ,"))
+    if business_phone:
+        rows += info_row("Телефон закладу", business_phone)
 
     body = card(rows) + button("Переглянути або скасувати", manage_url)
 
@@ -87,6 +109,7 @@ async def send_booking_rescheduled_email(
         new_time: str,
         address: str = "",
         manage_url: str = "",
+        master_name: str = "",
 ):
     """
     Перенесення візиту.
@@ -95,10 +118,12 @@ async def send_booking_rescheduled_email(
     впізнати свій запис, а не гадати, про який візит ідеться.
     """
     rows = (
-        info_row("Послуга", service_name)
-        + info_row("Було", f"{old_date}, {old_time}", strike=True)
+        info_row("Було", f"{old_date}, {old_time}", strike=True)
         + info_row("Стало", f"{new_date}, {new_time}", big=True)
+        + info_row("Послуга", service_name)
     )
+    if master_name:
+        rows += info_row("Майстер", master_name)
     if address.strip(" ,"):
         rows += info_row("Адреса", address.strip(" ,"))
 

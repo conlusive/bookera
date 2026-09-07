@@ -11,7 +11,7 @@ from app.api.deps import get_db
 from app.api.appointments import normalize_master_id
 from app.core.auth import CurrentUser, assert_business_access, get_current_user
 from app.core.time_utils import utc_now
-from app.models import Appointment, Business, Client, Service
+from app.models import Appointment, Business, Client, Service, User
 from app.schemas.appointment import AppointmentResponse, AppointmentRescheduleRequest, ManualAppointmentCreate
 from app.core.email import send_booking_rescheduled_email
 from app.services.monetization import award_points_for_new_client
@@ -164,6 +164,15 @@ async def reschedule_appointment(
             appointment.manage_token = secrets.token_urlsafe(24)
             await db.commit()
 
+        # Майстер у листі: при перенесенні клієнт має бачити не лише
+        # новий час, а й до кого він іде - інколи разом із часом
+        # змінюється й людина.
+        master_display = ""
+        if appointment.master_id:
+            m_res = await db.execute(select(User).where(User.id == str(appointment.master_id)))
+            master = m_res.scalars().first()
+            master_display = (master.full_name or "") if master else ""
+
         background_tasks.add_task(
             send_booking_rescheduled_email,
             to_email=appointment.client_email,
@@ -176,6 +185,7 @@ async def reschedule_appointment(
             new_time=appointment.start_time.strftime("%H:%M"),
             address=(business.address or "") if business else "",
             manage_url=f"{FRONTEND_URL}/my-booking/{appointment.id}?token={appointment.manage_token}",
+            master_name=master_display,
         )
 
     return appointment

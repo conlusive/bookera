@@ -624,6 +624,24 @@ async def create_appointment(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
     await db.refresh(appointment)
 
+    # Імʼя майстра для листа. «Будь-який вільний» - чесніше за порожній
+    # рядок: клієнт має розуміти, що конкретну людину не закріплено.
+    # Поле в моделі називається master_id (не staff_id) - я щойно
+    # переплутав і зламав 13 тестів; лишаю коментар, бо назва
+    # неочевидна на тлі staff_id в інших таблицях.
+    master_display_name = ""
+    if appointment.master_id:
+        m_res = await db.execute(select(User).where(User.id == str(appointment.master_id)))
+        master = m_res.scalars().first()
+        master_display_name = (master.full_name or "") if master else ""
+
+    total_minutes = int((appointment.end_time - appointment.start_time).total_seconds() // 60)
+    hours, minutes = divmod(max(total_minutes, 0), 60)
+    duration_text = " ".join(filter(None, [
+        f"{hours} год" if hours else "",
+        f"{minutes} хв" if minutes else "",
+    ]))
+
     # Фонова відправка листа клієнту через SMTP
     if notify_client and appointment_in.client_email and business and service:
         background_tasks.add_task(
@@ -641,6 +659,9 @@ async def create_appointment(
             # в листі, а не дізнатись на місці.
             cancellation_policy=rules.get("cancellation_policy") or "",
             deposit_due=float(deposit_due) if deposit_due else None,
+            master_name=master_display_name,
+            duration_minutes=service.duration_minutes,
+            business_phone=business.phone or "",
         )
 
     return appointment

@@ -5,7 +5,9 @@
 «власник салону» і «власник сервісу» в одному файлі - вірний спосіб
 одного дня видати першому права другого.
 """
+import os
 from datetime import timedelta
+from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,7 +19,8 @@ from app.api.deps import get_db
 from app.core.auth import CurrentUser, get_current_user
 from app.core.logging_config import logger
 from app.core.time_utils import utc_now
-from app.models import Business, User
+from app.models import Business, Payment, User
+from app.services.payments import create_payment_intent, verify_callback_signature
 from app.services.subscription import (
     STATUS_ACTIVE,
     STATUS_EXPIRED,
@@ -194,3 +197,142 @@ async def platform_stats(
         # активним із простроченою датою, і в звіті це не платний клієнт.
         "really_active": active,
     }
+
+
+# === Оплата підписки самим закладом ===
+#
+# Окремо від адміністративних ендпоінтів вище: там платформа видає
+# доступ вручну, тут заклад платить сам. Різні дійові особи й різні
+# перевірки, тому й розділено.
+
+SUBSCRIPTION_PRICE_UAH = Decimal(os.getenv("SUBSCRIPTION_PRICE_UAH", "490"))
+SUBSCRIPTION_PERIOD_DAYS = 30
+
+
+class SubscriptionCheckoutResponse(BaseModel):
+    # None у mock-режимі (без ключів WayForPay): переходити нікуди,
+    # оплата вважається успішною одразу. Інтерфейс має це врахувати,
+    # а не показувати порожнє посилання.
+    payment_url: Optional[str] = None
+    order_id: str
+    amount: float
+    period_days: int
+
+
+@router.post("/subscription/checkout", response_model=SubscriptionCheckoutResponse)
+async def create_subscription_payment(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Створити платіж за підписку.
+
+    Свідомо БЕЗ перевірки чинної підписки: платити треба саме тоді,
+    коли доступ уже завершився. Якби тут стояла звичайна перевірка
+    доступу, заклад із простроченою підпискою не міг би її продовжити -
+    класичний глухий кут.
+
+    Перевіряємо лише, що людина - власник цього закладу: платити за
+    чужу підписку не має сенсу, а платити за свою може лише той, хто
+    за неї відповідає.
+    """
+    res = await db.execute(select(Business).where(Business.id == business_id))
+    business = res.scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    if str(business.owner_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Оплатити підписку може лише власник закладу")
+
+    # order_id містить business_id: коли платіжна система повідомить
+    # про успіх, ми маємо знати, кому саме продовжувати доступ.
+    order_id = f"sub-{business_id}-{int(utc_now().timestamp())}"
+
+    intent = create_payment_intent(
+        amount=SUBSCRIPTION_PRICE_UAH,
+        order_id=order_id,
+        product_name=f"Підписка BookEra — {business.name}",
+    )
+    intent_provider = getattr(intent, "provider", "wayforpay")
+
+    # provider_ref, а не власне поле: у моделі Payment зовнішній
+    # ідентифікатор уже є, додавати друге поле для того самого - вірний
+    # шлях до розсинхрону.
+    payment = Payment(
+        business_id=business_id,
+        amount=SUBSCRIPTION_PRICE_UAH,
+        currency="UAH",
+        purpose="subscription",
+        provider=intent_provider,
+        provider_ref=order_id,
+        status="pending",
+    )
+    # У mock-режимі (без ключів провайдера) переходити нікуди, тому
+    # платіж лишається pending і чекає на callback - так само, як у
+    # реальному сценарії. Це навмисно: локальна перевірка має проходити
+    # тим самим шляхом, що й бойова.
+    db.add(payment)
+    await db.commit()
+
+    return SubscriptionCheckoutResponse(
+        payment_url=intent.checkout_url,
+        order_id=order_id,
+        amount=float(SUBSCRIPTION_PRICE_UAH),
+        period_days=SUBSCRIPTION_PERIOD_DAYS,
+    )
+
+
+@router.post("/subscription/callback")
+async def subscription_payment_callback(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Підтвердження оплати від платіжної системи.
+
+    Без авторизації користувача - викликає платіжний провайдер, а не
+    людина. Захист тут інший: підпис запиту (перевіряється у
+    verify_callback_signature) і те, що ми звіряємо суму з тим, що
+    самі виставили. Довіряти сумі з тіла запиту не можна: інакше
+    оплату на 1 гривню можна видати за повну.
+
+    Продовжуємо ВІД БІЛЬШОЇ дати: якщо підписка ще діє, нові 30 днів
+    додаються до залишку, а не з'їдають його. Людина, яка заплатила
+    заздалегідь, не має втрачати оплачені дні.
+    """
+    order_id = str(payload.get("orderReference") or payload.get("order_id") or "")
+    if not order_id.startswith("sub-"):
+        raise HTTPException(status_code=400, detail="Невідомий платіж")
+
+    if not verify_callback_signature(payload):
+        logger.warning("Callback підписки з невірним підписом: %s", order_id)
+        raise HTTPException(status_code=400, detail="Невірний підпис запиту")
+
+    res = await db.execute(select(Payment).where(Payment.provider_ref == order_id))
+    payment = res.scalars().first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Платіж не знайдено")
+
+    # Повторний виклик - звичайна річ: платіжні системи надсилають
+    # підтвердження кілька разів. Другий раз доступ не продовжуємо.
+    if payment.status == "completed":
+        return {"status": "already_processed"}
+
+    payment.status = "completed"
+    payment.completed_at = utc_now()
+
+    biz_res = await db.execute(select(Business).where(Business.id == payment.business_id))
+    business = biz_res.scalars().first()
+    if business:
+        base = business.subscription_until
+        start_from = base if (base and base > utc_now()) else utc_now()
+        business.subscription_plan = STATUS_ACTIVE
+        business.subscription_until = start_from + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
+        business.subscription_note = None  # це вже не ручна видача
+
+    await db.commit()
+    logger.info("Підписку продовжено оплатою: business_id=%s до %s",
+                payment.business_id, business.subscription_until if business else "-")
+
+    return {"status": "ok"}

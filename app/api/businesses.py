@@ -42,7 +42,12 @@ async def list_businesses(
     )
     stmt = (
         select(Business)
-        .where(Business.is_active == True)
+        .where(
+            Business.is_active == True,
+            # Заклади без чинної підписки в каталозі не показуємо: вони
+            # однаково не приймуть запис, і клієнт лише марно згає час.
+            Business.subscription_plan.in_(["trial", "active"]),
+        )
         .options(selectinload(Business.services))
         .order_by(Business.id.in_(select(radar_subq.c.business_id)).desc(), Business.id)
         .limit(limit)

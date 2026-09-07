@@ -67,3 +67,42 @@ def create_payment_intent(amount: Decimal, order_id: str, product_name: str) -> 
     if WFP_MERCHANT_LOGIN and WFP_MERCHANT_SECRET:
         return _wayforpay_create_intent(amount, order_id, product_name)
     return _mock_create_intent(amount, order_id)
+
+
+def verify_callback_signature(payload: dict) -> bool:
+    """
+    Перевірка підпису відповіді від платіжної системи.
+
+    Без цієї перевірки будь-хто, знаючи адресу callback, міг би
+    надіслати «оплату пройшла» і отримати підписку безкоштовно.
+    Це не теоретична загроза: адреси callback легко вгадуються.
+
+    У режимі без ключів (розробка, mock-оплата) пропускаємо - інакше
+    неможливо перевірити сценарій локально. У продакшні ключі є
+    завжди, тому реальний обхід так не зробиш.
+    """
+    if not WFP_MERCHANT_SECRET:
+        logger.warning("WFP_MERCHANT_SECRET не заданий - підпис callback не перевіряється")
+        return True
+
+    received = str(payload.get("merchantSignature") or "")
+    if not received:
+        return False
+
+    # Порядок полів визначає WayForPay: змінювати не можна, інакше
+    # підпис не зійдеться.
+    fields = [
+        payload.get("merchantAccount", ""),
+        payload.get("orderReference", ""),
+        payload.get("amount", ""),
+        payload.get("currency", ""),
+        payload.get("authCode", ""),
+        payload.get("cardPan", ""),
+        payload.get("transactionStatus", ""),
+        payload.get("reasonCode", ""),
+    ]
+    expected = _wayforpay_signature(fields)
+
+    # Порівняння сталого часу: звичайне == дозволяє з'ясувати підпис
+    # посимвольно, вимірюючи час відповіді.
+    return hmac.compare_digest(expected, received)

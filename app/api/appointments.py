@@ -23,6 +23,7 @@ from app.schemas.appointment import (
     SlotStatusItem,
 )
 from app.core.email import send_booking_confirmation_email
+from app.services.subscription import has_access
 from app.services.monetization import charge_commission_if_applicable, award_points_for_new_client
 from app.services.inventory import consume_materials_for_appointment, revert_materials_for_appointment
 
@@ -383,6 +384,21 @@ async def create_appointment(
     business_for_rules = biz_res.scalars().first()
     if not business_for_rules:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заклад не знайдено")
+
+    # Заклад без чинної підписки не приймає записів.
+    #
+    # Інакше виходить найгірше: клієнт записується, отримує лист із
+    # підтвердженням, приходить - а заклад цього запису НЕ БАЧИВ,
+    # бо кабінет для нього закритий. Краще чесно не прийняти запис,
+    # ніж прийняти й загубити.
+    #
+    # Формулювання нейтральне: клієнту не повідомляємо, що в закладу
+    # проблеми з оплатою сервісу - це не його справа.
+    if not has_access(business_for_rules):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Онлайн-запис тимчасово недоступний. Зверніться до закладу.",
+        )
 
     rules = business_for_rules.booking_settings or {}
     notify = business_for_rules.notification_settings or {}

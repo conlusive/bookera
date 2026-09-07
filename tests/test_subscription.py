@@ -166,3 +166,113 @@ async def test_campaign_audience_filters(client, auth_headers):
         "audience": "regular",
     }, headers=owner)
     assert r.json()["queued"] == 1, "лише клієнт із 3+ візитами"
+
+
+async def _expire(business_id: int):
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        await conn.execute(
+            "UPDATE businesses SET subscription_plan='expired', subscription_until=NULL WHERE id=$1",
+            business_id,
+        )
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_expired_business_stops_accepting_bookings(client, auth_headers):
+    """
+    Найгірший сценарій, який це закриває: клієнт записується, отримує
+    лист, приходить - а заклад запису НЕ БАЧИВ, бо кабінет закритий.
+    Краще чесно не прийняти запис, ніж прийняти й загубити.
+    """
+    headers = auth_headers("expired-book-owner")
+    r = await client.post("/crm/businesses", json={"name": "Expired Book", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+    r = await client.post("/services", json={
+        "business_id": business_id, "name": "Стрижка", "duration_minutes": 60, "price": 400,
+    }, headers=headers)
+    service_id = r.json()["id"]
+
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    payload = {
+        "business_id": business_id, "service_id": service_id,
+        "start_time": start.isoformat(), "client_name": "К", "client_phone": "+380671234567",
+    }
+
+    # У пробному періоді - запис проходить
+    r = await client.post("/appointments", json=payload)
+    assert r.status_code == 200, r.text
+
+    await _expire(business_id)
+
+    payload["start_time"] = (start + timedelta(hours=3)).isoformat()
+    r = await client.post("/appointments", json=payload)
+    assert r.status_code == 403
+    # Клієнту НЕ повідомляємо, що в закладу проблеми з оплатою сервісу
+    assert "підписк" not in r.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_expired_business_hidden_from_catalog(client, auth_headers):
+    """Заклад без доступу не показуємо: він однаково не прийме запис."""
+    headers = auth_headers("catalog-owner")
+    r = await client.post("/crm/businesses", json={"name": "Catalog Test Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.get("/businesses/?limit=200")
+    assert any(b["id"] == business_id for b in r.json()), "у пробному періоді має бути видно"
+
+    await _expire(business_id)
+    r = await client.get("/businesses/?limit=200")
+    assert not any(b["id"] == business_id for b in r.json())
+
+
+@pytest.mark.asyncio
+async def test_owner_can_pay_even_when_expired(client, auth_headers):
+    """
+    Класичний глухий кут, якого тут немає: якби оплата вимагала чинної
+    підписки, заклад із простроченим доступом не міг би її продовжити.
+    """
+    headers = auth_headers("pay-owner")
+    r = await client.post("/crm/businesses", json={"name": "Pay Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+    await _expire(business_id)
+
+    r = await client.post(f"/platform/subscription/checkout?business_id={business_id}", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["order_id"].startswith(f"sub-{business_id}-")
+    assert r.json()["amount"] > 0
+
+    # Чужа людина оплатити не може
+    r = await client.post(f"/platform/subscription/checkout?business_id={business_id}",
+                          headers=auth_headers("random-person"))
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_payment_callback_extends_subscription(client, auth_headers):
+    headers = auth_headers("callback-owner")
+    r = await client.post("/crm/businesses", json={"name": "Callback Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+    await _expire(business_id)
+
+    r = await client.post(f"/platform/subscription/checkout?business_id={business_id}", headers=headers)
+    order_id = r.json()["order_id"]
+
+    r = await client.post("/platform/subscription/callback", json={
+        "orderReference": order_id, "transactionStatus": "Approved",
+    })
+    assert r.status_code == 200, r.text
+
+    # Доступ повернувся
+    r = await client.get("/crm/businesses/me", headers=headers)
+    assert r.json()["subscription"]["has_access"] is True
+    assert r.json()["subscription"]["status"] == "active"
+
+    # Повторний виклик не продовжує вдруге: платіжні системи надсилають
+    # підтвердження кілька разів
+    r = await client.post("/platform/subscription/callback", json={
+        "orderReference": order_id, "transactionStatus": "Approved",
+    })
+    assert r.json()["status"] == "already_processed"

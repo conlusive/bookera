@@ -129,3 +129,63 @@ async def test_blacklisted_client_cannot_book(client, auth_headers):
     # Інший номер - без обмежень
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, start, phone="+380509998877"))
     assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_registration_data_shapes_booking_rules(client, auth_headers):
+    """
+    Дані з реєстрації мають впливати на поведінку, а не просто лежати
+    в базі: барбер і майстер манікюру отримують різні правила.
+    """
+    # Барбер: короткі візити, можна записатись майже одразу
+    r = await client.post("/crm/businesses", json={
+        "name": "Barber Profile", "city": "Львів",
+        "category": "barber", "business_type": "company", "workspace_type": "my_place",
+    }, headers=auth_headers("profile-barber"))
+    assert r.status_code == 201, r.text
+    barber = r.json()["booking_settings"]
+    assert barber["min_advance_hours"] == 1
+
+    # Манікюр: довші візити, більше часу на підготовку
+    r = await client.post("/crm/businesses", json={
+        "name": "Nails Profile", "city": "Львів",
+        "category": "nails", "business_type": "individual", "workspace_type": "my_place",
+    }, headers=auth_headers("profile-nails"))
+    nails = r.json()["booking_settings"]
+    assert nails["min_advance_hours"] == 3
+    # Приватний майстер планує далі наперед
+    assert nails["max_advance_days"] == 90
+
+    # Виїзд до клієнта: майстру потрібен час на дорогу, тому запис
+    # «через годину» нереалістичний навіть для барбера
+    r = await client.post("/crm/businesses", json={
+        "name": "Mobile Barber", "city": "Львів",
+        "category": "barber", "business_type": "individual", "workspace_type": "client_place",
+    }, headers=auth_headers("profile-mobile"))
+    mobile = r.json()["booking_settings"]
+    assert mobile["min_advance_hours"] >= 4, "виїзд потребує запасу часу"
+    assert "адресою" in mobile["cancellation_policy"]
+
+
+@pytest.mark.asyncio
+async def test_profile_rules_actually_block_booking(client, auth_headers):
+    """Правила з профілю - не декорація: вони справді відмовляють."""
+    headers = auth_headers("profile-enforce")
+    r = await client.post("/crm/businesses", json={
+        "name": "Enforce Salon", "city": "Львів",
+        "category": "nails", "business_type": "company", "workspace_type": "my_place",
+    }, headers=headers)
+    business_id = r.json()["id"]
+    r = await client.post("/services", json={
+        "business_id": business_id, "name": "Манікюр", "duration_minutes": 90, "price": 700,
+    }, headers=headers)
+    service_id = r.json()["id"]
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Манікюр - мінімум 3 години наперед
+    r = await client.post("/appointments", json=_book_payload(business_id, service_id, now + timedelta(hours=1)))
+    assert r.status_code == 400
+
+    r = await client.post("/appointments", json=_book_payload(business_id, service_id, now + timedelta(hours=5)))
+    assert r.status_code == 200, r.text

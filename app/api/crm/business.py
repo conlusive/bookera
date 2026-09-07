@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
+from app.services.business_profile import default_booking_settings
 from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.models import Business, BusinessHours, User
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessOut, BusinessHoursItem
@@ -105,6 +106,17 @@ async def register_business(
         user.role = "business_owner"
         if not user.full_name and current_user.full_name:
             user.full_name = current_user.full_name
+
+    # Правила бронювання виводимо з того, що людина вказала при
+    # реєстрації. Раніше всі отримували однакові значення, і власник
+    # мусив сам здогадуватись, що для манікюру крок у 30 хвилин
+    # незручний, а для виїзду до клієнта запис «через годину» нереальний.
+    if not data.get("booking_settings"):
+        data["booking_settings"] = default_booking_settings(
+            data.get("category"),
+            data.get("business_type"),
+            data.get("workspace_type"),
+        )
 
     business = Business(
         **data,

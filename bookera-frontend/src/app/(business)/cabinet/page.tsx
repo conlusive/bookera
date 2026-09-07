@@ -1204,8 +1204,15 @@ export default function BusinessCabinet() {
             .filter(item => {
               const role = userProfile?.role;
 
-              // Власник бачить усе. Перевірка через isOwnerRole, а не
-              // порівняння з одним рядком: роль власника приходить як
+              // Майстер-одинак: «Команда» не має сенсу, поки людина
+              // працює сама. Але ховаємо ЛИШЕ якщо команди справді
+              // немає - тип обирають раз при реєстрації, а співробітник
+              // може зʼявитись пізніше, і тоді вкладка потрібна.
+              const isSolo = business?.business_type === 'individual' && (team?.length || 0) <= 1;
+              if (isSolo && item.id === 'Team') return false;
+
+              // Власник бачить усе решта. Перевірка через isOwnerRole,
+              // а не порівняння з одним рядком: роль приходить як
               // 'business_owner', але в старих записах трапляються
               // 'vendor' і 'owner'.
               if (isOwnerRole(role)) return true;

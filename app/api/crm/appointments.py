@@ -1,6 +1,8 @@
+import os
+import secrets
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +13,10 @@ from app.core.auth import CurrentUser, assert_business_access, get_current_user
 from app.core.time_utils import utc_now
 from app.models import Appointment, Business, Client, Service
 from app.schemas.appointment import AppointmentResponse, AppointmentRescheduleRequest, ManualAppointmentCreate
+from app.core.email import send_booking_rescheduled_email
 from app.services.monetization import award_points_for_new_client
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 router = APIRouter(prefix="/crm/appointments", tags=["CRM - Appointments"])
 
@@ -115,6 +120,7 @@ async def create_manual_appointment(
 async def reschedule_appointment(
     appointment_id: int,
     payload: AppointmentRescheduleRequest,
+    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -125,6 +131,10 @@ async def reschedule_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Запис не знайдено")
     await assert_business_access(db, current_user, appointment.business_id)
+
+    # Старий час запамʼятовуємо ДО зміни: він потрібен у листі, щоб
+    # людина впізнала, про який саме візит ідеться.
+    old_start = appointment.start_time
 
     duration = appointment.end_time - appointment.start_time
     appointment.start_time = payload.start_time
@@ -137,4 +147,35 @@ async def reschedule_appointment(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час уже зайнятий іншим записом.")
 
     await db.refresh(appointment)
+
+    # Сповіщення клієнта. Раніше після перенесення людина не дізнавалась
+    # про зміну ніяк - приходила у старий час або не приходила взагалі.
+    # Для сервісу записів це головне джерело неявок, і лікується воно
+    # не нагадуваннями, а тим, щоб людина взагалі знала про зміну.
+    if appointment.client_email and background_tasks is not None:
+        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
+        business = biz_res.scalars().first()
+        service = None
+        if appointment.service_id:
+            srv_res = await db.execute(select(Service).where(Service.id == appointment.service_id))
+            service = srv_res.scalars().first()
+
+        if not appointment.manage_token:
+            appointment.manage_token = secrets.token_urlsafe(24)
+            await db.commit()
+
+        background_tasks.add_task(
+            send_booking_rescheduled_email,
+            to_email=appointment.client_email,
+            client_name=appointment.client_name or "Вітаємо",
+            business_name=business.name if business else "Заклад",
+            service_name=service.name if service else "Візит",
+            old_date=old_start.strftime("%d.%m.%Y"),
+            old_time=old_start.strftime("%H:%M"),
+            new_date=appointment.start_time.strftime("%d.%m.%Y"),
+            new_time=appointment.start_time.strftime("%H:%M"),
+            address=(business.address or "") if business else "",
+            manage_url=f"{FRONTEND_URL}/my-booking/{appointment.id}?token={appointment.manage_token}",
+        )
+
     return appointment

@@ -72,6 +72,10 @@ export default function CalendarTab({ business, team = [], services = [], refres
   }, [isMasterUser, myMasterId]);
   const [isMasterFilterOpen, setIsMasterFilterOpen] = useState(false);
   const [clipboardApp, setClipboardApp] = useState<any>(null);
+  // Останнє перенесення - щоб його можна було відкотити одним кліком.
+  // Перетягнути картку не туди легко, а згадувати, звідки саме її
+  // перетягнули, доводиться по памʼяті.
+  const [lastMove, setLastMove] = useState<any>(null);
   const [contextMenu, setContextMenu] = useState<{x: number, y: number, app: any} | null>(null);
   const [dragConfirmData, setDragConfirmData] = useState<{app: any, targetDate: Date, newStart: string, newEnd: string} | null>(null);
 
@@ -494,11 +498,17 @@ export default function CalendarTab({ business, team = [], services = [], refres
      setSelectedBooking(updatedApp);
      setAppointments(prev => prev.map(a => a.id === updatedApp.id ? updatedApp : a));
      if (business) {
+       // Запамʼятовуємо стан ДО зміни: якщо сервер відмовить, треба
+       // повернути картку на місце, а не лишати екран із неправдою.
+       const before = { app: selectedBooking, prevDate: selectedBooking.booking_date, prevStart: selectedBooking.start_time, prevEnd: selectedBooking.end_time, prevStatus: selectedBooking.status };
        try {
          const token = await getAuthToken();
          const newStartIso = new Date(`${selectedBooking.booking_date}T${newStartStr}`);
          await api.rescheduleAppointment(token, updatedApp.id, newStartIso.toISOString());
+         setLastMove(before);
        } catch (err: any) {
+         setSelectedBooking(selectedBooking);
+         setAppointments(prev => prev.map(a => a.id === selectedBooking.id ? selectedBooking : a));
          showToast(err?.message || "Не вдалося перенести запис", "error");
        }
      }
@@ -570,13 +580,51 @@ export default function CalendarTab({ business, team = [], services = [], refres
     setAppointments(prev => prev.map(a => String(a.id) === String(app.id) ? { ...a, booking_date: newDateStr, start_time: newStart, end_time: newEnd, status: newStatus } : a ));
     setDragConfirmData(null);
     if (business) {
+      const before = { app, prevDate: app.booking_date, prevStart: app.start_time, prevEnd: app.end_time, prevStatus: app.status };
       try {
         const token = await getAuthToken();
         const newStartIso = new Date(`${newDateStr}T${newStart}`);
         await api.rescheduleAppointment(token, app.id, newStartIso.toISOString());
+        setLastMove(before);
       } catch (err: any) {
+        // Відкочуємо екран до стану до перетягування: показувати картку
+        // на новому місці, коли сервер її туди не переніс, - гірше за
+        // саму помилку.
+        setAppointments(prev => prev.map(a => String(a.id) === String(app.id) ? app : a));
         showToast(err?.message || "Не вдалося перенести запис", "error");
       }
+    }
+  };
+
+  /**
+   * Повертає запис туди, звідки його щойно перенесли.
+   *
+   * Спершу пишемо на сервер і лише потім оновлюємо екран: якщо відкат
+   * не пройде, інтерфейс не має показувати неправду - саме цієї
+   * помилки припускалось саме перенесення до цього виправлення.
+   */
+  // Пропозиція відкотити живе 10 секунд: якщо людина за цей час не
+  // помітила помилки, вона вже прийняла нове місце як правильне, і
+  // смужка внизу лише заважає.
+  useEffect(() => {
+    if (!lastMove) return;
+    const t = setTimeout(() => setLastMove(null), 10000);
+    return () => clearTimeout(t);
+  }, [lastMove]);
+
+  const undoLastMove = async () => {
+    if (!lastMove) return;
+    const { app, prevDate, prevStart, prevEnd, prevStatus } = lastMove;
+    try {
+      const token = await getAuthToken();
+      await api.rescheduleAppointment(token, app.id, new Date(`${prevDate}T${prevStart}`).toISOString());
+      setAppointments(prev => prev.map(a => String(a.id) === String(app.id)
+        ? { ...a, booking_date: prevDate, start_time: prevStart, end_time: prevEnd, status: prevStatus }
+        : a));
+      setLastMove(null);
+      showToast('Запис повернуто на місце', 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося повернути запис', 'error');
     }
   };
 
@@ -1861,6 +1909,25 @@ export default function CalendarTab({ business, team = [], services = [], refres
               )}
             </button>
           </div>
+        </div>
+      )}
+
+      {lastMove && (
+        <div style={{
+          position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', alignItems: 'center', gap: '0.85rem',
+          background: '#1F241F', color: '#fff',
+          padding: '0.6rem 0.7rem 0.6rem 1.1rem', borderRadius: '12px',
+          boxShadow: '0 8px 28px rgba(31,36,31,0.22)', zIndex: 9998,
+          fontSize: '0.85rem', fontWeight: 500,
+        }}>
+          <span>Запис перенесено</span>
+          <button
+            onClick={undoLastMove}
+            style={{ background: '#C2D8C4', color: '#222222', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            Скасувати
+          </button>
         </div>
       )}
 

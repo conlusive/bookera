@@ -88,3 +88,70 @@ async def send_booking_confirmation_email(
         f"Підтвердження візиту — {business_name}",
         html_template
     )
+
+async def send_booking_rescheduled_email(
+        to_email: str,
+        client_name: str,
+        business_name: str,
+        service_name: str,
+        old_date: str,
+        old_time: str,
+        new_date: str,
+        new_time: str,
+        address: str = "",
+        manage_url: str = "",
+):
+    """
+    Лист про перенесення візиту.
+
+    Раніше після зміни часу в CRM клієнт не дізнавався про це ніяк -
+    приходив у старий час або не приходив узагалі. Для сервісу записів
+    це головне джерело неявок, і виправляти його треба не нагадуваннями,
+    а тим, щоб людина взагалі знала про зміну.
+
+    Старий час показуємо ЗАКРЕСЛЕНИМ поруч із новим: людина має впізнати
+    свій запис, а не гадати, про який візит ідеться.
+    """
+    manage_block = f"""
+      <div style="text-align: center; margin-top: 20px;">
+        <a href="{manage_url}" style="display:inline-block;padding:12px 22px;background:#222222;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;">
+          Переглянути запис
+        </a>
+      </div>
+    """ if manage_url else ""
+
+    address_block = f'<p style="margin:6px 0 0;color:#6B756A;font-size:14px;">{address}</p>' if address else ""
+
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#222222;">
+      <h1 style="font-size:20px;font-weight:700;margin:0 0 8px;letter-spacing:-0.02em;">Ваш візит перенесено</h1>
+      <p style="margin:0 0 24px;color:#5C6B5E;font-size:15px;line-height:1.5;">
+        {client_name}, у закладі «{business_name}» змінили час вашого запису.
+      </p>
+
+      <div style="background:#F4FAF5;border:1px solid rgba(94,122,97,0.18);border-radius:14px;padding:20px;">
+        <p style="margin:0 0 4px;color:#6B756A;font-size:13px;">Послуга</p>
+        <p style="margin:0 0 16px;font-size:15px;font-weight:600;">{service_name}</p>
+
+        <p style="margin:0 0 4px;color:#6B756A;font-size:13px;">Було</p>
+        <p style="margin:0 0 16px;font-size:15px;color:#A5AEA3;text-decoration:line-through;">{old_date}, {old_time}</p>
+
+        <p style="margin:0 0 4px;color:#6B756A;font-size:13px;">Стало</p>
+        <p style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.02em;">{new_date}, {new_time}</p>
+        {address_block}
+      </div>
+
+      {manage_block}
+
+      <p style="margin:24px 0 0;color:#A5AEA3;font-size:13px;line-height:1.5;">
+        Якщо новий час вам не підходить — зв'яжіться із закладом.
+      </p>
+    </div>
+    """
+
+    await asyncio.to_thread(
+        send_email_sync,
+        to_email,
+        f"Візит перенесено — {business_name}",
+        html,
+    )

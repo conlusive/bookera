@@ -74,7 +74,7 @@ async def get_available_slots(
     service_id: int = Query(...),
     target_date: date = Query(...),
     master_id: Optional[str] = Query("0"),
-    step_minutes: int = Query(15, ge=5, le=60),
+    step_minutes: Optional[int] = Query(None, ge=5, le=60, description="Крок сітки; за замовчуванням - налаштування закладу"),
     db: AsyncSession = Depends(get_db),
 ):
     now = get_utc_now()
@@ -84,6 +84,20 @@ async def get_available_slots(
     business = biz_res.scalars().first()
     if not business:
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    # Крок сітки бере заклад, а не клієнт.
+    #
+    # Раніше він приходив параметром із фронтенду і завжди дорівнював 15 -
+    # тому налаштування «крок 30 хвилин» у CRM нічого не змінювало.
+    # Для манікюру з візитами по 1.5 години сітка на 15 хвилин означала
+    # вчетверо більше слотів, ніж має сенс показувати.
+    #
+    # Явний параметр лишається: він потрібен адміністративним екранам,
+    # де іноді треба побачити дрібнішу сітку, ніж у публічному записі.
+    if step_minutes is None:
+        rules = business.booking_settings or {}
+        raw_step = rules.get("time_step")
+        step_minutes = int(raw_step) if isinstance(raw_step, (int, float)) and 5 <= raw_step <= 60 else 15
 
     srv_res = await db.execute(select(Service).where(Service.id == service_id, Service.business_id == business_id))
     service = srv_res.scalars().first()
@@ -371,6 +385,27 @@ async def create_appointment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заклад не знайдено")
 
     rules = business_for_rules.booking_settings or {}
+    notify = business_for_rules.notification_settings or {}
+
+    # Налаштування сповіщень досі зберігались і не читались: перемикачі
+    # у CRM нічого не вимикали. Значення за замовчуванням - True, щоб
+    # заклади, які їх не чіпали, поводились як раніше.
+    auto_approve = notify.get("auto_approve", True) is not False
+    notify_client = notify.get("notify_client_booking", True) is not False
+
+    # Депозит. Налаштування зберігалось, але на запис не впливало -
+    # заклад думав, що передоплата обовʼязкова, а вона ніде не виникала.
+    #
+    # Реальної оплати тут не проводимо (для цього потрібен платіжний
+    # провайдер): фіксуємо СУМУ до сплати в самому записі. Заклад бачить
+    # її в календарі й може взяти передоплату будь-яким своїм способом,
+    # а коли підключиться WayForPay - сума вже буде порахована.
+    payments = business_for_rules.payments_settings or {}
+    deposit_due = None
+    if payments.get("require_deposit") is True:
+        amount = payments.get("deposit_amount")
+        if isinstance(amount, (int, float)) and amount > 0:
+            deposit_due = Decimal(str(amount))
 
     if rules.get("is_active") is False:
         raise HTTPException(
@@ -554,24 +589,29 @@ async def create_appointment(
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
-            status="confirmed",
+            # auto_approve - налаштування закладу, яке досі нічого не робило:
+            # запис завжди ставав підтвердженим. Тепер, якщо автопідтвердження
+            # вимкнене, візит чекає на рішення закладу.
+            status="confirmed" if auto_approve else "pending_approval",
             price=final_price,
             client_name=appointment_in.client_name,
             client_phone=appointment_in.client_phone,
             client_email=appointment_in.client_email,
             source=resolved_source,
+            deposit_due=deposit_due,
             manage_token=secrets.token_urlsafe(24),
             created_at=now,
         )
         db.add(appointment)
     else:
-        appointment.status = "confirmed"
+        appointment.status = "confirmed" if auto_approve else "pending_approval"
         appointment.expires_at = None
         appointment.client_id = resolved_client_id
         appointment.price = final_price
         appointment.client_name = appointment_in.client_name
         appointment.client_phone = appointment_in.client_phone
         appointment.client_email = appointment_in.client_email
+        appointment.deposit_due = deposit_due
         appointment.manage_token = secrets.token_urlsafe(24)
         # source визначає сервер (resolved_source), а не клієнтське поле -
         # раніше тут лишався appointment_in.source, якого в схемі вже немає.
@@ -585,7 +625,7 @@ async def create_appointment(
     await db.refresh(appointment)
 
     # Фонова відправка листа клієнту через SMTP
-    if appointment_in.client_email and business and service:
+    if notify_client and appointment_in.client_email and business and service:
         background_tasks.add_task(
             send_booking_confirmation_email,
             to_email=appointment_in.client_email,
@@ -666,7 +706,10 @@ async def get_booked_appointments(
     # службовий стан на 15 хвилин, який нічого не означає для календаря.
     # 'late' і 'no-show' теж мають повертатись: без них запис ЗНИКАВ би
     # з календаря одразу після того, як його позначили запізненням.
-    statuses = ["confirmed", "completed", "cancelled", "late", "no-show"]
+    # pending_approval - записи, що чекають на підтвердження закладу
+    # (коли автопідтвердження вимкнене). Без них заклад НЕ ПОБАЧИТЬ,
+    # що хтось намагався записатись - і запит просто загубиться.
+    statuses = ["confirmed", "completed", "cancelled", "late", "no-show", "pending_approval"]
     if include_cancelled is False:
         statuses.remove("cancelled")
 

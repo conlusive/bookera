@@ -189,3 +189,90 @@ async def test_profile_rules_actually_block_booking(client, auth_headers):
 
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, now + timedelta(hours=5)))
     assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_auto_approve_off_puts_booking_on_hold(client, auth_headers):
+    """
+    Вимкнене автопідтвердження раніше нічого не робило: запис усе одно
+    ставав confirmed. Тепер він чекає на рішення закладу - і, головне,
+    ЗАЛИШАЄТЬСЯ ВИДИМИМ у календарі, інакше запит просто загубився б.
+    """
+    headers = auth_headers("approve-owner")
+    business_id, service_id = await _setup(client, headers, "Approve Salon")
+    await _set_rules(business_id, booking={"is_active": True})
+
+    import json
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        await conn.execute(
+            "UPDATE businesses SET notification_settings = $1::json WHERE id = $2",
+            json.dumps({"auto_approve": False}), business_id,
+        )
+    finally:
+        await conn.close()
+
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "pending_approval"
+
+    # Заклад мусить бачити запит, інакше він загубиться
+    r = await client.get(f"/appointments/booked?business_id={business_id}", headers=headers)
+    assert any(a["status"] == "pending_approval" for a in r.json())
+
+
+@pytest.mark.asyncio
+async def test_time_step_comes_from_business_settings(client, auth_headers):
+    """
+    Крок сітки бере заклад, а не фронтенд. Раніше він завжди приходив
+    параметром 15, тому налаштування «крок 30» нічого не змінювало.
+    """
+    headers = auth_headers("step-owner")
+    business_id, service_id = await _setup(client, headers, "Step Salon")
+    await _set_rules(business_id, booking={"is_active": True, "time_step": 60, "min_advance_hours": 0})
+
+    await client.put(f"/crm/businesses/{business_id}/hours", json=[
+        {"weekday": d, "is_closed": False, "open_time": "09:00", "close_time": "18:00"} for d in range(7)
+    ], headers=headers)
+
+    target = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
+    r = await client.get(f"/appointments/available-slots?business_id={business_id}&service_id={service_id}&target_date={target}")
+    assert r.status_code == 200, r.text
+    slots = [s["time"] for s in r.json()["slots"]]
+
+    # Крок 60 хвилин - усі слоти на рівних годинах
+    assert slots, "слоти мають бути"
+    assert all(t.endswith(":00") for t in slots), f"крок не застосувався: {slots[:5]}"
+
+
+@pytest.mark.asyncio
+async def test_deposit_amount_is_recorded_on_booking(client, auth_headers):
+    """
+    Депозит зберігався в налаштуваннях і ніде не виникав: заклад думав,
+    що передоплата обовʼязкова, а сума ніде не рахувалась.
+    """
+    headers = auth_headers("deposit-owner")
+    business_id, service_id = await _setup(client, headers, "Deposit Salon")
+    await _set_rules(business_id, booking={"is_active": True})
+
+    import json
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        await conn.execute(
+            "UPDATE businesses SET payments_settings = $1::json WHERE id = $2",
+            json.dumps({"require_deposit": True, "deposit_amount": 200}), business_id,
+        )
+    finally:
+        await conn.close()
+
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
+    assert r.status_code == 200, r.text
+
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        row = await conn.fetchrow("SELECT deposit_due FROM appointments WHERE id = $1", r.json()["id"])
+    finally:
+        await conn.close()
+    assert row["deposit_due"] == 200, "сума передоплати має зафіксуватись у записі"

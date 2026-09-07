@@ -75,7 +75,7 @@ class AppointmentStatusUpdate(BaseModel):
     # «Не прийшов»), але схема їх не приймала - кожне натискання давало
     # помилку. Це реальні стани візиту, і саме вони потрібні для
     # статистики неявок, тому додані, а не прибрані з інтерфейсу.
-    status: Literal["confirmed", "completed", "cancelled", "late", "no-show"]
+    status: Literal["confirmed", "completed", "cancelled", "late", "no-show", "pending_approval"]
 
 
 class ManageBookingRequest(BaseModel):

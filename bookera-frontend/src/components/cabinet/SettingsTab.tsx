@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { useToast } from '@/context/ToastContext';
 
 interface SettingsTabProps {
   business: any;
@@ -44,7 +45,6 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // СТАНИ НАЛАШТУВАНЬ
@@ -79,10 +79,9 @@ export default function SettingsTab({ business }: SettingsTabProps) {
     }
   }, [business]);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 4000);
-  };
+  // Спільна система повідомлень замість власної: це вже четверта
+  // реалізація в проєкті, і кожна виглядала по-своєму.
+  const { showToast } = useToast();
 
   const saveSettingsToDB = async (column: string, data: any, successMsg: string) => {
     if (!business) return;
@@ -786,11 +785,6 @@ export default function SettingsTab({ business }: SettingsTabProps) {
         })()}
 
         {/* Generic Тоасти (Переміщено в правий нижній кут) */}
-        {toastMessage && (
-          <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: '#0f172a', color: '#fff', padding: '0.8rem 1.2rem', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem', zIndex: 3000, animation: 'slideUpRightFade 0.2s ease-out', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)' }}>
-            <SvgCheck /> {toastMessage}
-          </div>
-        )}
 
       </div>
     </>

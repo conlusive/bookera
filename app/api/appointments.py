@@ -4,7 +4,7 @@ import os
 import secrets
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate
@@ -355,6 +355,101 @@ async def create_appointment(
     db: AsyncSession = Depends(get_db),
 ):
     now = get_utc_now()
+
+    # === Правила онлайн-бронювання ===
+    #
+    # Заклад налаштовує їх у CRM, але досі вони НІЧОГО не робили:
+    # зберігались у базі й ніде не читались. Тобто «зупинити прийом
+    # записів» чи «не раніше ніж за 2 години» були декорацією -
+    # клієнт міг записатись попри них.
+    #
+    # Перевіряємо ДО будь-яких змін у базі: відмовляти треба на вході,
+    # а не після того, як слот уже зайнято.
+    biz_res = await db.execute(select(Business).where(Business.id == appointment_in.business_id))
+    business_for_rules = biz_res.scalars().first()
+    if not business_for_rules:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заклад не знайдено")
+
+    rules = business_for_rules.booking_settings or {}
+
+    if rules.get("is_active") is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Онлайн-запис у цьому закладі вимкнено",
+        )
+
+    if rules.get("is_paused_emergency") is True:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Заклад тимчасово не приймає онлайн-записи",
+        )
+
+    booking_start = appointment_in.start_time
+    if booking_start.tzinfo is not None:
+        booking_start = booking_start.replace(tzinfo=None)
+
+    # === Чорний список і захист від неявок ===
+    #
+    # security_settings так само зберігались і не читались: позначка
+    # клієнта як «у чорному списку» не заважала йому записатись знову.
+    security = business_for_rules.security_settings or {}
+    phone_digits = "".join(ch for ch in (appointment_in.client_phone or "") if ch.isdigit())
+
+    if phone_digits:
+        client_res = await db.execute(
+            select(Client).where(
+                Client.business_id == appointment_in.business_id,
+                Client.phone.isnot(None),
+            )
+        )
+        for existing in client_res.scalars().all():
+            existing_digits = "".join(ch for ch in (existing.phone or "") if ch.isdigit())
+            if not existing_digits or existing_digits[-9:] != phone_digits[-9:]:
+                continue
+
+            if existing.is_blacklisted:
+                # Формулювання свідомо нейтральне: клієнту не повідомляємо,
+                # що він у чорному списку - це розмова для закладу, а не
+                # для автоматичного повідомлення на сайті.
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Онлайн-запис для цього номера недоступний. Зверніться до закладу.",
+                )
+
+            if security.get("block_no_shows") is True:
+                no_shows = await db.execute(
+                    select(func.count(Appointment.id)).where(
+                        Appointment.business_id == appointment_in.business_id,
+                        Appointment.client_phone.isnot(None),
+                        Appointment.status == "no-show",
+                        Appointment.client_phone.like(f"%{phone_digits[-9:]}"),
+                    )
+                )
+                if (no_shows.scalar() or 0) >= 3:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Онлайн-запис для цього номера недоступний. Зверніться до закладу.",
+                    )
+            break
+
+    min_hours = rules.get("min_advance_hours")
+    if isinstance(min_hours, (int, float)) and min_hours > 0:
+        earliest = now + timedelta(hours=float(min_hours))
+        if booking_start < earliest:
+            hours_word = int(min_hours)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Записатись можна щонайменше за {hours_word} год до візиту",
+            )
+
+    max_days = rules.get("max_advance_days")
+    if isinstance(max_days, (int, float)) and max_days > 0:
+        latest = now + timedelta(days=float(max_days))
+        if booking_start > latest:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Записатись можна не більше ніж на {int(max_days)} днів наперед",
+            )
 
     lock_query = select(Appointment).where(
         Appointment.service_id == appointment_in.service_id,

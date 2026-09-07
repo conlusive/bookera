@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
-import { roleLabel, isOwnerRole } from '@/lib/roles';
+import { isOwnerRole } from '@/lib/roles';
 import { Business } from '@/types';
 
 // 🟢 ІМПОРТУЄМО ІКОНКИ ТА КОНСТАНТИ З ТВОГО ОКРЕМОГО ФАЙЛУ
@@ -35,6 +35,22 @@ function normalizeStaff(list: any[]): any[] {
     ...s,
     name: s.full_name || s.name || s.email || 'Без імені',
   }));
+}
+
+/**
+ * Людська назва ролі.
+ *
+ * Свідомо тут, а не в lib/roles: next dev не перевіряє типи, тому
+ * відсутній експорт із зовнішнього модуля не дає помилки збірки -
+ * сторінка просто падає в браузері. Саме так і сталось, коли roles.ts
+ * та цей файл розійшлись при злитті гілок. Для трирядкового хелпера
+ * окремий модуль не вартий такого ризику.
+ */
+function roleLabel(role?: string | null): string {
+  if (isOwnerRole(role)) return 'Власник';
+  if (role === 'admin') return 'Адміністратор';
+  if (role === 'master') return 'Майстер';
+  return 'Співробітник';
 }
 
 export default function BusinessCabinet() {

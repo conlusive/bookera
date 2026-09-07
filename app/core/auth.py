@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core.logging_config import logger
+from app.services.subscription import assert_has_access
 
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "") or os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
@@ -148,7 +149,8 @@ async def get_current_user(
 ADMIN_ROLES = {"business_owner", "vendor", "owner", "admin"}
 
 
-async def _get_access_level(db: AsyncSession, current_user: CurrentUser, business_id: int) -> str:
+async def _get_access_level(db: AsyncSession, current_user: CurrentUser, business_id: int,
+                            check_subscription: bool = True) -> str:
     """Повертає 'owner' | 'admin' | 'staff', або кидає 403/404."""
     from app.models import Business, User  # локальний імпорт, щоб уникнути циклу
 
@@ -156,6 +158,17 @@ async def _get_access_level(db: AsyncSession, current_user: CurrentUser, busines
     business = result.scalars().first()
     if not business:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заклад не знайдено")
+
+    # Підписка перевіряється ТУТ, а не в кожному ендпоінті окремо:
+    # assert_business_access - єдині двері в CRM, тому й замок має бути
+    # один. Розкидана по ендпоінтах перевірка неминуче десь випаде,
+    # і платна функція лишиться відкритою.
+    #
+    # Читання власного стану підписки свідомо НЕ блокуємо (див. виклик
+    # у /crm/businesses/me): людина з простроченим доступом мусить
+    # мати змогу побачити, що саме прострочено, і оплатити.
+    if check_subscription:
+        assert_has_access(business)
 
     if business.owner_id is not None and str(business.owner_id) == str(current_user.id):
         return "owner"
@@ -172,9 +185,10 @@ async def _get_access_level(db: AsyncSession, current_user: CurrentUser, busines
     return "admin" if staff.role in ADMIN_ROLES else "staff"
 
 
-async def assert_business_access(db: AsyncSession, current_user: CurrentUser, business_id: int) -> None:
-    """Базовий доступ: будь-який активний співробітник закладу."""
-    await _get_access_level(db, current_user, business_id)
+async def assert_business_access(db: AsyncSession, current_user: CurrentUser, business_id: int,
+                                 check_subscription: bool = True) -> None:
+    """Базовий доступ: активний співробітник закладу з чинною підпискою."""
+    await _get_access_level(db, current_user, business_id, check_subscription)
 
 
 async def assert_business_admin(db: AsyncSession, current_user: CurrentUser, business_id: int) -> None:

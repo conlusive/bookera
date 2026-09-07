@@ -68,6 +68,7 @@ async def reply_to_review(
 
 # === Склад ===
 
+
 @router.get("/crm/inventory", response_model=List[InventoryItemResponse])
 async def list_inventory(business_id: int = Query(...), db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
     await assert_business_access(db, current_user, business_id)
@@ -495,7 +496,6 @@ async def send_campaign(
     """
     from app.models import Business, Client
     from app.core.email import send_campaign_email
-    from app.services.subscription import assert_pro_feature
 
     await assert_business_admin(db, current_user, payload.business_id)
 
@@ -503,8 +503,6 @@ async def send_campaign(
     business = biz_res.scalars().first()
     if not business:
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
-
-    assert_pro_feature(business, "marketing")
 
     stmt = select(Client).where(
         Client.business_id == payload.business_id,

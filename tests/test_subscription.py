@@ -43,15 +43,15 @@ async def test_only_platform_admin_can_grant_subscription(client, auth_headers):
     # Власник закладу - НЕ адміністратор платформи: він не може
     # видати підписку сам собі
     r = await client.post(f"/platform/businesses/{business_id}/subscription",
-                          json={"plan": "pro"}, headers=owner)
+                          json={"plan": "active"}, headers=owner)
     assert r.status_code == 403
 
     await _make_platform_admin("granting-admin")
     r = await client.post(f"/platform/businesses/{business_id}/subscription",
-                          json={"plan": "pro", "days": 30, "note": "Партнер"},
+                          json={"plan": "active", "days": 30, "note": "Партнер"},
                           headers=auth_headers("granting-admin"))
     assert r.status_code == 200, r.text
-    assert r.json()["subscription_plan"] == "pro"
+    assert r.json()["subscription_plan"] == "active"
     assert r.json()["is_subscription_active"] is True
     assert r.json()["subscription_note"] == "Партнер"
 
@@ -68,7 +68,7 @@ async def test_subscription_without_date_is_perpetual(client, auth_headers):
 
     await _make_platform_admin("perp-admin")
     r = await client.post(f"/platform/businesses/{business_id}/subscription",
-                          json={"plan": "pro"}, headers=auth_headers("perp-admin"))
+                          json={"plan": "active"}, headers=auth_headers("perp-admin"))
     assert r.json()["subscription_until"] is None
     assert r.json()["is_subscription_active"] is True
 
@@ -83,14 +83,14 @@ async def test_expired_subscription_is_not_active(client, auth_headers):
     conn = await asyncpg.connect(DB_URL_RAW)
     try:
         await conn.execute(
-            "UPDATE businesses SET subscription_plan='pro', subscription_until=$1 WHERE id=$2",
+            "UPDATE businesses SET subscription_plan='active', subscription_until=$1 WHERE id=$2",
             datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1), business_id,
         )
     finally:
         await conn.close()
 
     await _make_platform_admin("exp-admin")
-    r = await client.get("/platform/businesses?plan=pro", headers=auth_headers("exp-admin"))
+    r = await client.get("/platform/businesses?plan=active", headers=auth_headers("exp-admin"))
     found = [b for b in r.json() if b["id"] == business_id]
     assert found and found[0]["is_subscription_active"] is False
 
@@ -109,23 +109,28 @@ async def test_campaign_requires_subscription(client, auth_headers):
         "business_id": business_id, "name": "Клієнт", "email": "client@test.com", "phone": "+380671110000",
     }, headers=owner)
 
-    # Без підписки - відмова з поясненням, ЩО саме недоступне
-    r = await client.post("/crm/campaigns", json={
-        "business_id": business_id, "subject": "Знижка", "message": "Тестове повідомлення для розсилки",
-    }, headers=owner)
-    assert r.status_code == 402
-    assert "Маркетинг" in r.json()["detail"]
-
-    # З підпискою - працює
-    await _make_platform_admin("camp-admin")
-    await client.post(f"/platform/businesses/{business_id}/subscription",
-                      json={"plan": "pro"}, headers=auth_headers("camp-admin"))
-
+    # Новий заклад у пробному періоді - розсилка працює одразу
     r = await client.post("/crm/campaigns", json={
         "business_id": business_id, "subject": "Знижка", "message": "Тестове повідомлення для розсилки",
     }, headers=owner)
     assert r.status_code == 200, r.text
     assert r.json()["queued"] == 1
+
+    # Прострочена підписка закриває доступ
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        await conn.execute(
+            "UPDATE businesses SET subscription_plan='expired', subscription_until=NULL WHERE id=$1",
+            business_id,
+        )
+    finally:
+        await conn.close()
+
+    r = await client.post("/crm/campaigns", json={
+        "business_id": business_id, "subject": "Знижка", "message": "Тестове повідомлення для розсилки",
+    }, headers=owner)
+    assert r.status_code == 402
+    assert "підписки" in r.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -137,7 +142,7 @@ async def test_campaign_audience_filters(client, auth_headers):
 
     await _make_platform_admin("aud-admin")
     await client.post(f"/platform/businesses/{business_id}/subscription",
-                      json={"plan": "pro"}, headers=auth_headers("aud-admin"))
+                      json={"plan": "active"}, headers=auth_headers("aud-admin"))
 
     for i, visits in enumerate([1, 5]):
         r = await client.post("/crm/clients", json={

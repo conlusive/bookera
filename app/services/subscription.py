@@ -1,92 +1,109 @@
 """
-Підписка закладу: що дає тариф і як перевіряти доступ.
+Підписка: один тариф, доступ лише платний.
 
-Правила зібрані в одному місці навмисно. Коли обмеження розкидані по
-ендпоінтах, змінити тариф означає обійти десяток файлів і щось
-неодмінно пропустити - а пропущена перевірка в платній функції
-помічається не одразу.
+Безкоштовного рівня немає. Але новий заклад отримує пробний період -
+інакше людина не може навіть подивитись, за що платить, і реєстрація
+перетворюється на сліпу покупку. Це не «безкоштовний тариф»: пробний
+період спливає й не поновлюється.
+
+Правила зібрані в одному місці навмисно. Коли перевірка доступу
+розкидана по ендпоінтах, зміна умов означає обійти десяток файлів
+і щось неодмінно пропустити - а пропущена перевірка в платному
+продукті помічається не одразу.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import HTTPException, status
 
 from app.core.time_utils import utc_now
 
-PLAN_FREE = "free"
-PLAN_PRO = "pro"
+TRIAL_DAYS = 14
+
+# Стани, у яких заклад може перебувати:
+#   'trial'   - пробний період після реєстрації
+#   'active'  - оплачена підписка
+#   'expired' - усе скінчилось, доступ закритий
+STATUS_TRIAL = "trial"
+STATUS_ACTIVE = "active"
+STATUS_EXPIRED = "expired"
 
 
-# Межі безкоштовного тарифу.
-#
-# Логіка добору: безкоштовний план має бути придатним для роботи
-# майстра-одинака, інакше людина не встигне побачити користь і піде.
-# Обмежуємо те, що потрібне саме СТРУКТУРАМ - команда, склад, аналітика -
-# а не щоденну роботу з клієнтами.
-FREE_LIMITS = {
-    "max_staff": 1,          # лише сам власник
-    "max_services": 10,
-    "max_active_clients": 50,
-}
-
-# Що недоступне без підписки.
-#
-# Календар, клієнти й послуги не включені свідомо: якщо забрати
-# щоденну роботу, продуктом неможливо користуватись, і безкоштовний
-# тариф перетворюється на демонстрацію.
-PRO_ONLY_FEATURES = {
-    "inventory": "Склад і витрати",
-    "analytics": "Аналітика",
-    "marketing": "Маркетинг і розсилки",
-    "payouts": "Виплати майстрам",
-    "storefront_custom": "Налаштування онлайн-вітрини",
-}
+def trial_until() -> datetime:
+    """Дата завершення пробного періоду для новоствореного закладу."""
+    return utc_now() + timedelta(days=TRIAL_DAYS)
 
 
-def is_subscription_active(business) -> bool:
+def subscription_status(business) -> str:
     """
-    Чи діє платна підписка.
+    Поточний стан підписки.
 
-    subscription_until = NULL при тарифі 'pro' означає безстроковий
-    доступ: так адміністратор платформи видає доступ партнеру або на
-    час тестування, не вигадуючи дату «до 2099 року».
+    subscription_until = NULL при активній підписці означає безстроковий
+    доступ - так адміністратор платформи видає доступ партнеру, не
+    вигадуючи дату «до 2099 року».
     """
     if business is None:
-        return False
-    if business.subscription_plan != PLAN_PRO:
-        return False
-    if business.subscription_until is None:
-        return True
-    return business.subscription_until > utc_now()
+        return STATUS_EXPIRED
+
+    plan = getattr(business, "subscription_plan", None)
+    until = getattr(business, "subscription_until", None)
+
+    if plan == STATUS_ACTIVE:
+        return STATUS_ACTIVE if (until is None or until > utc_now()) else STATUS_EXPIRED
+
+    if plan == STATUS_TRIAL:
+        return STATUS_TRIAL if (until and until > utc_now()) else STATUS_EXPIRED
+
+    return STATUS_EXPIRED
 
 
-def assert_pro_feature(business, feature: str) -> None:
+def has_access(business) -> bool:
+    """Чи має заклад доступ до CRM просто зараз."""
+    return subscription_status(business) in (STATUS_TRIAL, STATUS_ACTIVE)
+
+
+def assert_has_access(business) -> None:
     """
-    Перевірка доступу до платної можливості.
+    Перевірка доступу до платної частини.
 
-    Формулювання відмови називає, ЩО саме недоступне: «недостатньо
-    прав» у відповідь на клік по «Аналітиці» лишає людину гадати,
-    чи це помилка, чи вона чогось не купила.
+    Код 402, а не 403: інтерфейс має відрізняти «вам не можна» від
+    «треба оплатити» - це різні екрани й різні дії людини.
+
+    Формулювання називає причину прямо. «Недостатньо прав» у відповідь
+    на відкриття власного ж кабінету лишає людину гадати, що зламалось.
     """
-    if is_subscription_active(business):
+    state = subscription_status(business)
+    if state in (STATUS_TRIAL, STATUS_ACTIVE):
         return
 
-    label = PRO_ONLY_FEATURES.get(feature, feature)
     raise HTTPException(
         status_code=status.HTTP_402_PAYMENT_REQUIRED,
-        detail=f"«{label}» доступна за підпискою Pro",
+        detail="Термін підписки завершився. Продовжіть її, щоб користуватись кабінетом.",
     )
 
 
 def subscription_state(business) -> dict:
-    """Стан підписки для інтерфейсу - щоб CRM показувала правду."""
-    active = is_subscription_active(business)
+    """
+    Стан підписки для інтерфейсу.
+
+    days_left рахуємо тут, а не на фронтенді: дата на пристрої людини
+    може бути будь-якою, і «залишився 1 день» не повинен залежати від
+    годинника її ноутбука.
+    """
+    state = subscription_status(business)
+    until = getattr(business, "subscription_until", None) if business else None
+
+    days_left: Optional[int] = None
+    if until:
+        delta = until - utc_now()
+        days_left = max(0, delta.days + (1 if delta.seconds > 0 else 0))
+
     return {
-        "plan": business.subscription_plan if business else PLAN_FREE,
-        "is_active": active,
-        "until": business.subscription_until if business else None,
-        "limits": None if active else FREE_LIMITS,
-        "pro_features": list(PRO_ONLY_FEATURES.values()),
+        "status": state,
+        "has_access": state in (STATUS_TRIAL, STATUS_ACTIVE),
+        "until": until,
+        "days_left": days_left,
+        "is_trial": state == STATUS_TRIAL,
     }
 
 

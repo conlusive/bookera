@@ -19,10 +19,11 @@ from app.core.logging_config import logger
 from app.core.time_utils import utc_now
 from app.models import Business, User
 from app.services.subscription import (
-    PLAN_FREE,
-    PLAN_PRO,
+    STATUS_ACTIVE,
+    STATUS_EXPIRED,
     assert_platform_admin,
-    is_subscription_active,
+    has_access,
+    subscription_status,
 )
 
 router = APIRouter(prefix="/platform", tags=["Platform Admin"])
@@ -50,7 +51,8 @@ class BusinessAdminOut(BaseModel):
 
 
 class GrantSubscriptionRequest(BaseModel):
-    plan: str = Field(PLAN_PRO, description="'pro' або 'free'")
+    # Тариф один, тому вибір зводиться до «увімкнути» / «вимкнути».
+    plan: str = Field(STATUS_ACTIVE, description="'active' або 'expired'")
     # Днів доступу. None означає безстроково - для партнерів і тестування.
     days: Optional[int] = Field(None, ge=1, le=3650)
     note: Optional[str] = Field(None, max_length=300, description="Чому видано")
@@ -100,7 +102,7 @@ async def list_all_businesses(
             subscription_plan=b.subscription_plan,
             subscription_until=b.subscription_until,
             subscription_note=b.subscription_note,
-            is_subscription_active=is_subscription_active(b),
+            is_subscription_active=has_access(b),
         )
         for b in businesses
     ]
@@ -126,7 +128,7 @@ async def grant_subscription(
     """
     admin = await _require_admin(db, current_user)
 
-    if payload.plan not in (PLAN_FREE, PLAN_PRO):
+    if payload.plan not in (STATUS_ACTIVE, STATUS_EXPIRED):
         raise HTTPException(status_code=400, detail="Невідомий тариф")
 
     res = await db.execute(select(Business).where(Business.id == business_id))
@@ -135,7 +137,7 @@ async def grant_subscription(
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
 
     business.subscription_plan = payload.plan
-    if payload.plan == PLAN_FREE:
+    if payload.plan == STATUS_EXPIRED:
         # Знімаючи підписку, чистимо і дату: інакше в базі лишається
         # «free до 2027 року», що читається як діючий доступ.
         business.subscription_until = None
@@ -161,7 +163,7 @@ async def grant_subscription(
         subscription_plan=business.subscription_plan,
         subscription_until=business.subscription_until,
         subscription_note=business.subscription_note,
-        is_subscription_active=is_subscription_active(business),
+        is_subscription_active=has_access(business),
     )
 
 
@@ -177,16 +179,18 @@ async def platform_stats(
 
     total = await db.execute(select(func.count(Business.id)))
     pro = await db.execute(
-        select(func.count(Business.id)).where(Business.subscription_plan == PLAN_PRO)
+        select(func.count(Business.id)).where(Business.subscription_plan == STATUS_ACTIVE)
     )
-    result = await db.execute(select(Business).where(Business.subscription_plan == PLAN_PRO))
+    result = await db.execute(select(Business).where(Business.subscription_plan == STATUS_ACTIVE))
 
     # Рахуємо ДІЙСНІ підписки окремо: заклад може мати план 'pro'
     # із простроченою датою, і в звіті це не платний клієнт.
-    active = sum(1 for b in result.scalars().all() if is_subscription_active(b))
+    active = sum(1 for b in result.scalars().all() if has_access(b))
 
     return {
         "total_businesses": total.scalar() or 0,
-        "pro_plan": pro.scalar() or 0,
-        "pro_active": active,
+        "marked_active": pro.scalar() or 0,
+        # Рахуємо ДІЙСНІ підписки окремо: заклад може бути позначений
+        # активним із простроченою датою, і в звіті це не платний клієнт.
+        "really_active": active,
     }

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.services.business_profile import default_booking_settings
+from app.services.subscription import STATUS_TRIAL, subscription_state, trial_until
 from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.models import Business, BusinessHours, User
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessOut, BusinessHoursItem
@@ -67,6 +68,10 @@ async def get_my_profile(
     return {
         "id": user.id,
         "email": user.email,
+        # Стан підписки віддаємо ЗАВЖДИ, навіть простроченої: людина
+        # з закритим доступом мусить бачити, що саме прострочено,
+        # і мати змогу оплатити.
+        "subscription": subscription_state(biz) if user.business_id and biz else None,
         "full_name": user.full_name,
         "role": user.role,
         "business_id": user.business_id,
@@ -117,6 +122,11 @@ async def register_business(
             data.get("business_type"),
             data.get("workspace_type"),
         )
+
+    # Пробний період: без нього людина не може навіть подивитись, за що
+    # платить, і реєстрація перетворюється на сліпу покупку.
+    data["subscription_plan"] = STATUS_TRIAL
+    data["subscription_until"] = trial_until()
 
     business = Business(
         **data,

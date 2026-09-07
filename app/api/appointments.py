@@ -637,6 +637,10 @@ async def create_appointment(
             price=float(service.price or 0),
             address=f"{business.city}, {business.address or ''}",
             manage_url=f"{FRONTEND_URL}/my-booking/{appointment.id}?token={appointment.manage_token}",
+            # Політику скасування й передоплату клієнт має побачити
+            # в листі, а не дізнатись на місці.
+            cancellation_policy=rules.get("cancellation_policy") or "",
+            deposit_due=float(deposit_due) if deposit_due else None,
         )
 
     return appointment

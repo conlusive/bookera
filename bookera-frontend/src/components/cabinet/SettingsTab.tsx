@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
@@ -44,7 +44,6 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   const [settingsView, setSettingsView] = useState<'main' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [isSettingsSaving, setIsSettingsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // СТАНИ НАЛАШТУВАНЬ
@@ -82,21 +81,6 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   // Спільна система повідомлень замість власної: це вже четверта
   // реалізація в проєкті, і кожна виглядала по-своєму.
   const { showToast } = useToast();
-
-  const saveSettingsToDB = async (column: string, data: any, successMsg: string) => {
-    if (!business) return;
-    setIsSettingsSaving(true);
-    try {
-      const token = await getAuthToken();
-      await api.updateBusiness(token, business.id, { [column]: data });
-      showToast(successMsg);
-    } catch(e: any) {
-      console.warn(`Помилка оновлення ${column}:`, e.message || e);
-      showToast(e?.message || 'Помилка збереження');
-    } finally {
-      setIsSettingsSaving(false);
-    }
-  };
 
   // РЕАЛЬНИЙ АЛГОРИТМ АНАЛІЗУ ПОСЛУГ
   const handleAIRecommendation = async () => {
@@ -172,12 +156,57 @@ export default function SettingsTab({ business }: SettingsTabProps) {
     }
   };
 
-  const handleHeaderSave = () => {
-    if (settingsView === 'booking') saveSettingsToDB('booking_settings', bookingSettings, 'Налаштування бронювання збережено');
-    else if (settingsView === 'security') saveSettingsToDB('security_settings', securitySettings, 'Безпеку збережено');
-    else if (settingsView === 'notifications') saveSettingsToDB('notification_settings', notificationSettings, 'Сповіщення збережено');
-    else if (settingsView === 'payments') saveSettingsToDB('payments_settings', paymentsSettings, 'Платежі збережено');
-  };
+  /**
+   * Автозбереження налаштувань.
+   *
+   * Кнопки «Зберегти зміни» прибрані: перемикач - це вже рішення,
+   * підтверджувати його окремою дією зайве. Гірше того, кнопка створює
+   * пастку - людина клацає повзунок, іде далі й вважає, що зберегла.
+   *
+   * Затримка 600 мс: без неї кожен символ у текстовому полі йшов би
+   * окремим запитом. Для перемикачів затримка непомітна, для тексту -
+   * рятівна.
+   */
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const autoSave = useCallback((column: string, data: any) => {
+    if (!business?.id) return;
+    clearTimeout(saveTimers.current[column]);
+    saveTimers.current[column] = setTimeout(async () => {
+      try {
+        const token = await getAuthToken();
+        await api.updateBusiness(token, business.id, { [column]: data });
+      } catch (err: any) {
+        // Тихо не мовчимо: людина має знати, що зміна НЕ збереглась,
+        // інакше вона піде з упевненістю, що все гаразд.
+        showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
+      }
+    }, 600);
+  }, [business?.id, showToast]);
+
+  // Кожна секція зберігається сама, щойно щось змінилось.
+  // Перший рендер пропускаємо: інакше відкриття вкладки одразу
+  // перезаписувало б налаштування тим, що щойно з них прочитали.
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    autoSave('booking_settings', bookingSettings);
+  }, [bookingSettings]);
+
+  useEffect(() => {
+    if (isFirstRender.current) return;
+    autoSave('security_settings', securitySettings);
+  }, [securitySettings]);
+
+  useEffect(() => {
+    if (isFirstRender.current) return;
+    autoSave('notification_settings', notificationSettings);
+  }, [notificationSettings]);
+
+  useEffect(() => {
+    if (isFirstRender.current) return;
+    autoSave('payments_settings', paymentsSettings);
+  }, [paymentsSettings]);
 
   const filteredCards = businessSettingsCards.filter(card =>
     String(card?.title ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase()) ||
@@ -306,18 +335,10 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                 {showPlansView && settingsView === 'billing' ? 'Перегляд планів' : businessSettingsCards.find(c => c.id === settingsView)?.title}
               </h2>
             </div>
-
-            {/* Права частина: Кнопка збереження (Apple Style) */}
-            {['booking', 'security', 'notifications', 'payments'].includes(settingsView) && (
-              <button
-                onClick={handleHeaderSave}
-                disabled={isSettingsSaving}
-                className="save-btn"
-                style={{ padding: '0.6rem 1.4rem', fontSize: '0.9rem', borderRadius: '10px' }}
-              >
-                {isSettingsSaving ? 'Збереження...' : 'Зберегти зміни'}
-              </button>
-            )}
+            {/* Кнопку «Зберегти зміни» прибрано: налаштування зберігаються
+                самі. Перемикач - це вже рішення, підтверджувати його окремою
+                дією зайве, а кнопка ще й створювала пастку: людина клацала
+                повзунок, ішла далі й вважала, що зберегла. */}
 
           </div>
         )}

@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
+import SubscriptionExpired from '@/components/cabinet/SubscriptionExpired';
+import type { SubscriptionState } from '@/lib/api';
 import { isOwnerRole } from '@/lib/roles';
 import { Business } from '@/types';
 
@@ -55,6 +57,7 @@ function roleLabel(role?: string | null): string {
 
 export default function BusinessCabinet() {
   const { showToast } = useToast();
+  const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -343,6 +346,7 @@ export default function BusinessCabinet() {
         });
 
         console.info('[cabinet] Профіль з бекенду:', { role: me.role, business_id: me.business_id });
+        setSubscription(me.subscription ?? null);
 
         if (!me.business_id) {
           // Людина залогінена, але салону ще не має - їй тут нема чого
@@ -800,6 +804,21 @@ export default function BusinessCabinet() {
     }
     return slots.slice(0, 3);
   }, [appointments, shifts]);
+
+  // Підписка завершилась - показуємо екран оплати замість кабінету.
+  //
+  // ПІСЛЯ перевірки loading: поки дані не прийшли, subscription = null,
+  // і без цієї послідовності екран «підписка завершилась» блимав би
+  // на секунду при кожному завантаженні кабінету.
+  if (!loading && subscription && !subscription.has_access && business?.id) {
+    return (
+      <SubscriptionExpired
+        businessId={business.id}
+        businessName={business.name}
+        subscription={subscription}
+      />
+    );
+  }
 
   if (loading) {
     const renderTabSkeleton = () => {
@@ -1358,6 +1377,51 @@ export default function BusinessCabinet() {
 
       {/* 🔴 ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', overflowY: 'auto', position: 'relative' }}>
+
+        {/* Попередження про завершення доступу.
+            Показуємо за 7 днів і менше: раніше - зайвий шум, пізніше -
+            людина може не встигнути оплатити й почне робочий день із
+            закритим кабінетом.
+            Пробний період попереджаємо завжди: там кожен день на рахунку
+            і людина ще не звикла, що доступ узагалі має термін. */}
+        {subscription?.has_access && subscription.days_left !== null &&
+         (subscription.is_trial || subscription.days_left <= 7) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '1rem', flexWrap: 'wrap',
+            padding: '0.7rem 1.25rem',
+            background: subscription.days_left <= 3 ? '#FDF6E9' : '#F4FAF5',
+            borderBottom: `1px solid ${subscription.days_left <= 3 ? 'rgba(180,130,40,0.22)' : '#E4EBE3'}`,
+            fontSize: '0.85rem', color: '#2E3A30', flexShrink: 0,
+          }}>
+            <span>
+              {subscription.is_trial ? 'Пробний період' : 'Підписка'}
+              {' '}закінчується{' '}
+              <b>{subscription.days_left === 0
+                ? 'сьогодні'
+                : `через ${subscription.days_left} ${subscription.days_left === 1 ? 'день' : subscription.days_left < 5 ? 'дні' : 'днів'}`}</b>
+            </span>
+            <button
+              onClick={async () => {
+                try {
+                  const token = await getAuthToken();
+                  const checkout = await api.createSubscriptionCheckout(token, business.id);
+                  if (checkout.payment_url) window.location.href = checkout.payment_url;
+                  else showToast('Оплата ще не налаштована. Зверніться до підтримки.', 'error');
+                } catch (err: any) {
+                  showToast(err?.message || 'Не вдалося створити платіж', 'error');
+                }
+              }}
+              style={{
+                height: '30px', padding: '0 0.85rem', borderRadius: '8px', border: 'none',
+                background: '#222222', color: '#fff', fontSize: '0.8rem', fontWeight: 600,
+                fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
+              }}
+            >
+              Продовжити
+            </button>
+          </div>
+        )}
 
         {/* 🟢 ВСІ ВКЛАДКИ ПІДКЛЮЧЕНІ ТУТ */}
         {activeTab === 'Calendar' && <CalendarTab business={business} team={team} services={services} userProfile={userProfile} />}

@@ -115,6 +115,17 @@ export interface StaffInvite {
   expires_at: string;
 }
 
+/** Стан підписки закладу. days_left рахує сервер: дата на пристрої
+ *  людини може бути будь-якою, і «залишився 1 день» не має залежати
+ *  від годинника її ноутбука. */
+export interface SubscriptionState {
+  status: 'trial' | 'active' | 'expired';
+  has_access: boolean;
+  until: string | null;
+  days_left: number | null;
+  is_trial: boolean;
+}
+
 export interface StaffMember {
   id: string;
   email: string;
@@ -380,8 +391,21 @@ export const api = {
   async getMyProfile(token: string): Promise<{
     id: string; email: string; full_name?: string; role: string | null;
     business_id: number | null; business: Business | null;
+    subscription: SubscriptionState | null;
   }> {
     return authFetch(`/crm/businesses/me`, token);
+  },
+
+  /**
+   * Створити платіж за підписку.
+   *
+   * Свідомо не вимагає чинної підписки: платити треба саме тоді, коли
+   * доступ уже завершився.
+   */
+  async createSubscriptionCheckout(token: string, businessId: number): Promise<{
+    payment_url: string | null; order_id: string; amount: number; period_days: number;
+  }> {
+    return authFetch(`/platform/subscription/checkout?business_id=${businessId}`, token, { method: 'POST' });
   },
 
   async registerBusiness(

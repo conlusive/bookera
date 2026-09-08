@@ -404,6 +404,7 @@ export const api = {
    */
   async createSubscriptionCheckout(token: string, businessId: number): Promise<{
     payment_url: string | null; order_id: string; amount: number; period_days: number;
+    activated?: boolean;
   }> {
     return authFetch(`/platform/subscription/checkout?business_id=${businessId}`, token, { method: 'POST' });
   },

@@ -1397,9 +1397,13 @@ export default function BusinessCabinet() {
          // попередження - закритий кабінет посеред робочого дня.
          (subscription.days_left <= 2 || Date.now() > bannerHiddenUntil) && (
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            gap: '1rem', flexWrap: 'wrap',
-            padding: '0.7rem 1.25rem',
+            // Раніше було space-between: текст ліворуч, кнопка й хрестик
+            // аж біля правого краю екрана. На широкому моніторі це
+            // читалось як два різні елементи, а не одне повідомлення.
+            // Тепер усе разом по центру - компактна смуга.
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: '0.75rem', flexWrap: 'wrap',
+            padding: '0.6rem 1.25rem',
             background: subscription.days_left <= 3 ? '#FDF6E9' : '#F4FAF5',
             borderBottom: `1px solid ${subscription.days_left <= 3 ? 'rgba(180,130,40,0.22)' : '#E4EBE3'}`,
             fontSize: '0.85rem', color: '#2E3A30', flexShrink: 0,
@@ -1416,8 +1420,16 @@ export default function BusinessCabinet() {
                 try {
                   const token = await getAuthToken();
                   const checkout = await api.createSubscriptionCheckout(token, business.id);
-                  if (checkout.payment_url) window.location.href = checkout.payment_url;
-                  else showToast('Оплата ще не налаштована. Зверніться до підтримки.', 'error');
+                  if (checkout.payment_url) { window.location.href = checkout.payment_url; return; }
+                  // Провайдер не підключений - підписку продовжено одразу.
+                  // Оновлюємо стан, щоб банер зник без перезавантаження.
+                  if (checkout.activated) {
+                    const me = await api.getMyProfile(token);
+                    setSubscription(me.subscription ?? null);
+                    showToast(`Підписку продовжено на ${checkout.period_days} днів`, 'info');
+                    return;
+                  }
+                  showToast('Оплата ще не налаштована. Зверніться до підтримки.', 'error');
                 } catch (err: any) {
                   showToast(err?.message || 'Не вдалося створити платіж', 'error');
                 }

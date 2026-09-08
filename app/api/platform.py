@@ -214,6 +214,9 @@ class SubscriptionCheckoutResponse(BaseModel):
     # оплата вважається успішною одразу. Інтерфейс має це врахувати,
     # а не показувати порожнє посилання.
     payment_url: Optional[str] = None
+    # true, коли підписка продовжена без переходу на оплату (немає
+    # ключів провайдера). Інтерфейс має оновити стан, а не редіректити.
+    activated: bool = False
     order_id: str
     amount: float
     period_days: int
@@ -274,6 +277,35 @@ async def create_subscription_payment(
     # тим самим шляхом, що й бойова.
     db.add(payment)
     await db.commit()
+
+    # Режим без платіжного провайдера (ключі WayForPay не задані).
+    #
+    # Переходити нікуди, тому продовжуємо підписку одразу. Це потрібно,
+    # щоб увесь потік - кнопка, продовження, зняття банера - можна було
+    # перевірити до підключення договору з провайдером.
+    #
+    # Умова навмисно прив'язана до ВІДСУТНОСТІ ключів, а не до прапорця
+    # «режим розробки»: у продакшні ключі є завжди, тому безкоштовну
+    # підписку так не отримаєш. Кожен такий випадок пишеться в лог.
+    if intent.checkout_url is None:
+        payment.status = "completed"
+        payment.completed_at = utc_now()
+        base = business.subscription_until
+        start_from = base if (base and base > utc_now()) else utc_now()
+        business.subscription_plan = STATUS_ACTIVE
+        business.subscription_until = start_from + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
+        await db.commit()
+        logger.warning(
+            "Підписку продовжено БЕЗ реальної оплати (немає ключів провайдера): business_id=%s",
+            business_id,
+        )
+        return SubscriptionCheckoutResponse(
+            payment_url=None,
+            order_id=order_id,
+            amount=float(SUBSCRIPTION_PRICE_UAH),
+            period_days=SUBSCRIPTION_PERIOD_DAYS,
+            activated=True,
+        )
 
     return SubscriptionCheckoutResponse(
         payment_url=intent.checkout_url,

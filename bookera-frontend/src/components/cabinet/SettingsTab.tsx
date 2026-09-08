@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
+import AppSelect from '@/components/ui/AppSelect';
 
 interface SettingsTabProps {
   business: any;
@@ -212,19 +213,19 @@ export default function SettingsTab({ business }: SettingsTabProps) {
           <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
               <div>
-                <h2 style={{ fontSize: '2.4rem', fontWeight: '900', color: '#0f172a', margin: '0 0 0.5rem 0', letterSpacing: '-0.03em' }}>Налаштування</h2>
-                <p style={{ color: '#64748b', fontSize: '1rem', margin: 0 }}>Системні параметри, безпека та правила вашого закладу.</p>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.35rem 0', letterSpacing: '-0.03em' }}>Налаштування</h2>
+                <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Системні параметри, безпека та правила вашого закладу.</p>
               </div>
 
-              <div style={{ position: 'relative', width: '320px', marginTop: '0.5rem' }}>
-                <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', display: 'flex' }}><SvgSearch size={18} /></div>
+              <div style={{ position: 'relative', width: '240px', marginTop: '0.75rem' }}>
+                <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', display: 'flex' }}><SvgSearch size={18} /></div>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Пошук налаштувань..."
                   className="setting-input"
-                  style={{ paddingLeft: '2.6rem', background: '#f8fafc', borderRadius: '12px' }}
+                  style={{ height: '38px', paddingLeft: '2.4rem', fontSize: '0.875rem', background: '#f8fafc', borderRadius: '10px' }}
                 />
               </div>
             </div>
@@ -330,11 +331,15 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                       <div className="tooltip-content">Час, який пропонується клієнту на вибір. Визначає щільність записів.</div>
                     </div>
                   </label>
-                  <select className="setting-input custom-select" value={bookingSettings.time_step} onChange={e => setBookingSettings({...bookingSettings, time_step: Number(e.target.value)})}>
-                    <option value={15}>Кожні 15 хвилин</option>
-                    <option value={30}>Кожні 30 хвилин</option>
-                    <option value={60}>Кожну годину</option>
-                  </select>
+                  <AppSelect
+                    value={bookingSettings.time_step}
+                    onChange={v => setBookingSettings({ ...bookingSettings, time_step: Number(v) })}
+                    options={[
+                      { value: 15, label: 'Кожні 15 хвилин' },
+                      { value: 30, label: 'Кожні 30 хвилин' },
+                      { value: 60, label: 'Кожну годину' },
+                    ]}
+                  />
                 </div>
 
                 <div>
@@ -345,17 +350,17 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                       <div className="tooltip-content">Час на прибирання й підготовку між клієнтами. Клієнт його не бачить — він лише не дає поставити наступний запис упритул.</div>
                     </div>
                   </label>
-                  <select
-                    className="setting-input custom-select"
+                  <AppSelect
                     value={bookingSettings.buffer_minutes}
-                    onChange={e => setBookingSettings({ ...bookingSettings, buffer_minutes: Number(e.target.value) })}
-                  >
-                    <option value={0}>Без буфера</option>
-                    <option value={5}>5 хвилин</option>
-                    <option value={10}>10 хвилин</option>
-                    <option value={15}>15 хвилин</option>
-                    <option value={30}>30 хвилин</option>
-                  </select>
+                    onChange={v => setBookingSettings({ ...bookingSettings, buffer_minutes: Number(v) })}
+                    options={[
+                      { value: 0, label: 'Без буфера' },
+                      { value: 5, label: '5 хвилин' },
+                      { value: 10, label: '10 хвилин' },
+                      { value: 15, label: '15 хвилин' },
+                      { value: 30, label: '30 хвилин' },
+                    ]}
+                  />
                 </div>
 
                 <div>
@@ -366,17 +371,17 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                       <div className="tooltip-content">Значення за замовчуванням. Підставляється при створенні нової послуги. Для кожної послуги тривалість можна змінити окремо.</div>
                     </div>
                   </label>
-                  <select
-                    className="setting-input custom-select"
+                  <AppSelect
                     value={bookingSettings.default_duration}
-                    onChange={e => setBookingSettings({ ...bookingSettings, default_duration: Number(e.target.value) })}
-                  >
-                    <option value={30}>30 хвилин</option>
-                    <option value={45}>45 хвилин</option>
-                    <option value={60}>1 година</option>
-                    <option value={90}>1.5 години</option>
-                    <option value={120}>2 години</option>
-                  </select>
+                    onChange={v => setBookingSettings({ ...bookingSettings, default_duration: Number(v) })}
+                    options={[
+                      { value: 30, label: '30 хвилин' },
+                      { value: 45, label: '45 хвилин' },
+                      { value: 60, label: '1 година' },
+                      { value: 90, label: '1.5 години' },
+                      { value: 120, label: '2 години' },
+                    ]}
+                  />
                 </div>
 
                 <div>
@@ -387,12 +392,16 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                       <div className="tooltip-content">Забороняє клієнтам бронювати візит "в останню секунду", даючи майстру час на підготовку.</div>
                     </div>
                   </label>
-                  <select className="setting-input custom-select" value={bookingSettings.min_advance_hours} onChange={e => setBookingSettings({...bookingSettings, min_advance_hours: Number(e.target.value)})}>
-                    <option value={0}>Можна записуватись одразу</option>
-                    <option value={1}>Мінімум за 1 годину</option>
-                    <option value={2}>Мінімум за 2 години</option>
-                    <option value={24}>Мінімум за 24 години</option>
-                  </select>
+                  <AppSelect
+                    value={bookingSettings.min_advance_hours}
+                    onChange={v => setBookingSettings({ ...bookingSettings, min_advance_hours: Number(v) })}
+                    options={[
+                      { value: 0, label: 'Можна записуватись одразу' },
+                      { value: 1, label: 'Мінімум за 1 годину' },
+                      { value: 2, label: 'Мінімум за 2 години' },
+                      { value: 24, label: 'Мінімум за 24 години' },
+                    ]}
+                  />
                 </div>
 
                 <div>
@@ -403,12 +412,16 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                       <div className="tooltip-content">На скільки днів вперед клієнти можуть гортати календар.</div>
                     </div>
                   </label>
-                  <select className="setting-input custom-select" value={bookingSettings.max_advance_days} onChange={e => setBookingSettings({...bookingSettings, max_advance_days: Number(e.target.value)})}>
-                    <option value={7}>На 1 тиждень</option>
-                    <option value={14}>На 2 тижні</option>
-                    <option value={30}>На 1 місяць</option>
-                    <option value={90}>На 3 місяці</option>
-                  </select>
+                  <AppSelect
+                    value={bookingSettings.max_advance_days}
+                    onChange={v => setBookingSettings({ ...bookingSettings, max_advance_days: Number(v) })}
+                    options={[
+                      { value: 7, label: 'На 1 тиждень' },
+                      { value: 14, label: 'На 2 тижні' },
+                      { value: 30, label: 'На 1 місяць' },
+                      { value: 90, label: 'На 3 місяці' },
+                    ]}
+                  />
                 </div>
               </div>
             </div>
@@ -609,10 +622,14 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                 <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', borderTop: '1px solid #e2e8f0', background: '#fafafa' }}>
                   <div>
                     <label className="setting-label">Тип депозиту</label>
-                    <select className="setting-input custom-select" value={paymentsSettings.deposit_type} onChange={e => setPaymentsSettings({...paymentsSettings, deposit_type: e.target.value})}>
-                      <option value="fixed">Фіксована сума</option>
-                      <option value="percent">Відсоток від вартості</option>
-                    </select>
+                    <AppSelect
+                      value={paymentsSettings.deposit_type}
+                      onChange={v => setPaymentsSettings({ ...paymentsSettings, deposit_type: String(v) })}
+                      options={[
+                        { value: 'fixed', label: 'Фіксована сума' },
+                        { value: 'percent', label: 'Відсоток від вартості' },
+                      ]}
+                    />
                   </div>
                   <div>
                     <label className="setting-label">Сума / Відсоток</label>

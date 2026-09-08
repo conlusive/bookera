@@ -44,11 +44,10 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   const [settingsView, setSettingsView] = useState<'main' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-
   // СТАНИ НАЛАШТУВАНЬ
   const [bookingSettings, setBookingSettings] = useState({
     is_active: true, is_paused_emergency: false, min_advance_hours: 2, max_advance_days: 30, time_step: 30,
+    default_duration: 60, buffer_minutes: 0, closed_periods: [] as { start: string; end: string; reason?: string }[],
     cancellation_policy: 'Скасування можливе не пізніше ніж за 24 години до візиту.'
   });
 
@@ -81,80 +80,9 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   // Спільна система повідомлень замість власної: це вже четверта
   // реалізація в проєкті, і кожна виглядала по-своєму.
   const { showToast } = useToast();
+  const [newPeriod, setNewPeriod] = useState({ start: '', end: '', reason: '' });
 
   // РЕАЛЬНИЙ АЛГОРИТМ АНАЛІЗУ ПОСЛУГ
-  const handleAIRecommendation = async () => {
-    if (!business) return;
-    setIsAnalyzing(true);
-
-    try {
-      const { data: services, error } = await supabase
-        .from('services')
-        .select('duration, price')
-        .eq('business_id', business.id);
-
-      if (error) throw error;
-
-      if (!services || services.length === 0) {
-        showToast('Помилка: У вас ще немає послуг для аналізу.');
-        setIsAnalyzing(false);
-        return;
-      }
-
-      const durations = services.map(s => s.duration).filter(d => d && d > 0);
-      let calculatedTimeStep = 30;
-
-      if (durations.length > 0) {
-        const minDuration = Math.min(...durations);
-        const needs15MinStep = durations.some(d => d % 30 !== 0);
-        const canUse60MinStep = durations.every(d => d % 60 === 0);
-
-        if (needs15MinStep || minDuration <= 15) {
-          calculatedTimeStep = 15;
-        } else if (canUse60MinStep && minDuration >= 60) {
-          calculatedTimeStep = 60;
-        } else {
-          calculatedTimeStep = 30;
-        }
-      }
-
-      const validPrices = services.map(s => s.price).filter(p => p && p > 0);
-      const avgPrice = validPrices.length > 0 ? validPrices.reduce((a, b) => a + b, 0) / validPrices.length : 0;
-
-      let calculatedPolicy = 'Скасування або перенесення візиту можливе не пізніше ніж за 24 години до початку.';
-      let suggestDeposit = false;
-
-      if (avgPrice > 1000) {
-        suggestDeposit = true;
-        calculatedPolicy = 'Зверніть увагу: скасування без штрафу можливе за 24 години. У разі пізнього скасування або неявки, передоплата (депозит) не повертається, оскільки ми бронюємо час майстра під складні послуги.';
-      }
-
-      setBookingSettings(prev => ({
-        ...prev,
-        time_step: calculatedTimeStep,
-        min_advance_hours: 1,
-        cancellation_policy: calculatedPolicy
-      }));
-
-      if (suggestDeposit) {
-        setPaymentsSettings(prev => ({
-          ...prev,
-          require_deposit: true,
-          deposit_type: 'percent',
-          deposit_amount: 20
-        }));
-        showToast(`Проаналізовано! Крок сітки: ${calculatedTimeStep}хв. Додано вимогу депозиту через високий середній чек.`);
-      } else {
-        showToast(`Проаналізовано! Найкращий крок для ваших послуг: ${calculatedTimeStep} хв.`);
-      }
-
-    } catch (err) {
-      console.warn("AI Algorithmic Error:", err);
-      showToast('Не вдалося проаналізувати послуги.');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
 
   /**
    * Автозбереження налаштувань.
@@ -386,9 +314,6 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                    </h4>
                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#3b82f6' }}>Система проаналізує вашу базу послуг та розрахує ідеальну сітку часу.</p>
                  </div>
-                 <button onClick={handleAIRecommendation} disabled={isAnalyzing} style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem', transition: '0.2s', opacity: isAnalyzing ? 0.7 : 1 }}>
-                   {isAnalyzing ? 'Аналізуємо БД...' : 'Підібрати автоматично'}
-                 </button>
               </div>
 
               <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
@@ -405,6 +330,48 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                     <option value={15}>Кожні 15 хвилин</option>
                     <option value={30}>Кожні 30 хвилин</option>
                     <option value={60}>Кожну годину</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="setting-label">
+                    <div className="tooltip-wrap">
+                      Буфер після візиту
+                      <SvgHelpCircle size={14} className="tooltip-icon" />
+                      <div className="tooltip-content">Час на прибирання й підготовку між клієнтами. Клієнт його не бачить — він лише не дає поставити наступний запис упритул.</div>
+                    </div>
+                  </label>
+                  <select
+                    className="setting-input custom-select"
+                    value={bookingSettings.buffer_minutes}
+                    onChange={e => setBookingSettings({ ...bookingSettings, buffer_minutes: Number(e.target.value) })}
+                  >
+                    <option value={0}>Без буфера</option>
+                    <option value={5}>5 хвилин</option>
+                    <option value={10}>10 хвилин</option>
+                    <option value={15}>15 хвилин</option>
+                    <option value={30}>30 хвилин</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="setting-label">
+                    <div className="tooltip-wrap">
+                      Тривалість візиту за замовчуванням
+                      <SvgHelpCircle size={14} className="tooltip-icon" />
+                      <div className="tooltip-content">Підставляється при створенні нової послуги. Для кожної послуги тривалість можна змінити окремо.</div>
+                    </div>
+                  </label>
+                  <select
+                    className="setting-input custom-select"
+                    value={bookingSettings.default_duration}
+                    onChange={e => setBookingSettings({ ...bookingSettings, default_duration: Number(e.target.value) })}
+                  >
+                    <option value={30}>30 хвилин</option>
+                    <option value={45}>45 хвилин</option>
+                    <option value={60}>1 година</option>
+                    <option value={90}>1.5 години</option>
+                    <option value={120}>2 години</option>
                   </select>
                 </div>
 
@@ -438,6 +405,80 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                     <option value={30}>На 1 місяць</option>
                     <option value={90}>На 3 місяці</option>
                   </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Закриті періоди: відпустка, санітарні дні, ремонт.
+                Раніше закрити тиждень означало вимкнути кожен день у
+                графіку окремо, а потім не забути увімкнути назад. */}
+            <div className="clean-panel">
+              <h3 className="panel-title">Закриті періоди</h3>
+              <p className="panel-subtitle">Відпустка, санітарні дні, ремонт. У ці дати клієнти не зможуть записатись.</p>
+              <div style={{ padding: '1.5rem 2rem' }}>
+                {(bookingSettings.closed_periods || []).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                    {bookingSettings.closed_periods.map((period: any, idx: number) => (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+                        padding: '0.7rem 0.9rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px',
+                      }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0f172a' }}>
+                            {period.start} — {period.end}
+                          </div>
+                          {period.reason && (
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>{period.reason}</div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setBookingSettings({
+                            ...bookingSettings,
+                            closed_periods: bookingSettings.closed_periods.filter((_: any, i: number) => i !== idx),
+                          })}
+                          style={{ background: 'transparent', border: 'none', color: '#A83934', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, flexShrink: 0 }}
+                        >
+                          Прибрати
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ flex: '1 1 130px' }}>
+                    <label className="setting-label" style={{ fontSize: '0.8rem' }}>Від</label>
+                    <input type="date" className="setting-input" value={newPeriod.start}
+                      onChange={e => setNewPeriod({ ...newPeriod, start: e.target.value })} />
+                  </div>
+                  <div style={{ flex: '1 1 130px' }}>
+                    <label className="setting-label" style={{ fontSize: '0.8rem' }}>До</label>
+                    <input type="date" className="setting-input" value={newPeriod.end}
+                      onChange={e => setNewPeriod({ ...newPeriod, end: e.target.value })} />
+                  </div>
+                  <div style={{ flex: '2 1 180px' }}>
+                    <label className="setting-label" style={{ fontSize: '0.8rem' }}>Причина (необовʼязково)</label>
+                    <input type="text" className="setting-input" value={newPeriod.reason}
+                      placeholder="Відпустка"
+                      onChange={e => setNewPeriod({ ...newPeriod, reason: e.target.value })} />
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!newPeriod.start || !newPeriod.end) return showToast('Вкажіть обидві дати', 'error');
+                      // Дати навпаки - типова помилка при швидкому вводі.
+                      // Мовчазне ігнорування лишило б людину гадати, чому
+                      // період не додався.
+                      if (newPeriod.end < newPeriod.start) return showToast('Дата «до» раніша за «від»', 'error');
+                      setBookingSettings({
+                        ...bookingSettings,
+                        closed_periods: [...(bookingSettings.closed_periods || []), { ...newPeriod }],
+                      });
+                      setNewPeriod({ start: '', end: '', reason: '' });
+                    }}
+                    style={{ height: '42px', padding: '0 1.1rem', borderRadius: '10px', border: 'none', background: '#222222', color: '#fff', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Додати
+                  </button>
                 </div>
               </div>
             </div>
@@ -538,14 +579,14 @@ export default function SettingsTab({ business }: SettingsTabProps) {
             <div className="clean-panel">
               <h3 className="panel-title">Фінансові налаштування</h3>
               <div style={{ padding: '1.5rem 2rem' }}>
-                <label className="setting-label">Базова валюта закладу</label>
-                <div style={{ maxWidth: '300px' }}>
-                  <select className="setting-input custom-select" value={paymentsSettings.currency} onChange={e => setPaymentsSettings({...paymentsSettings, currency: e.target.value})}>
-                    <option value="UAH">Гривня (₴)</option>
-                    <option value="USD">Долар ($)</option>
-                    <option value="EUR">Євро (€)</option>
-                    <option value="PLN">Злотий (zł)</option>
-                  </select>
+                {/* Вибір валюти прибрано: система всюди рахує в гривні -
+                    ціни послуг, виплати майстрам, комісії, звіти. Поки
+                    немає справжньої мультивалютності, вибір був обіцянкою,
+                    якої продукт не виконує: людина обирала долар і далі
+                    бачила гривневі суми. */}
+                <label className="setting-label">Валюта</label>
+                <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, marginTop: '0.4rem' }}>
+                  Гривня (₴)
                 </div>
               </div>
             </div>

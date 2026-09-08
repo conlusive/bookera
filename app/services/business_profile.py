@@ -46,6 +46,13 @@ def default_booking_settings(category: str | None, business_type: str | None,
         "time_step": base["time_step"],
         "min_advance_hours": base["min_advance_hours"],
         "max_advance_days": 60,
+        # Тривалість візиту за замовчуванням - підставляється при
+        # створенні нової послуги, щоб не вводити щоразу вручну.
+        "default_duration": base["default_duration"],
+        # Буфер після візиту: прибрати, підготувати місце, помити руки.
+        # Саме через невраховані 10-15 хвилин майстри й спізнюються -
+        # календар обіцяє час, якого фізично немає.
+        "buffer_minutes": 10 if category in ("nails", "hair", "spa", "massage") else 5,
         "cancellation_policy": "Скасування можливе не пізніше ніж за 24 години до візиту.",
     }
 

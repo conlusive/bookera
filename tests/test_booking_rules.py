@@ -276,3 +276,71 @@ async def test_deposit_amount_is_recorded_on_booking(client, auth_headers):
     finally:
         await conn.close()
     assert row["deposit_due"] == 200, "сума передоплати має зафіксуватись у записі"
+
+
+@pytest.mark.asyncio
+async def test_closed_period_blocks_booking(client, auth_headers):
+    """
+    Закриті періоди: відпустка, санітарні дні, ремонт.
+    Раніше закрити тиждень означало вимкнути кожен день у графіку
+    окремо, а потім не забути увімкнути назад.
+    """
+    headers = auth_headers("closed-owner")
+    business_id, service_id = await _setup(client, headers, "Closed Salon")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    vacation_start = (now + timedelta(days=10)).date()
+    vacation_end = (now + timedelta(days=17)).date()
+
+    await _set_rules(business_id, booking={
+        "is_active": True,
+        "closed_periods": [
+            {"start": vacation_start.isoformat(), "end": vacation_end.isoformat(), "reason": "Відпустка"}
+        ],
+    })
+
+    # Усередині періоду - відмова з причиною
+    r = await client.post("/appointments", json=_book_payload(
+        business_id, service_id, now + timedelta(days=12)))
+    assert r.status_code == 403
+    assert "Відпустка" in r.json()["detail"]
+
+    # Після періоду - працює
+    r = await client.post("/appointments", json=_book_payload(
+        business_id, service_id, now + timedelta(days=20)))
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_buffer_blocks_back_to_back_slots(client, auth_headers):
+    """
+    Буфер після візиту: наступний клієнт не має потрапити впритул.
+    Саме через невраховані 10-15 хвилин майстри й спізнюються.
+    """
+    headers = auth_headers("buffer-owner")
+    r = await client.post("/crm/businesses", json={"name": "Buffer Salon", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+    r = await client.post("/services", json={
+        "business_id": business_id, "name": "Стрижка", "duration_minutes": 60, "price": 500,
+    }, headers=headers)
+    service_id = r.json()["id"]
+
+    await client.put(f"/crm/businesses/{business_id}/hours", json=[
+        {"weekday": d, "is_closed": False, "open_time": "09:00", "close_time": "18:00"} for d in range(7)
+    ], headers=headers)
+
+    target = (datetime.now(timezone.utc) + timedelta(days=4)).strftime("%Y-%m-%d")
+
+    # Без буфера слот о 10:00 вільний після візиту 09:00-10:00
+    await _set_rules(business_id, booking={"is_active": True, "time_step": 60, "buffer_minutes": 0})
+    r = await client.get(f"/appointments/available-slots?business_id={business_id}&service_id={service_id}&target_date={target}")
+    assert r.status_code == 200, r.text
+    slots_no_buffer = len([s for s in r.json()["slots"] if s["status"] == "available"])
+
+    # З буфером 30 хвилин слотів має стати менше: кожен візит займає
+    # більше часу, ніж триває сама послуга
+    await _set_rules(business_id, booking={"is_active": True, "time_step": 60, "buffer_minutes": 30})
+    r = await client.get(f"/appointments/available-slots?business_id={business_id}&service_id={service_id}&target_date={target}")
+    slots_with_buffer = len([s for s in r.json()["slots"] if s["status"] == "available"])
+
+    assert slots_with_buffer <= slots_no_buffer, "буфер має зменшувати кількість слотів"

@@ -169,3 +169,46 @@ async def send_campaign_email(
         unsubscribe_url=unsubscribe_url,
     )
     await asyncio.to_thread(send_email_sync, to_email, subject, html)
+
+
+async def send_new_booking_to_staff(
+        to_email: str,
+        business_name: str,
+        client_name: str,
+        client_phone: str,
+        service_name: str,
+        booking_date: str,
+        booking_time: str,
+        master_name: str = "",
+        needs_approval: bool = False,
+):
+    """
+    Сповіщення ЗАКЛАДУ про новий запис.
+
+    Раніше лист ішов лише клієнту, а заклад дізнавався про запис,
+    коли відкривав календар. Для майстра, який працює без адміністратора,
+    це означало сюрприз - або прогаяного клієнта.
+
+    Телефон клієнта в листі не випадково: найчастіша дія після
+    «прийшов новий запис» - подзвонити й уточнити.
+    """
+    rows = (
+        info_row("Клієнт", client_name or "Без імені")
+        + info_row("Телефон", client_phone or "не вказано")
+        + info_row("Коли", f"{booking_date}, {booking_time}", big=True)
+        + info_row("Послуга", service_name)
+    )
+    if master_name:
+        rows += info_row("Майстер", master_name)
+
+    title = "Новий запис чекає підтвердження" if needs_approval else "Новий запис"
+    note = ("Автопідтвердження вимкнене — візит зʼявиться в календарі "
+            "після вашого підтвердження.") if needs_approval else ""
+
+    html = layout(
+        business_name=business_name,
+        title=title,
+        body_html=card(rows),
+        footer_note=note,
+    )
+    await asyncio.to_thread(send_email_sync, to_email, f"{title} — {business_name}", html)

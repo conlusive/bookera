@@ -22,7 +22,7 @@ from app.schemas.appointment import (
     ManualAppointmentCreate,
     SlotStatusItem,
 )
-from app.core.email import send_booking_confirmation_email
+from app.core.email import send_booking_confirmation_email, send_new_booking_to_staff
 from app.services.subscription import has_access
 from app.services.monetization import charge_commission_if_applicable, award_points_for_new_client
 from app.services.inventory import consume_materials_for_appointment, revert_materials_for_appointment
@@ -129,6 +129,19 @@ async def get_available_slots(
     close_mins = parse_hhmm_to_minutes(day_hours.close_time if day_hours else "20:00")
     duration = service.duration_minutes
 
+    # Буфер після візиту: прибрати, підготувати місце, помити руки.
+    #
+    # Додається до тривалості лише для РОЗРАХУНКУ зайнятості, а не до
+    # самого запису: клієнт має бачити «45 хв», а не «55 хв» - буфер
+    # це внутрішня справа закладу, не послуга.
+    #
+    # Саме через невраховані 10-15 хвилин майстри й спізнюються:
+    # календар обіцяє час, якого фізично немає.
+    rules_for_slots = business.booking_settings or {}
+    raw_buffer = rules_for_slots.get("buffer_minutes")
+    buffer_minutes = int(raw_buffer) if isinstance(raw_buffer, (int, float)) and 0 <= raw_buffer <= 60 else 0
+    occupied_duration = duration + buffer_minutes
+
     # 1.4 Майстри закладу
     masters_query = select(User).where(
         User.business_id == business_id,
@@ -162,7 +175,9 @@ async def get_available_slots(
     # 1.6 Розрахунок кожного слота
     while current_mins + duration <= close_mins:
         slot_start_dt = datetime.combine(target_date, time(current_mins // 60, current_mins % 60))
-        slot_end_dt = slot_start_dt + timedelta(minutes=duration)
+        # Для перевірки зайнятості беремо час ІЗ буфером: наступний
+        # клієнт не має потрапити впритул до попереднього.
+        slot_end_dt = slot_start_dt + timedelta(minutes=occupied_duration)
         slot_str = format_minutes_to_hhmm(current_mins)
 
         # Пропускаємо години, що вже минули сьогодні
@@ -435,6 +450,26 @@ async def create_appointment(
             detail="Заклад тимчасово не приймає онлайн-записи",
         )
 
+    # Закриті періоди: відпустка, санітарні дні, ремонт.
+    #
+    # Раніше закрити тиждень означало вимкнути кожен день у графіку
+    # окремо, а потім не забути увімкнути назад - і половина закладів
+    # забувала. Тут це один запис із датами.
+    closed_periods = rules.get("closed_periods") or []
+    booking_day = appointment_in.start_time.date()
+    for period in closed_periods:
+        try:
+            start = date.fromisoformat(str(period.get("start")))
+            end = date.fromisoformat(str(period.get("end")))
+        except (TypeError, ValueError):
+            continue
+        if start <= booking_day <= end:
+            reason = str(period.get("reason") or "").strip()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Заклад не працює в цей період{f': {reason}' if reason else ''}",
+            )
+
     booking_start = appointment_in.start_time
     if booking_start.tzinfo is not None:
         booking_start = booking_start.replace(tzinfo=None)
@@ -657,6 +692,33 @@ async def create_appointment(
         f"{hours} год" if hours else "",
         f"{minutes} хв" if minutes else "",
     ]))
+
+    # Сповіщення ЗАКЛАДУ. Раніше лист ішов лише клієнту, а заклад
+    # дізнавався про запис, коли відкривав календар - для майстра без
+    # адміністратора це означало сюрприз або прогаяного клієнта.
+    #
+    # Адресат: пошта закладу, а якщо її немає - власника. Слати всім
+    # підряд не варто: майстру не потрібні чужі записи.
+    if notify.get("notify_staff_booking", True) is not False and business:
+        staff_email = business.email
+        if not staff_email and business.owner_id:
+            owner_res = await db.execute(select(User).where(User.id == str(business.owner_id)))
+            owner = owner_res.scalars().first()
+            staff_email = owner.email if owner else None
+
+        if staff_email:
+            background_tasks.add_task(
+                send_new_booking_to_staff,
+                to_email=staff_email,
+                business_name=business.name,
+                client_name=appointment_in.client_name or "",
+                client_phone=appointment_in.client_phone or "",
+                service_name=service.name if service else "Візит",
+                booking_date=appointment.start_time.strftime("%d.%m.%Y"),
+                booking_time=appointment.start_time.strftime("%H:%M"),
+                master_name=master_display_name,
+                needs_approval=not auto_approve,
+            )
 
     # Фонова відправка листа клієнту через SMTP
     if notify_client and appointment_in.client_email and business and service:

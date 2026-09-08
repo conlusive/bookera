@@ -63,6 +63,20 @@ async def get_my_profile(
         )
         biz = biz_res.scalars().first()
         if biz:
+            # Доповнюємо налаштування значеннями за профілем закладу.
+            #
+            # Заклади, створені ДО появи цієї логіки, мають порожні або
+            # неповні booking_settings - і людина не бачить у налаштуваннях
+            # того, що вказувала при реєстрації. Доповнюємо лише відсутні
+            # ключі: те, що власник змінив вручну, чіпати не можна.
+            defaults = default_booking_settings(biz.category, biz.business_type, biz.workspace_type)
+            current = dict(biz.booking_settings or {})
+            missing = {k: v for k, v in defaults.items() if k not in current}
+            if missing:
+                biz.booking_settings = {**defaults, **current}
+                await db.commit()
+                await db.refresh(biz)
+
             business_data = BusinessOut.model_validate(biz)
 
     return {

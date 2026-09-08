@@ -58,6 +58,13 @@ function roleLabel(role?: string | null): string {
 export default function BusinessCabinet() {
   const { showToast } = useToast();
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
+  // Банер можна закрити на добу. Попередження, яке не прибрати, - це
+  // не попередження, а докір: людина бачить його щодня й перестає
+  // помічати. Через добу нагадаємо знову.
+  const [bannerHiddenUntil, setBannerHiddenUntil] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    return Number(localStorage.getItem('bookera_sub_banner_hidden') || 0);
+  });
   const router = useRouter();
   const supabase = createClient();
 
@@ -1385,7 +1392,10 @@ export default function BusinessCabinet() {
             Пробний період попереджаємо завжди: там кожен день на рахунку
             і людина ще не звикла, що доступ узагалі має термін. */}
         {subscription?.has_access && subscription.days_left !== null &&
-         (subscription.is_trial || subscription.days_left <= 7) && (
+         (subscription.is_trial || subscription.days_left <= 7) &&
+         // За 2 дні й менше банер закрити не можна: тут ціна пропущеного
+         // попередження - закритий кабінет посеред робочого дня.
+         (subscription.days_left <= 2 || Date.now() > bannerHiddenUntil) && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             gap: '1rem', flexWrap: 'wrap',
@@ -1420,6 +1430,24 @@ export default function BusinessCabinet() {
             >
               Продовжити
             </button>
+
+            {subscription.days_left > 2 && (
+              <button
+                onClick={() => {
+                  const until = Date.now() + 24 * 60 * 60 * 1000;
+                  localStorage.setItem('bookera_sub_banner_hidden', String(until));
+                  setBannerHiddenUntil(until);
+                }}
+                title="Нагадати завтра"
+                style={{
+                  width: '26px', height: '26px', borderRadius: '50%', border: 'none',
+                  background: 'transparent', color: '#6B756A', cursor: 'pointer',
+                  fontSize: '1rem', lineHeight: 1, flexShrink: 0,
+                }}
+              >
+                ×
+              </button>
+            )}
           </div>
         )}
 

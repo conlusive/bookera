@@ -168,7 +168,15 @@ export default function SettingsTab({ business }: SettingsTabProps) {
         .setting-input:focus:not(:disabled) { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
         .setting-input:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
         
-        .setting-label { font-size: 0.85rem; font-weight: 700; color: #334155; margin-bottom: 0.5rem; display: flex; align-items: center; }
+        .setting-label {
+          font-size: 0.85rem; font-weight: 700; color: #334155;
+          margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.35rem;
+          /* Стала висота під два рядки: підписи різної довжини
+             («Буфер після візиту» проти «Тривалість візиту за
+             замовчуванням») інакше зсувають сусідні поля, і сітка
+             з рівної стає драбинкою. */
+          min-height: 2.6em; line-height: 1.3;
+        }
         
         .custom-select { appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 12 15 18 9"></polyline></svg>'); background-repeat: no-repeat; background-position: right 1rem center; background-size: 18px; padding-right: 2.5rem; cursor: pointer; }
         .custom-select:disabled { opacity: 0.7; }
@@ -307,14 +315,10 @@ export default function SettingsTab({ business }: SettingsTabProps) {
               <h3 className="panel-title">Доступність вікон для запису</h3>
               <p className="panel-subtitle">Ці налаштування визначають, які саме слоти часу клієнти бачитимуть у віджеті.</p>
 
-              <div style={{ margin: '1.5rem 2rem 0 2rem', background: 'linear-gradient(to right, #eff6ff, #e0e7ff)', border: '1px dashed #818cf8', borderRadius: '12px', padding: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                 <div>
-                   <h4 style={{ margin: '0 0 0.3rem 0', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
-                     <SvgWand size={16} /> Алгоритмічний підбір
-                   </h4>
-                   <p style={{ margin: 0, fontSize: '0.85rem', color: '#3b82f6' }}>Система проаналізує вашу базу послуг та розрахує ідеальну сітку часу.</p>
-                 </div>
-              </div>
+              {/* Плашка «Алгоритмічний підбір» прибрана разом із самою
+                  функцією: вона обіцяла аналіз, якого не відбувалось.
+                  Обіцянка без дії гірша за її відсутність - людина чекає
+                  результату, а він не приходить. */}
 
               <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
 
@@ -357,9 +361,9 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                 <div>
                   <label className="setting-label">
                     <div className="tooltip-wrap">
-                      Тривалість візиту за замовчуванням
+                      Тривалість візиту
                       <SvgHelpCircle size={14} className="tooltip-icon" />
-                      <div className="tooltip-content">Підставляється при створенні нової послуги. Для кожної послуги тривалість можна змінити окремо.</div>
+                      <div className="tooltip-content">Значення за замовчуванням. Підставляється при створенні нової послуги. Для кожної послуги тривалість можна змінити окремо.</div>
                     </div>
                   </label>
                   <select

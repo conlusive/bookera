@@ -572,6 +572,11 @@ export const api = {
     return authFetch('/crm/campaigns', token, { method: 'POST', body: JSON.stringify(payload) });
   },
 
+  /** Оновити правила бронювання за профілем закладу. */
+  async applyProfileDefaults(token: string, businessId: number): Promise<{ booking_settings: any }> {
+    return authFetch(`/crm/businesses/${businessId}/apply-profile-defaults`, token, { method: 'POST' });
+  },
+
   // === Справи на день ===
   // Раніше цей список жив лише в localStorage: зникав при чистці кешу
   // і не бачився з іншого пристрою.

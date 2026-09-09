@@ -344,3 +344,41 @@ async def test_buffer_blocks_back_to_back_slots(client, auth_headers):
     slots_with_buffer = len([s for s in r.json()["slots"] if s["status"] == "available"])
 
     assert slots_with_buffer <= slots_no_buffer, "буфер має зменшувати кількість слотів"
+
+
+@pytest.mark.asyncio
+async def test_apply_profile_defaults_updates_derived_settings(client, auth_headers):
+    """
+    Зміна напряму не має мовчки скидати ручні налаштування, але має
+    бути СПОСІБ оновити типові значення - інакше барбер, що став
+    салоном краси, назавжди лишається зі старою сіткою.
+    """
+    headers = auth_headers("profile-apply")
+    r = await client.post("/crm/businesses", json={
+        "name": "Apply Salon", "city": "Львів",
+        "category": "barber", "business_type": "company", "workspace_type": "my_place",
+    }, headers=headers)
+    business_id = r.json()["id"]
+    assert r.json()["booking_settings"]["min_advance_hours"] == 1
+
+    # Власник вручну змінив політику скасування - вона НЕ має постраждати
+    await client.patch(f"/crm/businesses/{business_id}", json={
+        "booking_settings": {
+            **r.json()["booking_settings"],
+            "cancellation_policy": "Мій власний текст",
+        },
+    }, headers=headers)
+
+    # Змінюємо напрям на манікюр
+    await client.patch(f"/crm/businesses/{business_id}", json={"category": "nails"}, headers=headers)
+
+    r = await client.post(f"/crm/businesses/{business_id}/apply-profile-defaults", headers=headers)
+    assert r.status_code == 200, r.text
+    settings = r.json()["booking_settings"]
+
+    # Значення за напрямом оновились
+    assert settings["min_advance_hours"] == 3, "манікюр потребує більше часу наперед"
+    assert settings["default_duration"] == 90
+
+    # А ручний текст лишився недоторканим
+    assert settings["cancellation_policy"] == "Мій власний текст"

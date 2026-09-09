@@ -33,6 +33,9 @@ const SvgGift = (p:any) => <SvgIcon {...p}><polyline points="20 12 20 22 4 22 4 
 const SvgCreditCardPlus = (p:any) => <SvgIcon {...p}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line><line x1="12" y1="15" x2="12" y2="19"></line><line x1="10" y1="17" x2="14" y2="17"></line></SvgIcon>;
 
 const businessSettingsCards = [
+  // Профіль першим: саме з нього виводяться типові значення для решти
+  // налаштувань, і людина має бачити, що вона вказала при реєстрації.
+  { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgGlobe, color: '#8b5cf6', bg: '#f5f3ff' },
   { id: 'booking', title: 'Онлайн-бронювання', desc: 'Правила сітки, зупинка запису та скасування.', icon: SvgGlobe, color: '#3b82f6', bg: '#eff6ff' },
   { id: 'security', title: 'Безпека та Чорний список', desc: 'Захист від фейкових записів та спаму.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
   { id: 'payments', title: 'Платежі та Каса', desc: 'Депозити, передоплата та валюта.', icon: SvgCreditCard, color: '#10b981', bg: '#ecfdf5' },
@@ -42,7 +45,7 @@ const businessSettingsCards = [
 
 export default function SettingsTab({ business }: SettingsTabProps) {
   const supabase = createClient();
-  const [settingsView, setSettingsView] = useState<'main' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
+  const [settingsView, setSettingsView] = useState<'main' | 'profile' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
   const [searchQuery, setSearchQuery] = useState('');
 
   // СТАНИ НАЛАШТУВАНЬ
@@ -71,6 +74,11 @@ export default function SettingsTab({ business }: SettingsTabProps) {
 
   useEffect(() => {
     if (business) {
+      setProfileSettings({
+        category: (business as any).category || 'beauty',
+        business_type: (business as any).business_type || 'company',
+        workspace_type: (business as any).workspace_type || 'my_place',
+      });
       if (business.booking_settings) setBookingSettings(prev => ({ ...prev, ...business.booking_settings }));
       if (business.notification_settings) setNotificationSettings(prev => ({ ...prev, ...business.notification_settings }));
       if (business.payments_settings) setPaymentsSettings(prev => ({ ...prev, ...business.payments_settings }));
@@ -82,6 +90,12 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   // реалізація в проєкті, і кожна виглядала по-своєму.
   const { showToast } = useToast();
   const [newPeriod, setNewPeriod] = useState({ start: '', end: '', reason: '' });
+  // Профіль закладу - те, що людина вказала при реєстрації. Раніше ці
+  // дані лежали в базі й ніде не показувались: змінити напрям після
+  // реєстрації було неможливо.
+  const [profileSettings, setProfileSettings] = useState({
+    category: 'beauty', business_type: 'company', workspace_type: 'my_place',
+  });
 
   // РЕАЛЬНИЙ АЛГОРИТМ АНАЛІЗУ ПОСЛУГ
 
@@ -126,6 +140,25 @@ export default function SettingsTab({ business }: SettingsTabProps) {
     if (isFirstRender.current) return;
     autoSave('security_settings', securitySettings);
   }, [securitySettings]);
+
+  // Профіль зберігається полями закладу, а не в JSON-колонці, тому
+  // окремий виклик. Зміна напряму НЕ перезаписує правила бронювання:
+  // людина могла їх налаштувати вручну, і мовчки скинути її роботу
+  // при зміні категорії було б грубо. Оновити типові значення можна
+  // окремою дією - див. кнопку нижче.
+  useEffect(() => {
+    if (isFirstRender.current) return;
+    if (!business?.id) return;
+    clearTimeout(saveTimers.current['profile']);
+    saveTimers.current['profile'] = setTimeout(async () => {
+      try {
+        const token = await getAuthToken();
+        await api.updateBusiness(token, business.id, profileSettings);
+      } catch (err: any) {
+        showToast(err?.message || 'Не вдалося зберегти профіль', 'error');
+      }
+    }, 600);
+  }, [profileSettings]);
 
   useEffect(() => {
     if (isFirstRender.current) return;
@@ -283,6 +316,106 @@ export default function SettingsTab({ business }: SettingsTabProps) {
         {/* ========================================= */}
         {/* 1. БРОНЮВАННЯ ТА КАЛЕНДАР                 */}
         {/* ========================================= */}
+        {settingsView === 'profile' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="clean-panel">
+              <h3 className="panel-title">Чим ви займаєтесь</h3>
+              <p className="panel-subtitle">
+                Ці дані ви вказали при реєстрації. З них система виводить типові
+                значення: крок сітки, тривалість візиту й запас часу до запису.
+                Змінивши напрям, ви можете оновити ці значення нижче.
+              </p>
+              <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                <div>
+                  <label className="setting-label">Напрям</label>
+                  <AppSelect
+                    value={profileSettings.category}
+                    onChange={v => setProfileSettings({ ...profileSettings, category: String(v) })}
+                    options={[
+                      { value: 'barber', label: 'Барбершоп' },
+                      { value: 'hair', label: 'Перукарня' },
+                      { value: 'nails', label: 'Манікюр і педикюр' },
+                      { value: 'beauty', label: 'Салон краси' },
+                      { value: 'brows', label: 'Брови та вії' },
+                      { value: 'massage', label: 'Масаж' },
+                      { value: 'spa', label: 'Wellness і SPA' },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="setting-label">Тип бізнесу</label>
+                  <AppSelect
+                    value={profileSettings.business_type}
+                    onChange={v => setProfileSettings({ ...profileSettings, business_type: String(v) })}
+                    options={[
+                      { value: 'individual', label: 'Приватний майстер' },
+                      { value: 'company', label: 'Заклад із командою' },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="setting-label">Де приймаєте</label>
+                  <AppSelect
+                    value={profileSettings.workspace_type}
+                    onChange={v => setProfileSettings({ ...profileSettings, workspace_type: String(v) })}
+                    options={[
+                      { value: 'my_place', label: 'У себе' },
+                      { value: 'client_place', label: 'Виїзд до клієнта' },
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Показуємо, ЩО саме випливає з профілю. Без цього звʼязок
+                непомітний: людина міняє напрям і не розуміє, чому потім
+                у бронюванні інші значення. */}
+            <div className="clean-panel">
+              <h3 className="panel-title">Що з цього випливає</h3>
+              <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {[
+                  ['Крок сітки', `${bookingSettings.time_step} хв`],
+                  ['Тривалість візиту', `${bookingSettings.default_duration} хв`],
+                  ['Буфер після візиту', bookingSettings.buffer_minutes ? `${bookingSettings.buffer_minutes} хв` : 'без буфера'],
+                  ['Мінімум часу до візиту', bookingSettings.min_advance_hours ? `${bookingSettings.min_advance_hours} год` : 'без обмежень'],
+                  ['Горизонт планування', `${bookingSettings.max_advance_days} днів`],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.9rem' }}>
+                    <span style={{ color: '#64748b' }}>{label}</span>
+                    <span style={{ color: '#0f172a', fontWeight: 600 }}>{value}</span>
+                  </div>
+                ))}
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.5rem 0 0', lineHeight: 1.5 }}>
+                  Ці значення можна змінити вручну в розділі «Онлайн-бронювання» —
+                  ваші зміни мають пріоритет над типовими.
+                </p>
+
+                <button
+                  onClick={async () => {
+                    if (!business?.id) return;
+                    if (!confirm('Замінити крок сітки, тривалість, буфер і межі запису на типові для вашого напряму?')) return;
+                    try {
+                      const token = await getAuthToken();
+                      const res = await api.applyProfileDefaults(token, business.id);
+                      setBookingSettings(prev => ({ ...prev, ...res.booking_settings }));
+                      showToast('Типові значення застосовано', 'info');
+                    } catch (err: any) {
+                      showToast(err?.message || 'Не вдалося оновити значення', 'error');
+                    }
+                  }}
+                  style={{
+                    alignSelf: 'flex-start', marginTop: '0.75rem', height: '38px', padding: '0 1rem',
+                    borderRadius: '10px', border: '1px solid rgba(34,34,34,0.16)', background: '#fff',
+                    color: '#222222', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+                  }}
+                >
+                  Оновити за напрямом
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {settingsView === 'booking' && (
           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
 

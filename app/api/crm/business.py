@@ -39,6 +39,46 @@ async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_d
     ]
 
 
+@router.post("/{business_id}/apply-profile-defaults")
+async def apply_profile_defaults(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Оновити правила бронювання за поточним профілем закладу.
+
+    Окрема дія, а не автоматика при зміні напряму: власник міг
+    налаштувати крок і буфер вручну, і мовчки скинути його роботу,
+    бо він виправив категорію, було б грубо.
+
+    Тут перезаписуємо саме ті поля, що випливають із профілю. Політика
+    скасування, закриті періоди й вимикачі не чіпаються - вони до
+    напряму діяльності не мають стосунку.
+    """
+    await assert_business_admin(db, current_user, business_id)
+
+    res = await db.execute(select(Business).where(Business.id == business_id))
+    business = res.scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    defaults = default_booking_settings(
+        business.category, business.business_type, business.workspace_type
+    )
+    derived_keys = ("time_step", "default_duration", "buffer_minutes",
+                    "min_advance_hours", "max_advance_days")
+
+    business.booking_settings = {
+        **(business.booking_settings or {}),
+        **{k: defaults[k] for k in derived_keys if k in defaults},
+    }
+    await db.commit()
+    await db.refresh(business)
+
+    return {"booking_settings": business.booking_settings}
+
+
 @router.get("/me")
 async def get_my_profile(
     db: AsyncSession = Depends(get_db),

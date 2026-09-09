@@ -586,6 +586,20 @@ export const api = {
     });
   },
 
+  /**
+   * Пряме посилання закладу - за ним клієнт зараховується як власний
+   * і комісія не стягується.
+   *
+   * Окремий запит, а не поле у відповіді закладу: та схема публічна,
+   * і токен у ній означав би, що будь-хто може підставити його
+   * у власне посилання.
+   */
+  async getDirectLink(token: string, businessId: number): Promise<{
+    direct_url: string; marketplace_url: string; token: string;
+  }> {
+    return authFetch(`/crm/businesses/${businessId}/direct-link`, token);
+  },
+
   // === Робота в кількох закладах ===
 
   /** Заклади, у яких людина працює. */

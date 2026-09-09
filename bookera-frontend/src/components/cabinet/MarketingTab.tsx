@@ -73,6 +73,7 @@ export default function MarketingTab({
   const { showToast } = useToast();
 
   const [marketingView, setMarketingView] = useState<'overview' | 'campaigns' | 'promotions' | 'radar' | 'smm'>('overview');
+  const [directLink, setDirectLink] = useState<{ direct_url: string; marketplace_url: string; token: string } | null>(null);
   const [campaignTab, setCampaignTab] = useState<'automated' | 'mass'>('automated');
 
   const [automations, setAutomations] = useState({ welcome: true, birthday: false, lost: true, reviews: true });
@@ -92,6 +93,22 @@ export default function MarketingTab({
 
   // 🟢 СТАН ДЛЯ ІНСТРАГРАМ-МОДАЛКИ
   const [activeSmmModal, setActiveSmmModal] = useState<'none' | 'instagram'>('none');
+
+  // Пряме посилання завантажуємо окремо: воно не входить у відповідь
+  // закладу, бо та схема публічна, і токен у ній дозволив би будь-кому
+  // підставити його у власне посилання й уникнути комісії.
+  useEffect(() => {
+    if (!business?.id) return;
+    void (async () => {
+      try {
+        const token = await getAuthToken();
+        setDirectLink(await api.getDirectLink(token, business.id));
+      } catch {
+        // Посилання - не критична частина екрана: якщо не завантажилось,
+        // решта маркетингу має працювати.
+      }
+    })();
+  }, [business?.id]);
 
   useEffect(() => {
     if (business?.id) {
@@ -424,6 +441,67 @@ export default function MarketingTab({
         {/* 🔴 ОГЛЯД МАРКЕТИНГУ */}
         {marketingView === 'overview' && (
           <div style={{ animation: 'fadeIn 0.2s ease', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+            {/* Пряме посилання закладу.
+                Механіка атрибуції працювала повністю - бекенд розрізняв
+                «свій клієнт» і «клієнт від Bookera», нараховував бали
+                й комісію. Але власнику НІДЕ було взяти саме посилання:
+                ключова частина бізнес-моделі лишалась недоступною. */}
+            <div style={{ background: '#fff', border: '1px solid #E4EBE3', borderRadius: '16px', padding: '1.5rem' }}>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#222222', marginBottom: '0.35rem' }}>
+                Ваше пряме посилання
+              </div>
+              <p style={{ fontSize: '0.875rem', color: '#5C6B5E', margin: '0 0 1rem', lineHeight: 1.5 }}>
+                Діліться ним у соцмережах і з постійними клієнтами. Записи за цим посиланням
+                вважаються вашими власними — комісія за них не стягується.
+              </p>
+
+              {directLink ? (
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <input
+                    readOnly
+                    value={directLink.direct_url}
+                    onFocus={e => e.currentTarget.select()}
+                    style={{
+                      flex: '1 1 260px', minWidth: 0, height: '42px', padding: '0 0.85rem',
+                      border: '1px solid #E4EBE3', borderRadius: '10px', background: '#F6F9F6',
+                      fontSize: '0.85rem', color: '#2E3A30', fontFamily: 'inherit', outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(directLink.direct_url);
+                        showToast('Посилання скопійовано', 'info');
+                      } catch {
+                        // Буфер обміну недоступний (старий браузер, http).
+                        // Поле вже виділяється при кліку, тому людина
+                        // може скопіювати вручну - кажемо про це прямо.
+                        showToast('Скопіюйте посилання вручну', 'info');
+                      }
+                    }}
+                    style={{
+                      height: '42px', padding: '0 1.1rem', borderRadius: '10px', border: 'none',
+                      background: '#222222', color: '#fff', fontSize: '0.875rem', fontWeight: 600,
+                      fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    Копіювати
+                  </button>
+                </div>
+              ) : (
+                <div style={{ height: '42px', borderRadius: '10px', background: '#F2F6F1' }} />
+              )}
+
+              {/* Друге посилання показуємо поруч, щоб різниця була
+                  очевидною: однакові адреси, різні наслідки. */}
+              {directLink && (
+                <p style={{ fontSize: '0.8rem', color: '#A5AEA3', margin: '0.85rem 0 0', lineHeight: 1.5 }}>
+                  Посилання без мітки ({directLink.marketplace_url}) вважається переходом
+                  із каталогу Bookera — за таких клієнтів стягується комісія.
+                </p>
+              )}
+            </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>

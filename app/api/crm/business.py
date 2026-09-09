@@ -1,3 +1,4 @@
+import os
 import re
 import secrets
 from typing import List, Optional
@@ -439,3 +440,48 @@ async def switch_workplace(
                 user.id, membership.business_id, membership.role)
 
     return {"business_id": membership.business_id, "role": membership.role}
+
+
+class DirectLinkOut(BaseModel):
+    direct_url: str
+    marketplace_url: str
+    token: str
+
+
+@router.get("/{business_id}/direct-link", response_model=DirectLinkOut)
+async def get_direct_link(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Пряме посилання закладу - те, за яким клієнт зараховується як власний
+    і комісія не стягується.
+
+    ОКРЕМИЙ ендпоінт, а не поле в BusinessOut: та схема віддається
+    публічно, у каталозі й на сторінці салону. Токен там означав би,
+    що будь-хто може підставити його у власне посилання й позбавити
+    платформу комісії з усіх своїх клієнтів.
+
+    Тому лише адміністратори закладу і лише окремим запитом.
+    """
+    await assert_business_admin(db, current_user, business_id)
+
+    res = await db.execute(select(Business).where(Business.id == business_id))
+    business = res.scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    if not business.direct_link_token:
+        # Заклади, створені до появи механіки, токена не мають.
+        # Видаємо тут, а не окремою міграцією: так він зʼявляється
+        # рівно тоді, коли справді потрібен.
+        business.direct_link_token = secrets.token_urlsafe(12)
+        await db.commit()
+
+    base = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    return DirectLinkOut(
+        direct_url=f"{base}/{business.slug}?dl={business.direct_link_token}",
+        marketplace_url=f"{base}/{business.slug}",
+        token=business.direct_link_token,
+    )

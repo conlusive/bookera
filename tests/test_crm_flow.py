@@ -219,3 +219,30 @@ async def test_business_deletion_requires_owner_and_exact_name(client, auth_head
 
     r = await client.get("/crm/businesses/me", headers=owner)
     assert r.json()["business_id"] is None, "власник більше не привʼязаний до закладу"
+
+
+@pytest.mark.asyncio
+async def test_direct_link_is_private_to_business_admins(client, auth_headers):
+    """
+    Пряме посилання визначає, платить заклад комісію чи ні. Тому токен
+    НЕ входить у публічну схему закладу: інакше будь-хто підставив би
+    його у власне посилання й позбавив платформу комісії.
+    """
+    owner = auth_headers("dl-owner")
+    r = await client.post("/crm/businesses", json={"name": "Direct Link Salon", "city": "Львів"}, headers=owner)
+    business_id = r.json()["id"]
+    slug = r.json()["slug"]
+
+    # Публічна сторінка салону токена не віддає
+    r = await client.get(f"/businesses/{slug}")
+    assert "direct_link_token" not in r.json()
+
+    # Власник його бачить
+    r = await client.get(f"/crm/businesses/{business_id}/direct-link", headers=owner)
+    assert r.status_code == 200, r.text
+    assert "?dl=" in r.json()["direct_url"]
+    assert "?dl=" not in r.json()["marketplace_url"]
+
+    # Стороння людина - ні
+    r = await client.get(f"/crm/businesses/{business_id}/direct-link", headers=auth_headers("dl-stranger"))
+    assert r.status_code == 403

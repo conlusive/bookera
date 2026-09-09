@@ -308,11 +308,26 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginTop: '0.75rem' }}>
                   <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor }} />
                   <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>
-                    {[formData.city, formData.address].filter(Boolean).join(', ') || 'Адресу не вказано'}
+                    {(() => {
+                      // Не склеюємо місто з адресою, якщо адреса вже з нього
+                      // починається. У старих записах у полі «адреса» лежить
+                      // повний рядок разом із містом - склеювання давало
+                      // «Львів, Львів, Дорошенка 10».
+                      const city = (formData.city || '').trim();
+                      const addr = (formData.address || '').trim();
+                      if (!addr) return city || 'Адресу не вказано';
+                      if (!city) return addr;
+                      return addr.toLowerCase().startsWith(city.toLowerCase())
+                        ? addr
+                        : `${city}, ${addr}`;
+                    })()}
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', marginTop: '0.75rem', alignItems: 'center' }}>
+                <div
+                  className="contacts-row"
+                  style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', marginTop: '0.75rem', alignItems: 'center' }}
+                >
                   {formData.phone && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
                       <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
@@ -325,12 +340,18 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                       <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.email}</span>
                     </div>
                   )}
+                  {/* Підпис зʼявляється при наведенні, як решта підказок
+                      на цій сторінці: постійна кнопка «Змінити» біля
+                      кожного блоку перетворює вітрину на панель керування,
+                      а вона має показувати, як заклад ВИГЛЯДАЄ. */}
                   <button
+                    className="edit-hint"
                     onClick={() => onNavigate?.('Settings')}
                     style={{
                       border: 'none', background: 'transparent', color: accentColor,
                       fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
                       fontFamily: 'inherit', padding: '0.2rem 0',
+                      opacity: 0, transition: 'opacity 0.15s ease',
                     }}
                   >
                     Змінити в налаштуваннях
@@ -401,7 +422,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 {layoutConfig.showMap && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', height: '300px', border: '1px solid rgba(226, 232, 240, 0.6)' }}>
                     <iframe key={formData.address} width="100%" height="100%" style={{ border: 0, pointerEvents: 'none' }} loading="lazy" src={`https://maps.google.com/maps?q=${encodeURIComponent(formData.address || 'Київ')}&t=&z=18&ie=UTF8&iwloc=&output=embed`}></iframe>
-                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => document.querySelector('input[name="address"]')?.scrollIntoView()}><button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button></div>
+                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => onNavigate?.('Settings')}><button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button></div>
                   </div>
                 )}
               </div>

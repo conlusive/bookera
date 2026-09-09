@@ -26,6 +26,7 @@ export default function BusinessRegisterWizard() {
   const [formData, setFormData] = useState({
     businessName: '',
     phone: '',
+    email: '',
     businessCategory: '',
     businessType: '',
     workspace: '',
@@ -160,6 +161,7 @@ export default function BusinessRegisterWizard() {
           ? formData.city.trim()
           : `${formData.city}, ${formData.street} ${formData.addressDetails}`.trim(),
         phone: `+380${formData.phone}`,
+        email: formData.email.trim() || undefined,
         hours: hoursPayload,
       });
 
@@ -417,6 +419,23 @@ export default function BusinessRegisterWizard() {
                 value={formData.phone ? `+380 ${formData.phone}` : '+380 '}
                 onChange={(e) => handlePhoneChange(e, 'business')}
               />
+
+              {/* Пошта закладу. Раніше її не питали взагалі, і заклад
+                  не отримував сповіщень про нові записи - дізнавався,
+                  лише відкривши календар.
+                  Необовʼязкова: змусити людину вигадувати пошту на
+                  першому кроці означає втратити частину реєстрацій. */}
+              <label className="input-label">Пошта закладу (необовʼязково)</label>
+              <input
+                type="email"
+                placeholder="salon@example.com"
+                className="custom-input"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
+              <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.5rem 0 0', lineHeight: 1.45 }}>
+                На неї приходитимуть сповіщення про нові записи. Можна додати пізніше в налаштуваннях.
+              </p>
             </div>
           )}
 

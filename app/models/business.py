@@ -56,6 +56,11 @@ class Business(Base):
     commission_rate = Column(Numeric(5, 2), default=10.00, nullable=False)  # % з завершеного візиту
     points_balance = Column(Integer, default=0, nullable=False)
 
+    # Чи показувати телефон клієнтам. Приватний майстер удома часто не
+    # хоче публікувати особистий номер, але він потрібен нам для звʼязку -
+    # тому окремий прапорець, а не порожнє поле.
+    show_phone_publicly = Column(Boolean, default=True, nullable=False)
+
     # === Підписка ===
     #
     # plan: 'free' | 'pro'. Свідомо рядок, а не enum: тарифи змінюються

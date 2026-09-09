@@ -319,3 +319,12 @@
   .cal-toolbar { flex-wrap: wrap; }
   .cal-toolbar__title { min-width: 0; }
 }
+
+/* Вітрина: підказки редагування зʼявляються при наведенні.
+   Постійні кнопки «Змінити» біля кожного блоку перетворювали б
+   вітрину на панель керування, а вона має показувати, як заклад
+   ВИГЛЯДАЄ для клієнта. */
+.contacts-row:hover .edit-hint,
+.edit-hint:focus-visible {
+  opacity: 1 !important;
+}

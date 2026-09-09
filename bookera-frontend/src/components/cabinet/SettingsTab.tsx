@@ -49,7 +49,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const businessSettingsCards = [
   // Профіль першим: саме з нього виводяться типові значення для решти
   // налаштувань, і людина має бачити, що вона вказала при реєстрації.
-  { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgGlobe, color: '#8b5cf6', bg: '#f5f3ff' },
+  { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgGlobe, color: '#0f766e', bg: '#f0fdfa' },
   { id: 'booking', title: 'Онлайн-бронювання', desc: 'Правила сітки, зупинка запису та скасування.', icon: SvgGlobe, color: '#3b82f6', bg: '#eff6ff' },
   { id: 'security', title: 'Безпека та Чорний список', desc: 'Захист від фейкових записів та спаму.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
   { id: 'payments', title: 'Платежі та Каса', desc: 'Депозити, передоплата та валюта.', icon: SvgCreditCard, color: '#10b981', bg: '#ecfdf5' },
@@ -94,6 +94,7 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
         address: (business as any).address || '',
         phone: (business as any).phone || '',
         email: (business as any).email || '',
+        show_phone_publicly: (business as any).show_phone_publicly !== false,
       });
       setProfileSettings({
         category: (business as any).category || 'beauty',
@@ -120,7 +121,7 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
     category: 'beauty', business_type: 'company', workspace_type: 'my_place',
   });
   const [contactSettings, setContactSettings] = useState({
-    name: '', city: '', address: '', phone: '', email: '',
+    name: '', city: '', address: '', phone: '', email: '', show_phone_publicly: true,
   });
 
   // РЕАЛЬНИЙ АЛГОРИТМ АНАЛІЗУ ПОСЛУГ
@@ -456,12 +457,18 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                   />
                 </div>
                 <div>
-                  <label className="setting-label">Адреса</label>
+                  <label className="setting-label">Вулиця й номер</label>
                   <input
                     type="text" className="setting-input"
                     value={contactSettings.address}
+                    placeholder="Дорошенка 10"
                     onChange={e => setContactSettings({ ...contactSettings, address: e.target.value })}
                   />
+                  {/* Місто в окремому полі - без цієї підказки його
+                      дублюють в адресі, і виходить «Львів, Львів, ...» */}
+                  <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0.4rem 0 0', lineHeight: 1.45 }}>
+                    Без міста — воно в полі поруч.
+                  </p>
                 </div>
                 <div>
                   <label className="setting-label">Телефон</label>
@@ -470,6 +477,21 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                     value={contactSettings.phone}
                     onChange={e => setContactSettings({ ...contactSettings, phone: e.target.value })}
                   />
+                  {/* Показ телефону - вибір закладу. Приватний майстер
+                      удома часто не хоче публікувати особистий номер,
+                      але він потрібен нам для звʼязку. Тому не «стерти
+                      номер», а «не показувати». */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.6rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={contactSettings.show_phone_publicly !== false}
+                      onChange={e => setContactSettings({ ...contactSettings, show_phone_publicly: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: '#0f766e', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                      Показувати клієнтам
+                    </span>
+                  </label>
                 </div>
                 <div>
                   <label className="setting-label">Пошта закладу</label>

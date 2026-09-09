@@ -63,6 +63,7 @@ class BusinessUpdate(BaseModel):
     layout_config: Optional[dict] = None
     workplace_photos: Optional[List[str]] = None
     booking_settings: Optional[dict] = None
+    show_phone_publicly: Optional[bool] = True
     security_settings: Optional[dict] = None
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None
@@ -76,6 +77,7 @@ class BusinessOut(BusinessBase):
     # Віддаємо лише те, що стосується клієнта - решта налаштувань
     # (безпека, платежі) не його справа.
     booking_settings: Optional[dict] = None
+    show_phone_publicly: Optional[bool] = True
     # Без цього поля інтерфейс не міг визначити власника: перевірка
     # userProfile.id === business.owner_id завжди давала false, і кнопки
     # для адміністратора зникали.
@@ -88,6 +90,7 @@ class BusinessOut(BusinessBase):
     layout_config: Optional[dict] = None
     workplace_photos: Optional[List[str]] = []
     booking_settings: Optional[dict] = None
+    show_phone_publicly: Optional[bool] = True
     security_settings: Optional[dict] = None
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None

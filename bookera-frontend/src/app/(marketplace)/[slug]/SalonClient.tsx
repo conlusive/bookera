@@ -104,6 +104,10 @@ export default function SalonClient({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [bookingStage, setBookingStage] = useState<'selection' | 'confirmation'>('selection');
   const [selectedService, setSelectedService] = useState<any>(null);
+  // Додаткові послуги до візиту. Пропонуємо ПІСЛЯ вибору основної:
+  // людина вже вирішила прийти, і додати щось до візиту - природне
+  // продовження, а не спроба продати щось замість.
+  const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedMasterId, setSelectedMasterId] = useState<number | string>(0);
@@ -451,6 +455,9 @@ export default function SalonClient({
 
   const openModal = (service: any) => {
     setSelectedService(service);
+    // Скидаємо: інакше вибір із попередньої послуги перенісся б на нову,
+    // і людина заплатила б за те, чого не обирала.
+    setSelectedAddonIds([]);
     setBookingStage('selection');
     setSelectedTime(null);
     if (calendarDays.length > 0) setSelectedDate(calendarDays[0].date);
@@ -1319,10 +1326,32 @@ export default function SalonClient({
                       {selectedDate.split('-').reverse().join('.')} о {selectedTime}
                     </span>
                   </div>
+                  {/* Додаткові послуги в підтвердженні: людина має бачити,
+                      за що саме платить, ДО натискання кнопки. Сюрприз
+                      у сумі - найшвидший спосіб втратити довіру. */}
+                  {selectedAddonIds.length > 0 && (selectedService?.addons || [])
+                    .filter((a: any) => selectedAddonIds.includes(a.id))
+                    .map((addon: any) => (
+                      <div className="details-row" key={addon.id}>
+                        <span className="details-label">+ {addon.name}</span>
+                        <div className="details-dots"></div>
+                        <span className="details-value">
+                          {Number(addon.price || 0).toLocaleString('uk-UA')} ₴
+                        </span>
+                      </div>
+                    ))}
+
                   <div className="details-row" style={{ marginTop: '2rem', alignItems: 'center' }}>
                     <span className="details-label" style={{ fontWeight: '800', color: '#222222', fontSize: '1.05rem' }}>До сплати</span>
                     <div className="details-dots" style={{ borderBottomColor: 'transparent' }}></div>
-                    <span className="details-value" style={{ color: '#166534', fontSize: '1.3rem', fontWeight: '900' }}>{selectedService?.price} ₴</span>
+                    <span className="details-value" style={{ color: '#166534', fontSize: '1.3rem', fontWeight: '900' }}>
+                      {(
+                        Number(selectedService?.price || 0) +
+                        (selectedService?.addons || [])
+                          .filter((a: any) => selectedAddonIds.includes(a.id))
+                          .reduce((s: number, a: any) => s + Number(a.price || 0), 0)
+                      ).toLocaleString('uk-UA')} ₴
+                    </span>
                   </div>
                 </div>
 
@@ -1421,6 +1450,83 @@ export default function SalonClient({
                     </div>
                   )}
                 </div>
+
+                {/* Додаткові послуги. Показуємо лише коли час уже обрано:
+                    поки людина шукає вільне вікно, пропозиція докупити
+                    щось лише заважає. Після вибору часу візит фактично
+                    вирішено, і додати до нього - природне продовження. */}
+                {selectedTime && (selectedService?.addons?.length ?? 0) > 0 && (
+                  <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #EDF1EC' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#222222', marginBottom: '0.25rem' }}>
+                      Додати до візиту
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#6B756A', marginBottom: '0.85rem' }}>
+                      Необовʼязково — можна вирішити на місці
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {selectedService.addons.map((addon: any) => {
+                        const isPicked = selectedAddonIds.includes(addon.id);
+                        return (
+                          <button
+                            key={addon.id}
+                            type="button"
+                            onClick={() => setSelectedAddonIds(prev =>
+                              isPicked ? prev.filter(id => id !== addon.id) : [...prev, addon.id]
+                            )}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '0.75rem',
+                              padding: '0.75rem 0.9rem', borderRadius: '12px',
+                              border: `1px solid ${isPicked ? '#8FAE93' : '#E4EBE3'}`,
+                              background: isPicked ? '#F4FAF5' : '#fff',
+                              cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                              transition: 'border-color 0.15s ease, background-color 0.15s ease',
+                            }}
+                          >
+                            <span style={{
+                              width: '20px', height: '20px', borderRadius: '6px', flexShrink: 0,
+                              border: `1.5px solid ${isPicked ? '#6F9273' : '#CBD5E1'}`,
+                              background: isPicked ? '#6F9273' : '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#fff', fontSize: '0.7rem', lineHeight: 1,
+                            }}>
+                              {isPicked ? '✓' : ''}
+                            </span>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#222222' }}>
+                                {addon.name}
+                              </span>
+                              <span style={{ display: 'block', fontSize: '0.78rem', color: '#6B756A', marginTop: '1px' }}>
+                                +{addon.duration_minutes} хв
+                              </span>
+                            </span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#222222', flexShrink: 0 }}>
+                              +{Number(addon.price || 0).toLocaleString('uk-UA')} ₴
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedAddonIds.length > 0 && (
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                        marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px dashed #E4EBE3',
+                        fontSize: '0.9rem',
+                      }}>
+                        <span style={{ color: '#6B756A' }}>Разом</span>
+                        <span style={{ fontWeight: 800, color: '#222222', fontSize: '1.05rem' }}>
+                          {(
+                            Number(selectedService.price || 0) +
+                            selectedService.addons
+                              .filter((a: any) => selectedAddonIds.includes(a.id))
+                              .reduce((s: number, a: any) => s + Number(a.price || 0), 0)
+                          ).toLocaleString('uk-UA')} ₴
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <button onClick={handleNextStep} className="btn-dark anim" style={{ width: '100%', padding: '1.1rem', borderRadius: '16px', fontSize: '1.05rem' }}>
                   Забронювати на 10 хвилин

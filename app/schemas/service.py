@@ -28,12 +28,28 @@ class ServiceUpdate(BaseModel):
     addon_service_ids: Optional[List[int]] = None
 
 
+class AddonOut(BaseModel):
+    """Додаткова послуга у відповіді - з назвою й ціною.
+
+    Раніше віддавались лише id, і клієнтська сторінка мусила шукати
+    кожну послугу окремо у списку. Для екрана «додати до візиту»
+    потрібні саме назва й ціна, а не номер.
+    """
+    id: int
+    name: str
+    price: Optional[float] = None
+    duration_minutes: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ServiceResponse(ServiceBase):
     id: int
     business_id: int
     is_active: bool = True
     order_index: int = 0
     addon_service_ids: List[int] = []
+    addons: List[AddonOut] = []
 
     model_config = ConfigDict(from_attributes=True)
 

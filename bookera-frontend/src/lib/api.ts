@@ -577,6 +577,15 @@ export const api = {
     return authFetch(`/crm/businesses/${businessId}/apply-profile-defaults`, token, { method: 'POST' });
   },
 
+  /** Видалити заклад. Потребує точної назви - підтвердження галочкою
+   *  для незворотної дії недостатньо. */
+  async deleteBusiness(token: string, businessId: number, confirmName: string): Promise<void> {
+    await authFetch(`/crm/businesses/${businessId}`, token, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm_name: confirmName }),
+    });
+  },
+
   // === Справи на день ===
   // Раніше цей список жив лише в localStorage: зникав при чистці кешу
   // і не бачився з іншого пристрою.

@@ -185,3 +185,37 @@ async def test_tasks_crud(client, auth_headers):
     other = auth_headers("tasks-stranger")
     r = await client.get(f"/crm/tasks?business_id={business_id}", headers=other)
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_business_deletion_requires_owner_and_exact_name(client, auth_headers):
+    """
+    Видалення закладу - вимога законодавства про персональні дані.
+    Формальної можливості «напишіть у підтримку» тут недосить.
+
+    Захист подвійний: лише власник і лише з точною назвою. Підтвердження
+    назвою, а не галочкою: галочку ставлять не читаючи.
+    """
+    owner = auth_headers("delete-owner")
+    r = await client.post("/crm/businesses", json={"name": "Salon To Delete", "city": "Львів"}, headers=owner)
+    business_id = r.json()["id"]
+
+    # Чужа людина видалити не може
+    r = await client.request("DELETE", f"/crm/businesses/{business_id}",
+                             json={"confirm_name": "Salon To Delete"},
+                             headers=auth_headers("delete-stranger"))
+    assert r.status_code == 403
+
+    # Неточна назва - відмова
+    r = await client.request("DELETE", f"/crm/businesses/{business_id}",
+                             json={"confirm_name": "salon to delete"}, headers=owner)
+    assert r.status_code == 400
+    assert "збігається" in r.json()["detail"]
+
+    # Точна назва - видаляється
+    r = await client.request("DELETE", f"/crm/businesses/{business_id}",
+                             json={"confirm_name": "Salon To Delete"}, headers=owner)
+    assert r.status_code == 204
+
+    r = await client.get("/crm/businesses/me", headers=owner)
+    assert r.json()["business_id"] is None, "власник більше не привʼязаний до закладу"

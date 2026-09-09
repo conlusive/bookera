@@ -8,6 +8,8 @@ import { useToast } from '@/context/ToastContext';
 import AppSelect from '@/components/ui/AppSelect';
 
 interface SettingsTabProps {
+  /** Перехід на іншу вкладку кабінету - щоб не дублювати поля. */
+  onNavigate?: (tab: string) => void;
   business: any;
   Icons?: any;
 }
@@ -32,6 +34,18 @@ const SvgDownload = (p:any) => <SvgIcon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5
 const SvgGift = (p:any) => <SvgIcon {...p}><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></SvgIcon>;
 const SvgCreditCardPlus = (p:any) => <SvgIcon {...p}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line><line x1="12" y1="15" x2="12" y2="19"></line><line x1="10" y1="17" x2="14" y2="17"></line></SvgIcon>;
 
+// Людські назви напрямів. Тут, а не всередині компонента: ті самі
+// підписи потрібні у «Вітрині», і два списки розійшлись би.
+const CATEGORY_LABELS: Record<string, string> = {
+  barber: 'Барбершоп',
+  hair: 'Перукарня',
+  nails: 'Манікюр і педикюр',
+  beauty: 'Салон краси',
+  brows: 'Брови та вії',
+  massage: 'Масаж',
+  spa: 'Wellness і SPA',
+};
+
 const businessSettingsCards = [
   // Профіль першим: саме з нього виводяться типові значення для решти
   // налаштувань, і людина має бачити, що вона вказала при реєстрації.
@@ -43,7 +57,7 @@ const businessSettingsCards = [
   { id: 'billing', title: 'Підписка та Білінг', desc: 'Поточний тариф, ліміти та методи оплати.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
 ];
 
-export default function SettingsTab({ business }: SettingsTabProps) {
+export default function SettingsTab({ business, onNavigate }: SettingsTabProps) {
   const supabase = createClient();
   const [settingsView, setSettingsView] = useState<'main' | 'profile' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,6 +104,8 @@ export default function SettingsTab({ business }: SettingsTabProps) {
   // реалізація в проєкті, і кожна виглядала по-своєму.
   const { showToast } = useToast();
   const [newPeriod, setNewPeriod] = useState({ start: '', end: '', reason: '' });
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
   // Профіль закладу - те, що людина вказала при реєстрації. Раніше ці
   // дані лежали в базі й ніде не показувались: змінити напрям після
   // реєстрації було неможливо.
@@ -153,12 +169,16 @@ export default function SettingsTab({ business }: SettingsTabProps) {
     saveTimers.current['profile'] = setTimeout(async () => {
       try {
         const token = await getAuthToken();
-        await api.updateBusiness(token, business.id, profileSettings);
+        // Категорію не надсилаємо: вона редагується у «Вітрині».
+        await api.updateBusiness(token, business.id, {
+          business_type: profileSettings.business_type,
+          workspace_type: profileSettings.workspace_type,
+        });
       } catch (err: any) {
         showToast(err?.message || 'Не вдалося зберегти профіль', 'error');
       }
     }, 600);
-  }, [profileSettings]);
+  }, [profileSettings.business_type, profileSettings.workspace_type]);
 
   useEffect(() => {
     if (isFirstRender.current) return;
@@ -321,26 +341,30 @@ export default function SettingsTab({ business }: SettingsTabProps) {
             <div className="clean-panel">
               <h3 className="panel-title">Чим ви займаєтесь</h3>
               <p className="panel-subtitle">
-                Ці дані ви вказали при реєстрації. З них система виводить типові
+                Тип бізнесу й спосіб роботи. Разом із напрямом із «Вітрини» вони визначають типові
                 значення: крок сітки, тривалість візиту й запас часу до запису.
                 Змінивши напрям, ви можете оновити ці значення нижче.
               </p>
               <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                {/* Напрям редагується у «Вітрині», а не тут.
+                    Він одночасно публічна назва, яку бачить клієнт, і
+                    основа для типових правил. Дати змінювати його у двох
+                    місцях означало б рано чи пізно отримати розбіжність:
+                    у вітрині «Барбершоп», у налаштуваннях «Манікюр».
+                    Тут показуємо як довідку. */}
                 <div>
                   <label className="setting-label">Напрям</label>
-                  <AppSelect
-                    value={profileSettings.category}
-                    onChange={v => setProfileSettings({ ...profileSettings, category: String(v) })}
-                    options={[
-                      { value: 'barber', label: 'Барбершоп' },
-                      { value: 'hair', label: 'Перукарня' },
-                      { value: 'nails', label: 'Манікюр і педикюр' },
-                      { value: 'beauty', label: 'Салон краси' },
-                      { value: 'brows', label: 'Брови та вії' },
-                      { value: 'massage', label: 'Масаж' },
-                      { value: 'spa', label: 'Wellness і SPA' },
-                    ]}
-                  />
+                  <div style={{
+                    height: '44px', padding: '0 0.9rem', display: 'flex', alignItems: 'center',
+                    justifyContent: 'space-between', gap: '0.5rem',
+                    background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px',
+                    fontSize: '0.9rem', color: '#475569',
+                  }}>
+                    <span>{CATEGORY_LABELS[profileSettings.category] || profileSettings.category || '—'}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0 }}>
+                      змінюється у «Вітрині»
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label className="setting-label">Тип бізнесу</label>
@@ -370,6 +394,34 @@ export default function SettingsTab({ business }: SettingsTabProps) {
             {/* Показуємо, ЩО саме випливає з профілю. Без цього звʼязок
                 непомітний: людина міняє напрям і не розуміє, чому потім
                 у бронюванні інші значення. */}
+            {/* Основні дані закладу редагуються у «Онлайн-вітрині».
+                Не дублюємо їх тут: два місця для одного поля - вірний
+                спосіб отримати розбіжність і питання «а де правильне». */}
+            <div className="clean-panel">
+              <h3 className="panel-title">Назва, адреса й контакти</h3>
+              <div style={{ padding: '1.25rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a' }}>
+                    {business?.name || 'Заклад'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>
+                    {[business?.city, (business as any)?.address].filter(Boolean).join(', ') || 'Адресу не вказано'}
+                    {(business as any)?.phone ? ` · ${(business as any).phone}` : ''}
+                  </div>
+                </div>
+                <button
+                  onClick={() => onNavigate?.('Storefront')}
+                  style={{
+                    height: '38px', padding: '0 1rem', borderRadius: '10px',
+                    border: '1px solid rgba(34,34,34,0.16)', background: '#fff', color: '#222222',
+                    fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
+                  }}
+                >
+                  Змінити у вітрині
+                </button>
+              </div>
+            </div>
+
             <div className="clean-panel">
               <h3 className="panel-title">Що з цього випливає</h3>
               <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -411,6 +463,83 @@ export default function SettingsTab({ business }: SettingsTabProps) {
                 >
                   Оновити за напрямом
                 </button>
+              </div>
+            </div>
+
+            {/* Видалення - в самому низу й окремим блоком. Небезпечні дії
+                не мають траплятись під руку, коли людина шукає щось інше. */}
+            <div className="clean-panel" style={{ borderColor: 'rgba(168,57,52,0.2)' }}>
+              <h3 className="panel-title" style={{ color: '#A83934' }}>Видалити заклад</h3>
+              <p className="panel-subtitle">
+                Разом із закладом зникнуть записи, клієнти, послуги й історія.
+                Дію не можна скасувати.
+              </p>
+              <div style={{ padding: '1.25rem 2rem' }}>
+                {!isDeleting ? (
+                  <button
+                    onClick={() => setIsDeleting(true)}
+                    style={{
+                      height: '38px', padding: '0 1rem', borderRadius: '10px',
+                      border: '1px solid rgba(168,57,52,0.25)', background: '#FBF0EF',
+                      color: '#A83934', fontSize: '0.85rem', fontWeight: 600,
+                      fontFamily: 'inherit', cursor: 'pointer',
+                    }}
+                  >
+                    Видалити заклад
+                  </button>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '420px' }}>
+                    <p style={{ fontSize: '0.875rem', color: '#0f172a', margin: 0, lineHeight: 1.5 }}>
+                      Щоб підтвердити, введіть назву закладу:{' '}
+                      <b>{business?.name}</b>
+                    </p>
+                    <input
+                      type="text"
+                      className="setting-input"
+                      value={deleteConfirm}
+                      onChange={e => setDeleteConfirm(e.target.value)}
+                      placeholder={business?.name || ''}
+                      autoFocus
+                    />
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        onClick={async () => {
+                          if (!business?.id) return;
+                          try {
+                            const token = await getAuthToken();
+                            await api.deleteBusiness(token, business.id, deleteConfirm.trim());
+                            // Перезавантаження, а не перехід: після видалення
+                            // весь стан кабінету посилається на заклад,
+                            // якого вже немає.
+                            window.location.href = '/business';
+                          } catch (err: any) {
+                            showToast(err?.message || 'Не вдалося видалити заклад', 'error');
+                          }
+                        }}
+                        disabled={deleteConfirm.trim() !== (business?.name || '').trim()}
+                        style={{
+                          height: '38px', padding: '0 1rem', borderRadius: '10px', border: 'none',
+                          background: '#A83934', color: '#fff', fontSize: '0.85rem', fontWeight: 600,
+                          fontFamily: 'inherit',
+                          cursor: deleteConfirm.trim() === (business?.name || '').trim() ? 'pointer' : 'not-allowed',
+                          opacity: deleteConfirm.trim() === (business?.name || '').trim() ? 1 : 0.45,
+                        }}
+                      >
+                        Видалити назавжди
+                      </button>
+                      <button
+                        onClick={() => { setIsDeleting(false); setDeleteConfirm(''); }}
+                        style={{
+                          height: '38px', padding: '0 1rem', borderRadius: '10px',
+                          border: '1px solid #e2e8f0', background: '#fff', color: '#475569',
+                          fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+                        }}
+                      >
+                        Скасувати
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

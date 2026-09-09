@@ -21,7 +21,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
   const supabase = createClient();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const [formData, setFormData] = useState({ name: '', category: '', address: '', description: '' });
+  const [formData, setFormData] = useState({ name: '', category: '', address: '', description: '', phone: '', email: '' });
 
   const [accentColor, setAccentColor] = useState('#0f172a');
   const [isSaving, setIsSaving] = useState(false);
@@ -48,6 +48,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         category: business.category || '',
         address: business.address || '',
         description: business.description || '',
+        phone: (business as any).phone || '',
+        email: (business as any).email || '',
       });
       setAccentColor(business.accent_color || '#0f172a');
       setLogo(business.logo || null);
@@ -111,6 +113,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         name: formData.name,
         category: formData.category,
         address: formData.address,
+        phone: formData.phone,
+        email: formData.email,
         description: formData.description,
         accent_color: accentColor,
         layout_config: layoutConfig,
@@ -300,6 +304,33 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     style={{ fontSize: '1.25rem', color: '#64748b', fontWeight: '500', width: '100%', padding: '0.2rem 0.5rem' }}
                     placeholder="Місто, вулиця та номер будинку"
                   />
+                </div>
+
+                {/* Контакти. Раніше телефон і пошту можна було вказати лише
+                    при реєстрації - переїхали чи змінили номер, і виправити
+                    було ніяк. Місце саме тут: це те, що бачить клієнт,
+                    а не внутрішнє налаштування.
+
+                    Пошта закладу ще й отримує сповіщення про нові записи -
+                    без неї заклад дізнається про запис, лише відкривши
+                    календар. */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', marginTop: '0.75rem', marginLeft: '0.1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: '1 1 220px' }}>
+                    <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
+                    <input
+                      name="phone" value={formData.phone || ''} onChange={handleInputChange} className="inline-input"
+                      style={{ fontSize: '1rem', color: '#64748b', fontWeight: '500', width: '100%', padding: '0.2rem 0.5rem' }}
+                      placeholder="+380 XX XXX XX XX"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: '1 1 220px' }}>
+                    <Icons.Mail style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
+                    <input
+                      name="email" type="email" value={formData.email || ''} onChange={handleInputChange} className="inline-input"
+                      style={{ fontSize: '1rem', color: '#64748b', fontWeight: '500', width: '100%', padding: '0.2rem 0.5rem' }}
+                      placeholder="Пошта закладу"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -11,7 +11,9 @@ from app.api.deps import get_db
 from app.services.business_profile import default_booking_settings
 from app.services.subscription import STATUS_TRIAL, subscription_state, trial_until
 from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
-from app.models import Business, BusinessHours, User
+from pydantic import BaseModel
+from app.core.logging_config import logger
+from app.models import Business, RoleEnum, BusinessHours, User
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessOut, BusinessHoursItem
 
 router = APIRouter(prefix="/crm/businesses", tags=["CRM - Business"])
@@ -263,3 +265,63 @@ async def set_business_hours(
     await db.commit()
     result = await db.execute(select(BusinessHours).where(BusinessHours.business_id == business_id))
     return result.scalars().all()
+
+
+class BusinessDeleteRequest(BaseModel):
+    # Підтвердження назвою, а не галочкою: галочку ставлять не читаючи,
+    # а щоб надрукувати назву закладу, треба усвідомити, що видаляєш.
+    confirm_name: str
+
+
+@router.delete("/{business_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_business(
+    business_id: int,
+    payload: BusinessDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Видалити заклад разом з усіма даними.
+
+    Право на видалення даних - вимога законодавства про персональні
+    дані, і формальної можливості «напишіть у підтримку» тут недосить.
+
+    Видаляє ЛИШЕ власник: адміністратор керує закладом щодня, але
+    закрити бізнес - рішення того, кому він належить.
+
+    Видалення повне, без «м'якого» прапорця.Напів-видалений заклад, який
+    лишається в базі, - це саме те, від чого закон і захищає. Виняток
+    один: історія платежів залишається знеособленою, бо фінансові
+    записи мають зберігатись за іншими правилами.
+    """
+    res = await db.execute(select(Business).where(Business.id == business_id))
+    business = res.scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    if str(business.owner_id) != str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Видалити заклад може лише власник",
+        )
+
+    if payload.confirm_name.strip() != business.name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Назва не збігається. Введіть назву закладу точно.",
+        )
+
+    # Відвʼязуємо персонал, а не видаляємо: люди мають облікові записи,
+    # якими користуються і в інших закладах.
+    staff_res = await db.execute(select(User).where(User.business_id == business_id))
+    for member in staff_res.scalars().all():
+        member.business_id = None
+        member.role = RoleEnum.CLIENT
+
+    logger.warning(
+        "Заклад видалено: id=%s name=%s owner=%s",
+        business.id, business.name, business.owner_id,
+    )
+
+    await db.delete(business)
+    await db.commit()

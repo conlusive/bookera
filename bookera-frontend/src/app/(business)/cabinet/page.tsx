@@ -1486,7 +1486,7 @@ export default function BusinessCabinet() {
           />
         )}
 
-        {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} />}
+        {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} />}
 
         {/* 🟢 БУФЕР ОБМІНУ (КОПІЮВАННЯ) */}
         {clipboardApp && (

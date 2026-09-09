@@ -500,9 +500,14 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const canEditServices = hasAdminRights;                // які послуги виконує
 
   const getRoleBadge = (staff: any) => {
-    if ((staff.name || '').includes('Власник') || isOwnerRole(staff.role)) return { label: 'Власник бізнесу', color: colors.blue, bg: colors.blueLight };
-    if (staff.role === 'admin') return { label: 'Адміністратор', color: '#5856d6', bg: '#f2f2f7' };
-    return { label: 'Спеціаліст', color: colors.green, bg: '#dcfce7' };
+    // Кольори з палітри продукту (Matcha Mist), а не системні синій
+    // і фіолетовий: бейдж посади - частина інтерфейсу, а не сповіщення,
+    // і не має конкурувати за увагу з іменем людини.
+    if ((staff.name || '').includes('Власник') || isOwnerRole(staff.role)) {
+      return { label: 'Власник бізнесу', color: '#24301F', bg: '#C2D8C4' };
+    }
+    if (staff.role === 'admin') return { label: 'Адміністратор', color: '#2E3A30', bg: '#E4EEE3' };
+    return { label: 'Спеціаліст', color: '#5C6B5E', bg: '#F2F6F1' };
   };
 
   const activeStaffTab = staffActiveTab || 'general';
@@ -599,27 +604,21 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   </div>
                 </div>
 
+                {/* Лише крапка, без суми.
+                    Сума розтягувала картку, і «Власник бізнесу» переносився
+                    на два рядки. Точна цифра тут і не потрібна: у списку
+                    достатньо знати, КОМУ пора платити, а скільки саме -
+                    видно в картці майстра. Сума лишилась у підказці. */}
                 {due && (
                   <span
                     title={`До виплати ${Number(due.amount_due).toLocaleString('uk-UA')} ₴`}
                     style={{
                       flexShrink: 0,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      fontSize: '0.7rem',
-                      fontWeight: 600,
-                      color: '#8A5A1E',
-                      background: '#FDF6E9',
-                      border: '0.5px solid rgba(180, 130, 40, 0.22)',
-                      padding: '3px 8px',
-                      borderRadius: '20px',
-                      lineHeight: 1,
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: '#D99A2B',
+                      boxShadow: '0 0 0 3px rgba(217, 154, 43, 0.18)',
                     }}
-                  >
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D99A2B', flexShrink: 0 }} />
-                    {Number(due.amount_due).toLocaleString('uk-UA')} ₴
-                  </span>
+                  />
                 )}
               </div>
             )
@@ -651,7 +650,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
               </div>
 
               {providesServices && (
-                <Button variant="secondary" onClick={() => { setActiveTab('Calendar'); setFilterMaster(currentStaff.id); }}>
+                <Button variant="primary" onClick={() => { setActiveTab('Calendar'); setFilterMaster(currentStaff.id); }}>
                   <Icons.Calendar /> Відкрити розклад
                 </Button>
               )}
@@ -761,7 +760,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                               setLocalAssignedServices(newAssigned);
                               handleSaveSettingsDB({ assigned_services: newAssigned });
                             }}
-                            variant="secondary"
+                            variant="primary"
                             size="sm"
                           >
                             {localAssignedServices.length === services.length ? 'Зняти всі' : `Вибрати всі (${services.length})`}
@@ -811,7 +810,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                          <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0 }}>Зміни зберігаються автоматично.</p>
                       </div>
                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                         <Button variant="secondary" size="sm" onClick={handleExportToCalendar}>
+                         <Button variant="primary" size="sm" onClick={handleExportToCalendar}>
                            <Icons.Calendar /> Експорт
                          </Button>
                       </div>
@@ -949,32 +948,32 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                               {' '}(Виконано: <b>{payoutPreview.completed_appointments_count}</b> візитів на суму <b>{Number(payoutPreview.gross_revenue).toLocaleString('uk-UA')} ₴</b>)
                             </p>
 
-                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1.5rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.85rem', flexWrap: 'wrap' }}>
                               <div>
                                 <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Відсоток ({payoutPreview.commission_rate}%)</div>
-                                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{Number(payoutPreview.commission_part || 0).toLocaleString('uk-UA')} ₴</div>
+                                <div style={{ fontSize: '1rem', fontWeight: '700', color: colors.wMintText, whiteSpace: 'nowrap' }}>{Number(payoutPreview.commission_part || 0).toLocaleString('uk-UA')} ₴</div>
                               </div>
 
                               {Number(payoutPreview.fixed_part) > 0 && (
                                 <>
-                                  <div style={{ fontSize: '1.1rem', color: colors.wMintBorder, paddingBottom: '2px' }}>+</div>
+                                  <div style={{ fontSize: '0.95rem', color: colors.wMintBorder, paddingBottom: '3px' }}>+</div>
                                   <div>
                                     <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>Ставка</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.wMintText }}>{Number(payoutPreview.fixed_part).toLocaleString('uk-UA')} ₴</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: '700', color: colors.wMintText, whiteSpace: 'nowrap' }}>{Number(payoutPreview.fixed_part).toLocaleString('uk-UA')} ₴</div>
                                   </div>
                                 </>
                               )}
 
                               {Number(payoutPreview.materials_cost) > 0 && (
                                 <>
-                                  <div style={{ fontSize: '1.1rem', color: payoutPreview.materials_deducted ? colors.red : colors.wMintBorder, opacity: 0.6, paddingBottom: '2px' }}>
+                                  <div style={{ fontSize: '0.95rem', color: payoutPreview.materials_deducted ? colors.red : colors.wMintBorder, opacity: 0.6, paddingBottom: '2px' }}>
                                     {payoutPreview.materials_deducted ? '−' : '·'}
                                   </div>
                                   <div>
                                     <div style={{ fontSize: '0.75rem', color: payoutPreview.materials_deducted ? colors.red : colors.wMintText, marginBottom: '4px', opacity: 0.8, fontWeight: '600' }}>
                                       Матеріали{!payoutPreview.materials_deducted && ' (довідково)'}
                                     </div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: payoutPreview.materials_deducted ? colors.red : colors.wMintText, opacity: payoutPreview.materials_deducted ? 1 : 0.6 }}>
+                                    <div style={{ whiteSpace: 'nowrap', fontSize: '1rem', fontWeight: '700', color: payoutPreview.materials_deducted ? colors.red : colors.wMintText, opacity: payoutPreview.materials_deducted ? 1 : 0.6 }}>
                                       {Number(payoutPreview.materials_cost).toLocaleString('uk-UA')} ₴
                                     </div>
                                   </div>
@@ -983,20 +982,20 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                               {Number(payoutPreview.tax_amount) > 0 && (
                                 <>
-                                  <div style={{ fontSize: '1.1rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>−</div>
+                                  <div style={{ fontSize: '0.95rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>−</div>
                                   <div>
                                     <div style={{ fontSize: '0.75rem', color: colors.red, marginBottom: '4px', opacity: 0.85, fontWeight: '600' }}>Податок ({payoutPreview.tax_rate}%)</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.red }}>{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: '700', color: colors.red, whiteSpace: 'nowrap' }}>{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
                                   </div>
                                 </>
                               )}
 
-                              <div style={{ fontSize: '1.1rem', color: colors.wMintBorder, paddingBottom: '2px', marginLeft: '0.5rem' }}>=</div>
+                              <div style={{ fontSize: '0.95rem', color: colors.wMintBorder, paddingBottom: '3px', marginLeft: '0.25rem' }}>=</div>
 
-                              <div style={{ marginLeft: '0.5rem' }}>
+                              <div style={{ marginLeft: '0.25rem' }}>
                                 <div style={{ fontSize: '0.75rem', color: colors.wMintText, marginBottom: '4px', fontWeight: '800', textTransform: 'uppercase' }}>До виплати</div>
-                                <div style={{ fontSize: '2rem', fontWeight: '800', color: colors.wMintText, lineHeight: 1, letterSpacing: '-1px' }}>
-                                  {payoutPreview.payout_amount.toLocaleString('uk-UA')} <span style={{fontSize: '1.2rem', opacity: 0.8}}>₴</span>
+                                <div style={{ whiteSpace: 'nowrap', fontSize: '1.6rem', fontWeight: '800', color: colors.wMintText, lineHeight: 1, letterSpacing: '-1px' }}>
+                                  {payoutPreview.payout_amount.toLocaleString('uk-UA')} <span style={{fontSize: '1rem', opacity: 0.8}}>₴</span>
                                 </div>
                               </div>
                             </div>

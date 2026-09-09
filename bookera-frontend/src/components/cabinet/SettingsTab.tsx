@@ -464,11 +464,6 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                     placeholder="Дорошенка 10"
                     onChange={e => setContactSettings({ ...contactSettings, address: e.target.value })}
                   />
-                  {/* Місто в окремому полі - без цієї підказки його
-                      дублюють в адресі, і виходить «Львів, Львів, ...» */}
-                  <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0.4rem 0 0', lineHeight: 1.45 }}>
-                    Без міста — воно в полі поруч.
-                  </p>
                 </div>
                 <div>
                   <label className="setting-label">Телефон</label>
@@ -481,17 +476,22 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                       удома часто не хоче публікувати особистий номер,
                       але він потрібен нам для звʼязку. Тому не «стерти
                       номер», а «не показувати». */}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.6rem', cursor: 'pointer', userSelect: 'none' }}>
-                    <input
-                      type="checkbox"
-                      checked={contactSettings.show_phone_publicly !== false}
-                      onChange={e => setContactSettings({ ...contactSettings, show_phone_publicly: e.target.checked })}
-                      style={{ width: '16px', height: '16px', accentColor: '#0f766e', cursor: 'pointer' }}
-                    />
-                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                      Показувати клієнтам
-                    </span>
-                  </label>
+                  {/* Перемикач, як решта в налаштуваннях: галочка тут
+                      виглядала чужорідно серед однакових повзунків. */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginTop: '0.7rem' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Показувати клієнтам</span>
+                    <label className="ios-toggle" style={{ flexShrink: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={contactSettings.show_phone_publicly !== false}
+                        onChange={e => setContactSettings({ ...contactSettings, show_phone_publicly: e.target.checked })}
+                      />
+                      <span
+                        className="ios-slider"
+                        style={{ backgroundColor: contactSettings.show_phone_publicly !== false ? '#22c55e' : '#cbd5e1' }}
+                      ></span>
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="setting-label">Пошта закладу</label>
@@ -697,8 +697,12 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                     value={bookingSettings.time_step}
                     onChange={v => setBookingSettings({ ...bookingSettings, time_step: Number(v) })}
                     options={[
+                      { value: 5, label: 'Кожні 5 хвилин' },
+                      { value: 10, label: 'Кожні 10 хвилин' },
                       { value: 15, label: 'Кожні 15 хвилин' },
+                      { value: 20, label: 'Кожні 20 хвилин' },
                       { value: 30, label: 'Кожні 30 хвилин' },
+                      { value: 45, label: 'Кожні 45 хвилин' },
                       { value: 60, label: 'Кожну годину' },
                     ]}
                   />
@@ -720,7 +724,10 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                       { value: 5, label: '5 хвилин' },
                       { value: 10, label: '10 хвилин' },
                       { value: 15, label: '15 хвилин' },
+                      { value: 20, label: '20 хвилин' },
                       { value: 30, label: '30 хвилин' },
+                      { value: 45, label: '45 хвилин' },
+                      { value: 60, label: '1 година' },
                     ]}
                   />
                 </div>
@@ -737,11 +744,16 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                     value={bookingSettings.default_duration}
                     onChange={v => setBookingSettings({ ...bookingSettings, default_duration: Number(v) })}
                     options={[
+                      { value: 15, label: '15 хвилин' },
+                      { value: 20, label: '20 хвилин' },
                       { value: 30, label: '30 хвилин' },
                       { value: 45, label: '45 хвилин' },
                       { value: 60, label: '1 година' },
                       { value: 90, label: '1.5 години' },
                       { value: 120, label: '2 години' },
+                      { value: 150, label: '2.5 години' },
+                      { value: 180, label: '3 години' },
+                      { value: 240, label: '4 години' },
                     ]}
                   />
                 </div>
@@ -761,7 +773,11 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                       { value: 0, label: 'Можна записуватись одразу' },
                       { value: 1, label: 'Мінімум за 1 годину' },
                       { value: 2, label: 'Мінімум за 2 години' },
-                      { value: 24, label: 'Мінімум за 24 години' },
+                      { value: 3, label: 'Мінімум за 3 години' },
+                      { value: 6, label: 'Мінімум за 6 годин' },
+                      { value: 12, label: 'Мінімум за 12 годин' },
+                      { value: 24, label: 'Мінімум за добу' },
+                      { value: 48, label: 'Мінімум за 2 доби' },
                     ]}
                   />
                 </div>
@@ -781,7 +797,10 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                       { value: 7, label: 'На 1 тиждень' },
                       { value: 14, label: 'На 2 тижні' },
                       { value: 30, label: 'На 1 місяць' },
+                      { value: 60, label: 'На 2 місяці' },
                       { value: 90, label: 'На 3 місяці' },
+                      { value: 180, label: 'На пів року' },
+                      { value: 365, label: 'На рік' },
                     ]}
                   />
                 </div>

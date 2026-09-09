@@ -88,6 +88,13 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
 
   useEffect(() => {
     if (business) {
+      setContactSettings({
+        name: business.name || '',
+        city: business.city || '',
+        address: (business as any).address || '',
+        phone: (business as any).phone || '',
+        email: (business as any).email || '',
+      });
       setProfileSettings({
         category: (business as any).category || 'beauty',
         business_type: (business as any).business_type || 'company',
@@ -111,6 +118,9 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
   // реєстрації було неможливо.
   const [profileSettings, setProfileSettings] = useState({
     category: 'beauty', business_type: 'company', workspace_type: 'my_place',
+  });
+  const [contactSettings, setContactSettings] = useState({
+    name: '', city: '', address: '', phone: '', email: '',
   });
 
   // РЕАЛЬНИЙ АЛГОРИТМ АНАЛІЗУ ПОСЛУГ
@@ -184,6 +194,25 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
     if (isFirstRender.current) return;
     autoSave('notification_settings', notificationSettings);
   }, [notificationSettings]);
+
+  // Контакти зберігаються полями закладу, а не в JSON-колонці.
+  //
+  // Порожню назву не зберігаємо: людина могла стерти поле, щоб
+  // надрукувати нове, і зберегти проміжний стан означало б лишити
+  // заклад без назви в каталозі й у листах клієнтам.
+  useEffect(() => {
+    if (isFirstRender.current) return;
+    if (!business?.id || !contactSettings.name.trim()) return;
+    clearTimeout(saveTimers.current['contacts']);
+    saveTimers.current['contacts'] = setTimeout(async () => {
+      try {
+        const token = await getAuthToken();
+        await api.updateBusiness(token, business.id, contactSettings);
+      } catch (err: any) {
+        showToast(err?.message || 'Не вдалося зберегти контакти', 'error');
+      }
+    }, 800);
+  }, [contactSettings]);
 
   useEffect(() => {
     if (isFirstRender.current) return;
@@ -394,31 +423,60 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
             {/* Показуємо, ЩО саме випливає з профілю. Без цього звʼязок
                 непомітний: людина міняє напрям і не розуміє, чому потім
                 у бронюванні інші значення. */}
-            {/* Основні дані закладу редагуються у «Онлайн-вітрині».
-                Не дублюємо їх тут: два місця для одного поля - вірний
-                спосіб отримати розбіжність і питання «а де правильне». */}
+            {/* Основні дані ТУТ, а не у вітрині.
+                Вітрина - про те, як заклад ВИГЛЯДАЄ: обкладинка, опис,
+                фото робіт. Назва, адреса й контакти - це самі дані
+                закладу, і шукати їх у розділі про оформлення неочевидно. */}
             <div className="clean-panel">
               <h3 className="panel-title">Назва, адреса й контакти</h3>
-              <div style={{ padding: '1.25rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a' }}>
-                    {business?.name || 'Заклад'}
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>
-                    {[business?.city, (business as any)?.address].filter(Boolean).join(', ') || 'Адресу не вказано'}
-                    {(business as any)?.phone ? ` · ${(business as any).phone}` : ''}
-                  </div>
+              <p className="panel-subtitle">Ці дані бачать клієнти на сторінці закладу та в листах.</p>
+              <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label className="setting-label">Назва закладу</label>
+                  <input
+                    type="text" className="setting-input"
+                    value={contactSettings.name}
+                    onChange={e => setContactSettings({ ...contactSettings, name: e.target.value })}
+                  />
                 </div>
-                <button
-                  onClick={() => onNavigate?.('Storefront')}
-                  style={{
-                    height: '38px', padding: '0 1rem', borderRadius: '10px',
-                    border: '1px solid rgba(34,34,34,0.16)', background: '#fff', color: '#222222',
-                    fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
-                  }}
-                >
-                  Змінити у вітрині
-                </button>
+                <div>
+                  <label className="setting-label">Місто</label>
+                  <input
+                    type="text" className="setting-input"
+                    value={contactSettings.city}
+                    onChange={e => setContactSettings({ ...contactSettings, city: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="setting-label">Адреса</label>
+                  <input
+                    type="text" className="setting-input"
+                    value={contactSettings.address}
+                    onChange={e => setContactSettings({ ...contactSettings, address: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="setting-label">Телефон</label>
+                  <input
+                    type="tel" className="setting-input"
+                    value={contactSettings.phone}
+                    onChange={e => setContactSettings({ ...contactSettings, phone: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="setting-label">Пошта закладу</label>
+                  <input
+                    type="email" className="setting-input"
+                    value={contactSettings.email}
+                    placeholder="salon@example.com"
+                    onChange={e => setContactSettings({ ...contactSettings, email: e.target.value })}
+                  />
+                  {/* Пояснюємо, навіщо вона: інакше поле виглядає
+                      формальністю, і його лишають порожнім. */}
+                  <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0.4rem 0 0', lineHeight: 1.45 }}>
+                    На неї приходять сповіщення про нові записи.
+                  </p>
+                </div>
               </div>
             </div>
 

@@ -1508,7 +1508,7 @@ export default function BusinessCabinet() {
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
         {activeTab === 'Clients' && <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} />}
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}
-        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} />}
+        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} onNavigate={setActiveTab} />}
 
         {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} />}
 

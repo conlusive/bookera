@@ -8,6 +8,8 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 
 interface StorefrontTabProps {
+  /** Перехід на іншу вкладку - щоб не дублювати поля. */
+  onNavigate?: (tab: string) => void;
   business: any;
   services: any[];
   team: any[];
@@ -15,13 +17,13 @@ interface StorefrontTabProps {
   setActiveTab: (tab: string) => void;
 }
 
-export default function StorefrontTab({ business, services, team, Icons, setActiveTab }: StorefrontTabProps) {
+export default function StorefrontTab({ business, services, team, Icons, setActiveTab, onNavigate }: StorefrontTabProps) {
   const { showToast } = useToast();
   const router = useRouter();
   const supabase = createClient();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const [formData, setFormData] = useState({ name: '', category: '', address: '', description: '', phone: '', email: '' });
+  const [formData, setFormData] = useState({ name: '', category: '', city: '', address: '', description: '', phone: '', email: '' });
 
   const [accentColor, setAccentColor] = useState('#0f172a');
   const [isSaving, setIsSaving] = useState(false);
@@ -45,6 +47,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     if (business) {
       setFormData({
         name: business.name || '',
+        city: business.city || '',
         category: business.category || '',
         address: business.address || '',
         description: business.description || '',
@@ -289,48 +292,49 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               </div>
             </div>
 
-            {/* Назва та Адреса */}
+            {/* Назва, адреса й контакти - ЛИШЕ ПЕРЕГЛЯД.
+                Редагуються в «Налаштуваннях → Профіль закладу».
+
+                Вітрина - про те, як заклад ВИГЛЯДАЄ: обкладинка, опис,
+                фото робіт. Самі дані закладу показані тут, щоб було
+                видно, як їх побачить клієнт, але два місця для одного
+                поля - вірний спосіб отримати розбіжність. */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, paddingRight: '2rem' }}>
-                <input
-                  name="name" value={formData.name} onChange={handleInputChange} className="inline-input"
-                  style={{ fontSize: '3.5rem', fontWeight: '900', color: '#0f172a', width: '100%', padding: '0.2rem 0.5rem', marginLeft: '-0.5rem', letterSpacing: '-0.03em', marginBottom: '0.5rem', lineHeight: '1.1' }}
-                  placeholder="Назва вашого закладу"
-                />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginLeft: '0.1rem' }}>
-                  <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor }} />
-                  <input
-                    name="address" value={formData.address} onChange={handleInputChange} className="inline-input"
-                    style={{ fontSize: '1.25rem', color: '#64748b', fontWeight: '500', width: '100%', padding: '0.2rem 0.5rem' }}
-                    placeholder="Місто, вулиця та номер будинку"
-                  />
+                <div style={{ fontSize: '3.5rem', fontWeight: '900', color: '#0f172a', lineHeight: 1.1 }}>
+                  {formData.name || 'Назва вашого закладу'}
                 </div>
 
-                {/* Контакти. Раніше телефон і пошту можна було вказати лише
-                    при реєстрації - переїхали чи змінили номер, і виправити
-                    було ніяк. Місце саме тут: це те, що бачить клієнт,
-                    а не внутрішнє налаштування.
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginTop: '0.75rem' }}>
+                  <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor }} />
+                  <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>
+                    {[formData.city, formData.address].filter(Boolean).join(', ') || 'Адресу не вказано'}
+                  </span>
+                </div>
 
-                    Пошта закладу ще й отримує сповіщення про нові записи -
-                    без неї заклад дізнається про запис, лише відкривши
-                    календар. */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', marginTop: '0.75rem', marginLeft: '0.1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: '1 1 220px' }}>
-                    <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
-                    <input
-                      name="phone" value={formData.phone || ''} onChange={handleInputChange} className="inline-input"
-                      style={{ fontSize: '1rem', color: '#64748b', fontWeight: '500', width: '100%', padding: '0.2rem 0.5rem' }}
-                      placeholder="+380 XX XXX XX XX"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: '1 1 220px' }}>
-                    <Icons.Mail style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
-                    <input
-                      name="email" type="email" value={formData.email || ''} onChange={handleInputChange} className="inline-input"
-                      style={{ fontSize: '1rem', color: '#64748b', fontWeight: '500', width: '100%', padding: '0.2rem 0.5rem' }}
-                      placeholder="Пошта закладу"
-                    />
-                  </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', marginTop: '0.75rem', alignItems: 'center' }}>
+                  {formData.phone && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
+                      <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
+                      <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.phone}</span>
+                    </div>
+                  )}
+                  {formData.email && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
+                      <Icons.Mail style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
+                      <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.email}</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => onNavigate?.('Settings')}
+                    style={{
+                      border: 'none', background: 'transparent', color: accentColor,
+                      fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                      fontFamily: 'inherit', padding: '0.2rem 0',
+                    }}
+                  >
+                    Змінити в налаштуваннях
+                  </button>
                 </div>
               </div>
             </div>

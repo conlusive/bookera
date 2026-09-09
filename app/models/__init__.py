@@ -1,5 +1,5 @@
 from app.models.base import Base
-from app.models.user import User, RoleEnum, StaffInvite
+from app.models.user import User, RoleEnum, StaffInvite, StaffMembership
 from app.models.business import Business, BusinessHours
 from app.models.service import Service, ServiceAddon
 from app.models.client import Client, ClientLink
@@ -11,7 +11,7 @@ from app.models.monetization import (
 )
 
 __all__ = [
-    "Base", "User", "RoleEnum", "StaffInvite",
+    "Base", "User", "RoleEnum", "StaffInvite", "StaffMembership",
     "Business", "BusinessHours",
     "Service", "ServiceAddon",
     "Client", "ClientLink",

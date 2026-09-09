@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Numeric, JSON
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Numeric, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -96,3 +96,42 @@ class StaffInvite(Base):
     expires_at = Column(DateTime, nullable=False)
 
     business = relationship("Business", back_populates="invites")
+
+
+class StaffMembership(Base):
+    """
+    Робота людини в закладі.
+
+    Раніше звʼязок був полем User.business_id - тобто рівно один заклад
+    на людину. Реальність інша: майстер манікюру працює у двох салонах,
+    барбер підміняє в сусідньому, адміністратор веде мережу з трьох
+    точок. З одним полем таким людям доводилось заводити другий
+    обліковий запис - із власною поштою, історією й плутаниною.
+
+    Роль зберігається ТУТ, а не в користувача: одна людина може бути
+    власником свого салону й водночас майстром у чужому. Роль описує
+    стосунок до конкретного закладу, а не людину загалом.
+
+    User.business_id НЕ видаляємо: він лишається «поточним закладом» -
+    тим, у який людина зайшла зараз. Так уся наявна логіка доступу
+    працює без переписування, а перемикач лише міняє це поле.
+    """
+    __tablename__ = "staff_memberships"
+    __table_args__ = (
+        # Двічі приєднатись до того самого закладу неможливо: інакше
+        # у списку зʼявляються дублікати, а права рахуються двічі.
+        UniqueConstraint("user_id", "business_id", name="uq_staff_membership"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+
+    role = Column(String, default="master", nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    joined_at = Column(DateTime, default=utc_now, nullable=False)
+    # Коли людину відключили. Не видаляємо запис: історія візитів
+    # посилається на майстра, і втратити звʼязок означає зіпсувати
+    # звіти за минулі періоди.
+    left_at = Column(DateTime, nullable=True)

@@ -283,6 +283,22 @@ export default function BusinessCabinet() {
       }
 
       if (targetBiz) {
+        // Повідомляємо бекенд про перемикання ДО завантаження даних.
+        //
+        // Уся логіка доступу спирається на user.business_id, тому без
+        // цього виклику запити пішли б від імені попереднього закладу -
+        // і повернули б або чужі дані, або відмову.
+        //
+        // Роль теж перемикається: людина може бути власником свого
+        // салону й майстром у чужому, і права мають відповідати місцю.
+        try {
+          const switched = await api.switchWorkplace(token, Number(targetBiz.id));
+          setUserProfile((prev: any) => prev ? { ...prev, role: switched.role, business_id: switched.business_id } : prev);
+        } catch (err: any) {
+          showToast(err?.message || 'Не вдалося перемкнути заклад', 'error');
+          return;
+        }
+
         setBusiness(targetBiz);
         localStorage.setItem('bookera_active_biz_id', String(targetBiz.id));
         const savedCal = localStorage.getItem(`bookera_cal_settings_${targetBiz.id}`);
@@ -366,7 +382,31 @@ export default function BusinessCabinet() {
         }
 
         if (me.business && me.business_id) {
+          // Список закладів для перемикача.
+          //
+          // Раніше тут був масив з ОДНОГО елемента - поточного закладу.
+          // Перемикач існував, але перемикати не було на що: майстер,
+          // який працює у двох салонах, бачив лише той, куди зайшов.
+          //
+          // Поточний заклад кладемо одразу, а повний список підвантажуємо
+          // окремо: інтерфейс не має чекати на другий запит, щоб
+          // показати те, що вже відоме.
           setMyBusinesses([me.business]);
+          void (async () => {
+            try {
+              const places = await api.listMyWorkplaces(token);
+              if (places.length > 1) {
+                setMyBusinesses(places.map(p => ({
+                  id: p.business_id, name: p.name, slug: p.slug,
+                  city: p.city, logo: p.logo, role: p.role,
+                  has_access: p.has_access,
+                })));
+              }
+            } catch {
+              // Перемикач - зручність, а не необхідність: якщо список
+              // не завантажився, кабінет має працювати як раніше.
+            }
+          })();
           setBusiness(me.business);
           localStorage.setItem('bookera_active_biz_id', String(me.business.id));
           const savedCal = localStorage.getItem(`bookera_cal_settings_${me.business.id}`);

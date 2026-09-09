@@ -1,6 +1,6 @@
 import re
 import secrets
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -325,3 +325,117 @@ async def delete_business(
 
     await db.delete(business)
     await db.commit()
+
+
+# === Робота в кількох закладах ===
+
+class WorkplaceOut(BaseModel):
+    business_id: int
+    name: str
+    slug: str
+    city: Optional[str] = None
+    logo: Optional[str] = None
+    role: str
+    is_current: bool
+    has_access: bool
+
+
+@router.get("/my-workplaces", response_model=List[WorkplaceOut])
+async def list_my_workplaces(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Заклади, у яких людина працює.
+
+    Раніше звʼязок був одним полем user.business_id, тому майстер,
+    що працює у двох салонах, мусив заводити другий обліковий запис.
+
+    Повертаємо і ті заклади, доступ до яких закритий через підписку:
+    людина має бачити, що заклад існує, а не гадати, куди він зник.
+    Перемкнутись туди не вийде - але причина буде зрозуміла.
+    """
+    from app.models import StaffMembership
+    from app.services.subscription import has_access
+
+    res = await db.execute(select(User).where(User.id == str(current_user.id)))
+    user = res.scalars().first()
+    if not user:
+        return []
+
+    m_res = await db.execute(
+        select(StaffMembership, Business)
+        .join(Business, Business.id == StaffMembership.business_id)
+        .where(
+            StaffMembership.user_id == str(current_user.id),
+            StaffMembership.is_active.is_(True),
+        )
+        .order_by(Business.name)
+    )
+
+    return [
+        WorkplaceOut(
+            business_id=biz.id,
+            name=biz.name,
+            slug=biz.slug,
+            city=biz.city,
+            logo=biz.logo,
+            role=membership.role,
+            is_current=(user.business_id == biz.id),
+            has_access=has_access(biz),
+        )
+        for membership, biz in m_res.all()
+    ]
+
+
+class SwitchWorkplaceRequest(BaseModel):
+    business_id: int
+
+
+@router.post("/switch-workplace")
+async def switch_workplace(
+    payload: SwitchWorkplaceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Перемкнутись на інший заклад.
+
+    Змінює user.business_id - «поточний заклад». Уся наявна логіка
+    доступу спирається саме на це поле, тому перемикання не потребує
+    переписування перевірок: людина просто стає співробітником іншого
+    закладу до наступного перемикання.
+
+    Роль теж перемикається: одна людина може бути власником свого
+    салону й майстром у чужому, і права мають відповідати місцю,
+    а не людині.
+    """
+    from app.models import StaffMembership
+
+    m_res = await db.execute(
+        select(StaffMembership).where(
+            StaffMembership.user_id == str(current_user.id),
+            StaffMembership.business_id == payload.business_id,
+            StaffMembership.is_active.is_(True),
+        )
+    )
+    membership = m_res.scalars().first()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ви не працюєте в цьому закладі",
+        )
+
+    res = await db.execute(select(User).where(User.id == str(current_user.id)))
+    user = res.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Користувача не знайдено")
+
+    user.business_id = membership.business_id
+    user.role = membership.role
+    await db.commit()
+
+    logger.info("Перемикання закладу: user=%s -> business=%s (%s)",
+                user.id, membership.business_id, membership.role)
+
+    return {"business_id": membership.business_id, "role": membership.role}

@@ -586,6 +586,23 @@ export const api = {
     });
   },
 
+  // === Робота в кількох закладах ===
+
+  /** Заклади, у яких людина працює. */
+  async listMyWorkplaces(token: string): Promise<{
+    business_id: number; name: string; slug: string; city: string | null;
+    logo: string | null; role: string; is_current: boolean; has_access: boolean;
+  }[]> {
+    return authFetch(`/crm/businesses/my-workplaces`, token);
+  },
+
+  /** Перемкнутись на інший заклад. Разом із закладом перемикається й роль. */
+  async switchWorkplace(token: string, businessId: number): Promise<{ business_id: number; role: string }> {
+    return authFetch(`/crm/businesses/switch-workplace`, token, {
+      method: 'POST', body: JSON.stringify({ business_id: businessId }),
+    });
+  },
+
   // === Справи на день ===
   // Раніше цей список жив лише в localStorage: зникав при чистці кешу
   // і не бачився з іншого пристрою.

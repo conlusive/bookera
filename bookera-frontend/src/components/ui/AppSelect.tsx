@@ -91,7 +91,7 @@ export default function AppSelect({
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
             background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px',
             boxShadow: '0 12px 32px rgba(15,23,42,0.12)',
-            padding: '0.3rem', zIndex: 50, maxHeight: '240px', overflowY: 'auto',
+            padding: '0.3rem', zIndex: 200, maxHeight: '240px', overflowY: 'auto',
           }}
         >
           {options.map(opt => {

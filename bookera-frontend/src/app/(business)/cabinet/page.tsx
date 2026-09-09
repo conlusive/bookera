@@ -1437,13 +1437,13 @@ export default function BusinessCabinet() {
          // попередження - закритий кабінет посеред робочого дня.
          (subscription.days_left <= 2 || Date.now() > bannerHiddenUntil) && (
           <div style={{
-            // Раніше було space-between: текст ліворуч, кнопка й хрестик
-            // аж біля правого краю екрана. На широкому моніторі це
-            // читалось як два різні елементи, а не одне повідомлення.
-            // Тепер усе разом по центру - компактна смуга.
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            // Групуємо праворуч, а не по центру: смуга тягнеться на всю
+            // ширину, і по центру повідомлення опиняється посеред порожнечі.
+            // Праворуч воно ближче до краю екрана, куди природно падає
+            // погляд після роботи з вмістом, і не перекриває сам вміст.
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
             gap: '0.75rem', flexWrap: 'wrap',
-            padding: '0.6rem 1.25rem',
+            padding: '0.6rem 1.5rem',
             background: subscription.days_left <= 3 ? '#FDF6E9' : '#F4FAF5',
             borderBottom: `1px solid ${subscription.days_left <= 3 ? 'rgba(180,130,40,0.22)' : '#E4EBE3'}`,
             fontSize: '0.85rem', color: '#2E3A30', flexShrink: 0,

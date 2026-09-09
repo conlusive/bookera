@@ -235,7 +235,15 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
         .settings-card:hover { border-color: #cbd5e1; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04); transform: translateY(-3px); }
         .settings-icon-wrapper { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.2s; }
         
-        .clean-panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0,0,0,0.01); overflow: hidden; }
+        .clean-panel {
+          background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;
+          margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0,0,0,0.01);
+          /* overflow: hidden прибрано - саме воно обрізало випадні списки:
+             меню виходить за межі панелі й опинялось під нею.
+             Заокруглення кутів працює й без нього, бо всередині немає
+             елементів, які торкаються краю. */
+          position: relative;
+        }
         .panel-title { font-size: 1.1rem; font-weight: 800; color: #0f172a; padding: 1.5rem 2rem 0.5rem 2rem; margin: 0; }
         .panel-subtitle { font-size: 0.9rem; color: #64748b; padding: 0 2rem 1rem 2rem; margin: 0; border-bottom: 1px solid #f1f5f9; }
         
@@ -505,6 +513,14 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                     if (!business?.id) return;
                     if (!confirm('Замінити крок сітки, тривалість, буфер і межі запису на типові для вашого напряму?')) return;
                     try {
+                      if (typeof api.applyProfileDefaults !== 'function') {
+                        // Трапляється, коли api.ts не оновився при злитті
+                        // гілок: компоненти нові, а методів у них немає.
+                        // Без цієї перевірки сторінка падає з незрозумілою
+                        // помилкою Turbopack про undefined-модуль.
+                        showToast('Оновіть застосунок: не вистачає частини коду (api.ts)', 'error');
+                        return;
+                      }
                       const token = await getAuthToken();
                       const res = await api.applyProfileDefaults(token, business.id);
                       setBookingSettings(prev => ({ ...prev, ...res.booking_settings }));
@@ -564,6 +580,10 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
                         onClick={async () => {
                           if (!business?.id) return;
                           try {
+                            if (typeof api.deleteBusiness !== 'function') {
+                              showToast('Оновіть застосунок: не вистачає частини коду (api.ts)', 'error');
+                              return;
+                            }
                             const token = await getAuthToken();
                             await api.deleteBusiness(token, business.id, deleteConfirm.trim());
                             // Перезавантаження, а не перехід: після видалення

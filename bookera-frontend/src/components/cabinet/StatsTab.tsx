@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
 
 export default function StatsTab({ services, team, business }: any) {
-  const supabase = createClient();
   const [statsTab, setStatsTab] = useState<'overview' | 'appointments' | 'clients' | 'revenue' | 'services' | 'staff' | 'archive'>('overview');
 
   // 🟢 Локальний стейт для записів
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   const [statsPeriodType, setStatsPeriodType] = useState<'day' | 'week' | 'month' | 'year' | 'custom'>('day');
   const [statsDate, setStatsDate] = useState(new Date());
@@ -94,14 +93,35 @@ export default function StatsTab({ services, team, business }: any) {
         return new Date(d.getTime() - offset).toISOString().split('T')[0];
       };
 
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('business_id', business.id)
-        .gte('booking_date', formatDate(fetchStart))
-        .lte('booking_date', formatDate(fetchEnd));
+      // Раніше тут був прямий запит до Supabase у таблицю 'bookings'.
+      //
+      // Такої таблиці НЕ ІСНУЄ: це рештки старої архітектури, коли
+      // записи з маркетплейсу й записи з CRM лежали окремо. Їх звели
+      // в одну таблицю 'appointments', а аналітика лишилась єдиним
+      // місцем, яке зверталось до покинутої назви.
+      //
+      // Наслідок: запит повертав порожнечу, помилка ковталась умовою
+      // `if (!error && data)`, і вся аналітика показувала нулі без
+      // жодного натяку на причину.
+      try {
+        const token = await getAuthToken();
+        const data = await api.getBookedAppointments(token, business.id);
 
-      if (!error && data) setAppointments(data);
+        // Фільтруємо період на клієнті: ендпоінт віддає всі записи
+        // закладу, а вкладка вже вміє рахувати за довільні періоди.
+        const inRange = (data || []).filter((a: any) => {
+          const raw = a.booking_date || a.start_time;
+          if (!raw) return false;
+          const d = formatDate(new Date(raw));
+          return d >= formatDate(fetchStart) && d <= formatDate(fetchEnd);
+        });
+        setAppointments(inRange);
+      } catch (err: any) {
+        // Мовчазна порожня аналітика - саме те, що ховало попередню
+        // помилку. Тепер кажемо прямо.
+        console.error('Не вдалося завантажити дані аналітики:', err);
+        setStatsError(err?.message || 'Не вдалося завантажити дані');
+      }
     }
     fetchStatsAppointments();
   }, [business?.id, currPeriod.start.toISOString(), currPeriod.end.toISOString(), statsDate.getMonth(), statsDate.getFullYear()]);
@@ -290,16 +310,25 @@ export default function StatsTab({ services, team, business }: any) {
   };
 
   // --- ФІЛЬТРАЦІЯ ТА ПІДРАХУНКИ ---
-  const periodApps = (appointments || []).filter((app: any) => {
+  // Мемоізація головних вибірок.
+  //
+  // Вкладка на 1700 рядків не мала жодної: КОЖЕН перемальовок -
+  // наведення миші, зміна вкладки, будь-який стан - проганяв усі
+  // записи закладу через десяток фільтрів заново.
+  //
+  // Ціна росте з кількістю візитів: у закладу з тисячею записів
+  // за квартал це відчутне гальмування там, де взагалі нічого
+  // не змінилось.
+  const periodApps = useMemo(() => (appointments || []).filter((app: any) => {
     if (app.status === 'blocked' || app.color === 'blocked') return false;
     const d = new Date(app.booking_date || app.start_time);
     return d >= currPeriod.start && d <= currPeriod.end;
-  });
+  }), [appointments, currPeriod.start, currPeriod.end]);
 
   const stTotal = periodApps.length;
-  const stCompleted = periodApps.filter((a: any) => a.status === 'completed');
-  const stNoShow = periodApps.filter((a: any) => a.status === 'no-show');
-  const stCancelled = periodApps.filter((a: any) => a.status === 'cancelled');
+  const stCompleted = useMemo(() => periodApps.filter((a: any) => a.status === 'completed'), [periodApps]);
+  const stNoShow = useMemo(() => periodApps.filter((a: any) => a.status === 'no-show'), [periodApps]);
+  const stCancelled = useMemo(() => periodApps.filter((a: any) => a.status === 'cancelled'), [periodApps]);
   const stUpcoming = periodApps.filter((a: any) => a.status !== 'completed' && a.status !== 'no-show' && a.status !== 'cancelled');
 
   const totalRev = stCompleted.reduce((sum: number, app: any) => sum + ((services || []).find((s: any) => String(s.id) === String(app.service_id))?.price || 0), 0);
@@ -310,13 +339,13 @@ export default function StatsTab({ services, team, business }: any) {
   const monthStart = new Date(statsDate.getFullYear(), statsDate.getMonth(), 1);
   const monthEnd = new Date(statsDate.getFullYear(), statsDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const monthApps = (appointments || []).filter((app: any) => {
+  const monthApps = useMemo(() => (appointments || []).filter((app: any) => {
     if (app.status === 'blocked' || app.color === 'blocked') return false;
     const d = new Date(app.booking_date || app.start_time);
     return d >= monthStart && d <= monthEnd;
-  });
+  }), [appointments, monthStart, monthEnd]);
 
-  const monthCompleted = monthApps.filter((a: any) => a.status === 'completed');
+  const monthCompleted = useMemo(() => monthApps.filter((a: any) => a.status === 'completed'), [monthApps]);
   const monthTotalRev = monthCompleted.reduce((sum: number, app: any) => sum + ((services || []).find((s: any) => String(s.id) === String(app.service_id))?.price || 0), 0);
   const goalProgressPercent = Math.min(100, Math.round((monthTotalRev / financialGoal) * 100)) || 0;
 
@@ -638,6 +667,33 @@ export default function StatsTab({ services, team, business }: any) {
 
   return (
     <div style={{ fontFamily, padding: '1.5rem 3rem', flexGrow: 1, backgroundColor: colors.bg, minHeight: '100vh', width: '100%' }}>
+
+      {/* Помилка завантаження. Раніше збій просто давав нулі на всіх
+          графіках - людина бачила «нуль виручки» і не могла зрозуміти,
+          чи це правда, чи щось зламалось. Нуль і невідомість виглядають
+          однаково, але означають різне. */}
+      {statsError && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '1rem', flexWrap: 'wrap',
+          padding: '0.85rem 1.1rem', marginBottom: '1.25rem',
+          background: '#FBF0EF', border: '1px solid rgba(168,57,52,0.22)',
+          borderRadius: '12px', fontSize: '0.875rem', color: '#8C2F2B',
+        }}>
+          <span>Не вдалося завантажити дані: {statsError}</span>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              height: '32px', padding: '0 0.8rem', borderRadius: '8px',
+              border: '1px solid rgba(168,57,52,0.3)', background: '#fff',
+              color: '#8C2F2B', fontSize: '0.8rem', fontWeight: 600,
+              fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            Спробувати ще раз
+          </button>
+        </div>
+      )}
 
       {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', marginTop: '0.5rem' }}>

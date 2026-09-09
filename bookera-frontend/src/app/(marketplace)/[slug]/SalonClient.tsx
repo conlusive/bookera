@@ -108,6 +108,12 @@ export default function SalonClient({
   // людина вже вирішила прийти, і додати щось до візиту - природне
   // продовження, а не спроба продати щось замість.
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
+  // Подарунковий сертифікат. Перевіряємо ДО бронювання: бекенд мовчки
+  // ігнорує недійсний код, і людина дізналась би про це вже після
+  // підтвердження - побачивши повну суму замість очікуваної знижки.
+  const [certCode, setCertCode] = useState('');
+  const [certState, setCertState] = useState<{ valid: boolean; amount: number; message: string } | null>(null);
+  const [isCheckingCert, setIsCheckingCert] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedMasterId, setSelectedMasterId] = useState<number | string>(0);
@@ -458,6 +464,8 @@ export default function SalonClient({
     // Скидаємо: інакше вибір із попередньої послуги перенісся б на нову,
     // і людина заплатила б за те, чого не обирала.
     setSelectedAddonIds([]);
+    setCertCode('');
+    setCertState(null);
     setBookingStage('selection');
     setSelectedTime(null);
     if (calendarDays.length > 0) setSelectedDate(calendarDays[0].date);
@@ -532,6 +540,9 @@ export default function SalonClient({
       // а не ідентифікатор залогіненого відвідувача маркетплейсу (різні речі -
       // одна людина може бути клієнтом багатьох салонів). Контакт створює сервер.
       await api.createAppointment({
+        // Код надсилаємо лише перевірений: інакше бекенд мовчки його
+        // проігнорує, і людина побачить повну суму замість очікуваної.
+        gift_certificate_code: certState?.valid ? certCode.trim() : undefined,
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
@@ -1326,6 +1337,91 @@ export default function SalonClient({
                       {selectedDate.split('-').reverse().join('.')} о {selectedTime}
                     </span>
                   </div>
+                  {/* Сертифікат на екрані підтвердження, а не раніше:
+                      знижка має сенс лише коли видно, від якої суми
+                      вона рахується. */}
+                  <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px dashed #E4EBE3' }}>
+                    {!certState?.valid ? (
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <input
+                            type="text"
+                            value={certCode}
+                            onChange={e => { setCertCode(e.target.value.toUpperCase()); setCertState(null); }}
+                            placeholder="Код сертифіката"
+                            style={{
+                              width: '100%', height: '42px', padding: '0 0.85rem',
+                              borderRadius: '10px', fontFamily: 'inherit',
+                              border: `1px solid ${certState && !certState.valid ? '#C2605B' : '#E4EBE3'}`,
+                              fontSize: '0.9rem', color: '#222222', outline: 'none',
+                              letterSpacing: '0.04em', textTransform: 'uppercase',
+                            }}
+                          />
+                          {certState && !certState.valid && (
+                            <div style={{ fontSize: '0.78rem', color: '#A83934', marginTop: '0.35rem' }}>
+                              {certState.message}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!certCode.trim() || isCheckingCert}
+                          onClick={async () => {
+                            setIsCheckingCert(true);
+                            try {
+                              const res = await api.checkGiftCertificate(certCode.trim(), salon.id);
+                              setCertState({
+                                valid: res.valid,
+                                amount: Number(res.remaining_amount || 0),
+                                message: res.message,
+                              });
+                            } catch (err: any) {
+                              setCertState({ valid: false, amount: 0, message: err?.message || 'Не вдалося перевірити код' });
+                            } finally {
+                              setIsCheckingCert(false);
+                            }
+                          }}
+                          style={{
+                            height: '42px', padding: '0 1rem', borderRadius: '10px',
+                            border: '1px solid rgba(34,34,34,0.16)', background: '#fff',
+                            color: '#222222', fontSize: '0.85rem', fontWeight: 600,
+                            fontFamily: 'inherit', flexShrink: 0,
+                            cursor: (!certCode.trim() || isCheckingCert) ? 'not-allowed' : 'pointer',
+                            opacity: (!certCode.trim() || isCheckingCert) ? 0.5 : 1,
+                          }}
+                        >
+                          {isCheckingCert ? '…' : 'Застосувати'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: '1rem', padding: '0.7rem 0.9rem', borderRadius: '10px',
+                        background: '#F4FAF5', border: '1px solid rgba(94,122,97,0.25)',
+                      }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#2E3A30' }}>
+                            Сертифікат {certCode}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#5C6B5E', marginTop: '1px' }}>
+                            Доступно {certState.amount.toLocaleString('uk-UA')} ₴
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setCertCode(''); setCertState(null); }}
+                          style={{
+                            border: 'none', background: 'transparent', color: '#5C6B5E',
+                            fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                            fontFamily: 'inherit', flexShrink: 0,
+                          }}
+                        >
+                          Прибрати
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Додаткові послуги в підтвердженні: людина має бачити,
                       за що саме платить, ДО натискання кнопки. Сюрприз
                       у сумі - найшвидший спосіб втратити довіру. */}
@@ -1341,16 +1437,37 @@ export default function SalonClient({
                       </div>
                     ))}
 
+                  {certState?.valid && (
+                    <div className="details-row">
+                      <span className="details-label" style={{ color: '#2E3A30' }}>Сертифікат</span>
+                      <div className="details-dots"></div>
+                      <span className="details-value" style={{ color: '#2E3A30' }}>
+                        −{Math.min(
+                          certState.amount,
+                          Number(selectedService?.price || 0) +
+                          (selectedService?.addons || [])
+                            .filter((a: any) => selectedAddonIds.includes(a.id))
+                            .reduce((s: number, a: any) => s + Number(a.price || 0), 0)
+                        ).toLocaleString('uk-UA')} ₴
+                      </span>
+                    </div>
+                  )}
+
                   <div className="details-row" style={{ marginTop: '2rem', alignItems: 'center' }}>
                     <span className="details-label" style={{ fontWeight: '800', color: '#222222', fontSize: '1.05rem' }}>До сплати</span>
                     <div className="details-dots" style={{ borderBottomColor: 'transparent' }}></div>
                     <span className="details-value" style={{ color: '#166534', fontSize: '1.3rem', fontWeight: '900' }}>
-                      {(
-                        Number(selectedService?.price || 0) +
-                        (selectedService?.addons || [])
-                          .filter((a: any) => selectedAddonIds.includes(a.id))
-                          .reduce((s: number, a: any) => s + Number(a.price || 0), 0)
-                      ).toLocaleString('uk-UA')} ₴
+                      {(() => {
+                        const base = Number(selectedService?.price || 0) +
+                          (selectedService?.addons || [])
+                            .filter((a: any) => selectedAddonIds.includes(a.id))
+                            .reduce((s: number, a: any) => s + Number(a.price || 0), 0);
+                        // Сертифікат покриває не більше за вартість візиту:
+                        // решта лишається на ньому для наступного разу, і
+                        // показувати відʼємну суму було б безглуздо.
+                        const discount = certState?.valid ? Math.min(certState.amount, base) : 0;
+                        return (base - discount).toLocaleString('uk-UA');
+                      })()} ₴
                     </span>
                   </div>
                 </div>

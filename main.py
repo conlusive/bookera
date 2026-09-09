@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -12,6 +13,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import businesses, services, appointments, platform
+from app.services.reminders import reminder_loop
 from app.api.crm import (
     clients as crm_clients,
     staff as crm_staff,
@@ -42,7 +44,30 @@ async def lifespan(app: FastAPI):
         await _warn_if_migrations_pending()
     except Exception as e:
         logger.error(f"Проблема при старті/підключенні до БД: {e}")
+
+    # Фоновий процес нагадувань клієнтам про візит.
+    #
+    # Запускається лише якщо налаштована пошта: без SMTP цикл щогодини
+    # робив би запити до бази, щоб нічого не надіслати.
+    reminder_task = None
+    if os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"):
+        reminder_task = asyncio.create_task(
+            reminder_loop(AsyncSessionLocal, os.getenv("FRONTEND_URL", ""))
+        )
+        logger.info("Нагадування клієнтам увімкнені")
+    else:
+        logger.info("Нагадування вимкнені: не налаштована пошта (SMTP_USER/SMTP_PASSWORD)")
+
     yield
+
+    # Зупиняємо акуратно: без цього при перезапуску завдання лишається
+    # висіти й може вписати нагадування в базу, що вже закривається.
+    if reminder_task:
+        reminder_task.cancel()
+        try:
+            await reminder_task
+        except asyncio.CancelledError:
+            pass
 
 
 

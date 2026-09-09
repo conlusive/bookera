@@ -69,6 +69,11 @@ class Appointment(Base):
     # змінитись, а домовленість із клієнтом лишається тією, що була.
     deposit_due = Column(Numeric(10, 2), nullable=True)
 
+    # Коли надіслано нагадування. Саме дата, а не прапорець: з датою
+    # видно, чи лист пішов вчасно, і можна розібратись, якщо клієнт
+    # каже, що нічого не отримував.
+    reminder_sent_at = Column(DateTime, nullable=True)
+
     # Ключ для DB-рівневого захисту від перетинів (exclusion constraint
     # у міграції). Якщо є майстер - ключ = master_id, інакше = сам заклад.
     booking_key = Column(

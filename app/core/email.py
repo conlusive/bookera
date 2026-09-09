@@ -212,3 +212,46 @@ async def send_new_booking_to_staff(
         footer_note=note,
     )
     await asyncio.to_thread(send_email_sync, to_email, f"{title} — {business_name}", html)
+
+
+async def send_booking_reminder_email(
+        to_email: str,
+        client_name: str,
+        business_name: str,
+        service_name: str,
+        booking_date: str,
+        booking_time: str,
+        master_name: str = "",
+        address: str = "",
+        business_phone: str = "",
+        manage_url: str = "",
+):
+    """
+    Нагадування за добу до візиту.
+
+    Тон навмисно спокійний: це не рекламний лист, а послуга. Людина
+    записалась тиждень тому й могла забути - нагадати треба так, щоб
+    не здатися настирливим.
+
+    Посилання на скасування - головне в цьому листі. Якщо людина
+    все одно не прийде, краще дізнатись про це зараз: слот ще можна
+    віддати комусь іншому.
+    """
+    rows = info_row("Коли", f"{booking_date}, {booking_time}", big=True)
+    if master_name:
+        rows += info_row("Майстер", master_name)
+    rows += info_row("Послуга", service_name)
+    if address.strip(" ,"):
+        rows += info_row("Адреса", address.strip(" ,"))
+    if business_phone:
+        rows += info_row("Телефон закладу", business_phone)
+
+    html = layout(
+        business_name=business_name,
+        title="Нагадуємо про візит завтра",
+        intro=f"{esc(client_name)}, чекаємо на вас." if client_name else "Чекаємо на вас.",
+        body_html=card(rows) + button("Переглянути або скасувати", manage_url),
+        footer_note=("Якщо плани змінились — скасуйте візит завчасно, "
+                     "щоб хтось інший міг зайняти цей час."),
+    )
+    await asyncio.to_thread(send_email_sync, to_email, f"Нагадування про візит — {business_name}", html)

@@ -64,6 +64,11 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
       if (business.layout_config) {
         setLayoutConfig(business.layout_config);
       }
+
+      // Дозвіл на автозбереження - лише після того, як стани заповнені
+      // справжніми даними. setTimeout(0) переносить це в наступний такт:
+      // виклики setState вище ще не застосовані.
+      setTimeout(() => { canAutoSave.current = true; }, 0);
     }
   }, [business]);
 
@@ -103,12 +108,52 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     return { score, hint };
   }, [formData.name, formData.address, formData.description, logo, coverPhoto, workplacePhotos.length]);
 
+  /**
+   * Повна адреса: місто + вулиця.
+   *
+   * Карта отримувала лише поле «адреса» без міста, тому «Дорошенка 10»
+   * шукалось невідомо де - у світі десятки таких вулиць. Тепер місто
+   * додається автоматично, і людині не треба дублювати його вручну.
+   *
+   * Якщо адреса вже починається з міста (старі записи), не додаємо
+   * вдруге - інакше вийде «Львів, Львів, Дорошенка 10».
+   */
+  const fullAddress = (() => {
+    const city = (formData.city || '').trim();
+    const addr = (formData.address || '').trim();
+    if (!addr) return city;
+    if (!city) return addr;
+    return addr.toLowerCase().startsWith(city.toLowerCase()) ? addr : `${city}, ${addr}`;
+  })();
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveBusinessInfo = async () => {
+  /**
+   * Автозбереження оформлення.
+   *
+   * Кнопка «Зберегти зміни» лишилась від часів, коли тут редагувались
+   * контакти. Тепер вітрина зберігає лише оформлення - назву, опис,
+   * фото, кольори - і окрема дія для цього зайва: людина міняє
+   * обкладинку й іде далі, вважаючи, що зберегла.
+   *
+   * Захист той самий, що й у налаштуваннях: дозвіл вмикається лише
+   * після завантаження справжніх даних, інакше перший рендер
+   * перезаписав би заклад порожнім станом.
+   */
+  const canAutoSave = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    if (!canAutoSave.current) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { void handleSaveBusinessInfo(true); }, 900);
+  }, [formData.name, formData.description, formData.category, accentColor,
+      layoutConfig, logo, coverPhoto, workplacePhotos]);
+
+  const handleSaveBusinessInfo = async (silent = false) => {
     if (!business?.id) return;
     setIsSaving(true);
 
@@ -265,14 +310,16 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               <Icons.Globe style={{ width: '18px', height: '18px' }} /> Переглянути
             </button>
 
-            <button
-              onClick={handleSaveBusinessInfo}
-              disabled={isSaving}
-              style={{ padding: '0.5rem 1.25rem', backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', fontWeight: '500', color: '#ffffff', cursor: isSaving ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isSaving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 4px 10px rgba(15, 23, 42, 0.1)', fontSize: '0.95rem' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-              {isSaving ? 'Збереження...' : 'Зберегти зміни'}
-            </button>
+            {/* Кнопку «Зберегти зміни» прибрано: вітрина зберігається
+                сама. Вона лишалась від часів, коли тут редагувались
+                контакти; тепер тут лише оформлення, і окрема дія для
+                нього зайва - людина міняє обкладинку й іде далі,
+                вважаючи, що зберегла. */}
+            {isSaving && (
+              <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 500 }}>
+                Збереження…
+              </span>
+            )}
           </div>
         </header>
 
@@ -309,27 +356,22 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                   onChange={handleInputChange}
                   className="inline-input"
                   placeholder="Назва вашого закладу"
-                  style={{ fontSize: '3.5rem', fontWeight: '900', color: '#0f172a', lineHeight: 1.1, width: '100%' }}
+                  style={{ fontSize: '2.25rem', fontWeight: '800', color: '#0f172a', lineHeight: 1.15, width: '100%', letterSpacing: '-0.02em' }}
                 />
 
                 <div className="editable-block" style={{ marginTop: '0.75rem', borderRadius: '16px', padding: '0.5rem', marginLeft: '-0.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
                     <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor }} />
                     <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>
-                      {(() => {
-                        // Не склеюємо місто з адресою, якщо адреса вже з нього
-                        // починається: у старих записах там повний рядок,
-                        // і виходило «Львів, Львів, Дорошенка 10».
-                        const city = (formData.city || '').trim();
-                        const addr = (formData.address || '').trim();
-                        if (!addr) return city || 'Адресу не вказано';
-                        if (!city) return addr;
-                        return addr.toLowerCase().startsWith(city.toLowerCase()) ? addr : `${city}, ${addr}`;
-                      })()}
+                      {fullAddress || 'Адресу не вказано'}
                     </span>
                   </div>
 
-                  {formData.phone && (
+                  {/* Показ телефону керується налаштуванням: вітрина -
+                      це те, що бачить клієнт, і якщо номер приховано,
+                      його не має бути й тут. Інакше власник вимикає
+                      показ і не розуміє, чи спрацювало. */}
+                  {formData.phone && (business as any)?.show_phone_publicly !== false && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginTop: '0.5rem' }}>
                       <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
                       <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.phone}</span>
@@ -357,7 +399,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 </div>
 
                 <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '3rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-                  <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', marginBottom: '2rem', letterSpacing: '-0.01em' }}>Прайс-лист</h2>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0f172a', marginBottom: '1.5rem', letterSpacing: '-0.01em' }}>Прайс-лист</h2>
                   {sortedServices.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {sortedServices.map(service => (
@@ -404,7 +446,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
                 {layoutConfig.showMap && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', height: '300px', border: '1px solid rgba(226, 232, 240, 0.6)' }}>
-                    <iframe key={formData.address} width="100%" height="100%" style={{ border: 0, pointerEvents: 'none' }} loading="lazy" src={`https://maps.google.com/maps?q=${encodeURIComponent(formData.address || 'Київ')}&t=&z=18&ie=UTF8&iwloc=&output=embed`}></iframe>
+                    <iframe key={fullAddress} width="100%" height="100%" style={{ border: 0, pointerEvents: 'none' }} loading="lazy" src={`https://maps.google.com/maps?q=${encodeURIComponent(fullAddress || 'Київ')}&t=&z=18&ie=UTF8&iwloc=&output=embed`}></iframe>
                     <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => onNavigate?.('Settings', 'profile')}><button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button></div>
                   </div>
                 )}

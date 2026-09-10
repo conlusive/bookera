@@ -98,6 +98,20 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
     if (initialView) setSettingsView(initialView as any);
   }, [initialView]);
 
+  // Запамʼятовуємо відкритий розділ.
+  //
+  // Перезавантаження сторінки викидало людину в загальний список -
+  // а перезавантажують саме тоді, коли щось перевіряють у поточному
+  // розділі, і повертатись туди щоразу вручну дратує.
+  useEffect(() => {
+    const saved = localStorage.getItem('bookera_settings_view');
+    if (saved && !initialView) setSettingsView(saved as any);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('bookera_settings_view', settingsView);
+  }, [settingsView]);
+
   useEffect(() => {
     if (business) {
       setContactSettings({

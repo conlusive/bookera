@@ -10,6 +10,9 @@ import AppSelect from '@/components/ui/AppSelect';
 interface SettingsTabProps {
   /** Перехід на іншу вкладку кабінету - щоб не дублювати поля. */
   onNavigate?: (tab: string) => void;
+  /** Відкрити одразу потрібний розділ. Перехід «змінити адресу» має
+   *  вести до самих полів, а не в список розділів, де їх ще шукати. */
+  initialView?: string;
   business: any;
   Icons?: any;
 }
@@ -57,7 +60,7 @@ const businessSettingsCards = [
   { id: 'billing', title: 'Підписка та Білінг', desc: 'Поточний тариф, ліміти та методи оплати.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
 ];
 
-export default function SettingsTab({ business, onNavigate }: SettingsTabProps) {
+export default function SettingsTab({ business, onNavigate, initialView }: SettingsTabProps) {
   const supabase = createClient();
   const [settingsView, setSettingsView] = useState<'main' | 'profile' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,6 +89,11 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
     currency: 'UAH', require_deposit: false, deposit_amount: 100, deposit_type: 'fixed'
   });
 
+  // Якщо нас відкрили з конкретним розділом - показуємо одразу його.
+  useEffect(() => {
+    if (initialView) setSettingsView(initialView as any);
+  }, [initialView]);
+
   useEffect(() => {
     if (business) {
       setContactSettings({
@@ -105,6 +113,12 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
       if (business.notification_settings) setNotificationSettings(prev => ({ ...prev, ...business.notification_settings }));
       if (business.payments_settings) setPaymentsSettings(prev => ({ ...prev, ...business.payments_settings }));
       if (business.security_settings) setSecuritySettings(prev => ({ ...prev, ...business.security_settings }));
+
+      // Вмикаємо автозбереження ЛИШЕ після того, як усі стани заповнені
+      // справжніми даними. setTimeout(0) переносить це в наступний такт:
+      // виклики setState вище ще не застосовані, і ввімкнути прапорець
+      // просто тут означало б дозволити збереження до їх застосування.
+      setTimeout(() => { canAutoSave.current = true; }, 0);
     }
   }, [business]);
 
@@ -157,14 +171,24 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
   // Кожна секція зберігається сама, щойно щось змінилось.
   // Перший рендер пропускаємо: інакше відкриття вкладки одразу
   // перезаписувало б налаштування тим, що щойно з них прочитали.
-  const isFirstRender = useRef(true);
+  // Дозвіл на автозбереження.
+  //
+  // Раніше тут був isFirstRender, який скидався в ПЕРШОМУ ефекті -
+  // а решта ефектів того ж рендера виконуються ПІСЛЯ нього й бачили
+  // вже false. Наслідок: при кожному завантаженні сторінки профіль
+  // зберігався зі значеннями ЗА ЗАМОВЧУВАННЯМ, ще до приходу справжніх
+  // даних. Налаштування людини мовчки затиралися порожніми.
+  //
+  // Тепер прапорець вмикається лише ПІСЛЯ того, як дані закладу
+  // завантажені й розкладені по станах.
+  const canAutoSave = useRef(false);
   useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (!canAutoSave.current) return;
     autoSave('booking_settings', bookingSettings);
   }, [bookingSettings]);
 
   useEffect(() => {
-    if (isFirstRender.current) return;
+    if (!canAutoSave.current) return;
     autoSave('security_settings', securitySettings);
   }, [securitySettings]);
 
@@ -174,7 +198,7 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
   // при зміні категорії було б грубо. Оновити типові значення можна
   // окремою дією - див. кнопку нижче.
   useEffect(() => {
-    if (isFirstRender.current) return;
+    if (!canAutoSave.current) return;
     if (!business?.id) return;
     clearTimeout(saveTimers.current['profile']);
     saveTimers.current['profile'] = setTimeout(async () => {
@@ -192,7 +216,7 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
   }, [profileSettings.business_type, profileSettings.workspace_type]);
 
   useEffect(() => {
-    if (isFirstRender.current) return;
+    if (!canAutoSave.current) return;
     autoSave('notification_settings', notificationSettings);
   }, [notificationSettings]);
 
@@ -202,7 +226,7 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
   // надрукувати нове, і зберегти проміжний стан означало б лишити
   // заклад без назви в каталозі й у листах клієнтам.
   useEffect(() => {
-    if (isFirstRender.current) return;
+    if (!canAutoSave.current) return;
     if (!business?.id || !contactSettings.name.trim()) return;
     clearTimeout(saveTimers.current['contacts']);
     saveTimers.current['contacts'] = setTimeout(async () => {
@@ -216,7 +240,7 @@ export default function SettingsTab({ business, onNavigate }: SettingsTabProps) 
   }, [contactSettings]);
 
   useEffect(() => {
-    if (isFirstRender.current) return;
+    if (!canAutoSave.current) return;
     autoSave('payments_settings', paymentsSettings);
   }, [paymentsSettings]);
 

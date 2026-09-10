@@ -8,8 +8,10 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 
 interface StorefrontTabProps {
-  /** Перехід на іншу вкладку - щоб не дублювати поля. */
-  onNavigate?: (tab: string) => void;
+  /** Перехід на іншу вкладку. Другим аргументом - розділ налаштувань:
+   *  «змінити адресу» має вести до самих полів, а не в список розділів,
+   *  де їх ще треба шукати. */
+  onNavigate?: (tab: string, view?: string) => void;
   business: any;
   services: any[];
   team: any[];
@@ -334,7 +336,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     </div>
                   )}
 
-                  <div className="edit-overlay" style={{ borderRadius: '16px' }} onClick={() => onNavigate?.('Settings')}>
+                  <div className="edit-overlay" style={{ borderRadius: '16px' }} onClick={() => onNavigate?.('Settings', 'profile')}>
                     <button className="edit-btn"><Icons.Edit /> Адреса й контакти</button>
                   </div>
                 </div>
@@ -403,7 +405,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 {layoutConfig.showMap && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', height: '300px', border: '1px solid rgba(226, 232, 240, 0.6)' }}>
                     <iframe key={formData.address} width="100%" height="100%" style={{ border: 0, pointerEvents: 'none' }} loading="lazy" src={`https://maps.google.com/maps?q=${encodeURIComponent(formData.address || 'Київ')}&t=&z=18&ie=UTF8&iwloc=&output=embed`}></iframe>
-                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => onNavigate?.('Settings')}><button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button></div>
+                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => onNavigate?.('Settings', 'profile')}><button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button></div>
                   </div>
                 )}
               </div>

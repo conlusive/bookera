@@ -58,6 +58,9 @@ function roleLabel(role?: string | null): string {
 export default function BusinessCabinet() {
   const { showToast } = useToast();
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
+  // Куди відкрити налаштування. Потрібне для переходів на кшталт
+  // «змінити адресу» з вітрини: вони мають вести до самих полів.
+  const [settingsTarget, setSettingsTarget] = useState<string | undefined>();
   // Банер можна закрити на добу. Попередження, яке не прибрати, - це
   // не попередження, а докір: людина бачить його щодня й перестає
   // помічати. Через добу нагадаємо знову.
@@ -1509,7 +1512,7 @@ export default function BusinessCabinet() {
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
         {activeTab === 'Clients' && <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} />}
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}
-        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} onNavigate={setActiveTab} />}
+        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 
         {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} />}
 
@@ -1527,7 +1530,7 @@ export default function BusinessCabinet() {
           />
         )}
 
-        {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} />}
+        {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} initialView={settingsTarget} />}
 
         {/* 🟢 БУФЕР ОБМІНУ (КОПІЮВАННЯ) */}
         {clipboardApp && (

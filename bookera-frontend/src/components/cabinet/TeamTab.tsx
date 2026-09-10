@@ -98,18 +98,22 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [transferConfirmed, setTransferConfirmed] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
 
-  // Фірмові кольори системи
+    // Фірмові кольори системи
+
   const colors = {
     bg: '#ffffff',
     surface: '#f8fafc',
     textPrimary: '#0f172a',
     textSecondary: '#64748b',
     border: '#e2e8f0',
-    blue: '#3b82f6',
-    blueLight: '#eff6ff',
+    blue: '#436b49',       // благородний матча-зелений акцент замість синього
+    blueLight: '#f2f7f3',  // ніжний пастельний матча-фон для активних карток
     green: '#10b981',
     red: '#ef4444',
-    wMintBg: '#dcfce7', wMintBorder: '#86efac', wMintText: '#166534',
+    softRed: '#be4b49',
+    wMintBg: '#f2f7f3',
+    wMintBorder: '#c3dac7',
+    wMintText: '#264e32',
   };
 
 // --- ЛОГІКА МАЙСТРА ТА ДОСТУПІВ ---
@@ -500,18 +504,18 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const canEditServices = hasAdminRights;                // які послуги виконує
 
   const getRoleBadge = (staff: any) => {
-    // Кольори з палітри продукту (Matcha Mist), а не системні синій
-    // і фіолетовий: бейдж посади - частина інтерфейсу, а не сповіщення,
-    // і не має конкурувати за увагу з іменем людини.
-    // Прозорий фон, текст кольору матчі: бейдж посади - довідка,
-    // а не позначка. Заливка робила з нього акцент, який змагався
-    // з іменем людини поруч.
-    const matcha = '#6F9273';
+    // Фірмовий напівпрозорий матча-фон (Matcha Mist)
+    const matchaText = '#166534';
+    const matchaBg = 'rgba(22, 101, 52, 0.08)';
+    const matchaBorder = '1px solid rgba(22, 101, 52, 0.16)';
+
     if ((staff.name || '').includes('Власник') || isOwnerRole(staff.role)) {
-      return { label: 'Власник бізнесу', color: matcha, bg: 'transparent' };
+      return { label: 'Власник бізнесу', color: matchaText, bg: matchaBg, border: matchaBorder };
     }
-    if (staff.role === 'admin') return { label: 'Адміністратор', color: matcha, bg: 'transparent' };
-    return { label: 'Спеціаліст', color: matcha, bg: 'transparent' };
+    if (staff.role === 'admin') {
+      return { label: 'Адміністратор', color: '#1e40af', bg: 'rgba(30, 64, 175, 0.08)', border: '1px solid rgba(30, 64, 175, 0.16)' };
+    }
+    return { label: 'Спеціаліст', color: matchaText, bg: matchaBg, border: matchaBorder };
   };
 
   const activeStaffTab = staffActiveTab || 'general';
@@ -567,11 +571,13 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         }
       `}</style>
 
-      {/* --- ЛІВА ПАНЕЛЬ КОМАНДИ --- */}
+{/* --- ЛІВА ПАНЕЛЬ КОМАНДИ --- */}
       <div style={{ width: '300px', borderRight: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', backgroundColor: colors.surface, zIndex: 10 }}>
-        <div style={{ padding: '2rem 1.5rem 1rem 1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: '700', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>Команда</h2>
+
+        {/* Хедер та пошук: встановлено padding 1rem з боків, щоб збігатися з картками */}
+        <div style={{ padding: '1.5rem 1rem 0.8rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: '700', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>Команда</h2>
             {hasAdminRights && (
               <Button size="sm" onClick={() => setIsInviteStaffModalOpen(true)}>
                 <Icons.Plus /> Додати
@@ -579,53 +585,129 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             )}
           </div>
 
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary }}><Icons.Search /></div>
-            <input type="text" placeholder="Пошук..." value={staffSearchQuery} onChange={(e) => setStaffSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.2rem', borderRadius: '10px', border: `1px solid ${colors.border}`, fontSize: '0.9rem', outline: 'none', transition: '0.2s', backgroundColor: colors.bg, color: colors.textPrimary }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border}/>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+              <Icons.Search />
+            </div>
+            <input
+              type="text"
+              placeholder="Пошук..."
+              value={staffSearchQuery}
+              onChange={(e) => setStaffSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '0.65rem 1rem 0.65rem 2.2rem',
+                borderRadius: '10px',
+                border: `1px solid ${colors.border}`,
+                fontSize: '0.9rem',
+                outline: 'none',
+                transition: '0.2s',
+                backgroundColor: colors.bg,
+                color: colors.textPrimary
+              }}
+              onFocus={e => e.currentTarget.style.borderColor = colors.blue}
+              onBlur={e => e.currentTarget.style.borderColor = colors.border}
+            />
           </div>
         </div>
 
-        <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0 1rem 1rem 1rem' }}>
+        {/* Список карток: ідеальне вирівнювання країв та внутрішнього вмісту */}
+        <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0.2rem 1rem 1rem 1rem' }}>
           {filteredTeam.map((member: any) => {
             const isSelected = String(selectedStaffId) === String(member.id) || (selectedStaffId === null && member.id === team[0]?.id);
             const isPending = member.status === 'pending';
             const badge = getRoleBadge(member);
-            // Замість окремого банера над списком - позначка прямо на картці:
-            // видно, кому пора платити, не відводячи погляд від людини.
             const due = duePayouts.find((d: any) => String(d.staff_id) === String(member.id));
 
             if (!hasAdminRights && String(member.id) !== String(currentLoggedInStaff?.id)) return null;
 
             return (
-              <div key={member.id} onClick={() => handleStaffSelect(member.id)} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem 1rem', borderRadius: '12px', cursor: 'pointer', transition: '0.2s', backgroundColor: isSelected ? colors.bg : 'transparent', boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.04)' : 'none', marginBottom: '0.2rem', border: isSelected ? `1px solid ${colors.border}` : '1px solid transparent' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: isSelected ? colors.textPrimary : colors.border, color: isSelected ? '#fff' : colors.textSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.9rem', flexShrink: 0 }}>
+              <div
+                key={member.id}
+                onClick={() => handleStaffSelect(member.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.85rem',
+                  padding: '0.75rem 0.9rem',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  transition: '0.2s',
+                  backgroundColor: isSelected ? colors.bg : 'transparent',
+                  boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
+                  marginBottom: '0.35rem',
+                  border: isSelected ? `1px solid ${colors.border}` : '1px solid transparent',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {/* Аватар */}
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: isSelected ? colors.textPrimary : colors.border,
+                  color: isSelected ? '#fff' : colors.textSecondary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: '700',
+                  fontSize: '0.9rem',
+                  flexShrink: 0
+                }}>
                   {getUserInitials(member.name)}
                 </div>
-                <div style={{ overflow: 'hidden', flex: 1 }}>
-                  <div style={{ fontWeight: isSelected ? '600' : '500', color: colors.textPrimary, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{member.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: isPending ? '#f59e0b' : colors.textSecondary, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {isPending ? <><span style={{width: 6, height: 6, borderRadius: '50%', background: '#f59e0b'}}></span> Очікує</> : badge.label}
+
+                {/* Текстовий блок: вертикальне центрування */}
+                <div style={{ overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
+                  <div style={{
+                    fontWeight: isSelected ? '600' : '500',
+                    color: colors.textPrimary,
+                    fontSize: '0.95rem',
+                    lineHeight: 1.25,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {member.name}
+                  </div>
+                  <div style={{
+                    fontSize: '0.75rem',
+                    color: isPending ? '#f59e0b' : colors.textSecondary,
+                    marginTop: '3px',
+                    lineHeight: 1.2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {isPending ? (
+                      <><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }}></span> Очікує</>
+                    ) : (
+                      badge.label
+                    )}
                   </div>
                 </div>
 
-                {/* Лише крапка, без суми.
-                    Сума розтягувала картку, і «Власник бізнесу» переносився
-                    на два рядки. Точна цифра тут і не потрібна: у списку
-                    достатньо знати, КОМУ пора платити, а скільки саме -
-                    видно в картці майстра. Сума лишилась у підказці. */}
+                {/* Жовтий індикатор виплати: відцентровано по вертикалі */}
                 {due && (
                   <span
                     title={`До виплати ${Number(due.amount_due).toLocaleString('uk-UA')} ₴`}
                     style={{
                       flexShrink: 0,
-                      width: 8, height: 8, borderRadius: '50%',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
                       background: '#D99A2B',
                       boxShadow: '0 0 0 3px rgba(217, 154, 43, 0.18)',
+                      marginLeft: '0.25rem'
                     }}
                   />
                 )}
               </div>
-            )
+            );
           })}
         </div>
       </div>
@@ -772,27 +854,69 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         )}
                       </div>
 
-                      <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                         {services.map((srv: any) => {
-                            const isAssigned = localAssignedServices.includes(String(srv.id));
-                            if (staffServiceSearchQuery && !String(srv?.name ?? '').toLowerCase().includes(String(staffServiceSearchQuery ?? '').toLowerCase())) return null;
-                            return (
-                               <div key={srv.id} onClick={() => {
-                                  if (!hasAdminRights) return;
-                                  const newAssigned = isAssigned ? localAssignedServices.filter(id => id !== String(srv.id)) : [...localAssignedServices, String(srv.id)];
-                                  setLocalAssignedServices(newAssigned);
-                                  handleSaveSettingsDB({ assigned_services: newAssigned }); // Автозбереження кліку
-                               }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', cursor: hasAdminRights ? 'pointer' : 'default' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: isAssigned ? colors.blue : colors.surface, border: isAssigned ? 'none' : `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                                      {isAssigned && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                                    </div>
-                                    <div style={{ fontWeight: '600', color: isAssigned ? colors.textPrimary : colors.textSecondary, fontSize: '0.95rem' }}>{srv.name}</div>
-                                  </div>
-                               </div>
-                            )
-                         })}
-                      </div>
+                      <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+  {services.map((srv: any) => {
+    const isAssigned = localAssignedServices.includes(String(srv.id));
+    if (staffServiceSearchQuery && !String(srv?.name ?? '').toLowerCase().includes(String(staffServiceSearchQuery ?? '').toLowerCase())) return null;
+
+    return (
+      <div
+        key={srv.id}
+        onClick={() => {
+          if (!hasAdminRights) return;
+          const newAssigned = isAssigned
+            ? localAssignedServices.filter(id => id !== String(srv.id))
+            : [...localAssignedServices, String(srv.id)];
+          setLocalAssignedServices(newAssigned);
+          handleSaveSettingsDB({ assigned_services: newAssigned });
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '1rem 1.25rem',
+          background: isAssigned ? '#fff' : '#fcfdfc',
+
+          borderRadius: '12px',
+          cursor: hasAdminRights ? 'pointer' : 'default',
+          transition: 'all 0.2s ease',
+          boxShadow: isAssigned ? '0 2px 8px rgba(67, 107, 73, 0.05)' : 'none'
+        }}
+      >
+        <span style={{
+          fontWeight: isAssigned ? '600' : '500',
+          color: isAssigned ? colors.textPrimary : colors.textSecondary,
+          fontSize: '0.95rem'
+        }}>
+          {srv.name}
+        </span>
+
+        {/* Плавний матча-перемикач */}
+        <div style={{
+          width: '38px',
+          height: '22px',
+          borderRadius: '20px',
+          background: isAssigned ? colors.green : '#e2e8f0',
+          position: 'relative',
+          transition: 'background 0.25s ease',
+          flexShrink: 0
+        }}>
+          <div style={{
+            width: '18px',
+            height: '18px',
+            borderRadius: '50%',
+            background: '#ffffff',
+            position: 'absolute',
+            top: '2px',
+            left: isAssigned ? '18px' : '2px',
+            transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+          }} />
+        </div>
+      </div>
+    );
+  })}
+</div>
                   </>
                 )}
               </div>
@@ -986,10 +1110,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                               {Number(payoutPreview.tax_amount) > 0 && (
                                 <>
-                                  <div style={{ fontSize: '0.95rem', color: colors.red, opacity: 0.6, paddingBottom: '2px' }}>−</div>
+                                  <div style={{ fontSize: '0.95rem', color: colors.softRed, opacity: 0.7, paddingBottom: '2px' }}>−</div>
                                   <div>
-                                    <div style={{ fontSize: '0.75rem', color: colors.red, marginBottom: '4px', opacity: 0.85, fontWeight: '600' }}>Податок ({payoutPreview.tax_rate}%)</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: '700', color: colors.red, whiteSpace: 'nowrap' }}>{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
+                                    <div style={{ fontSize: '0.75rem', color: colors.softRed, marginBottom: '4px', opacity: 0.9, fontWeight: '600' }}>Податок ({payoutPreview.tax_rate}%)</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: '700', color: colors.softRed, whiteSpace: 'nowrap' }}>{Number(payoutPreview.tax_amount).toLocaleString('uk-UA')} ₴</div>
                                   </div>
                                 </>
                               )}
@@ -1008,7 +1132,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                           {hasAdminRights && (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
                                <Button onClick={handlePayout} disabled={isPayoutDisabled}>
-                                 <Icons.CheckCircle /> {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати'}
+                                  {isPayoutDisabled ? 'Виплачено' : 'Зафіксувати'}
                                </Button>
                             </div>
                           )}
@@ -1401,17 +1525,17 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     </Button>
                   </div>
                 ) : (
-                  <div style={{ background: colors.surface, border: `1px dashed ${colors.border}`, borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                  <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                     <div>
-                      <h3 style={{ fontSize: '1rem', fontWeight: '700', color: colors.textPrimary, margin: '0 0 0.4rem 0' }}>Передача прав власника</h3>
-                      <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0, maxWidth: '400px', lineHeight: 1.4 }}>Щоб звільнити цей профіль, потрібно спочатку передати права власності на бізнес іншому адміністратору.</p>
+                      <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#991b1b', margin: '0 0 0.4rem 0' }}>Передача прав власника</h3>
+                      <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0, maxWidth: '400px', lineHeight: 1.4, opacity: 0.9 }}>Щоб звільнити цей профіль, потрібно спочатку передати права власності на бізнес іншому адміністратору.</p>
                     </div>
                     {isSystemOwner ? (
                         <Button variant="outline" onClick={() => setIsTransferModalOpen(true)}>
-                          Передати права
+                          <span style={{ color: '#ef4444' }}>Передати права</span>
                         </Button>
                     ) : (
-                        <div style={{ fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, padding: '0.8rem 1.5rem', background: '#f1f5f9', borderRadius: '10px' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#991b1b', padding: '0.8rem 1.5rem', background: '#fff', borderRadius: '10px' }}>
                           Лише власник
                         </div>
                     )}

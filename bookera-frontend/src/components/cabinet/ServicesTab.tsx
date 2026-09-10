@@ -10,6 +10,18 @@ const CopyIcon = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="no
 const CheckIcon = () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>);
 const XIcon = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>);
 
+// Зрозуміла іконка з 6 крапок для перетягування
+const GripDotsIcon = () => (
+  <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+    <circle cx="2" cy="2" r="1.5" />
+    <circle cx="8" cy="2" r="1.5" />
+    <circle cx="2" cy="8" r="1.5" />
+    <circle cx="8" cy="8" r="1.5" />
+    <circle cx="2" cy="14" r="1.5" />
+    <circle cx="8" cy="14" r="1.5" />
+  </svg>
+);
+
 interface ServicesTabProps {
   business: any;
   services: any[];
@@ -48,8 +60,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
   // Спеціальні стани для Розумного пошуку додаткових послуг (Upsell)
   const [addonSearch, setAddonSearch] = useState('');
-  // Матеріали, що витрачаються на цю послугу. Списуються зі складу
-  // автоматично, коли візит позначають виконаним.
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [serviceMaterials, setServiceMaterials] = useState<{ inventory_item_id: number; quantity_per_use: number }[]>([]);
   const [isAddonDropdownOpen, setIsAddonDropdownOpen] = useState(false);
@@ -158,57 +168,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   const handleRemoveAddon = (id: number) => {
     setServiceForm(prev => ({ ...prev, addon_services: prev.addon_services.filter(aId => aId !== id) }));
   };
-
-  // --- МАСОВІ ДІЇ ТА СОТРУВАННЯ ---
-  const toggleSelectAll = () => {
-    if (selectedServices.length === displayedServices.length && displayedServices.length > 0) {
-      setSelectedServices([]);
-    } else {
-      setSelectedServices(displayedServices.map(s => s.id));
-    }
-  };
-
-  const toggleSelectService = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (selectedServices.includes(id)) {
-      setSelectedServices(selectedServices.filter(sId => sId !== id));
-    } else {
-      setSelectedServices([...selectedServices, id]);
-    }
-  };
-
-  const handleBulkVisibility = async (makeActive: boolean) => {
-    if (selectedServices.length === 0) return;
-    try {
-      setServices(prev => prev.map(s => selectedServices.includes(s.id) ? { ...s, is_active: makeActive } : s));
-      const token = await getAuthToken();
-      // Бекенд не має "масового" ендпоінта - викликаємо існуючий по одному
-      // на кожну обрану послугу (прийнятно для дії "виділив кілька -> дію").
-      await Promise.all(selectedServices.map(id => api.updateService(token, Number(id), { is_active: makeActive })));
-      showToast(makeActive ? `Показано послуг: ${selectedServices.length}` : `Приховано послуг: ${selectedServices.length}`, 'success');
-      setSelectedServices([]);
-    } catch (error: any) {
-      showToast(error?.message || 'Помилка оновлення статусу', 'error');
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedServices.length === 0) return;
-    if (!confirm(`Ви впевнені, що хочете видалити ${selectedServices.length} послуг?`)) return;
-    try {
-      setServices(prev => prev.filter(s => !selectedServices.includes(s.id)));
-      const token = await getAuthToken();
-      await Promise.all(selectedServices.map(id => api.deleteService(token, Number(id))));
-      showToast(`Видалено послуг: ${selectedServices.length}`, 'success');
-      setSelectedServices([]);
-    } catch (error: any) {
-      showToast(error?.message || 'Помилка при видаленні', 'error');
-    }
-  };
-
-  const selectedServicesObjects = services.filter(s => selectedServices.includes(s.id));
-  const activeCount = selectedServicesObjects.filter(s => s.is_active !== false).length;
-  const hiddenCount = selectedServicesObjects.length - activeCount;
 
   const handleSortMenuClick = (mode: 'custom' | 'view') => {
     setSortMode(mode);
@@ -346,7 +305,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     setIsServiceModalOpen(true);
   };
 
-  // Підвантажуємо склад і поточні матеріали при відкритті модалки послуги
   useEffect(() => {
     if (!isServiceModalOpen || !business?.id) return;
     void (async () => {
@@ -388,7 +346,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
           addon_service_ids: serviceForm.addon_services,
         });
         setServices(prev => prev.map(s => s.id === editingService.id ? updated : s));
-        // Матеріали - окремий ендпоінт: список перезаписується цілком
         await api.setServiceMaterials(token, editingService.id, serviceMaterials.filter(m => m.quantity_per_use > 0));
         showToast("Послугу оновлено", "success");
       } else {
@@ -454,7 +411,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         .toast-animate { animation: fadeIn 0.3s ease forwards; }
 
         .clean-input { width: 100%; padding: 0.5rem 0.8rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fafafa; font-size: 0.85rem; color: #0f172a; outline: none; transition: all 0.2s; }
-        .clean-input:focus { border-color: #cbd5e1; background: #fff; }
+        .clean-input:focus { border-color: #436b49; background: #fff; }
 
         .clean-btn { background: #0f172a; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
         .clean-btn:hover { background: #1e293b; }
@@ -466,18 +423,74 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         .category-pill:hover { background: #f8fafc; color: #0f172a; }
         .category-pill.active { background: #0f172a; color: #fff; border-color: #0f172a; }
 
-        .service-table { width: 100%; border-collapse: collapse; text-align: left; }
-        .service-table th { padding: 0.6rem 1rem; color: #94a3b8; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #f1f5f9; position: sticky; top: 0; background: #fdfdfd; z-index: 10; transition: color 0.2s; }
+        /* Таблиця з м'якими заокругленими рядками без гострих кутів */
+        .service-table { 
+          width: 100%; 
+          border-collapse: separate; 
+          border-spacing: 0 4px; 
+          text-align: left; 
+        }
+        .service-table th { 
+          padding: 0.75rem 1rem; 
+          color: #94a3b8; 
+          font-size: 0.7rem; 
+          font-weight: 700; 
+          text-transform: uppercase; 
+          letter-spacing: 0.05em; 
+          border-bottom: 1px solid #f1f5f9; 
+          position: sticky; 
+          top: 0; 
+          background: #fff; 
+          z-index: 10; 
+          transition: color 0.2s; 
+        }
         .service-table th.sortable:hover { color: #0f172a; cursor: pointer; }
-        .service-table td { padding: 0.6rem 1rem; border-bottom: 1px solid #f8fafc; vertical-align: middle; transition: background 0.15s; }
+        
+        .service-table td { 
+          padding: 0.95rem 1rem; 
+          border-bottom: 1px solid #f8fafc; 
+          border-top: 1px solid transparent;
+          vertical-align: middle; 
+          transition: background 0.15s ease; 
+        }
         .service-table tr { cursor: pointer; transition: 0.15s; }
         .service-table tr.service-row:hover td { background: #f8fafc; }
+
+        /* Плавні заокруглення лівого та правого краю рядка */
+        .service-table tr.service-row td:first-child {
+          border-top-left-radius: 12px;
+          border-bottom-left-radius: 12px;
+          padding-left: 1.25rem;
+        }
+        .service-table tr.service-row td:last-child {
+          border-top-right-radius: 12px;
+          border-bottom-right-radius: 12px;
+          padding-right: 1.25rem;
+        }
         
-        .category-header td { color: #94a3b8; font-weight: 700; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 1.5rem 1rem 0.4rem 1rem; border: none; }
+        .category-header td { 
+          color: #94a3b8; 
+          font-weight: 700; 
+          font-size: 0.75rem; 
+          text-transform: uppercase; 
+          letter-spacing: 0.06em; 
+          padding: 1.6rem 1.25rem 0.5rem 1.25rem; 
+          border: none !important; 
+          background: transparent !important; 
+        }
 
         .service-row.dragging td { opacity: 0.4; }
-        .service-row.drag-over td { border-top: 1px solid #0f172a; }
-        .drag-handle { color: #cbd5e1; display: inline-flex; align-items: center; justify-content: center; transition: 0.2s; opacity: 0.3; cursor: grab; padding-right: 0.2rem; }
+        .service-row.drag-over td { border-top: 1px solid #436b49 !important; }
+        
+        .drag-handle { 
+          color: #cbd5e1; 
+          display: inline-flex; 
+          align-items: center; 
+          justify-content: center; 
+          transition: 0.2s; 
+          opacity: 0.4; 
+          cursor: grab; 
+        }
         .service-row:hover .drag-handle { opacity: 1; color: #94a3b8; }
         .drag-handle.disabled { cursor: not-allowed; opacity: 0 !important; }
 
@@ -494,16 +507,10 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
         .clean-select-trigger { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.85rem; font-weight: 500; color: #475569; transition: 0.2s; padding: 0.4rem 0.6rem; border-radius: 6px; }
         .clean-select-trigger:hover { color: #0f172a; background: #f8fafc; }
-        .clean-select-dropdown { position: absolute; top: calc(100% + 5px); right: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); z-index: 50; overflow: hidden; animation: slideDown 0.2s ease; min-width: 220px; padding: 0.3rem; }
-        .clean-select-option { padding: 0.5rem 0.8rem; font-size: 0.8rem; font-weight: 500; color: #475569; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; border-radius: 4px; }
+        .clean-select-dropdown { position: absolute; top: calc(100% + 5px); right: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); z-index: 50; overflow: hidden; animation: slideDown 0.2s ease; min-width: 200px; padding: 0.3rem; }
+        .clean-select-option { padding: 0.55rem 0.85rem; font-size: 0.85rem; font-weight: 500; color: #475569; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; border-radius: 6px; }
         .clean-select-option:hover { background: #f8fafc; color: #0f172a; }
         .clean-select-option.selected { color: #0f172a; font-weight: 600; background: #f1f5f9; }
-
-        .min-checkbox { width: 18px; height: 18px; border: 1.5px solid #cbd5e1; border-radius: 5px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; background: #fff; margin: 0; padding: 0; flex-shrink: 0; }
-        .min-checkbox:hover { border-color: #94a3b8; }
-        .min-checkbox.checked { background: #0f172a; border-color: #0f172a; color: #fff; }
-        .min-checkbox svg { width: 12px; height: 12px; opacity: 0; transform: scale(0.5); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-        .min-checkbox.checked svg { opacity: 1; transform: scale(1); }
 
         .addon-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; color: #0f172a; transition: 0.2s; }
         .addon-chip button { background: transparent; border: none; padding: 0; display: flex; align-items: center; justify-content: center; color: #94a3b8; cursor: pointer; transition: 0.2s; margin-left: 2px; }
@@ -553,17 +560,15 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                </div>
 
                {isSortDropdownOpen && (
-                  <div className="clean-select-dropdown">
-                     <div onClick={() => handleSortMenuClick('custom')} className={`clean-select-option ${sortMode === 'custom' ? 'selected' : ''}`}>
-                        Свій порядок
-                        {sortMode === 'custom' && <div style={{ color: '#0f172a', transform: 'scale(0.8)' }}><Icons.CheckCircle /></div>}
-                     </div>
-                     <div onClick={() => handleSortMenuClick('view')} className={`clean-select-option ${sortMode === 'view' ? 'selected' : ''}`}>
-                        Режим перегляду
-                        {sortMode === 'view' && <div style={{ color: '#0f172a', transform: 'scale(0.8)' }}><Icons.CheckCircle /></div>}
-                     </div>
-                  </div>
-               )}
+                   <div className="clean-select-dropdown">
+                      <div onClick={() => handleSortMenuClick('custom')} className={`clean-select-option ${sortMode === 'custom' ? 'selected' : ''}`}>
+                         Свій порядок
+                      </div>
+                      <div onClick={() => handleSortMenuClick('view')} className={`clean-select-option ${sortMode === 'view' ? 'selected' : ''}`}>
+                         Режим перегляду
+                      </div>
+                   </div>
+                )}
             </div>
 
             <div style={{ width: '1px', height: '16px', background: '#e2e8f0', margin: '0 0.2rem' }}></div>
@@ -596,20 +601,15 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       )}
 
       {/* --- ТАБЛИЦЯ ТА САЙДБАР --- */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', flex: 1, overflow: 'hidden' }}>
 
         <div className="custom-scroll" style={{ overflowY: 'auto', borderRight: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center' }}>
-            <div style={{ width: '100%', maxWidth: '1200px', paddingRight: '1.5rem', paddingLeft: '0.5rem' }}>
+            <div style={{ width: '100%', maxWidth: '1200px', padding: '0 1.25rem' }}>
               {displayedServices.length > 0 ? (
                  <table className="service-table">
                     <thead>
                        <tr>
-                          <th style={{ width: '40px', paddingLeft: '1.5rem' }}>
-                             <div className={`min-checkbox ${selectedServices.length > 0 && selectedServices.length === displayedServices.length ? 'checked' : ''}`} onClick={toggleSelectAll}>
-                                <CheckIcon />
-                             </div>
-                          </th>
-                          <th style={{ width: '30px', padding: '0.6rem 0' }}></th>
+                          <th style={{ width: '44px', paddingLeft: '1.25rem' }}></th>
 
                           <th className="sortable" style={{ width: 'auto', whiteSpace: 'nowrap' }} onClick={() => applyHeaderSort('name')}>
                             Назва послуги <span style={{ color: '#0f172a', display: 'inline-block', width: '12px', textAlign: 'center' }}>{getSortIndicator('name')}</span>
@@ -622,7 +622,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                           </th>
 
                           <th style={{ width: '100px', textAlign: 'center' }}>Онлайн</th>
-                          <th style={{ width: '100px', textAlign: 'right', paddingRight: '1.5rem' }}>Дії</th>
+                          <th style={{ width: '100px', textAlign: 'right', paddingRight: '1.25rem' }}>Дії</th>
                        </tr>
                     </thead>
                     <tbody>
@@ -630,13 +630,12 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                           <React.Fragment key={category}>
                              {!selectedCategory && (
                                <tr className="category-header">
-                                  <td colSpan={7} style={{ paddingLeft: '1.5rem' }}>{category}</td>
+                                  <td colSpan={6}>{category}</td>
                                </tr>
                              )}
                              {groupedServices[category].map(service => {
                                 const originalIndex = services.findIndex(s => s.id === service.id);
                                 const isDragDisabled = sortMode !== 'custom' || debouncedSearch.length > 0 || selectedCategory !== null;
-                                const isSelected = selectedServices.includes(service.id);
                                 const hasAddons = service.addon_services && service.addon_services.length > 0;
 
                                 return (
@@ -649,41 +648,39 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                                       onDragEnd={handleDragEnd}
                                       onDragOver={(e) => e.preventDefault()}
                                       onClick={() => openServiceModal(service)}
-                                      style={{ background: isSelected ? '#f8fafc' : 'transparent' }}
                                    >
-                                      <td style={{ paddingLeft: '1.5rem' }}>
-                                         <div className={`min-checkbox ${isSelected ? 'checked' : ''}`} onClick={(e) => toggleSelectService(service.id, e)}>
-                                            <CheckIcon />
-                                         </div>
-                                      </td>
-                                      <td style={{ padding: '0.6rem 0' }}>
-                                         <div className={`drag-handle ${!isDragDisabled ? 'active' : 'disabled'}`} title={isDragDisabled ? "Перетягування доступне лише у 'Своєму порядку' без пошуку та фільтрів" : "Змінити порядок"}>
-                                            <Icons.Grip />
+                                      <td style={{ width: '44px' }}>
+                                         <div
+                                           className={`drag-handle ${!isDragDisabled ? 'active' : 'disabled'}`}
+                                           title={isDragDisabled ? "Перетягування доступне лише у 'Своєму порядку' без фільтрів" : "Потягніть, щоб змінити порядок"}
+                                           style={{ cursor: !isDragDisabled ? 'grab' : 'not-allowed', display: 'inline-flex' }}
+                                         >
+                                            <GripDotsIcon />
                                          </div>
                                       </td>
                                       <td>
-                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                              <span style={{ fontWeight: '600', color: service.is_active === false ? '#94a3b8' : '#0f172a', fontSize: '0.9rem' }}>
+                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                              <span style={{ fontWeight: '600', color: service.is_active === false ? '#94a3b8' : '#0f172a', fontSize: '0.98rem' }}>
                                                  {service.name}
                                               </span>
                                               {hasAddons && (
-                                                <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: '700' }}>
+                                                <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 7px', borderRadius: '5px', fontSize: '0.7rem', fontWeight: '700' }}>
                                                   +{service.addon_services.length} Upsell
                                                 </span>
                                               )}
                                             </div>
                                             {service.description && (
-                                               <span style={{ color: '#94a3b8', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px' }}>
+                                               <span style={{ color: '#94a3b8', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '340px' }}>
                                                   {service.description}
                                                </span>
                                             )}
                                          </div>
                                       </td>
-                                      <td style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '500' }}>
-                                         {service.duration} хв
+                                      <td style={{ color: '#64748b', fontSize: '0.92rem', fontWeight: '500' }}>
+                                         {service.duration ?? service.duration_minutes ?? 0} хв
                                       </td>
-                                      <td style={{ color: '#0f172a', fontSize: '0.85rem', fontWeight: '700' }}>
+                                      <td style={{ color: '#0f172a', fontSize: '0.98rem', fontWeight: '700' }}>
                                          {service.price} ₴
                                       </td>
                                       <td>
@@ -691,7 +688,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                                             <div className="apple-switch-knob"></div>
                                          </div>
                                       </td>
-                                      <td style={{ paddingRight: '1.5rem', whiteSpace: 'nowrap' }}>
+                                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                                          <div className="row-actions">
                                             <button className="row-action-btn" onClick={(e) => handleDuplicate(service, e)} title="Дублювати послугу">
                                                <CopyIcon />
@@ -776,38 +773,9 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         </div>
       </div>
 
-      {/* Панель масових дій */}
-      {selectedServices.length > 0 && (
-         <div style={{ position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', background: '#0f172a', color: '#fff', padding: '0.6rem 1.2rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '1.2rem', boxShadow: '0 10px 25px rgba(15,23,42,0.3)', zIndex: 100, animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: '600' }}>
-               Вибрано: <span style={{ background: '#3b82f6', padding: '0.1rem 0.4rem', borderRadius: '4px', marginLeft: '0.2rem' }}>{selectedServices.length}</span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
-               {activeCount > 0 && hiddenCount === 0 && (
-                 <button onClick={() => handleBulkVisibility(false)} style={{ background: '#1e293b', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem' }}>Приховати</button>
-               )}
-               {hiddenCount > 0 && activeCount === 0 && (
-                 <button onClick={() => handleBulkVisibility(true)} style={{ background: '#10b981', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem' }}>Показати</button>
-               )}
-               {activeCount > 0 && hiddenCount > 0 && (
-                 <>
-                   <button onClick={() => handleBulkVisibility(true)} style={{ background: '#10b981', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem' }}>Показати всі</button>
-                   <button onClick={() => handleBulkVisibility(false)} style={{ background: '#1e293b', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem' }}>Приховати всі</button>
-                 </>
-               )}
-               <button onClick={handleBulkDelete} style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '0.8rem', marginLeft: '0.4rem' }}>Видалити</button>
-            </div>
-
-            <button onClick={() => setSelectedServices([])} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex' }}><Icons.XCircle /></button>
-         </div>
-      )}
-
       {/* --- МОДАЛЬНЕ ВІКНО ПОСЛУГИ --- */}
       {isServiceModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.3)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setIsServiceModalOpen(false)}>
-
-          {/* 🟢 ЗМІНЕНО: Великий розмір вікна (85vh), гнучка структура, без зайвого розтягування */}
           <div className="toast-animate" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '520px', height: '85vh', minHeight: '600px', maxHeight: '800px', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
 
             {/* Хедер модалки */}
@@ -820,7 +788,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
               </button>
             </div>
 
-            {/* 🟢 Скролиме тіло модалки. Зверни увагу на margin-right та padding-right для правильного скролу */}
+            {/* Скролиме тіло модалки */}
             <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 1rem 1.5rem 2rem', marginRight: '1rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', paddingRight: '0.5rem' }}>
 
@@ -856,7 +824,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                   />
                 </div>
 
-                {/* 🟢 БЛОК UPSELL: Випадаючий список поверх усього */}
+                {/* БЛОК UPSELL */}
                 {services.length > 0 && (
                   <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '16px', border: '1px solid #e2e8f0', marginTop: '0.5rem' }} ref={addonDropdownRef}>
                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.4rem' }}>
@@ -866,7 +834,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                         Збільшуйте середній чек. Виберіть послуги, які клієнт побачить як рекомендацію під час запису.
                      </p>
 
-                     {/* 🟢 Компактний скрол вибраних тегів */}
                      {selectedAddons.length > 0 && (
                        <div className="custom-scroll" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1rem', maxHeight: '80px', overflowY: 'auto' }}>
                          {selectedAddons.map(addon => (
@@ -893,7 +860,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                          style={{ background: '#fff', paddingLeft: '2.4rem', paddingRight: '1rem', height: '44px', fontSize: '0.9rem', marginBottom: '0' }}
                        />
 
-                       {/* 🟢 Абсолютний список, який випадає ПОВЕРХ кнопок футера */}
                        {isAddonDropdownOpen && Object.keys(availableAddonsGrouped).length > 0 && (
                          <div className="custom-scroll" style={{
                             position: 'absolute',
@@ -1008,7 +974,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
               </div>
             </div>
 
-            {/* Футер модалки (Кнопки дії завжди видимі знизу) */}
+            {/* Футер модалки */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.8rem', padding: '1.2rem 2rem', borderTop: '1px solid #f1f5f9', flexShrink: 0, background: '#fff' }}>
               <button onClick={() => setIsServiceModalOpen(false)} className="clean-btn-ghost">Скасувати</button>
               <button onClick={handleSaveService} disabled={isServiceSaving} className="clean-btn" style={{ opacity: isServiceSaving ? 0.7 : 1 }}>

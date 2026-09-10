@@ -382,3 +382,52 @@ async def test_apply_profile_defaults_updates_derived_settings(client, auth_head
 
     # А ручний текст лишився недоторканим
     assert settings["cancellation_policy"] == "Мій власний текст"
+
+
+@pytest.mark.asyncio
+async def test_client_can_view_and_cancel_own_booking(client, auth_headers):
+    """
+    Потік, на який ведуть УСІ листи: підтвердження, перенесення,
+    нагадування. Сторінки /my-booking не існувало - людина натискала
+    «Переглянути або скасувати» й потрапляла на 404.
+
+    Доступ за токеном без входу в систему: вимагати реєстрації від
+    людини, яка хоче скасувати візит, - найшвидший спосіб отримати
+    неявку замість скасування.
+    """
+    headers = auth_headers("manage-owner")
+    business_id, service_id = await _setup(client, headers, "Manage Salon")
+
+    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=3)
+    r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
+    assert r.status_code == 200, r.text
+    appointment_id = r.json()["id"]
+
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        token = await conn.fetchval("SELECT manage_token FROM appointments WHERE id = $1", appointment_id)
+    finally:
+        await conn.close()
+    assert token, "токен керування має видаватись при створенні"
+
+    # Перегляд: назви мають бути заповнені, інакше людина бачить
+    # свій запис без натяку, куди й до кого вона йде
+    r = await client.get(f"/appointments/{appointment_id}/manage?token={token}")
+    assert r.status_code == 200, r.text
+    assert r.json()["business_name"] == "Manage Salon"
+    assert r.json()["service_name"] == "Стрижка"
+
+    # Чужий токен не працює
+    r = await client.get(f"/appointments/{appointment_id}/manage?token=wrong-token")
+    assert r.status_code == 404
+
+    # Скасування
+    r = await client.post(f"/appointments/{appointment_id}/cancel", json={"token": token})
+    assert r.status_code == 200, r.text
+
+    r = await client.get(f"/appointments/{appointment_id}/manage?token={token}")
+    assert r.json()["status"] == "cancelled"
+
+    # Повторне скасування - зрозуміла відмова, а не мовчазний успіх
+    r = await client.post(f"/appointments/{appointment_id}/cancel", json={"token": token})
+    assert r.status_code == 409

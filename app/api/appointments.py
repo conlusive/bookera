@@ -759,7 +759,29 @@ async def get_appointment_for_client(
     appointment = result.scalars().first()
     if not appointment or not appointment.manage_token or appointment.manage_token != token:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
-    return appointment
+
+    # Підтягуємо назви: id послуги нічого не каже людині, яка відкрила
+    # посилання з листа. Вона має бачити, КУДИ й ДО КОГО йде.
+    response = AppointmentResponse.model_validate(appointment, from_attributes=True)
+
+    biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
+    business = biz_res.scalars().first()
+    if business:
+        response.business_name = business.name
+
+    if appointment.service_id:
+        srv_res = await db.execute(select(Service).where(Service.id == appointment.service_id))
+        service = srv_res.scalars().first()
+        if service:
+            response.service_name = service.name
+
+    if appointment.master_id:
+        m_res = await db.execute(select(User).where(User.id == str(appointment.master_id)))
+        master = m_res.scalars().first()
+        if master:
+            response.master_name = master.full_name
+
+    return response
 
 
 @router.post("/{appointment_id}/cancel", response_model=AppointmentResponse)

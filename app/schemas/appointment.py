@@ -98,6 +98,14 @@ class AppointmentResponse(BaseModel):
     client_email: Optional[str] = None
     created_at: Optional[datetime] = None
 
+    # Назви для сторінки клієнта. Без них людина бачить свій запис
+    # без жодного натяку, куди й до кого вона йде: id послуги їй
+    # нічого не каже. Заповнюються лише там, де потрібні, - решта
+    # ендпоінтів віддає їх порожніми й нічого не втрачає.
+    business_name: Optional[str] = None
+    service_name: Optional[str] = None
+    master_name: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

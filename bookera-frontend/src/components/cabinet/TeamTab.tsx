@@ -503,11 +503,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     // Кольори з палітри продукту (Matcha Mist), а не системні синій
     // і фіолетовий: бейдж посади - частина інтерфейсу, а не сповіщення,
     // і не має конкурувати за увагу з іменем людини.
+    // Прозорий фон, текст кольору матчі: бейдж посади - довідка,
+    // а не позначка. Заливка робила з нього акцент, який змагався
+    // з іменем людини поруч.
+    const matcha = '#6F9273';
     if ((staff.name || '').includes('Власник') || isOwnerRole(staff.role)) {
-      return { label: 'Власник бізнесу', color: '#24301F', bg: '#C2D8C4' };
+      return { label: 'Власник бізнесу', color: matcha, bg: 'transparent' };
     }
-    if (staff.role === 'admin') return { label: 'Адміністратор', color: '#2E3A30', bg: '#E4EEE3' };
-    return { label: 'Спеціаліст', color: '#5C6B5E', bg: '#F2F6F1' };
+    if (staff.role === 'admin') return { label: 'Адміністратор', color: matcha, bg: 'transparent' };
+    return { label: 'Спеціаліст', color: matcha, bg: 'transparent' };
   };
 
   const activeStaffTab = staffActiveTab || 'general';

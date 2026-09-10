@@ -50,6 +50,11 @@ class BusinessCreate(BusinessBase):
 class BusinessUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
+    # Тип бізнесу й спосіб роботи. Їх не було в схемі оновлення, тому
+    # Pydantic мовчки відкидав ці поля: інтерфейс показував «збережено»,
+    # а в базі нічого не змінювалось.
+    business_type: Optional[str] = None
+    workspace_type: Optional[str] = None
     description: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None

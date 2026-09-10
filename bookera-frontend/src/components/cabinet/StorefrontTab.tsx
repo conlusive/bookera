@@ -112,12 +112,14 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
     try {
       const token = await getAuthToken();
+      // Адресу, телефон і пошту звідси НЕ надсилаємо: вони редагуються
+      // в налаштуваннях. Якби надсилали, вітрина перезаписувала б їх
+      // своїм застарілим станом щоразу при збереженні оформлення -
+      // людина змінила б телефон у налаштуваннях, зайшла у вітрину,
+      // натиснула «Зберегти» і мовчки повернула старий.
       await api.updateBusiness(token, business.id, {
         name: formData.name,
         category: formData.category,
-        address: formData.address,
-        phone: formData.phone,
-        email: formData.email,
         description: formData.description,
         accent_color: accentColor,
         layout_config: layoutConfig,
@@ -292,70 +294,49 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               </div>
             </div>
 
-            {/* Назва, адреса й контакти - ЛИШЕ ПЕРЕГЛЯД.
-                Редагуються в «Налаштуваннях → Профіль закладу».
-
-                Вітрина - про те, як заклад ВИГЛЯДАЄ: обкладинка, опис,
-                фото робіт. Самі дані закладу показані тут, щоб було
-                видно, як їх побачить клієнт, але два місця для одного
-                поля - вірний спосіб отримати розбіжність. */}
+            {/* Назва редагується ТУТ - це частина оформлення вітрини,
+                і правити її, дивлячись на результат, природніше.
+                Адреса й контакти - у налаштуваннях: там вони поруч із
+                рештою даних закладу. При наведенні зʼявляється та сама
+                підсвітка, що й на решті блоків сторінки. */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, paddingRight: '2rem' }}>
-                <div style={{ fontSize: '3.5rem', fontWeight: '900', color: '#0f172a', lineHeight: 1.1 }}>
-                  {formData.name || 'Назва вашого закладу'}
-                </div>
+                <input
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className="inline-input"
+                  placeholder="Назва вашого закладу"
+                  style={{ fontSize: '3.5rem', fontWeight: '900', color: '#0f172a', lineHeight: 1.1, width: '100%' }}
+                />
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginTop: '0.75rem' }}>
-                  <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor }} />
-                  <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>
-                    {(() => {
-                      // Не склеюємо місто з адресою, якщо адреса вже з нього
-                      // починається. У старих записах у полі «адреса» лежить
-                      // повний рядок разом із містом - склеювання давало
-                      // «Львів, Львів, Дорошенка 10».
-                      const city = (formData.city || '').trim();
-                      const addr = (formData.address || '').trim();
-                      if (!addr) return city || 'Адресу не вказано';
-                      if (!city) return addr;
-                      return addr.toLowerCase().startsWith(city.toLowerCase())
-                        ? addr
-                        : `${city}, ${addr}`;
-                    })()}
-                  </span>
-                </div>
+                <div className="editable-block" style={{ marginTop: '0.75rem', borderRadius: '16px', padding: '0.5rem', marginLeft: '-0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
+                    <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor }} />
+                    <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>
+                      {(() => {
+                        // Не склеюємо місто з адресою, якщо адреса вже з нього
+                        // починається: у старих записах там повний рядок,
+                        // і виходило «Львів, Львів, Дорошенка 10».
+                        const city = (formData.city || '').trim();
+                        const addr = (formData.address || '').trim();
+                        if (!addr) return city || 'Адресу не вказано';
+                        if (!city) return addr;
+                        return addr.toLowerCase().startsWith(city.toLowerCase()) ? addr : `${city}, ${addr}`;
+                      })()}
+                    </span>
+                  </div>
 
-                <div
-                  className="contacts-row"
-                  style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', marginTop: '0.75rem', alignItems: 'center' }}
-                >
                   {formData.phone && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginTop: '0.5rem' }}>
                       <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
                       <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.phone}</span>
                     </div>
                   )}
-                  {formData.email && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
-                      <Icons.Mail style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
-                      <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.email}</span>
-                    </div>
-                  )}
-                  {/* Підпис зʼявляється при наведенні, як решта підказок
-                      на цій сторінці: постійна кнопка «Змінити» біля
-                      кожного блоку перетворює вітрину на панель керування,
-                      а вона має показувати, як заклад ВИГЛЯДАЄ. */}
-                  <button
-                    className="edit-hint"
-                    onClick={() => onNavigate?.('Settings')}
-                    style={{
-                      border: 'none', background: 'transparent', color: accentColor,
-                      fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
-                      fontFamily: 'inherit', padding: '0.2rem 0',
-                      opacity: 0, transition: 'opacity 0.15s ease',
-                    }}
-                  >
-                    Змінити в налаштуваннях
-                  </button>
+
+                  <div className="edit-overlay" style={{ borderRadius: '16px' }} onClick={() => onNavigate?.('Settings')}>
+                    <button className="edit-btn"><Icons.Edit /> Адреса й контакти</button>
+                  </div>
                 </div>
               </div>
             </div>

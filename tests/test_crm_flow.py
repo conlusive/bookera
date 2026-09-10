@@ -246,3 +246,34 @@ async def test_direct_link_is_private_to_business_admins(client, auth_headers):
     # Стороння людина - ні
     r = await client.get(f"/crm/businesses/{business_id}/direct-link", headers=auth_headers("dl-stranger"))
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_business_update_accepts_profile_fields(client, auth_headers):
+    """
+    business_type і workspace_type були відсутні в BusinessUpdate, тому
+    Pydantic мовчки їх відкидав: інтерфейс показував «збережено», а в
+    базі нічого не змінювалось.
+
+    Мовчазне відкидання - найгірший вид помилки: людина впевнена, що
+    зберегла, і дізнається про зворотне через тиждень.
+    """
+    headers = auth_headers("profile-update-owner")
+    r = await client.post("/crm/businesses", json={
+        "name": "Update Profile Salon", "city": "Львів",
+        "category": "barber", "business_type": "company", "workspace_type": "my_place",
+    }, headers=headers)
+    business_id = r.json()["id"]
+
+    r = await client.patch(f"/crm/businesses/{business_id}", json={
+        "business_type": "individual",
+        "workspace_type": "client_place",
+        "show_phone_publicly": False,
+    }, headers=headers)
+    assert r.status_code == 200, r.text
+
+    r = await client.get("/crm/businesses/me", headers=headers)
+    biz = r.json()["business"]
+    assert biz["business_type"] == "individual"
+    assert biz["workspace_type"] == "client_place"
+    assert biz["show_phone_publicly"] is False

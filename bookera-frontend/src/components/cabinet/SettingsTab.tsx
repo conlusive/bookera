@@ -26,6 +26,10 @@ const SvgSearch = (p:any) => <SvgIcon {...p}><circle cx="11" cy="11" r="8"></cir
 const SvgCrown = (p:any) => <SvgIcon {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></SvgIcon>;
 const SvgCheck = (p:any) => <SvgIcon strokeWidth="3" {...p}><polyline points="20 6 9 17 4 12"></polyline></SvgIcon>;
 const SvgAlertCircle = (p:any) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></SvgIcon>;
+// Вітрина крамниці: профіль - це про сам заклад, а не про його
+// присутність в інтернеті. Глобус лишається за онлайн-бронюванням.
+const SvgStorefront = (p:any) => <SvgIcon {...p}><path d="M3 9l1.5-5h15L21 9"></path><path d="M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z"></path><path d="M8 21v-7h8v7"></path></SvgIcon>;
+
 const SvgGlobe = (p:any) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></SvgIcon>;
 const SvgCreditCard = (p:any) => <SvgIcon {...p}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></SvgIcon>;
 const SvgBell = (p:any) => <SvgIcon {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></SvgIcon>;
@@ -52,7 +56,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const businessSettingsCards = [
   // Профіль першим: саме з нього виводяться типові значення для решти
   // налаштувань, і людина має бачити, що вона вказала при реєстрації.
-  { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgGlobe, color: '#0f766e', bg: '#f0fdfa' },
+  { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgStorefront, color: '#0f766e', bg: '#f0fdfa' },
   { id: 'booking', title: 'Онлайн-бронювання', desc: 'Правила сітки, зупинка запису та скасування.', icon: SvgGlobe, color: '#3b82f6', bg: '#eff6ff' },
   { id: 'security', title: 'Безпека та Чорний список', desc: 'Захист від фейкових записів та спаму.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
   { id: 'payments', title: 'Платежі та Каса', desc: 'Депозити, передоплата та валюта.', icon: SvgCreditCard, color: '#10b981', bg: '#ecfdf5' },

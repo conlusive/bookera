@@ -224,9 +224,17 @@ export default function CalendarTab({ business, team = [], services = [], refres
           };
 
           if (result.status === 'confirmed' && currentTime > end) {
-            // Реальний PATCH через бекенд (і коректне нарахування комісії,
-            // якщо джерело - маркетплейс), не fire-and-forget запит.
-            api.updateAppointmentStatus(token, app.id, 'completed').catch(() => {});
+            // Автозавершення минулих візитів.
+            //
+            // Помилку більше не ковтаємо: раніше стояло .catch(() => {}),
+            // і якщо запит не проходив, екран показував «завершено», а
+            // сервер лишався при «підтверджено». Розбіжність тримається
+            // до перезавантаження й ламає звіти - у виручку потрапляє
+            // те, чого в базі немає.
+            api.updateAppointmentStatus(token, app.id, 'completed')
+              .catch((err: any) => {
+                console.warn('Не вдалося завершити візит', app.id, err?.message || err);
+              });
             return { ...result, status: 'completed' };
           }
           return result;

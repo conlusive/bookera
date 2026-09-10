@@ -49,14 +49,19 @@ async def lifespan(app: FastAPI):
     #
     # Запускається лише якщо налаштована пошта: без SMTP цикл щогодини
     # робив би запити до бази, щоб нічого не надіслати.
-    reminder_task = None
+    # Цикл запускається ЗАВЖДИ, а не лише за наявності пошти.
+    #
+    # Раніше він залежав від SMTP, але тепер у ньому дві задачі:
+    # нагадування (потребують пошти) і завершення минулих візитів
+    # (не потребує). Привʼязати друге до налаштувань пошти означало б,
+    # що заклад без SMTP має неправильні виплати майстрам.
+    reminder_task = asyncio.create_task(
+        reminder_loop(AsyncSessionLocal, os.getenv("FRONTEND_URL", ""))
+    )
     if os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"):
-        reminder_task = asyncio.create_task(
-            reminder_loop(AsyncSessionLocal, os.getenv("FRONTEND_URL", ""))
-        )
-        logger.info("Нагадування клієнтам увімкнені")
+        logger.info("Фоновий процес: нагадування + автозавершення візитів")
     else:
-        logger.info("Нагадування вимкнені: не налаштована пошта (SMTP_USER/SMTP_PASSWORD)")
+        logger.info("Фоновий процес: автозавершення візитів (пошта не налаштована)")
 
     yield
 

@@ -1,4 +1,5 @@
 import asyncpg
+import os
 import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
@@ -27,7 +28,15 @@ async def _setup_with_appointment(client, headers, hours_ahead: float, name: str
 
 
 async def _run_reminders():
-    """Запускає один прохід нагадувань із підміненою відправкою пошти."""
+    """
+    Запускає один прохід нагадувань із підміненою відправкою пошти.
+
+    SMTP-ключі задаємо фіктивні: функція перевіряє їх наявність на
+    вході, щоб не робити марних запитів до бази в закладів без пошти.
+    Сама відправка все одно підмінена.
+    """
+    os.environ.setdefault("SMTP_USER", "test@example.com")
+    os.environ.setdefault("SMTP_PASSWORD", "test-password")
     from app.core.database import AsyncSessionLocal
     from app.services import reminders
 
@@ -153,6 +162,9 @@ async def test_failed_email_does_not_block_others(client, auth_headers):
     async def always_fail(**kwargs):
         raise RuntimeError("SMTP недоступний")
 
+    os.environ.setdefault("SMTP_USER", "test@example.com")
+    os.environ.setdefault("SMTP_PASSWORD", "test-password")
+
     with patch.object(reminders, "send_booking_reminder_email", side_effect=always_fail):
         async with AsyncSessionLocal() as db:
             count = await reminders.send_due_reminders(db, "")
@@ -163,3 +175,75 @@ async def test_failed_email_does_not_block_others(client, auth_headers):
     count2, emails = await _run_reminders()
     assert any(e["business_name"] == "Reminder Fail Salon" for e in emails), \
         "запис із невдалою відправкою має спробуватись знову"
+
+
+@pytest.mark.asyncio
+async def test_past_appointments_completed_automatically(client, auth_headers):
+    """
+    Раніше це робив ФРОНТЕНД при відкритті календаря: візити ставали
+    завершеними, лише коли хтось заходив у систему. Заклад не відкривав
+    кабінет тиждень - тиждень записів висіли «підтвердженими», і виплати
+    майстрам рахувались неправильно.
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.services.reminders import complete_past_appointments
+
+    headers = auth_headers("complete-owner")
+    business_id, appointment_id = await _setup_with_appointment(client, headers, 5, "Complete Salon")
+
+    # Пересуваємо візит у минуле
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        past = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=3)
+        await conn.execute(
+            "UPDATE appointments SET start_time=$1, end_time=$2 WHERE id=$3",
+            past, past + timedelta(hours=1), appointment_id,
+        )
+    finally:
+        await conn.close()
+
+    async with AsyncSessionLocal() as db:
+        count = await complete_past_appointments(db)
+    assert count >= 1
+
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        status = await conn.fetchval("SELECT status FROM appointments WHERE id=$1", appointment_id)
+    finally:
+        await conn.close()
+    assert status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_recent_appointment_not_completed_too_early(client, auth_headers):
+    """
+    Запас у 15 хвилин після кінця візиту: якщо клієнт затримався,
+    а майстер ще не натиснув «завершено», не варто робити це за нього
+    тієї ж секунди.
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.services.reminders import complete_past_appointments
+
+    headers = auth_headers("recent-owner")
+    business_id, appointment_id = await _setup_with_appointment(client, headers, 5, "Recent Salon")
+
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        # Візит скінчився 5 хвилин тому - ще зарано
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        await conn.execute(
+            "UPDATE appointments SET start_time=$1, end_time=$2 WHERE id=$3",
+            now - timedelta(hours=1), now - timedelta(minutes=5), appointment_id,
+        )
+    finally:
+        await conn.close()
+
+    async with AsyncSessionLocal() as db:
+        await complete_past_appointments(db)
+
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        status = await conn.fetchval("SELECT status FROM appointments WHERE id=$1", appointment_id)
+    finally:
+        await conn.close()
+    assert status == "confirmed", "візит, що скінчився щойно, чіпати зарано"

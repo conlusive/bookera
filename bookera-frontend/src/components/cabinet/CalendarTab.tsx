@@ -223,20 +223,15 @@ export default function CalendarTab({ business, team = [], services = [], refres
             end_time: `${pad(end.getHours())}:${pad(end.getMinutes())}:00`,
           };
 
-          if (result.status === 'confirmed' && currentTime > end) {
-            // Автозавершення минулих візитів.
-            //
-            // Помилку більше не ковтаємо: раніше стояло .catch(() => {}),
-            // і якщо запит не проходив, екран показував «завершено», а
-            // сервер лишався при «підтверджено». Розбіжність тримається
-            // до перезавантаження й ламає звіти - у виручку потрапляє
-            // те, чого в базі немає.
-            api.updateAppointmentStatus(token, app.id, 'completed')
-              .catch((err: any) => {
-                console.warn('Не вдалося завершити візит', app.id, err?.message || err);
-              });
-            return { ...result, status: 'completed' };
-          }
+          // Автозавершення минулих візитів переїхало на бекенд
+          // (services/reminders.py, фоновий цикл раз на годину).
+          //
+          // Тут воно спрацьовувало лише коли хтось відкривав календар:
+          // заклад не заходив тиждень - тиждень записів висіли
+          // «підтвердженими», і виплати майстрам рахувались неправильно.
+          //
+          // Показуємо статус як він є. Розбіжність між екраном і базою
+          // гірша за короткий проміжок, поки фоновий процес не спрацював.
           return result;
         });
 
@@ -1083,7 +1078,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.2rem', textAlign: 'center', marginBottom: '0.8rem', fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8' }}>
-            <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
+            <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div>
+            <div style={{ color: '#d92d20' }}>Сб</div><div style={{ color: '#d92d20' }}>Нд</div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.2rem' }}>
             {blanks.map(blank => <div key={`blank-${blank}`}></div>)}
@@ -1097,7 +1093,13 @@ export default function CalendarTab({ business, team = [], services = [], refres
                   key={day}
                   onClick={() => { setCurrentDate(dObj); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
                   className={`cal-mini-day ${isSelected ? 'selected' : ''}`}
-                  style={{ position: 'relative' }}
+                  style={{
+                    position: 'relative',
+                    // Вихідні червоним - так само, як у місячному вигляді.
+                    // Обраний день лишається білим на темному тлі: там
+                    // червоний нечитабельний.
+                    color: !isSelected && (dObj.getDay() === 0 || dObj.getDay() === 6) ? '#d92d20' : undefined,
+                  }}
                 >
                   {day}
                   {hasOverdue && <div style={{ position: 'absolute', top: '2px', right: '2px', width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%' }}></div>}
@@ -1662,7 +1664,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
           {calendarView === 'month' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #f1f5f9', textAlign: 'center', fontWeight: '600', color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '1rem 0', flexShrink: 0 }}>
-                 <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
+                 <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div>
+                 <div style={{ color: '#d92d20' }}>Сб</div><div style={{ color: '#d92d20' }}>Нд</div>
               </div>
 
               <div className="custom-scroll" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(130px, 1fr)', overflowY: 'auto' }}>
@@ -1687,7 +1690,11 @@ export default function CalendarTab({ business, team = [], services = [], refres
                                       <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>{dayApps.filter((a: any) => a.status !== 'blocked').length} зап.</span>
                                     )}
                                   </div>
-                                  <span style={{ fontWeight: isMDayToday ? '700' : '500', color: isMDayToday ? '#ffffff' : '#0f172a', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isMDayToday ? '#0f172a' : 'transparent', fontSize: '0.9rem' }}>{day}</span>
+                                  <span style={{ fontWeight: isMDayToday ? '700' : '500',
+                                    // Вихідні червоним, як у системному календарі.
+                                    // Це не декор: у календарі, куди дивляться щодня,
+                                    // межа тижня має читатись без підрахунку стовпців.
+                                    color: isMDayToday ? '#ffffff' : (dObj.getDay() === 0 || dObj.getDay() === 6 ? '#d92d20' : '#0f172a'), width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isMDayToday ? '#0f172a' : 'transparent', fontSize: '0.9rem' }}>{day}</span>
                               </div>
 
                               {dayLoad > 0 && (

@@ -41,6 +41,12 @@ async def send_due_reminders(db: AsyncSession, frontend_url: str = "") -> int:
 
     Повертає кількість надісланих листів - зручно для логів і тестів.
     """
+    # Без налаштованої пошти надсилати нічого: виходимо одразу, щоб
+    # не робити марних запитів до бази щогодини.
+    import os
+    if not (os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")):
+        return 0
+
     now = utc_now()
     window_start = now + timedelta(hours=WINDOW_START_HOURS)
     window_end = now + timedelta(hours=WINDOW_END_HOURS)
@@ -137,9 +143,65 @@ async def reminder_loop(session_factory, frontend_url: str = "") -> None:
         try:
             async with session_factory() as db:
                 await send_due_reminders(db, frontend_url)
+                # Завершення минулих візитів - у тому ж циклі: обидві
+                # задачі періодичні, і другий фоновий процес заради
+                # одного запиту раз на годину не вартий складності.
+                await complete_past_appointments(db)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             logger.error("Помилка в циклі нагадувань: %s", exc)
 
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)
+
+
+async def complete_past_appointments(db: AsyncSession) -> int:
+    """
+    Позначити завершеними візити, час яких минув.
+
+    Раніше це робив ФРОНТЕНД при відкритті календаря. Наслідок: візити
+    ставали завершеними лише коли хтось заходив у систему. Заклад не
+    відкривав кабінет тиждень - тиждень записів висіли «підтвердженими»,
+    і виплати майстрам рахувались неправильно, бо в розрахунок беруться
+    саме завершені.
+
+    Запас у 15 хвилин після кінця візиту: якщо клієнт затримався, а
+    майстер ще не встиг натиснути «завершено», не варто робити це за
+    нього тієї ж секунди.
+    """
+    now = utc_now()
+    cutoff = now - timedelta(minutes=15)
+
+    stmt = select(Appointment).where(
+        Appointment.status == "confirmed",
+        Appointment.end_time < cutoff,
+    )
+    result = await db.execute(stmt)
+    appointments = result.scalars().all()
+
+    completed = 0
+    for appointment in appointments:
+        # Комісію нараховує та сама функція, що й при ручному завершенні:
+        # два шляхи до одного стану неминуче розійшлися б, і частина
+        # візитів лишилась би без комісії.
+        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
+        business = biz_res.scalars().first()
+
+        appointment.status = "completed"
+        completed += 1
+
+        if business:
+            try:
+                from app.services.monetization import charge_commission_if_applicable
+                await charge_commission_if_applicable(db, appointment, business)
+            except Exception as exc:
+                # Комісія не має блокувати завершення візиту: сам факт
+                # виконаної роботи важливіший за нарахування, яке можна
+                # виправити пізніше.
+                logger.warning("Комісію не нараховано (запис %s): %s", appointment.id, exc)
+
+    if completed:
+        await db.commit()
+        logger.info("Автоматично завершено візитів: %s", completed)
+
+    return completed

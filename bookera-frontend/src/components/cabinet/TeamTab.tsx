@@ -1531,14 +1531,30 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0, maxWidth: '400px', lineHeight: 1.4, opacity: 0.9 }}>Щоб звільнити цей профіль, потрібно спочатку передати права власності на бізнес іншому адміністратору.</p>
                     </div>
                     {isSystemOwner ? (
-                        <Button variant="outline" onClick={() => setIsTransferModalOpen(true)}>
-                          <span style={{ color: '#ef4444' }}>Передати права</span>
-                        </Button>
-                    ) : (
-                        <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#991b1b', padding: '0.8rem 1.5rem', background: '#fff', borderRadius: '10px' }}>
-                          Лише власник
-                        </div>
-                    )}
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsTransferModalOpen(true)}
+                      style={{
+                        backgroundColor: '#FBF0EF',
+                        borderColor: '#fca5a5',
+                        color: '#991b1b',
+                      }}
+                    >
+                      Передати права
+                    </Button>
+                  ) : (
+                      <div style={{
+                        fontSize: '0.85rem',
+                        fontWeight: '600',
+                        color: '#991b1b',
+                        padding: '0.8rem 1.5rem',
+                        background: '#FBF0EF',
+                        border: '1px solid #fca5a5',
+                        borderRadius: '10px'
+                      }}>
+                        Лише власник
+                      </div>
+                  )}
                   </div>
                 )}
               </div>

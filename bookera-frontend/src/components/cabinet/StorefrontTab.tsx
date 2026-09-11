@@ -8,9 +8,6 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 
 interface StorefrontTabProps {
-  /** Перехід на іншу вкладку. Другим аргументом - розділ налаштувань:
-   *  «змінити адресу» має вести до самих полів, а не в список розділів,
-   *  де їх ще треба шукати. */
   onNavigate?: (tab: string, view?: string) => void;
   business: any;
   services: any[];
@@ -22,7 +19,7 @@ interface StorefrontTabProps {
 export default function StorefrontTab({ business, services, team, Icons, setActiveTab, onNavigate }: StorefrontTabProps) {
   const { showToast } = useToast();
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [formData, setFormData] = useState({ name: '', category: '', city: '', address: '', description: '', phone: '', email: '' });
@@ -41,7 +38,6 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isDesignModalOpen, setIsDesignModalOpen] = useState(false);
-  const [isAiExpanded, setIsAiExpanded] = useState(false);
 
   const MAX_WORKPLACE_PHOTOS = 6;
 
@@ -65,9 +61,6 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         setLayoutConfig(business.layout_config);
       }
 
-      // Дозвіл на автозбереження - лише після того, як стани заповнені
-      // справжніми даними. setTimeout(0) переносить це в наступний такт:
-      // виклики setState вище ще не застосовані.
       setTimeout(() => { canAutoSave.current = true; }, 0);
     }
   }, [business]);
@@ -79,45 +72,6 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     }
   }, [formData.description]);
 
-  const aiState = useMemo(() => {
-    let score = 0;
-    let hint = "";
-
-    if (formData.name && formData.address) score += 20;
-    if (logo) score += 15;
-    if (coverPhoto) {
-      score += 25;
-    } else {
-      hint = "Почніть з обкладинки! Це перше, що бачать клієнти.";
-    }
-
-    if ((formData.description || '').length > 80) {
-      score += 20;
-    } else if (!hint) {
-      hint = "Ваш опис закороткий. Деталі про атмосферу продають найкраще!";
-    }
-
-    if (workplacePhotos.length > 0) {
-      score += 20;
-    } else if (!hint) {
-      hint = "Додайте фото інтер'єру, щоб показати ваш простір.";
-    }
-
-    if (score === 100 && !hint) hint = "Виглядає розкішно! Ваш профіль готовий до залучення клієнтів.";
-
-    return { score, hint };
-  }, [formData.name, formData.address, formData.description, logo, coverPhoto, workplacePhotos.length]);
-
-  /**
-   * Повна адреса: місто + вулиця.
-   *
-   * Карта отримувала лише поле «адреса» без міста, тому «Дорошенка 10»
-   * шукалось невідомо де - у світі десятки таких вулиць. Тепер місто
-   * додається автоматично, і людині не треба дублювати його вручну.
-   *
-   * Якщо адреса вже починається з міста (старі записи), не додаємо
-   * вдруге - інакше вийде «Львів, Львів, Дорошенка 10».
-   */
   const fullAddress = (() => {
     const city = (formData.city || '').trim();
     const addr = (formData.address || '').trim();
@@ -131,25 +85,13 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  /**
-   * Автозбереження оформлення.
-   *
-   * Кнопка «Зберегти зміни» лишилась від часів, коли тут редагувались
-   * контакти. Тепер вітрина зберігає лише оформлення - назву, опис,
-   * фото, кольори - і окрема дія для цього зайва: людина міняє
-   * обкладинку й іде далі, вважаючи, що зберегла.
-   *
-   * Захист той самий, що й у налаштуваннях: дозвіл вмикається лише
-   * після завантаження справжніх даних, інакше перший рендер
-   * перезаписав би заклад порожнім станом.
-   */
   const canAutoSave = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!canAutoSave.current) return;
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { void handleSaveBusinessInfo(true); }, 900);
+    saveTimer.current = setTimeout(() => { void handleSaveBusinessInfo(true); }, 700);
   }, [formData.name, formData.description, formData.category, accentColor,
       layoutConfig, logo, coverPhoto, workplacePhotos]);
 
@@ -159,11 +101,6 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
     try {
       const token = await getAuthToken();
-      // Адресу, телефон і пошту звідси НЕ надсилаємо: вони редагуються
-      // в налаштуваннях. Якби надсилали, вітрина перезаписувала б їх
-      // своїм застарілим станом щоразу при збереженні оформлення -
-      // людина змінила б телефон у налаштуваннях, зайшла у вітрину,
-      // натиснула «Зберегти» і мовчки повернула старий.
       await api.updateBusiness(token, business.id, {
         name: formData.name,
         category: formData.category,
@@ -174,10 +111,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         cover_photo: coverPhoto ?? undefined,
         workplace_photos: workplacePhotos,
       });
-
-      // Підтвердження показує сама кнопка (SaveButton) - тост тут зайвий.
     } catch (err: any) {
-      console.error("Непередбачена помилка:", err);
+      console.error("Помилка збереження:", err);
       showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
     } finally {
       setIsSaving(false);
@@ -188,13 +123,11 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     const file = e.target.files?.[0];
     if (!file || !business?.id) return;
 
-    // 1. ПЕРЕВІРКА ТИПУ ФАЙЛУ
     if (!file.type.startsWith('image/')) {
       showToast('Підтримуються лише зображення: JPG, PNG, WebP', 'error');
       return;
     }
 
-    // 2. ОБМЕЖЕННЯ РОЗМІРУ (5 MB)
     const MAX_FILE_SIZE_MB = 5;
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       showToast(`Файл завеликий. Максимум — ${MAX_FILE_SIZE_MB} МБ`, 'error');
@@ -211,7 +144,6 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     const filePath = `${type}s/${fileName}`;
 
     try {
-      // 3. Завантажуємо файл у бакет 'business_media'
       const { error: uploadError } = await supabase.storage
         .from('business_media')
         .upload(filePath, file, { cacheControl: '3600', upsert: false });
@@ -232,20 +164,16 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     }
   };
 
-  // Функція для видалення фотографій
   const handleDeletePhoto = async (type: 'logo' | 'cover' | 'workplace', urlToRemove?: string) => {
     if (!urlToRemove) return;
 
-    // 1. Оновлюємо UI миттєво (прибираємо з екрана)
     if (type === 'logo') setLogo(null);
     else if (type === 'cover') setCoverPhoto(null);
     else if (type === 'workplace') {
       setWorkplacePhotos(prev => prev.filter(url => url !== urlToRemove));
     }
 
-    // 2. Фізично видаляємо файл із Supabase Storage
     try {
-      // Витягуємо шлях до файлу з URL (все, що йде після назви бакета)
       const pathStartIndex = urlToRemove.indexOf('/business_media/');
       if (pathStartIndex !== -1) {
         const filePath = urlToRemove.substring(pathStartIndex + '/business_media/'.length);
@@ -257,7 +185,18 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     }
   };
 
-  const sortedServices = [...services].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+  const sortedServices = useMemo(() => {
+    return [...services]
+      .filter(s => s.is_active !== false)
+      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+  }, [services]);
+
+  const formatServiceDuration = (minutes?: number) => {
+    if (!minutes) return '30 хв';
+    if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60} год`;
+    if (minutes > 60) return `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
+    return `${minutes} хв`;
+  };
 
   return (
     <>
@@ -269,14 +208,18 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         @keyframes slideInUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes fadeInBg { from { opacity: 0; } to { opacity: 1; } }
         
-        .color-swatch { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; border: 3px solid #ffffff; transition: all 0.2s ease; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .color-swatch:hover { transform: scale(1.1); }
-        .color-swatch.active { outline: 2px solid var(--swatch-color); outline-offset: 2px; transform: scale(1.1); }
-
-        .toggle-switch { width: 44px; height: 24px; background: #cbd5e1; border-radius: 999px; position: relative; cursor: pointer; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .toggle-switch.active { background: var(--accent-color); }
-        .toggle-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        .toggle-switch.active::after { transform: translateX(20px); }
+        .color-swatch-item {
+          width: 38px;
+          height: 38px;
+          border-radius: 50%;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          border: 3px solid #ffffff;
+          box-sizing: border-box;
+        }
+        .color-swatch-item:hover {
+          transform: scale(1.1);
+        }
 
         .media-delete-btn { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; background: rgba(239, 68, 68, 0.9); color: white; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; z-index: 10; backdrop-filter: blur(4px); }
         .media-delete-btn:hover { background: rgba(220, 38, 38, 1); transform: scale(1.1); }
@@ -284,7 +227,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         .media-upload-label:hover { background: #e2e8f0; border-color: #94a3b8; color: #475569; }
       `}} />
 
-      <div className="hide-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fafbfc', overflowY: 'auto', position: 'relative', '--accent-color': accentColor } as React.CSSProperties}>
+      <div className="hide-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fafbfc', overflowY: 'auto', position: 'relative' }}>
 
         {/* Хедер */}
         <header style={{ padding: '1.5rem 3rem', borderBottom: '1px solid rgba(226, 232, 240, 0.6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 50 }}>
@@ -310,11 +253,6 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               <Icons.Globe style={{ width: '18px', height: '18px' }} /> Переглянути
             </button>
 
-            {/* Кнопку «Зберегти зміни» прибрано: вітрина зберігається
-                сама. Вона лишалась від часів, коли тут редагувались
-                контакти; тепер тут лише оформлення, і окрема дія для
-                нього зайва - людина міняє обкладинку й іде далі,
-                вважаючи, що зберегла. */}
             {isSaving && (
               <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 500 }}>
                 Збереження…
@@ -327,7 +265,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         <div style={{ padding: '2rem 3rem 5rem 3rem', flex: 1, display: 'flex', justifyContent: 'center' }}>
           <div style={{ width: '100%', maxWidth: '1280px', display: 'flex', flexDirection: 'column', gap: '4rem' }}>
 
-            {/* Менеджер фотографій (Відкриває модалку) */}
+            {/* Менеджер фотографій */}
             <div className="editable-block" style={{ height: '450px', borderRadius: '24px', overflow: 'hidden', background: coverPhoto ? `url(${coverPhoto}) center/cover` : '#f1f5f9', display: 'flex', alignItems: 'flex-end', padding: '3rem', border: coverPhoto ? 'none' : '2px dashed #cbd5e1', position: 'relative', boxShadow: coverPhoto ? '0 20px 40px rgba(0,0,0,0.1)' : 'none' }}>
               {!coverPhoto && (
                 <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#94a3b8', textAlign: 'center' }}>
@@ -343,11 +281,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               </div>
             </div>
 
-            {/* Назва редагується ТУТ - це частина оформлення вітрини,
-                і правити її, дивлячись на результат, природніше.
-                Адреса й контакти - у налаштуваннях: там вони поруч із
-                рештою даних закладу. При наведенні зʼявляється та сама
-                підсвітка, що й на решті блоків сторінки. */}
+            {/* Назва та адреса */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ flex: 1, paddingRight: '2rem' }}>
                 <input
@@ -361,19 +295,15 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
                 <div className="editable-block" style={{ marginTop: '0.75rem', borderRadius: '16px', padding: '0.5rem', marginLeft: '-0.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
-                    <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor }} />
+                    <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor, transition: 'color 0.2s ease' }} />
                     <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>
                       {fullAddress || 'Адресу не вказано'}
                     </span>
                   </div>
 
-                  {/* Показ телефону керується налаштуванням: вітрина -
-                      це те, що бачить клієнт, і якщо номер приховано,
-                      його не має бути й тут. Інакше власник вимикає
-                      показ і не розуміє, чи спрацювало. */}
                   {formData.phone && (business as any)?.show_phone_publicly !== false && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginTop: '0.5rem' }}>
-                      <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0 }} />
+                      <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0, transition: 'color 0.2s ease' }} />
                       <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.phone}</span>
                     </div>
                   )}
@@ -389,6 +319,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '4rem', alignItems: 'start' }}>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4rem' }}>
+                {/* Блок Про нас */}
                 <div style={{ background: '#ffffff', borderRadius: '24px', padding: '3rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
                   <h2 style={{ fontSize: '1.6rem', fontWeight: '800', marginBottom: '1.5rem', color: '#0f172a', letterSpacing: '-0.01em' }}>Про нас</h2>
                   <textarea
@@ -398,30 +329,110 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                   />
                 </div>
 
-                <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '3rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#0f172a', marginBottom: '1.5rem', letterSpacing: '-0.01em' }}>Прайс-лист</h2>
+                {/* 🟢 ПРАЙС-ЛИСТ (Преміальний вигляд із живим акцентним кольором) */}
+                <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2.5rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
+                    <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+                      Послуги
+                    </h2>
+                    <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '500' }}>
+                      {sortedServices.length} {sortedServices.length === 1 ? 'позиція' : 'позицій'}
+                    </span>
+                  </div>
+
                   {sortedServices.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {sortedServices.map(service => (
-                        <div key={service.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', borderRadius: '16px', background: '#f8fafc' }}>
-                          <div>
-                            <div style={{ fontWeight: '700', fontSize: '1.2rem', color: '#0f172a', marginBottom: '0.4rem' }}>{service.name}</div>
-                            <div style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Icons.Clock style={{ width: '16px', height: '16px' }} /> {service.duration} хв</div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {sortedServices.map((service, idx) => {
+                        const durationVal = service.duration_minutes ?? service.duration ?? 30;
+                        return (
+                          <div
+                            key={service.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '1.15rem 0',
+                              borderBottom: idx !== sortedServices.length - 1 ? '1px solid #f1f5f9' : 'none',
+                              gap: '1.5rem'
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0, paddingRight: '1rem' }}>
+                              <div style={{ fontWeight: '600', fontSize: '1.05rem', color: '#0f172a', marginBottom: '0.25rem' }}>
+                                {service.name}
+                              </div>
+
+                              {service.description && (
+                                <p style={{ margin: '0 0 0.4rem 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.4, maxWidth: '480px' }}>
+                                  {service.description}
+                                </p>
+                              )}
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', color: '#64748b' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
+                                  <Icons.Clock style={{ width: '14px', height: '14px', color: '#94a3b8' }} />
+                                  {formatServiceDuration(durationVal)}
+                                </span>
+                                <span style={{ color: '#cbd5e1' }}>·</span>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  color: '#166534',
+                                  backgroundColor: '#f0fdf4',
+                                  border: '1px solid #bbf7d0',
+                                  padding: '1px 8px',
+                                  borderRadius: '999px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: '600'
+                                }}>
+                                  <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: '#22c55e' }}></span>
+                                  Є час сьогодні
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexShrink: 0 }}>
+                              <div style={{ fontSize: '1.15rem', fontWeight: '700', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                                {Number(service.price || 0).toLocaleString('uk-UA')} ₴
+                              </div>
+                              <button
+                                type="button"
+                                style={{
+                                  padding: '0.55rem 1.3rem',
+                                  backgroundColor: accentColor,
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '10px',
+                                  fontWeight: '600',
+                                  fontSize: '0.85rem',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s ease, opacity 0.2s ease, transform 0.1s ease',
+                                  whiteSpace: 'nowrap',
+                                  boxShadow: `0 3px 10px ${accentColor}25`
+                                }}
+                                onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
+                                onMouseOut={e => e.currentTarget.style.opacity = '1'}
+                              >
+                                Вибрати
+                              </button>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-                            <div style={{ fontSize: '1.3rem', fontWeight: '800', color: accentColor }}>{service.price} ₴</div>
-                            <button style={{ padding: '0.5rem 1.25rem', backgroundColor: 'transparent', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '600', color: '#64748b' }}>Вибрати</button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '4rem 0', color: '#64748b', border: '2px dashed #e2e8f0', borderRadius: '16px' }}>Прайс-лист порожній</div>
+                    <div style={{ textAlign: 'center', padding: '3.5rem 0', color: '#94a3b8', border: '1.5px dashed #e2e8f0', borderRadius: '16px' }}>
+                      Прайс-лист порожній або всі послуги приховано
+                    </div>
                   )}
-                  <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => setActiveTab('Services')}><button className="edit-btn"><Icons.Edit /> Редагувати послуги</button></div>
+
+                  <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => setActiveTab('Services')}>
+                    <button className="edit-btn"><Icons.Edit /> Редагувати послуги</button>
+                  </div>
                 </div>
               </div>
 
+              {/* Сайдбар */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem', position: 'sticky', top: '7rem' }}>
                 {layoutConfig.showTeam && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
@@ -440,14 +451,18 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     ) : (
                       <div style={{ textAlign: 'center', padding: '1rem 0', color: '#94a3b8' }}>Команда не додана</div>
                     )}
-                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => setActiveTab('Team')}><button className="edit-btn"><Icons.Edit /> Керувати командою</button></div>
+                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => setActiveTab('Team')}>
+                      <button className="edit-btn"><Icons.Edit /> Керувати командою</button>
+                    </div>
                   </div>
                 )}
 
                 {layoutConfig.showMap && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', height: '300px', border: '1px solid rgba(226, 232, 240, 0.6)' }}>
                     <iframe key={fullAddress} width="100%" height="100%" style={{ border: 0, pointerEvents: 'none' }} loading="lazy" src={`https://maps.google.com/maps?q=${encodeURIComponent(fullAddress || 'Київ')}&t=&z=18&ie=UTF8&iwloc=&output=embed`}></iframe>
-                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => onNavigate?.('Settings', 'profile')}><button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button></div>
+                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => onNavigate?.('Settings', 'profile')}>
+                      <button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -455,7 +470,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
           </div>
         </div>
 
-        {/* НОВЕ: МОДАЛЬНЕ ВІКНО КЕРУВАННЯ МЕДІА (ФОТОГРАФІЯМИ) */}
+        {/* МОДАЛЬНЕ ВІКНО КЕРУВАННЯ МЕДІА */}
         {isPhotoModalOpen && (
           <div className="modal-overlay" onClick={() => setIsPhotoModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeInBg 0.2s ease forwards' }}>
             <div onClick={e => e.stopPropagation()} className="hide-scrollbar" style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '800px', maxHeight: '85vh', borderRadius: '24px', padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', animation: 'slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
@@ -463,7 +478,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '1.5rem' }}>
                 <div>
                   <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Керування медіафайлами</h2>
-                  <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Завантажте логотип, обкладинку та фото інтер'єру. Не забудьте зберегти зміни після закриття вікна.</p>
+                  <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Завантажте логотип, обкладинку та фото інтер'єру.</p>
                 </div>
                 <button onClick={() => setIsPhotoModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '36px', height: '36px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -543,74 +558,130 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
           </div>
         )}
 
-        {/* НОВЕ, КРАСИВЕ МОДАЛЬНЕ ВІКНО НАЛАШТУВАНЬ ВИГЛЯДУ (справа) */}
+        {/* 🟢 МОДАЛЬНЕ ВІКНО НАЛАШТУВАНЬ ВИГЛЯДУ З ЖИВИМИ ТОГЛАМИ ТА ПАЛІТРОЮ */}
         {isDesignModalOpen && (
           <div className="modal-overlay" onClick={() => setIsDesignModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.25)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', justifyContent: 'flex-end', animation: 'fadeInBg 0.3s ease forwards' }}>
-            <div className="hide-scrollbar" onClick={e => e.stopPropagation()} style={{ backgroundColor: '#f8fafc', width: '100%', maxWidth: '400px', height: '100%', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '2.5rem', overflowY: 'auto', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
+            <div className="hide-scrollbar" onClick={e => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '400px', height: '100%', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '2.5rem', overflowY: 'auto', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Вигляд та блоки</h2>
-                <button onClick={() => setIsDesignModalOpen(false)} style={{ background: '#ffffff', border: 'none', borderRadius: '50%', width: '32px', height: '32px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', transition: '0.2s' }}>
+                <button onClick={() => setIsDesignModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '34px', height: '34px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
 
+              {/* Палітра акцентних кольорів */}
               <div>
                 <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '16px' }}>Колір акцентів</h3>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  {['#0f172a', '#d4af37', '#10b981', '#ef4444', '#f97316', '#8b5cf6', '#ec4899'].map(color => (
-                    <div
-                      key={color}
-                      onClick={() => setAccentColor(color)}
-                      className={`color-swatch ${accentColor === color ? 'active' : ''}`}
-                      style={{ backgroundColor: color, '--swatch-color': color } as React.CSSProperties}
-                    />
-                  ))}
+                  {[
+                    { id: 'navy', color: '#0f172a' },
+                    { id: 'matcha', color: '#436b49' },
+                    { id: 'emerald', color: '#10b981' },
+                    { id: 'red', color: '#ef4444' },
+                    { id: 'orange', color: '#f97316' },
+                    { id: 'purple', color: '#8b5cf6' },
+                    { id: 'pink', color: '#ec4899' }
+                  ].map(item => {
+                    const isSelected = accentColor === item.color;
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => setAccentColor(item.color)}
+                        className="color-swatch-item"
+                        style={{
+                          backgroundColor: item.color,
+                          boxShadow: isSelected ? `0 0 0 2px #ffffff, 0 0 0 4px ${item.color}` : '0 2px 5px rgba(0,0,0,0.12)',
+                          transform: isSelected ? 'scale(1.1)' : 'scale(1)'
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               </div>
 
+              {/* Конструктор сторінки: живі тогли в кольорі акценту */}
               <div>
                 <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '16px' }}>Конструктор сторінки</h3>
-                <div style={{ background: '#ffffff', borderRadius: '16px', padding: '8px 20px', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '8px 20px', border: '1px solid #e2e8f0' }}>
+
+                  {/* Тогл "Наша команда" */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid #e2e8f0' }}>
                     <div>
                       <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.95rem' }}>Блок "Наша команда"</div>
                       <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Показувати майстрів клієнтам</div>
                     </div>
-                    <div className={`toggle-switch ${layoutConfig.showTeam ? 'active' : ''}`} onClick={() => setLayoutConfig({...layoutConfig, showTeam: !layoutConfig.showTeam})}></div>
+                    <div
+                      onClick={() => setLayoutConfig(prev => ({ ...prev, showTeam: !prev.showTeam }))}
+                      style={{
+                        width: '46px',
+                        height: '26px',
+                        backgroundColor: layoutConfig.showTeam ? accentColor : '#cbd5e1',
+                        borderRadius: '999px',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.25s ease',
+                        flexShrink: 0
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '3px',
+                          left: '3px',
+                          width: '20px',
+                          height: '20px',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '50%',
+                          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transform: layoutConfig.showTeam ? 'translateX(20px)' : 'translateX(0px)',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
+                        }}
+                      />
+                    </div>
                   </div>
+
+                  {/* Тогл "Карта" */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0' }}>
                     <div>
                       <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.95rem' }}>Блок "Карта"</div>
                       <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Відображати Google Maps</div>
                     </div>
-                    <div className={`toggle-switch ${layoutConfig.showMap ? 'active' : ''}`} onClick={() => setLayoutConfig({...layoutConfig, showMap: !layoutConfig.showMap})}></div>
+                    <div
+                      onClick={() => setLayoutConfig(prev => ({ ...prev, showMap: !prev.showMap }))}
+                      style={{
+                        width: '46px',
+                        height: '26px',
+                        backgroundColor: layoutConfig.showMap ? accentColor : '#cbd5e1',
+                        borderRadius: '999px',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.25s ease',
+                        flexShrink: 0
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '3px',
+                          left: '3px',
+                          width: '20px',
+                          height: '20px',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '50%',
+                          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transform: layoutConfig.showMap ? 'translateX(20px)' : 'translateX(0px)',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
+                        }}
+                      />
+                    </div>
                   </div>
+
                 </div>
               </div>
+
             </div>
           </div>
         )}
-
-        {/* ПЛАВАЮЧИЙ AI-АСИСТЕНТ (FAB) */}
-        <div
-          onMouseEnter={() => setIsAiExpanded(true)}
-          onMouseLeave={() => setIsAiExpanded(false)}
-          style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1rem' }}
-        >
-          {isAiExpanded && (
-            <div style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0', width: '320px', animation: 'fadeIn 0.2s ease-out', transformOrigin: 'bottom right' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#8b5cf6', fontWeight: '700', fontSize: '0.85rem' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
-                AI ПОРАДА
-              </div>
-              <p style={{ margin: 0, fontSize: '0.95rem', color: '#334155', lineHeight: '1.5' }}>{aiState.hint}</p>
-            </div>
-          )}
-          <div style={{ background: '#0f172a', color: '#fff', height: '56px', padding: '0 1.5rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.8rem', cursor: 'pointer', boxShadow: '0 10px 25px rgba(15,23,42,0.2)', transition: '0.2s', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>Профіль: {aiState.score}%</span>
-            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: `conic-gradient(#8b5cf6 ${aiState.score}%, rgba(255,255,255,0.2) 0)` }}></div>
-          </div>
-        </div>
 
       </div>
     </>

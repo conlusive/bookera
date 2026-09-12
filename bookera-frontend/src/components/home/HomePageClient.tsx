@@ -1298,41 +1298,92 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               {displayedBusinesses.map((biz: any) => {
                 const rank = parseFloat(biz.rating);
                 const hasRating = !isNaN(rank) && rank > 0;
-                const displayRank = hasRating ? rank.toFixed(1) : '-';
+                const displayRank = hasRating ? rank.toFixed(1) : '5.0';
                 const reviewCount = parseInt(biz.reviews_count) || 0;
                 const bgImage = biz.cover_photo || biz.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
-                const category = biz.category || 'Салон краси';
+
+                // Людські короткі назви категорій для картки
+                const categoryLabels: Record<string, string> = {
+                  barber: 'Барбер',
+                  hair: 'Волосся',
+                  nails: 'Нігті',
+                  skincare: 'Догляд',
+                  brows: 'Брови',
+                  massage: 'Масаж',
+                  makeup: 'Макіяж',
+                  spa: 'Spa',
+                };
+                const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Салон';
+
+                // Зрозуміла адреса (місто + вулиця)
+                const locationText = [biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
 
                 return (
                   <Link key={biz.id} href={`/${biz.slug || biz.id}`} className="tour-card">
                     <div className="tour-card-img-wrapper">
                       <img src={bgImage} alt={biz.name} loading="lazy" decoding="async" className="tour-card-bg" />
-                      {hasRating && rank >= 4.8 && (
+                      {(!hasRating || rank >= 4.8) && (
                         <div className="tour-badge-top">
                           <span className="star">★</span> Топ Вибір
                         </div>
                       )}
                     </div>
+
                     <div className="tour-card-content">
                       <h3 className="tour-title">{biz.name}</h3>
-                      <p className="tour-desc">{biz.address || 'Комфортна атмосфера, професійні майстри та індивідуальний підхід до кожного клієнта.'}</p>
+
+                      {/* Адреса з компактною іконкою локації */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#6b7280', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {locationText}
+                        </span>
+                      </div>
+
+                      {/* 3 колонки з розділювачами: Зірочка рейтингу, Відгуки, Ножиці категорії */}
                       <div className="tour-info-row">
+                        {/* 1. Рейтинг із золотою зіркою замість знака $ */}
                         <div className="tour-info-item">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                          <span>{hasRating ? displayRank : 'Новий'}</span>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                          </svg>
+                          <span style={{ fontWeight: 700, color: '#111827' }}>{displayRank}</span>
                         </div>
+
                         <div className="tour-info-divider"></div>
+
+                        {/* 2. Кількість відгуків */}
                         <div className="tour-info-item">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                          </svg>
                           <span>{reviewCount} відг.</span>
                         </div>
+
                         <div className="tour-info-divider"></div>
+
+                        {/* 3. Зрозуміла категорія зі значком ножиць */}
                         <div className="tour-info-item">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg>
-                          <span style={{whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60px'}}>{category}</span>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="6" cy="6" r="3"></circle>
+                            <circle cx="6" cy="18" r="3"></circle>
+                            <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
+                            <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
+                            <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
+                          </svg>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75px' }}>
+                            {category}
+                          </span>
                         </div>
                       </div>
 
+                      {/* Теги */}
                       {(() => {
                         const cardTags = Array.isArray(biz.tags) ? biz.tags : [];
                         if (cardTags.length === 0) return null;
@@ -1353,6 +1404,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                         );
                       })()}
 
+                      {/* Кнопка дії */}
                       <button className="tour-book-btn">Записатись</button>
                     </div>
                   </Link>

@@ -145,32 +145,30 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     setMounted(true);
 
     if (typeof window !== 'undefined') {
-  const storedName = localStorage.getItem('userName');
-  const storedRole = localStorage.getItem('userRole') || 'client';
-  const storedAvatar = localStorage.getItem('userAvatar');
+      const storedName = localStorage.getItem('userName');
+      const storedRole = localStorage.getItem('userRole') || 'client';
+      const storedAvatar = localStorage.getItem('userAvatar');
 
-  if (storedAvatar) setAvatarUrl(storedAvatar);
+      if (storedAvatar) setAvatarUrl(storedAvatar);
 
-  if (storedName) {
-    setIsLoggedIn(true);
-    const displayName = storedName.includes('@') ? 'Користувач' : storedName;
-    setUserName(displayName);
-    setUserRole(storedRole);
-    const nameParts = displayName.split(' ');
-    const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-    setInitials(init.toUpperCase());
-  }
+      if (storedName) {
+        setIsLoggedIn(true);
+        const displayName = storedName.includes('@') ? 'Користувач' : storedName;
+        setUserName(displayName);
+        setUserRole(storedRole);
+        const nameParts = displayName.split(' ');
+        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
+        setInitials(init.toUpperCase());
+      }
 
-  // Миттєве оновлення при зміні фото в сусідній вкладці/профілі
-  const handleStorageUpdate = () => {
-    setAvatarUrl(localStorage.getItem('userAvatar') || null);
-    const updatedName = localStorage.getItem('userName');
-    if (updatedName) setUserName(updatedName);
-  };
-  window.addEventListener('storage', handleStorageUpdate);
-}
+      const handleStorageUpdate = () => {
+        setAvatarUrl(localStorage.getItem('userAvatar') || null);
+        const updatedName = localStorage.getItem('userName');
+        if (updatedName) setUserName(updatedName);
+      };
+      window.addEventListener('storage', handleStorageUpdate);
+    }
 
-    // 🟢 ВІДНОВЛЕНА ПРАВИЛЬНА ЛОГІКА СКРОЛУ
     const handleScroll = () => {
       if (window.scrollY > 400) {
         setScrollState('scrolled');
@@ -270,11 +268,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           return;
         }
 
-        // full_name/role вже є в user_metadata (записані туди під час
-        // реєстрації нижче) - окремого запиту до 'profiles' не потрібно,
-        // такої таблиці більше немає.
         const profile = data.user?.user_metadata;
-
         let finalName = profile?.full_name || data.user?.user_metadata?.full_name || 'Користувач';
         if (finalName.includes('@')) finalName = 'Користувач';
         const finalRole = profile?.role || 'client';
@@ -291,7 +285,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         setIsAuthModalOpen(false);
 
         if (finalRole === 'vendor') router.push('/cabinet');
-} else {
+      } else {
         const targetEmail = loginEmail.trim().toLowerCase();
         const targetFullName = `${regFirstName} ${regLastName}`.trim();
         const targetPhone = regPhone.trim();
@@ -308,14 +302,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           }
         });
 
-        // 1. Спочатку перевіряємо помилку
         if (error) {
           alert(`Помилка реєстрації: ${error.message}`);
           return;
         }
-
-        // Дані вже збережені в user_metadata (переданому в signUp вище) -
-        // окремого запису в 'profiles' не потрібно, такої таблиці немає.
 
         localStorage.setItem('userName', targetFullName);
         localStorage.setItem('userRole', 'client');
@@ -328,12 +318,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
-      }    } catch (error) {
+      }
+    } catch (error) {
       alert("Відбулася помилка при з'єднанні з сервером.");
     }
   };
 
-  // 🟢 ГАРАНТОВАНИЙ ПОШУК ТА ПЛАВНИЙ СКРОЛ ДО РЕЗУЛЬТАТІВ
   const handleSearch = async () => {
     const term = searchWhat.trim().toLowerCase();
 
@@ -362,7 +352,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     setIsExpanded(true);
     setActiveSearch(null);
 
-    // Запит на бекенд, якщо обрана дата
     if (searchDate) {
       try {
         const availableBizs = await api.searchAvailableBusinesses({
@@ -380,11 +369,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       setAvailableBizIds(null);
     }
 
-    // 🎯 ТОЧНИЙ ФОКУС: Прокрутка до секції з картками після оновлення стейту
     setTimeout(() => {
       const targetElement = document.getElementById('salons-section');
       if (targetElement) {
-        // Враховуємо висоту фіксованого хедера (72px) + невеликий відступ (18px)
         const headerOffset = 90;
         const elementPosition = targetElement.getBoundingClientRect().top;
         const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
@@ -397,7 +384,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }, 150);
   };
 
-  // 🟢 ГЛОБАЛЬНИЙ ОБРОБНИК ENTER ДЛЯ ІНПУТІВ
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -406,7 +392,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
   };
 
-  // Зчитуємо параметри з URL
   useEffect(() => {
     const what = searchParams.get('what');
     const where = searchParams.get('where');
@@ -419,7 +404,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     if (time) setSearchTime(time);
   }, [searchParams]);
 
-  // Автоматично запускаємо пошук, як тільки дата підтягнулась у стейт
   useEffect(() => {
     const dateParam = searchParams.get('date');
     if (!isAutoSearchRun.current && dateParam && searchDate === dateParam) {
@@ -461,7 +445,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const filteredBusinesses = useMemo(() => {
     return businesses
       .filter(biz => {
-        // Якщо ми шукали по даті, пропускаємо тільки ті ID, що повернув бекенд
         if (availableBizIds !== null && !availableBizIds.includes(biz.id)) {
           return false;
         }
@@ -652,9 +635,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const isHeaderDark = scrollState === 'scrolled' || scrollState === 'hiding';
 
   return (
-    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#222222', overflowX: 'hidden' }}>
+    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#222222', overflowX: 'hidden' }}>
 
       <style>{`
+        html, body {
+          background-color: #111215 !important;
+          margin: 0;
+          padding: 0;
+        }
+
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; position: relative; z-index: 10; }
         .anim { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
         
@@ -753,16 +742,46 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         .floating-widget { position: absolute; z-index: 10; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); padding: 1rem 1.5rem; border-radius: 100px; box-shadow: 0 20px 40px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 1rem; border: 1px solid rgba(255, 255, 255, 1); animation: float-widget 6s ease-in-out infinite; }
         
-        .city-link { color: #475569; text-decoration: none; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; transition: 0.2s; font-weight: 500; }
-        .city-link:hover { color: #222222; transform: translateX(4px); }
-        .city-link svg { stroke: #C2D8C4; }
+        .city-link { color: #94a3b8; text-decoration: none; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; transition: 0.2s; font-weight: 500; }
+        .city-link:hover { color: #ffffff; transform: translateX(4px); }
+        .city-link svg { stroke: #8fae92; }
 
         .modal-input { width: 100%; padding: 0.85rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; box-sizing: border-box; margin-bottom: 1rem; transition: 0.2s; }
         .modal-input:focus { outline: none; border-color: #222222; box-shadow: 0 0 0 3px rgba(34, 34, 34, 0.1); }
         .social-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.85rem; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; font-weight: 600; color: #475569; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
         .social-btn:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
 
-        /* 🟢 ПРАВИЛЬНА АНІМАЦІЯ ТА ПОЗИЦІЮВАННЯ ХЕДЕРА */
+        /* ЧОРНИЙ СУЧАСНИЙ ФУТЕР */
+        .clean-dark-footer {
+          background-color: #111215;
+          color: #ffffff;
+          padding: 4.5rem 0 2.5rem 0;
+          position: relative;
+          z-index: 10;
+        }
+        .footer-col-title {
+          color: #ffffff;
+          font-size: 0.82rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 1.35rem;
+        }
+        .footer-nav-link {
+          color: #94A3B8;
+          text-decoration: none;
+          font-size: 0.9rem;
+          font-weight: 500;
+          transition: color 0.15s ease, transform 0.15s ease;
+          display: inline-block;
+          line-height: 1.5;
+        }
+        .footer-nav-link:hover {
+          color: #ffffff;
+          transform: translateX(2px);
+        }
+
+        /* ХЕДЕР */
         .main-header {
           position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000;
           display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent;
@@ -961,7 +980,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                     {userName}
                   </span>
 
-                  {/* 🟢 РЕНДЕР АВАТАРКИ АБО ІНІЦІАЛІВ */}
                   {avatarUrl ? (
                     <img
                       src={avatarUrl}
@@ -1302,7 +1320,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 const reviewCount = parseInt(biz.reviews_count) || 0;
                 const bgImage = biz.cover_photo || biz.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
 
-                // Людські короткі назви категорій для картки
                 const categoryLabels: Record<string, string> = {
                   barber: 'Барбер',
                   hair: 'Волосся',
@@ -1314,8 +1331,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                   spa: 'Spa',
                 };
                 const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Салон';
-
-                // Зрозуміла адреса (місто + вулиця)
                 const locationText = [biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
 
                 return (
@@ -1332,7 +1347,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                     <div className="tour-card-content">
                       <h3 className="tour-title">{biz.name}</h3>
 
-                      {/* Адреса з компактною іконкою локації */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#6b7280', fontSize: '0.85rem', marginBottom: '1rem' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -1343,9 +1357,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                         </span>
                       </div>
 
-                      {/* 3 колонки з розділювачами: Зірочка рейтингу, Відгуки, Ножиці категорії */}
                       <div className="tour-info-row">
-                        {/* 1. Рейтинг із золотою зіркою замість знака $ */}
                         <div className="tour-info-item">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1">
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -1355,7 +1367,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
                         <div className="tour-info-divider"></div>
 
-                        {/* 2. Кількість відгуків */}
                         <div className="tour-info-item">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -1368,7 +1379,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
                         <div className="tour-info-divider"></div>
 
-                        {/* 3. Зрозуміла категорія зі значком ножиць */}
                         <div className="tour-info-item">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="6" cy="6" r="3"></circle>
@@ -1383,7 +1393,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                         </div>
                       </div>
 
-                      {/* Теги */}
                       {(() => {
                         const cardTags = Array.isArray(biz.tags) ? biz.tags : [];
                         if (cardTags.length === 0) return null;
@@ -1404,7 +1413,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                         );
                       })()}
 
-                      {/* Кнопка дії */}
                       <button className="tour-book-btn">Записатись</button>
                     </div>
                   </Link>
@@ -1415,7 +1423,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* НОВА КОМПАКТНА ІНФОРМАЦІЙНА СІТКА */}
+      {/* ІНФОРМАЦІЙНА СІТКА */}
       <section className="info-section">
         <div className="container">
           <div className="compact-features-grid">
@@ -1555,10 +1563,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* БЛОК МІСТ */}
-      <section className="reveal-on-scroll" style={{ padding: '6rem 0', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0', position: 'relative', zIndex: 20 }}>
+      {/* 🟢 БЛОК МІСТ (ГАРМОНІЙНИЙ ТЕМНИЙ ПЕРЕХІД) */}
+      <section className="reveal-on-scroll" style={{ padding: '5rem 0', backgroundColor: '#111827', borderTop: '1px solid rgba(255, 255, 255, 0.08)', position: 'relative', zIndex: 20 }}>
         <div className="container">
-          <h2 style={{ fontSize: '2rem', fontWeight: '800', color: '#222222', textAlign: 'center', marginBottom: '3rem', letterSpacing: '-0.02em' }}>
+          <h2 style={{ fontSize: '2rem', fontWeight: '800', color: '#ffffff', textAlign: 'center', marginBottom: '3rem', letterSpacing: '-0.02em' }}>
             Шукайте свого спеціаліста за містом
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem 2rem' }}>
@@ -1572,59 +1580,109 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* ФУТЕР */}
-      <footer style={{ backgroundColor: '#1a1a1a', padding: '4rem 0 2rem 0', position: 'relative', zIndex: 20 }}>
+      {/* ========================================================= */}
+      {/* ЧОРНИЙ ФУТЕР ІЗ КОТИКОМ (МОНОЛІТНИЙ ДО САМОГО НИЗУ)       */}
+      {/* ========================================================= */}
+      <footer className="clean-dark-footer" style={{ marginTop: 'auto', position: 'relative', overflow: 'hidden' }}>
         <div className="container">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', borderBottom: '1px solid #333333', paddingBottom: '3rem', margin: '0 0 2rem 0' }}>
-            <div style={{ flex: 1, display: 'flex', gap: '4rem' }}>
-              <Link href="#" className="footer-link anim">Блог</Link>
-              <Link href="#" className="footer-link anim">Про нас</Link>
-              <Link href="#" className="footer-link anim">Поширені запитання</Link>
-              <Link href="#" className="footer-link anim">Політика конфіденційності</Link>
-              <Link href="#" className="footer-link anim">Умови використання</Link>
-              <Link href="#" className="footer-link anim">Кар'єра</Link>
-              <Link href={isBusinessRole(userRole) ? "/cabinet" : "/business"} className="footer-link anim" style={{ color: '#C2D8C4', fontWeight: '700' }}>BookEra Business</Link>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '900', color: '#C2D8C4' }}>Book<span style={{ color: '#fff' }}>Era</span></div>
-              <span style={{ color: '#64748b', fontSize: '0.85rem' }}>© 2026 BookEra Inc. Усі права захищено.</span>
-            </div>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-               {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={userName || 'Аватарка'}
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    flexShrink: 0
-                  }}
-                />
-              ) : (
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#111827',
-                  fontWeight: '800',
-                  fontSize: '0.9rem',
-                  boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.35)',
-                  transition: 'all 0.2s ease',
-                  flexShrink: 0
-                }}>
-                  {initials}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '3rem', marginBottom: '3.5rem' }}>
+
+            {/* 1. БРЕНД */}
+            <div>
+              <Link href="/" style={{ textDecoration: 'none', display: 'inline-block', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '1.75rem', fontWeight: '900', color: '#ffffff', letterSpacing: '-0.04em' }}>
+                  Book<span style={{ color: '#8fae92' }}>Era</span>
                 </div>
-              )}
+              </Link>
+              <p style={{ color: '#94A3B8', fontSize: '0.88rem', lineHeight: '1.6', margin: '0 0 1.25rem 0', maxWidth: '300px' }}>
+                Простий та надійний онлайн-запис до перевірених майстрів і салонів краси у вашому місті.
+              </p>
             </div>
+
+            {/* 2. МОЖЛИВОСТІ */}
+            <div>
+              <div className="footer-col-title">Можливості</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <Link href="/" className="footer-nav-link">Онлайн-запис</Link>
+                <Link href="/" className="footer-nav-link">Пошук закладів</Link>
+                <Link href="/" className="footer-nav-link">Подарункові сертифікати</Link>
+                <Link href="/account/profile" className="footer-nav-link">Особистий кабінет</Link>
+              </div>
+            </div>
+
+            {/* 3. ДЛЯ БІЗНЕСУ */}
+            <div>
+              <div className="footer-col-title">Для бізнесу</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <Link href="/business" className="footer-nav-link" style={{ color: '#C2D8C4', fontWeight: 600 }}>BookEra Business</Link>
+                <Link href="/business/register" className="footer-nav-link">Підключити салон</Link>
+                <Link href="/cabinet" className="footer-nav-link">Панель керування CRM</Link>
+                <Link href="/business#pricing" className="footer-nav-link">Тарифи</Link>
+              </div>
+            </div>
+
+            {/* 4. ПІДТРИМКА */}
+            <div>
+              <div className="footer-col-title">Підтримка</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <Link href="#" className="footer-nav-link">Служба турботи</Link>
+                <Link href="/#faq" className="footer-nav-link">Поширені запитання</Link>
+                <Link href="#" className="footer-nav-link">Безпека клієнтів</Link>
+                <Link href="#" className="footer-nav-link">Контакти команди</Link>
+              </div>
+            </div>
+
           </div>
+
+          {/* НИЖНЯ ПЛАШКА: ЮРИДИЧНІ ПОСИЛАННЯ + КОПІРАЙТ */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
+                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>ПОЛІТИКА КОНФІДЕНЦІЙНОСТІ</Link>
+                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>УМОВИ ВИКОРИСТАННЯ</Link>
+                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>БЕЗПЕКА</Link>
+              </div>
+
+              <div style={{ color: '#64748B', fontSize: '0.78rem' }}>
+                © 2026 BookEra. Платформа онлайн-запису до закладів краси в Україні.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', color: '#64748B', fontSize: '0.82rem', fontWeight: 500 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                SSL Захист
+              </span>
+              <span>•</span>
+              <span>Україна • UA</span>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* ВЕСЕЛИЙ КОТИК В НИЗУ ФУТЕРА */}
+        <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', userSelect: 'none', zIndex: 12, lineHeight: 0 }}>
+          <svg width="84" height="42" viewBox="0 0 100 50" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+            <path d="M20 50 C20 22, 80 22, 80 50 Z" fill="#1C1D22" stroke="#2D2F36" strokeWidth="1.5" />
+            <polygon points="26,30 20,8 38,22" fill="#1C1D22" stroke="#2D2F36" strokeWidth="1.5" />
+            <polygon points="27,27 23,13 35,21" fill="#FFB4C2" />
+            <polygon points="74,30 80,8 62,22" fill="#1C1D22" stroke="#2D2F36" strokeWidth="1.5" />
+            <polygon points="73,27 77,13 65,21" fill="#FFB4C2" />
+            <ellipse cx="40" cy="34" rx="3.5" ry="4.5" fill="#C2D8C4" />
+            <circle cx="41" cy="33" r="1.5" fill="#111" />
+            <ellipse cx="60" cy="34" rx="3.5" ry="4.5" fill="#C2D8C4" />
+            <circle cx="61" cy="33" r="1.5" fill="#111" />
+            <polygon points="50,38 47,35 53,35" fill="#FFB4C2" />
+            <line x1="33" y1="36" x2="18" y2="34" stroke="#64748B" strokeWidth="1" strokeLinecap="round" />
+            <line x1="33" y1="38" x2="19" y2="39" stroke="#64748B" strokeWidth="1" strokeLinecap="round" />
+            <line x1="67" y1="36" x2="82" y2="34" stroke="#64748B" strokeWidth="1" strokeLinecap="round" />
+            <line x1="67" y1="38" x2="81" y2="39" stroke="#64748B" strokeWidth="1" strokeLinecap="round" />
+            <ellipse cx="28" cy="48" rx="6" ry="4" fill="#2D2F36" stroke="#111" strokeWidth="1" />
+            <ellipse cx="72" cy="48" rx="6" ry="4" fill="#2D2F36" stroke="#111" strokeWidth="1" />
+          </svg>
         </div>
       </footer>
     </div>

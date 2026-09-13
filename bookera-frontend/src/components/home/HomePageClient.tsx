@@ -65,13 +65,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   const [mounted, setMounted] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  // Стан для хедера: 'top' (прозорий), 'scrolled' (білий), 'hiding' (зникає)
   const [scrollState, setScrollState] = useState<'top' | 'scrolled' | 'hiding'>('top');
 
-  const [businesses] = useState<any[]>(initialBusinesses);
+  const [businesses] = useState<any[]>(initialBusinesses || []);
+  const [favorites, setFavorites] = useState<number[]>([]);
 
-  // --- Стейт авторизації ---
+  // Авторизація
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isLoginView, setIsLoginView] = useState(true);
   const [loginEmail, setLoginEmail] = useState('');
@@ -86,7 +85,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // --- Стан для пошуку ---
+  // Пошук
   const [searchWhat, setSearchWhat] = useState('');
   const [searchWhere, setSearchWhere] = useState('Львів');
   const [searchDate, setSearchDate] = useState('');
@@ -118,6 +117,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   const sortRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
+  const nearbyScrollRef = useRef<HTMLDivElement>(null);
+  const collectionsScrollRef = useRef<HTMLDivElement>(null);
   const isAutoSearchRun = useRef(false);
 
   // Геолокація
@@ -140,7 +141,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
   }, []);
 
-  // Ініціалізація та логіка скролу хедера
+  // Ініціалізація
   useEffect(() => {
     setMounted(true);
 
@@ -148,6 +149,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       const storedName = localStorage.getItem('userName');
       const storedRole = localStorage.getItem('userRole') || 'client';
       const storedAvatar = localStorage.getItem('userAvatar');
+      const storedFavs = localStorage.getItem('bookera_favs');
+
+      if (storedFavs) {
+        try { setFavorites(JSON.parse(storedFavs)); } catch {}
+      }
 
       if (storedAvatar) setAvatarUrl(storedAvatar);
 
@@ -170,9 +176,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
 
     const handleScroll = () => {
-      if (window.scrollY > 400) {
+      if (window.scrollY > 380) {
         setScrollState('scrolled');
-      } else if (window.scrollY > 150) {
+      } else if (window.scrollY > 140) {
         setScrollState(prevState => {
           if (prevState === 'scrolled') return 'hiding';
           if (prevState === 'top') return 'top';
@@ -191,7 +197,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           entry.target.classList.add('is-visible');
         }
       });
-    }, { threshold: 0.15 });
+    }, { threshold: 0.12 });
 
     setTimeout(() => {
       document.querySelectorAll('.reveal-on-scroll').forEach(el => observer.observe(el));
@@ -203,7 +209,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     };
   }, [supabase]);
 
-  // Закриття дропдаунів кліком поза межами
+  // Закриття кліком поза межами
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -241,6 +247,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     };
   }, []);
 
+  const toggleFavorite = (bizId: number) => {
+    const updated = favorites.includes(bizId)
+      ? favorites.filter(id => id !== bizId)
+      : [...favorites, bizId];
+    setFavorites(updated);
+    localStorage.setItem('bookera_favs', JSON.stringify(updated));
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('userName');
@@ -269,7 +283,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         }
 
         const profile = data.user?.user_metadata;
-        let finalName = profile?.full_name || data.user?.user_metadata?.full_name || 'Користувач';
+        let finalName = profile?.full_name || 'Користувач';
         if (finalName.includes('@')) finalName = 'Користувач';
         const finalRole = profile?.role || 'client';
 
@@ -319,7 +333,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
       }
-    } catch (error) {
+    } catch {
       alert("Відбулася помилка при з'єднанні з сервером.");
     }
   };
@@ -372,7 +386,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     setTimeout(() => {
       const targetElement = document.getElementById('salons-section');
       if (targetElement) {
-        const headerOffset = 90;
+        const headerOffset = 85;
         const elementPosition = targetElement.getBoundingClientRect().top;
         const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
 
@@ -381,7 +395,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
            behavior: 'smooth'
         });
       }
-    }, 150);
+    }, 120);
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -427,7 +441,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       .map(c => ({ name: c.name, type: 'Категорія' }));
 
     const matchedSalons = businesses
-      .filter(b => b.name.toLowerCase().includes(searchLower))
+      .filter(b => b.name?.toLowerCase().includes(searchLower))
       .slice(0, 4)
       .map(b => ({ name: b.name, type: 'Салон' }));
 
@@ -442,6 +456,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return { whatSuggestions: what, whereSuggestions: where };
   }, [searchWhat, searchWhere, businesses]);
 
+  // Фільтрація каталогу
   const filteredBusinesses = useMemo(() => {
     return businesses
       .filter(biz => {
@@ -471,14 +486,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             'other': ['інше']
           };
           const terms = searchTerms[activeCategory] || [];
-          const searchableText = `${biz.category || ''} ${biz.name} ${biz.description || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
+          const searchableText = `${biz.category || ''} ${biz.name || ''} ${biz.description || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
           matchesCategory = terms.some(term => searchableText.includes(term));
         }
 
         let matchesText = true;
         if (appliedSearch) {
           const query = appliedSearch.toLowerCase();
-          const fullText = `${biz.category || ''} ${biz.name} ${biz.description || ''} ${biz.address || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
+          const fullText = `${biz.category || ''} ${biz.name || ''} ${biz.description || ''} ${biz.address || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
           matchesText = fullText.includes(query);
         }
 
@@ -502,7 +517,19 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       });
   }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds]);
 
-  const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 4);
+  // Заклади поблизу
+  const nearbyBusinesses = useMemo(() => {
+    if (!searchWhere || searchWhere.trim() === '') return businesses.slice(0, 6);
+    const loc = searchWhere.toLowerCase().trim();
+    const matches = businesses.filter(b =>
+      (b.city && b.city.toLowerCase().includes(loc)) ||
+      (b.address && b.address.toLowerCase().includes(loc))
+    );
+    return matches.length > 0 ? matches : businesses.slice(0, 6);
+  }, [businesses, searchWhere]);
+
+  const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 8);
+  const isDefaultView = activeCategory === 'all' && !appliedSearch && !searchDate;
 
   const getDisplayDateTime = () => {
     if (!searchDate && !searchTime) return 'Будь-коли';
@@ -534,9 +561,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           key={i}
           onClick={(e) => {
             e.stopPropagation();
-            if (!isPast) {
-              setSearchDate(isSelected ? '' : dateStr);
-            }
+            if (!isPast) setSearchDate(isSelected ? '' : dateStr);
           }}
           style={{
             height: '34px',
@@ -545,14 +570,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             justifyContent: 'center',
             cursor: isPast ? 'default' : 'pointer',
             borderRadius: '10px',
-            backgroundColor: isSelected ? '#0f172a' : 'transparent',
-            color: isSelected ? '#ffffff' : (isPast ? '#cbd5e1' : '#0f172a'),
+            backgroundColor: isSelected ? '#111827' : 'transparent',
+            color: isSelected ? '#ffffff' : (isPast ? '#cbd5e1' : '#111827'),
             fontWeight: isSelected ? '700' : '500',
-            fontSize: '0.95rem',
-            transition: 'all 0.2s ease',
+            fontSize: '0.9rem',
+            transition: 'all 0.15s ease',
           }}
-          onMouseOver={(e) => { if (!isPast && !isSelected) e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
-          onMouseOut={(e) => { if (!isPast && !isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           {i}
         </div>
@@ -562,20 +585,20 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   };
 
   const renderDatePicker = () => (
-    <div className="search-dropdown anim" style={{ maxHeight: 'none', overflowY: 'visible', padding: '1.5rem', width: '360px', right: 0, left: 'auto', top: 'calc(100% + 14px)', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 24px 50px rgba(0,0,0,0.1)' }} onClick={(e) => e.stopPropagation()}>
+    <div className="search-dropdown anim" style={{ maxHeight: 'none', overflowY: 'visible', padding: '1.5rem', width: '350px', right: 0, left: 'auto', top: 'calc(100% + 14px)', borderRadius: '22px' }} onClick={(e) => e.stopPropagation()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
-        <div style={{ fontWeight: '800', color: '#0f172a', fontSize: '1rem', textTransform: 'capitalize' }}>
+        <div style={{ fontWeight: '700', color: '#111827', fontSize: '0.95rem', textTransform: 'capitalize' }}>
           {currentMonth.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })}
         </div>
-        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#f8fafc'} onMouseOut={e=>e.currentTarget.style.background='#fff'}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', color: '#64748b' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginBottom: '0.5rem' }}>
         <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Нд</div>
       </div>
 
@@ -583,7 +606,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         {renderCalendarDays()}
       </div>
 
-      <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '1.25rem', display: 'flex', gap: '6px', justifyContent: 'space-between' }}>
+      <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: '1.25rem', display: 'flex', gap: '6px', justifyContent: 'space-between' }}>
         {['Ранок', 'Обід', 'Вечір', 'Будь-коли'].map(period => {
           const isSelected = searchTime === period || (period === 'Будь-коли' && searchTime === '');
           return (
@@ -594,15 +617,13 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 setSearchTime(period === 'Будь-коли' ? '' : period);
               }}
               style={{
-                flex: 1, padding: '10px 4px', borderRadius: '12px', border: '1px solid',
-                borderColor: isSelected ? '#0f172a' : '#e2e8f0',
-                background: isSelected ? '#0f172a' : '#fff',
+                flex: 1, padding: '8px 4px', borderRadius: '10px', border: '1px solid',
+                borderColor: isSelected ? '#111827' : '#e2e8f0',
+                background: isSelected ? '#111827' : '#fff',
                 color: isSelected ? '#fff' : '#475569',
-                fontWeight: '600', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s ease',
+                fontWeight: '600', cursor: 'pointer', fontSize: '0.78rem', transition: 'all 0.15s ease',
                 whiteSpace: 'nowrap'
               }}
-              onMouseOver={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
-              onMouseOut={(e) => { if (!isSelected) e.currentTarget.style.background = '#fff'; }}
             >
               {period}
             </button>
@@ -620,14 +641,161 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   const getSectionTitle = () => {
     if (appliedSearch) return `Результати пошуку: «${appliedSearch}»`;
-    if (activeCategory === 'all') return 'Рекомендовані майстри';
+    if (activeCategory === 'all') return 'Рекомендовані майстри та студії';
     return categoryTitles[activeCategory] || 'Заклади';
   };
 
   const getSectionSubtitle = () => {
     if (appliedSearch) return `Знайдено закладів: ${filteredBusinesses.length}`;
-    if (activeCategory === 'all') return 'Знайдіть ідеального спеціаліста для себе';
+    if (activeCategory === 'all') return 'Найкращі фахівці за відгуками клієнтів';
     return 'Найкращі майстри та студії у цій категорії';
+  };
+
+  // 🟢 ЄДИНА КАРТКА ЗАКЛАДУ (ОДНАКОВИЙ РОЗМІР 1:1)
+  const renderCard = (biz: any, options?: { distanceTag?: string; showTimeSlots?: boolean }) => {
+    const rank = parseFloat(biz.rating);
+    const hasRating = !isNaN(rank) && rank > 0;
+    const displayRank = hasRating ? rank.toFixed(1) : '5.0';
+    const reviewCount = parseInt(biz.reviews_count) || 0;
+    const bgImage = biz.cover_photo || biz.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
+    const isFav = favorites.includes(biz.id);
+
+    const categoryLabels: Record<string, string> = {
+      barber: 'Барбер',
+      hair: 'Волосся',
+      nails: 'Нігті',
+      skincare: 'Догляд',
+      brows: 'Брови',
+      massage: 'Масаж',
+      makeup: 'Макіяж',
+      spa: 'Spa',
+    };
+    const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Студія';
+    const locationText = options?.distanceTag
+      ? `${options.distanceTag} • ${biz.address || biz.city || 'Центр'}`
+      : ([biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте');
+
+    return (
+      <Link key={biz.id} href={`/${biz.slug || biz.id}`} className="apple-biz-card anim">
+        <div className="card-photo-box">
+          <img src={bgImage} alt={biz.name} loading="lazy" decoding="async" className="card-photo-img" />
+
+          <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>
+            {options?.distanceTag ? (
+              <div className="glass-pill">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                <span>{options.distanceTag}</span>
+              </div>
+            ) : (
+              (!hasRating || rank >= 4.8) && (
+                <div className="glass-pill">
+                  <span style={{ color: '#f59e0b' }}>★</span>
+                  <span>Топ вибір</span>
+                </div>
+              )
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleFavorite(biz.id);
+            }}
+            className="glass-fav-btn anim"
+            title="Зберегти"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={isFav ? "#ef4444" : "none"} stroke={isFav ? "#ef4444" : "#111827"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="card-body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
+            <h3 className="card-heading">{biz.name}</h3>
+            <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111827', whiteSpace: 'nowrap' }}>
+              від 450 ₴
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '700' }}>
+              <span style={{ color: '#f59e0b' }}>★</span> {displayRank}
+              <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.75rem' }}>({reviewCount})</span>
+            </span>
+            <span>•</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{category}</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+            <span style={{ color: '#10b981', fontWeight: '600' }}>Відкрито</span>
+            <span>•</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationText}</span>
+          </div>
+
+          {/* ІНТЕРАКТИВНІ СЛОТИ ЧАСУ */}
+          {options?.showTimeSlots ? (
+            <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.72rem', color: '#8fae92', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Сьогодні:
+              </span>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                {['14:30', '16:00', '18:15'].map(time => (
+                  <button
+                    key={time}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      router.push(`/${biz.slug || biz.id}?time=${time}&date=today`);
+                    }}
+                    className="interactive-time-chip anim"
+                  >
+                    {time}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '500' }}>
+                Швидкий запис
+              </span>
+              <span className="card-action-link">
+                Записатись
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </span>
+            </div>
+          )}
+        </div>
+      </Link>
+    );
+  };
+
+  const scrollNearby = (direction: 'left' | 'right') => {
+    if (nearbyScrollRef.current) {
+      const scrollAmount = 320;
+      nearbyScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const scrollCollections = (direction: 'left' | 'right') => {
+    if (collectionsScrollRef.current) {
+      const scrollAmount = 340;
+      collectionsScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
   };
 
   if (!mounted) return null;
@@ -635,7 +803,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const isHeaderDark = scrollState === 'scrolled' || scrollState === 'hiding';
 
   return (
-    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#222222', overflowX: 'hidden' }}>
+    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif', color: '#222222', overflowX: 'hidden' }}>
 
       <style>{`
         html, body {
@@ -648,7 +816,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .anim { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
         
         .btn-theme { background-color: #C2D8C4 !important; color: #222222 !important; font-weight: 750; border: none; cursor: pointer; }
-        .btn-theme:hover { background-color: #AECAB0 !important; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(194, 216, 196, 0.4); }
+        .btn-theme:hover { background-color: #AECAB0 !important; transform: translateY(-2px); box-shadow: 0 4px 14px rgba(194, 216, 196, 0.4); }
         
         .category-btn { 
           color: #64748b; font-weight: 650; font-size: 0.95rem; white-space: nowrap; position: relative; 
@@ -664,17 +832,23 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+        /* СКЛЯНІ ДРОПДАУНИ */
         .search-dropdown {
           position: absolute; top: calc(100% + 8px); left: 0; width: 100%; 
-          background: #ffffff; border-radius: 16px;
-          box-shadow: 0 16px 40px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; z-index: 50;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+          border-radius: 18px;
+          box-shadow: 0 20px 45px -10px rgba(0,0,0,0.1), 0 0 1px 1px rgba(0,0,0,0.04);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          z-index: 50;
           max-height: 280px; overflow-y: auto; padding: 0.5rem;
         }
         .search-dropdown-item {
-          padding: 0.6rem 0.75rem; cursor: pointer; border-radius: 8px; font-size: 0.9rem; color: #334155; transition: background 0.2s;
+          padding: 0.65rem 0.85rem; cursor: pointer; border-radius: 10px; font-size: 0.9rem; color: #334155; transition: background 0.15s;
           display: flex; justify-content: space-between; align-items: center;
         }
-        .search-dropdown-item:hover { background: #f8fafc; color: #0f172a; font-weight: 600; }
+        .search-dropdown-item:hover { background: rgba(0, 0, 0, 0.05); color: #0f172a; font-weight: 600; }
         .badge-tag { font-size: 0.7rem; color: #94a3b8; background-color: #f1f5f9; padding: 3px 8px; border-radius: 6px; font-weight: 600; }
 
         .sort-trigger {
@@ -690,40 +864,287 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           font-size: 0.95rem; font-weight: 700; color: #111827; cursor: pointer; padding: 0.5rem 0;
           transition: color 0.2s; font-family: inherit;
         }
-        .view-all-text-btn:hover { color: #64748b; }
-        .view-all-text-btn svg { transition: transform 0.2s; }
-        .view-all-text-btn:hover svg { transform: translateY(2px); }
-        .view-all-text-btn.expanded:hover svg { transform: translateY(-2px); }
+        .view-all-text-btn:hover { color: #8fae92; }
 
-        .salons-layout { display: flex; flex-wrap: wrap; gap: 2.5rem 1.5rem; width: 100%; position: relative; z-index: 10; }
-        .tour-card { 
-          flex: 0 0 calc((100% - 4.5rem) / 4); max-width: calc((100% - 4.5rem) / 4);
-          background: #ffffff; border-radius: 20px; overflow: hidden; 
-          box-shadow: 0 12px 30px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04); transition: transform 0.3s ease, box-shadow 0.3s ease; 
-          display: flex; flex-direction: column; text-decoration: none; position: relative; border: 1px solid #f1f5f9; 
+        /* ОДНАКОВІ КАРТКИ В СТИЛІ APPLE */
+        .apple-biz-card {
+          background: #ffffff;
+          border-radius: 20px;
+          border: 1px solid rgba(0, 0, 0, 0.06);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          text-decoration: none;
+          position: relative;
+          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
+          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+          box-sizing: border-box;
         }
-        .tour-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.06); }
-        .tour-card-img-wrapper { width: 100%; height: 170px; position: relative; overflow: hidden; background: #f1f5f9; }
-        .tour-card-bg { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
-        .tour-card:hover .tour-card-bg { transform: scale(1.05); }
-        .tour-badge-top { position: absolute; top: 12px; left: 12px; background: #ffffff; color: #111827; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 2; }
-        .tour-badge-top .star { color: #f59e0b; font-size: 0.9rem; }
-        .tour-card-content { padding: 1.25rem; display: flex; flex-direction: column; flex: 1; }
-        .tour-title { font-size: 1.15rem; font-weight: 800; color: #111827; margin: 0 0 0.4rem 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
-        .tour-desc { color: #6b7280; font-size: 0.85rem; margin: 0 0 1rem 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .tour-info-row { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; padding: 0.65rem 0; margin-bottom: 1rem; }
-        .tour-info-item { display: flex; align-items: center; gap: 6px; color: #374151; font-size: 0.8rem; font-weight: 600; }
-        .tour-info-item svg { color: #9ca3af; width: 14px; height: 14px; }
-        .tour-info-divider { width: 1px; height: 20px; background: #e5e7eb; }
-        .tour-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
-        .tour-tag-pill { background: #f3f4f6; color: #111827; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
-        .tour-book-btn { width: 100%; background: linear-gradient(180deg, #2d2d2d 0%, #111111 100%); color: #ffffff; padding: 0.85rem; border-radius: 999px; font-weight: 700; font-size: 0.95rem; text-align: center; cursor: pointer; transition: all 0.2s ease; border: none; box-shadow: 0 4px 14px rgba(0,0,0,0.15); }
-        .tour-card:hover .tour-book-btn { background: linear-gradient(180deg, #3d3d3d 0%, #1a1a1a 100%); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+        .apple-biz-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.08);
+          border-color: rgba(0, 0, 0, 0.1);
+        }
+        .card-photo-box {
+          width: 100%;
+          height: 175px;
+          position: relative;
+          overflow: hidden;
+          background-color: #f1f5f9;
+        }
+        .card-photo-img {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+          object-fit: cover;
+          transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .apple-biz-card:hover .card-photo-img {
+          transform: scale(1.04);
+        }
 
-        .skeleton-pulse { background: #e2e8f0; animation: pulse 1.5s infinite ease-in-out; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        /* СКЛЯНИЙ БЕЙДЖ */
+        .glass-pill {
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          padding: 4px 9px;
+          border-radius: 999px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          color: #111827;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        }
 
-        .reveal-on-scroll { opacity: 0; transform: translateY(40px); transition: opacity 0.8s ease-out, transform 0.8s cubic-bezier(0.25, 0.8, 0.25, 1); }
+        /* КНОПКА «В ОБРАНЕ» */
+        .glass-fav-btn {
+          position: absolute; top: 10px; right: 10px; z-index: 2;
+          width: 32px; height: 32px; border-radius: 50%;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        }
+        .glass-fav-btn:hover {
+          transform: scale(1.1);
+          background: #ffffff;
+        }
+
+        .card-body {
+          padding: 1.15rem;
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+        }
+        .card-heading {
+          font-size: 1.12rem;
+          font-weight: 800;
+          color: #111827;
+          margin: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          letter-spacing: -0.015em;
+        }
+        .card-action-link {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: #111827;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          transition: color 0.15s ease, transform 0.15s ease;
+        }
+        .apple-biz-card:hover .card-action-link {
+          color: #8fae92;
+          transform: translateX(2px);
+        }
+
+        /* КЛІКАБЕЛЬНІ СЛОТИ ЧАСУ */
+        .interactive-time-chip {
+          background: #f1f5f9;
+          color: #111827;
+          border: 1px solid transparent;
+          border-radius: 8px;
+          padding: 4px 8px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .interactive-time-chip:hover {
+          background: #C2D8C4;
+          color: #111827;
+          transform: translateY(-1px);
+        }
+
+        /* СІТКА КАТАЛОГУ */
+        .salons-layout {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1.75rem 1.5rem;
+          width: 100%;
+        }
+        @media (max-width: 1120px) { .salons-layout { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 820px) { .salons-layout { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 560px) { .salons-layout { grid-template-columns: 1fr; } }
+
+        /* ОДНАКОВИЙ РОЗМІР КАРТОК У КАРУСЕЛІ */
+        .nearby-carousel {
+          display: flex;
+          gap: 1.5rem;
+          overflow-x: auto;
+          scroll-snap-type: x mandatory;
+          padding-bottom: 0.5rem;
+        }
+        .nearby-carousel-item {
+          flex: 0 0 calc((100% - 4.5rem) / 4);
+          min-width: 270px;
+          scroll-snap-align: start;
+        }
+
+        .carousel-nav-btn {
+          width: 36px; height: 36px;
+          border-radius: 50%;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          color: #111827;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .carousel-nav-btn:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          transform: scale(1.05);
+        }
+
+        /* 🌟 ВИТОНЧЕНІ КУРАТОРСЬКІ ДОБІРКИ У ДВА РЯДИ ЗІ ЗМІЩЕННЯМ */
+        .editorial-scroll-wrapper {
+          overflow-x: auto;
+          padding-bottom: 0.8rem;
+          margin: 0 -0.5rem;
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+        }
+        .editorial-staggered-track {
+          display: flex;
+          flex-direction: column;
+          gap: 1.15rem;
+          width: max-content;
+        }
+        .editorial-stream-row {
+          display: flex;
+          gap: 1.15rem;
+        }
+        .editorial-stream-row.offset-row {
+          margin-left: 55px; /* ЕЛЕГАНТНЕ ЗМІЩЕННЯ ДРУГОГО РЯДУ ВПРАВО */
+        }
+
+        .compact-editorial-card {
+          width: 275px;
+          height: 132px; /* КОМПАКТНА ВИСОТА */
+          border-radius: 20px;
+          overflow: hidden;
+          position: relative;
+          text-decoration: none;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          padding: 1.15rem 1.25rem;
+          box-shadow: 0 6px 20px -6px rgba(0, 0, 0, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          box-sizing: border-box;
+          cursor: pointer;
+        }
+        
+        /* СВІТЛОВИЙ БЛІК APPLE */
+        .compact-editorial-card::after {
+          content: '';
+          position: absolute;
+          top: -50%;
+          left: -60%;
+          width: 40%;
+          height: 200%;
+          background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.25) 50%, transparent 70%);
+          transform: rotate(25deg);
+          transition: transform 0.65s ease-in-out;
+          pointer-events: none;
+          z-index: 4;
+        }
+        .compact-editorial-card:hover::after {
+          transform: rotate(25deg) translate(280%, 0);
+        }
+
+        .compact-editorial-bg {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
+          transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+          z-index: 1;
+        }
+        .compact-editorial-card:hover .compact-editorial-bg {
+          transform: scale(1.06);
+        }
+        .compact-editorial-overlay {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+          background: linear-gradient(180deg, rgba(17, 24, 39, 0.1) 0%, rgba(17, 24, 39, 0.4) 40%, rgba(17, 24, 39, 0.88) 100%);
+          z-index: 2;
+        }
+        .compact-tag {
+          position: relative; z-index: 3;
+          align-self: flex-start;
+          background: rgba(255, 255, 255, 0.22);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.35);
+          color: #ffffff;
+          font-size: 0.68rem;
+          font-weight: 750;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          padding: 3px 9px;
+          border-radius: 999px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .compact-footer {
+          position: relative; z-index: 3;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .compact-title {
+          color: #ffffff;
+          font-size: 1.05rem;
+          font-weight: 800;
+          margin: 0;
+          letter-spacing: -0.02em;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .compact-chevron {
+          width: 22px; height: 22px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.25);
+          backdrop-filter: blur(12px);
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0;
+          transition: transform 0.2s ease, background 0.2s ease;
+        }
+        .compact-editorial-card:hover .compact-chevron {
+          background: #ffffff;
+          transform: translateX(2px);
+        }
+        .compact-editorial-card:hover .compact-chevron svg {
+          stroke: #111827;
+        }
+
+        .reveal-on-scroll { opacity: 0; transform: translateY(30px); transition: opacity 0.8s ease-out, transform 0.8s cubic-bezier(0.25, 0.8, 0.25, 1); }
         .reveal-on-scroll.is-visible { opacity: 1; transform: translateY(0); }
         .delay-100 { transition-delay: 100ms; }
         .delay-200 { transition-delay: 200ms; }
@@ -731,7 +1152,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .compact-features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-bottom: 1rem; }
         @media (max-width: 992px) { .compact-features-grid { grid-template-columns: 1fr; gap: 2.5rem; } }
         
-        .info-section { padding: 4rem 0 6rem 0; position: relative; z-index: 10; }
+        .info-section { padding: 5rem 0 6rem 0; position: relative; z-index: 10; }
         .info-title { font-size: 2rem; font-weight: 900; color: #111827; line-height: 1.2; margin-bottom: 1rem; letter-spacing: -0.02em; }
         .info-desc { color: #64748b; font-size: 1rem; line-height: 1.6; margin-bottom: 1rem; font-weight: 400; }
 
@@ -751,7 +1172,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .social-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.85rem; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; font-weight: 600; color: #475569; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
         .social-btn:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
 
-        /* ЧОРНИЙ СУЧАСНИЙ ФУТЕР */
+        /* ЧОРНИЙ ФУТЕР */
         .clean-dark-footer {
           background-color: #111215;
           color: #ffffff;
@@ -781,22 +1202,28 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           transform: translateX(2px);
         }
 
-        /* ХЕДЕР */
+        /* СКЛЯНИЙ ХЕДЕР */
         .main-header {
           position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000;
           display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent;
         }
         .main-header.top { transform: translateY(0); }
         .main-header.scrolled {
-          position: fixed; background-color: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-          border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05);
+          position: fixed;
+          background-color: rgba(255, 255, 255, 0.82);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+          box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
           animation: slideDown 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
         }
         .main-header.hiding {
-          position: fixed; background-color: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-          border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05);
+          position: fixed;
+          background-color: rgba(255, 255, 255, 0.82);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+          box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
           animation: slideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
         }
         .main-header.top .nav-link { color: #ffffff; }
@@ -809,8 +1236,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
       {/* МОДАЛКА ЛОГІНУ/РЕЄСТРАЦІЇ */}
       {isAuthModalOpen && (
-        <div onClick={() => setIsAuthModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
-          <div className="anim" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+        <div onClick={() => setIsAuthModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(12px)' }}>
+          <div className="anim" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)' }}>
             <button onClick={() => { setIsAuthModalOpen(false); setIsLoginView(true); }} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1.2rem', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>×</button>
             <h2 style={{ fontSize: '1.8rem', fontWeight: '800', textAlign: 'center', marginBottom: '0.5rem', color: '#111827', letterSpacing: '-0.02em' }}>{isLoginView ? 'З поверненням' : 'Почати роботу'}</h2>
             <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.95rem', marginBottom: '2rem', lineHeight: '1.4' }}>{isLoginView ? 'Увійдіть, щоб керувати розкладом.' : 'Створіть акаунт для вашого бізнесу.'}</p>
@@ -832,11 +1259,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       )}
 
-      {/* ОРИГІНАЛЬНИЙ ХЕДЕР З ДОДАНИМ ПОШУКОМ */}
+      {/* ХЕДЕР */}
       <header className={`main-header ${scrollState}`}>
         <div className="container" style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '1rem' }}>
 
-          {/* ЛОГОТИП */}
           <div style={{ width: '180px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
             <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline' }}>
               <div style={{ fontSize: '1.8rem', fontWeight: '900', color: isHeaderDark ? '#111827' : '#ffffff', letterSpacing: '-0.04em', transition: 'color 0.3s ease' }}>
@@ -845,7 +1271,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </Link>
           </div>
 
-          {/* 🟢 ПОШУК У ХЕДЕРІ */}
+          {/* ПОШУК У ХЕДЕРІ */}
           <div style={{
             flex: 1,
             display: 'flex',
@@ -860,17 +1286,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: '#ffffff',
-              border: '1px solid #e2e8f0',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(0, 0, 0, 0.07)',
               borderRadius: '12px',
               padding: '4px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
               width: '100%',
               maxWidth: '650px',
               position: 'relative'
             }}>
 
-              {/* ЩО (HEADER) */}
               <div ref={headerWhatRef} style={{ flex: 1.3, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.5rem 0 1rem', height: '100%' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 <input
@@ -894,7 +1321,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
               <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
 
-              {/* ДЕ (HEADER) */}
               <div ref={headerWhereRef} style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.5rem', height: '100%' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                 <input
@@ -916,7 +1342,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
               <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
 
-              {/* КОЛИ (HEADER) */}
               <div ref={headerDateRef} style={{ flex: 0.8, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 1.25rem 0 0.5rem', height: '100%', cursor: 'pointer' }} onClick={() => { setIsDateOpen(!isDateOpen); setActiveSearch('header'); }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 <span style={{ color: searchDate || searchTime ? '#222222' : '#64748b', fontSize: '0.95rem', fontWeight: searchDate || searchTime ? '600' : '400', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -935,7 +1360,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </div>
           </div>
 
-          {/* ПРОФІЛЬ ТА МЕНЮ */}
+          {/* ПРОФІЛЬ */}
           <div style={{ width: '320px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
             <Link
               href="/business"
@@ -984,59 +1409,28 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                     <img
                       src={avatarUrl}
                       alt={userName || 'Аватарка'}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        flexShrink: 0
-                      }}
+                      style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                     />
                   ) : (
                     <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
+                      width: '36px', height: '36px', borderRadius: '50%',
                       backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#111827',
-                      fontWeight: '800',
-                      fontSize: '0.9rem',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#111827', fontWeight: '800', fontSize: '0.9rem',
                       boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.35)',
-                      transition: 'all 0.2s ease',
                       flexShrink: 0
                     }}>
                       {initials}
                     </div>
                   )}
 
-                  <svg
-                    width="10"
-                    height="6"
-                    viewBox="0 0 10 6"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    style={{
-                      transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s ease',
-                      flexShrink: 0
-                    }}
-                  >
-                    <path
-                      d="M1 1L5 5L9 1"
-                      stroke={isHeaderDark ? '#64748b' : '#ffffff'}
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      style={{ transition: 'stroke 0.2s ease' }}
-                    />
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}>
+                    <path d="M1 1L5 5L9 1" stroke={isHeaderDark ? '#64748b' : '#ffffff'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
 
                 {isProfileOpen && (
-                  <div className="search-dropdown anim" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '210px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.4rem', zIndex: 1001 }}>
+                  <div className="search-dropdown anim" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '210px', padding: '0.4rem', zIndex: 1001 }}>
                     <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.25rem' }}>
                       <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Акаунт</div>
                       <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
@@ -1054,14 +1448,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               <span
                 onClick={() => { setIsLoginView(true); setIsAuthModalOpen(true); }}
                 className="anim"
-                style={{
-                  color: isHeaderDark ? '#111827' : '#ffffff',
-                  cursor: 'pointer',
-                  transition: 'color 0.2s ease',
-                  fontWeight: '600',
-                  fontSize: '0.95rem',
-                  whiteSpace: 'nowrap'
-                }}
+                style={{ color: isHeaderDark ? '#111827' : '#ffffff', cursor: 'pointer', transition: 'color 0.2s ease', fontWeight: '600', fontSize: '0.95rem', whiteSpace: 'nowrap' }}
                 onMouseOver={(e) => { e.currentTarget.style.color = '#8fae92'; }}
                 onMouseOut={(e) => { e.currentTarget.style.color = isHeaderDark ? '#111827' : '#ffffff'; }}
               >
@@ -1089,11 +1476,13 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             Знаходьте перевірених фахівців поблизу та миттєво бронюйте візити онлайн без зайвих дзвінків.
           </p>
 
-          {/* 🟢 ОСНОВНИЙ ПОШУК (HERO) */}
+          {/* ПОШУК (HERO) */}
           <div style={{
-            backgroundColor: '#ffffff',
-            border: '1px solid transparent',
-            borderRadius: '12px',
+            backgroundColor: 'rgba(255, 255, 255, 0.96)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.6)',
+            borderRadius: '14px',
             padding: '4px',
             maxWidth: '700px',
             width: '100%',
@@ -1101,17 +1490,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             display: 'flex',
             alignItems: 'center',
             boxSizing: 'border-box',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+            boxShadow: '0 20px 48px -10px rgba(0,0,0,0.18)',
             position: 'relative',
             zIndex: 100,
-            height: '42px'
+            height: '44px'
           }}>
 
             <div ref={heroWhatRef} style={{ flex: 1.3, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.5rem 0 1rem', height: '100%' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}>
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               <input
                 type="text"
                 placeholder="Послуга, бренд або салон"
@@ -1136,10 +1522,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
 
             <div ref={heroWhereRef} style={{ flex: 0.9, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.75rem', height: '100%' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}>
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-              </svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
               <input
                 type="text"
                 placeholder="Де шукаємо?"
@@ -1161,22 +1544,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
 
             <div ref={heroDateRef} style={{ flex: 0.8, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 1.25rem 0 0.5rem', cursor: 'pointer', height: '100%' }} onClick={() => { setIsDateOpen(!isDateOpen); setActiveSearch('hero'); }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}>
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-              </svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
               <span style={{ color: searchDate || searchTime ? '#222222' : '#64748b', fontSize: '0.95rem', fontWeight: searchDate || searchTime ? '600' : '400', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {getDisplayDateTime()}
               </span>
 
-              {isDateOpen && activeSearch === 'hero' && (
-                renderDatePicker()
-              )}
+              {isDateOpen && activeSearch === 'hero' && renderDatePicker()}
             </div>
 
-            <button type="button" onClick={() => void handleSearch()} style={{ width: '34px', height: '34px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
+            <button type="button" onClick={() => void handleSearch()} style={{ width: '36px', height: '36px', borderRadius: '18px', backgroundColor: '#111827', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', marginRight: '4px', flexShrink: 0, transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             </button>
 
@@ -1185,8 +1561,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       </section>
 
       {/* КАТЕГОРІЇ ПОСЛУГ */}
-      <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '2.5rem', paddingBottom: '3.5rem', position: 'relative', zIndex: 40 }}>
-        <div className="hide-scrollbar" style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
+      <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '2.5rem', paddingBottom: '3rem', position: 'relative', zIndex: 40 }}>
+        <div className="hide-scrollbar" style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
           {categoriesData.map((cat) => {
             const isActive = activeCategory === cat.slug && !appliedSearch;
             return (
@@ -1226,21 +1602,209 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* РЕКОМЕНДОВАНІ ЗАКЛАДИ */}
+      {/* 🟢 1. СПЕРШУ: ПОБЛИЗУ ВАС ІЗ ВІЛЬНИМИ ВІКНАМИ (КАРУСЕЛЬ З ОДНАКОВИМ РОЗМІРОМ) */}
+      {isDefaultView && nearbyBusinesses.length > 0 && (
+        <section className="reveal-on-scroll" style={{ paddingBottom: '4.5rem' }}>
+          <div className="container">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem' }}>
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
+                  Швидкий візит • {searchWhere || 'Львів'}
+                </div>
+                <h2 style={{ fontSize: '2.2rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.03em' }}>
+                  Поблизу вас із вільними вікнами
+                </h2>
+                <p style={{ color: '#64748b', fontSize: '1rem', marginTop: '0.35rem', marginBottom: 0 }}>
+                  Забронюйте час прямо сьогодні без попередніх дзвінків
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button onClick={() => scrollNearby('left')} className="carousel-nav-btn" aria-label="Вліво">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <button onClick={() => scrollNearby('right')} className="carousel-nav-btn" aria-label="Вправо">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            </div>
+
+            <div ref={nearbyScrollRef} className="nearby-carousel hide-scrollbar">
+              {nearbyBusinesses.map((biz, idx) => (
+                <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
+                  {renderCard(biz, {
+                    distanceTag: `${300 + idx * 220} м`,
+                    showTimeSlots: true
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 🟢 2. ПОТІМ: ВАМ МОЖЕ СПОДОБАТИСЯ (КОМПАКТНІ ДОБІРКИ У 2 РЯДИ ЗІ ЗМІЩЕННЯМ ТА СКРОЛОМ) */}
+      {isDefaultView && (
+        <section className="reveal-on-scroll" style={{ padding: '3.5rem 0 4rem 0', backgroundColor: '#fbfbfd', borderTop: '1px solid rgba(0,0,0,0.05)', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: '4.5rem' }}>
+          <div className="container">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem' }}>
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>
+                  Вам може сподобатися
+                </div>
+                <h2 style={{ fontSize: '2.1rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.03em' }}>
+                  Кураторські колекції
+                </h2>
+              </div>
+
+              {/* Навігація скролу колекцій */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button onClick={() => scrollCollections('left')} className="carousel-nav-btn" aria-label="Вліво">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <button onClick={() => scrollCollections('right')} className="carousel-nav-btn" aria-label="Вправо">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            </div>
+
+            {/* КОМПАКТНИЙ СКРОЛ-ТРЕК З ДВОМА ЗМІЩЕНИМИ РЯДАМИ */}
+            <div ref={collectionsScrollRef} className="editorial-scroll-wrapper hide-scrollbar">
+              <div className="editorial-staggered-track">
+
+                {/* РЯД 1 */}
+                <div className="editorial-stream-row">
+
+                  <div onClick={() => handleCategorySelect('barber')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=600&q=80" alt="Барбершопи" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">8 закладів</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Чоловіча класика & Fades</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('nails')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=600&q=80" alt="Манікюр" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">14 студій</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Естетика манікюру</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('spa')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=600&q=80" alt="Spa" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">6 просторів</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Wellness, спа & релакс</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('hair')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80" alt="Волосся" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">12 салонів</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Стрижки & авторський колір</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('makeup')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=600&q=80" alt="Макіяж" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">7 майстрів</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Вечірній образ & візаж</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* РЯД 2 (ЗМІЩЕНИЙ ВПРАВО НА 55PX) */}
+                <div className="editorial-stream-row offset-row">
+
+                  <div onClick={() => handleCategorySelect('skincare')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=80" alt="Догляд за шкірою" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">9 центрів</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Догляд за шкірою & Glow</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('brows')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=80" alt="Брови та вії" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">11 студій</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Ламінування брів & вій</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('massage')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1519823551278-64ac92734fb1?auto=format&fit=crop&w=600&q=80" alt="Масаж" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">8 фахівців</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Масажні техніки & тонус</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('aesthetic-medicine')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80" alt="Естетика" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">5 клінік</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Естетична медицина</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                  <div onClick={() => handleCategorySelect('hair-removal')} className="compact-editorial-card anim">
+                    <img src="https://images.unsplash.com/photo-1512290900672-1f5be1c66f54?auto=format&fit=crop&w=600&q=80" alt="Епіляція" className="compact-editorial-bg" />
+                    <div className="compact-editorial-overlay"></div>
+                    <span className="compact-tag">6 студій</span>
+                    <div className="compact-footer">
+                      <h3 className="compact-title">Лазерна епіляція</h3>
+                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 🟢 3. І ПОТІМ: РЕКОМЕНДОВАНІ МАЙСТРИ ТА СТУДІЇ (КАТАЛОГ) */}
       <section className="reveal-on-scroll" style={{ paddingBottom: '5rem' }} id="salons-section">
         <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem', position: 'relative', zIndex: 50 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.25rem', position: 'relative', zIndex: 50 }}>
             <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
+                Топ вибір користувачів
+              </div>
               <h2 style={{ fontSize: '2.4rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.04em' }}>
                 {getSectionTitle()}
               </h2>
-              <p style={{ color: '#64748b', fontSize: '1.05rem', marginTop: '0.5rem', marginBottom: 0 }}>
+              <p style={{ color: '#64748b', fontSize: '1.05rem', marginTop: '0.4rem', marginBottom: 0 }}>
                 {getSectionSubtitle()}
               </p>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-
               <div style={{ position: 'relative' }} ref={sortRef}>
                 <button
                   type="button"
@@ -1282,7 +1846,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 )}
               </div>
 
-              {filteredBusinesses.length > 4 && (
+              {filteredBusinesses.length > 8 && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
                   className={`view-all-text-btn anim ${isExpanded ? 'expanded' : ''}`}
@@ -1293,7 +1857,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                   </svg>
                 </button>
               )}
-
             </div>
           </div>
 
@@ -1302,122 +1865,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               <div style={{ width: '72px', height: '72px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               </div>
-              <h3 style={{ color: '#111827', fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>Майстрів не знайдено</h3>
-              <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '480px', margin: '0 auto', lineHeight: '1.5' }}>На жаль, за вашим запитом немає доступних закладів. Спробуйте змінити фільтри або повернутись до всіх рекомендацій.</p>
+              <h3 style={{ color: '#111827', fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>Закладів не знайдено</h3>
+              <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '480px', margin: '0 auto', lineHeight: '1.5' }}>Спробуйте обрати інше місто або скинути фільтри.</p>
               <button
                 onClick={() => { handleCategorySelect('all'); setAppliedSearch(''); setSearchWhat(''); }}
                 style={{ marginTop: '2rem', padding: '0.85rem 2rem', backgroundColor: '#222222', color: '#fff', border: 'none', borderRadius: '99px', cursor: 'pointer', fontWeight: '700', fontSize: '1rem', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
               >
-                Скинути пошук
+                Скинути фільтри
               </button>
             </div>
           ) : (
             <div className="salons-layout anim">
-              {displayedBusinesses.map((biz: any) => {
-                const rank = parseFloat(biz.rating);
-                const hasRating = !isNaN(rank) && rank > 0;
-                const displayRank = hasRating ? rank.toFixed(1) : '5.0';
-                const reviewCount = parseInt(biz.reviews_count) || 0;
-                const bgImage = biz.cover_photo || biz.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
-
-                const categoryLabels: Record<string, string> = {
-                  barber: 'Барбер',
-                  hair: 'Волосся',
-                  nails: 'Нігті',
-                  skincare: 'Догляд',
-                  brows: 'Брови',
-                  massage: 'Масаж',
-                  makeup: 'Макіяж',
-                  spa: 'Spa',
-                };
-                const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Салон';
-                const locationText = [biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
-
-                return (
-                  <Link key={biz.id} href={`/${biz.slug || biz.id}`} className="tour-card">
-                    <div className="tour-card-img-wrapper">
-                      <img src={bgImage} alt={biz.name} loading="lazy" decoding="async" className="tour-card-bg" />
-                      {(!hasRating || rank >= 4.8) && (
-                        <div className="tour-badge-top">
-                          <span className="star">★</span> Топ Вибір
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="tour-card-content">
-                      <h3 className="tour-title">{biz.name}</h3>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#6b7280', fontSize: '0.85rem', marginBottom: '1rem' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {locationText}
-                        </span>
-                      </div>
-
-                      <div className="tour-info-row">
-                        <div className="tour-info-item">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                          </svg>
-                          <span style={{ fontWeight: 700, color: '#111827' }}>{displayRank}</span>
-                        </div>
-
-                        <div className="tour-info-divider"></div>
-
-                        <div className="tour-info-item">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                          </svg>
-                          <span>{reviewCount} відг.</span>
-                        </div>
-
-                        <div className="tour-info-divider"></div>
-
-                        <div className="tour-info-item">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="6" cy="6" r="3"></circle>
-                            <circle cx="6" cy="18" r="3"></circle>
-                            <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
-                            <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
-                            <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
-                          </svg>
-                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75px' }}>
-                            {category}
-                          </span>
-                        </div>
-                      </div>
-
-                      {(() => {
-                        const cardTags = Array.isArray(biz.tags) ? biz.tags : [];
-                        if (cardTags.length === 0) return null;
-
-                        const maxTags = 2;
-                        const visibleTags = cardTags.slice(0, maxTags);
-                        const hiddenCount = cardTags.length - maxTags;
-
-                        return (
-                          <div className="tour-tags">
-                            {visibleTags.map((tag: string, i: number) => (
-                              <span key={i} className="tour-tag-pill">{tag}</span>
-                            ))}
-                            {hiddenCount > 0 && (
-                              <span className="tour-tag-pill">+{hiddenCount}</span>
-                            )}
-                          </div>
-                        );
-                      })()}
-
-                      <button className="tour-book-btn">Записатись</button>
-                    </div>
-                  </Link>
-                );
-              })}
+              {displayedBusinesses.map((biz: any) => renderCard(biz))}
             </div>
           )}
         </div>
@@ -1429,7 +1888,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           <div className="compact-features-grid">
             <div className="reveal-on-scroll">
               <div style={{ width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#f0fdf4', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
               </div>
               <h2 className="info-title">
                 Зручно бронюйте візити <br/>
@@ -1444,12 +1903,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 Хочете записатися до перукаря, барбера, на манікюр чи в масажний салон у вашому районі? Шукаєте місце, де найкращі спеціалісти подбають про вашу красу?
               </p>
               <p className="info-desc">
-                BookEra — це безкоштовний додаток для бронювання, де можна легко й швидко знаходити вільні дати та записуватися. Більше жодних телефонних дзвінків.
+                BookEra — це сервіс миттєвого бронювання, де можна легко й швидко знаходити вільні дати та записуватися. Більше жодних телефонних дзвінків.
               </p>
             </div>
             <div className="reveal-on-scroll delay-100">
               <div style={{ width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#eff6ff', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
               </div>
               <h2 className="info-title">
                 Щось змінилося? <br/>Не переймайтеся — <br/>
@@ -1469,7 +1928,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </div>
             <div className="reveal-on-scroll delay-200">
               <div style={{ width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#fefce8', color: '#a16207', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
               </div>
               <h2 className="info-title">
                 Бронюйте в <span style={{ position: 'relative', display: 'inline-block', zIndex: 1 }}>
@@ -1483,7 +1942,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 У BookEra ви знайдете найкращі заклади для здоров'я та салони краси у вашому регіоні.
               </p>
               <p className="info-desc">
-                Дізнайтеся більше про них — переглядайте профілі, читайте реальні відгуки інших клієнтів та ознайомлюйтеся з їхніми роботами в портфоліо перед тим, як записатись.
+                Дізнайтеся більше про них — переглядайте профілі, читайте реальні відгуки інших клієнтів та ознайомлюйтеся з їхніми роботами перед тим, як записатись.
               </p>
             </div>
           </div>
@@ -1548,7 +2007,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 </svg>
               </div>
               <div className="floating-widget" style={{ left: '-10px', bottom: '15%' }}>
-                <div style={{ width: '40px', height: '40px', background: '#C2D8C4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#222', flexShrink: 0 }}>✓</div>
+                <div style={{ width: '40px', height: '40px', background: '#C2D8C4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#222', flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span style={{ fontSize: '1rem', fontWeight: '800', color: '#111827', lineHeight: '1.2' }}>+40% клієнтів</span>
                   <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Завдяки системі</span>
@@ -1563,7 +2024,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* 🟢 БЛОК МІСТ (ГАРМОНІЙНИЙ ТЕМНИЙ ПЕРЕХІД) */}
+      {/* БЛОК МІСТ */}
       <section className="reveal-on-scroll" style={{ padding: '5rem 0', backgroundColor: '#111827', borderTop: '1px solid rgba(255, 255, 255, 0.08)', position: 'relative', zIndex: 20 }}>
         <div className="container">
           <h2 style={{ fontSize: '2rem', fontWeight: '800', color: '#ffffff', textAlign: 'center', marginBottom: '3rem', letterSpacing: '-0.02em' }}>
@@ -1580,15 +2041,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* ========================================================= */}
-      {/* ЧОРНИЙ ФУТЕР ІЗ КОТИКОМ (МОНОЛІТНИЙ ДО САМОГО НИЗУ)       */}
-      {/* ========================================================= */}
+      {/* ЧОРНИЙ ФУТЕР ІЗ КОТИКОМ */}
       <footer className="clean-dark-footer" style={{ marginTop: 'auto', position: 'relative', overflow: 'hidden' }}>
         <div className="container">
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '3rem', marginBottom: '3.5rem' }}>
-
-            {/* 1. БРЕНД */}
             <div>
               <Link href="/" style={{ textDecoration: 'none', display: 'inline-block', marginBottom: '1rem' }}>
                 <div style={{ fontSize: '1.75rem', fontWeight: '900', color: '#ffffff', letterSpacing: '-0.04em' }}>
@@ -1600,7 +2057,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               </p>
             </div>
 
-            {/* 2. МОЖЛИВОСТІ */}
             <div>
               <div className="footer-col-title">Можливості</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
@@ -1611,7 +2067,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               </div>
             </div>
 
-            {/* 3. ДЛЯ БІЗНЕСУ */}
             <div>
               <div className="footer-col-title">Для бізнесу</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
@@ -1622,7 +2077,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               </div>
             </div>
 
-            {/* 4. ПІДТРИМКА */}
             <div>
               <div className="footer-col-title">Підтримка</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
@@ -1632,12 +2086,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 <Link href="#" className="footer-nav-link">Контакти команди</Link>
               </div>
             </div>
-
           </div>
 
-          {/* НИЖНЯ ПЛАШКА: ЮРИДИЧНІ ПОСИЛАННЯ + КОПІРАЙТ */}
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
                 <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>ПОЛІТИКА КОНФІДЕНЦІЙНОСТІ</Link>
@@ -1658,7 +2109,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               <span>•</span>
               <span>Україна • UA</span>
             </div>
-
           </div>
 
         </div>

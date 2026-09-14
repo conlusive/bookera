@@ -2018,6 +2018,22 @@ export default function CalendarTab({ business, team = [], services = [], refres
                     <span style={{ color: '#222222', fontWeight: 500, textAlign: 'right' }}>{serviceName || '—'}</span>
                   </div>
                 )}
+
+                {/* Додаткові послуги, обрані клієнтом при записі.
+                    Без них майстер бачить лише основну послугу й не знає,
+                    що людина доплатила за додаткові - а вони вже в ціні
+                    та в тривалості візиту. */}
+                {!isBlock && (selectedBooking.addon_service_ids?.length ?? 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.875rem' }}>
+                    <span style={{ color: '#6B756A' }}>Додатково</span>
+                    <span style={{ color: '#222222', fontWeight: 500, textAlign: 'right' }}>
+                      {(selectedBooking.addon_service_ids as number[])
+                        .map((id: number) => services.find((s: any) => String(s.id) === String(id))?.name)
+                        .filter(Boolean)
+                        .join(', ') || '—'}
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.875rem' }}>
                   <span style={{ color: '#6B756A' }}>Майстер</span>
                   <span style={{ color: masterName ? '#222222' : '#A5AEA3', fontWeight: 500, textAlign: 'right' }}>

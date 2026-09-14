@@ -37,6 +37,10 @@ class LockSlotRequest(BaseModel):
 class AppointmentCreate(BaseModel):
     business_id: int
     service_id: int
+    # Додаткові послуги, обрані клієнтом. Впливають і на ціну, і на
+    # тривалість: без цього заклад бачив би 45 хвилин там, де людина
+    # записалась на 75, і майстер не встигав би.
+    addon_service_ids: Optional[List[int]] = None
     start_time: datetime
     master_id: Optional[str] = "0"
     session_token: Optional[str] = None
@@ -102,6 +106,7 @@ class AppointmentResponse(BaseModel):
     # без жодного натяку, куди й до кого вона йде: id послуги їй
     # нічого не каже. Заповнюються лише там, де потрібні, - решта
     # ендпоінтів віддає їх порожніми й нічого не втрачає.
+    addon_service_ids: Optional[List[int]] = None
     business_name: Optional[str] = None
     service_name: Optional[str] = None
     master_name: Optional[str] = None

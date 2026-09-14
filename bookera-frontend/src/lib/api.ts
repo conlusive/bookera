@@ -344,6 +344,7 @@ export const api = {
     client_email?: string;
     direct_link_token?: string;
     gift_certificate_code?: string;
+    addon_service_ids?: number[];
   }): Promise<Appointment> {
     return publicFetch(`/appointments`, { method: 'POST', body: JSON.stringify(payload) });
   },

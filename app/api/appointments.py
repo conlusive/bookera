@@ -6,6 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate
 
@@ -576,14 +577,35 @@ async def create_appointment(
     )
 
     srv_res = await db.execute(
-        select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id)
+        select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id).options(selectinload(Service.addons))
     )
     service = srv_res.scalars().first()
+
+    # Додаткові послуги: тривалість і ціна.
+    #
+    # Перевіряємо, що кожна справді належить ЦІЙ послузі: інакше клієнт
+    # міг би передати будь-який id і додати до візиту те, чого заклад
+    # не пропонував - або чужу послугу з іншого закладу.
+    addon_ids: list[int] = []
+    addon_minutes = 0
+    addon_price = Decimal("0")
+
+    if appointment_in.addon_service_ids and service:
+        allowed = {a.id for a in (service.addons or [])}
+        wanted = [int(i) for i in appointment_in.addon_service_ids if int(i) in allowed]
+        if wanted:
+            addons_res = await db.execute(select(Service).where(Service.id.in_(wanted)))
+            for addon in addons_res.scalars().all():
+                addon_ids.append(addon.id)
+                addon_minutes += addon.duration_minutes or 0
+                addon_price += Decimal(str(addon.price or 0))
+
+    total_minutes = (service.duration_minutes if service else 60) + addon_minutes
 
     # Застосування подарункового сертифіката - зменшує ціну, не робить
     # бронювання безкоштовним понад залишок сертифіката.
     applied_certificate = None
-    final_price = service.price if service else Decimal("0")
+    final_price = (Decimal(str(service.price or 0)) if service else Decimal("0")) + addon_price
     if appointment_in.gift_certificate_code and service:
         cert_res = await db.execute(
             select(GiftCertificate).where(
@@ -629,9 +651,7 @@ async def create_appointment(
 
     if not appointment:
         # Створюємо прямий запис, якщо блоку не було
-        requested_end_time = appointment_in.start_time + timedelta(
-            minutes=(service.duration_minutes if service else 60)
-        )
+        requested_end_time = appointment_in.start_time + timedelta(minutes=total_minutes)
         appointment = Appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
@@ -640,6 +660,7 @@ async def create_appointment(
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
+            addon_service_ids=addon_ids or None,
             # auto_approve - налаштування закладу, яке досі нічого не робило:
             # запис завжди ставав підтвердженим. Тепер, якщо автопідтвердження
             # вимкнене, візит чекає на рішення закладу.

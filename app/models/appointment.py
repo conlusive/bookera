@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric, Computed, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric, Computed, Text, JSON
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -49,6 +49,13 @@ class Appointment(Base):
     source = Column(String, default="direct", nullable=False)
 
     price = Column(Numeric(10, 2), nullable=True)
+
+    # Додаткові послуги, обрані при записі.
+    #
+    # Зберігаємо СПИСОК ID, а не звʼязок: набір фіксується на момент
+    # запису. Якщо заклад згодом прибере послугу з переліку додаткових,
+    # уже створений візит має лишитись таким, як домовлялись.
+    addon_service_ids = Column(JSON, nullable=True)
 
     # Знімок контактів на момент бронювання - зберігається навіть для
     # гостьових бронювань без Client-запису.

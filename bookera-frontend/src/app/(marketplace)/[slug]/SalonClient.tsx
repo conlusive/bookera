@@ -724,7 +724,11 @@ export default function SalonClient({
         client_name: clientDisplayName,
         client_phone: safePhone,
         client_email: clientUserEmail,
-        direct_link_token: directLinkToken
+        direct_link_token: directLinkToken,
+        // Додаткові послуги. Без них клієнт обирав послуг на 800 ₴,
+        // а заклад бачив у календарі 500 ₴ і 45 хвилин замість 75 -
+        // майстер не знав, що робити, і не встигав.
+        addon_service_ids: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
       });
 
       setBookingSuccess(true);

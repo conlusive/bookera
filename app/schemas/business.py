@@ -74,9 +74,26 @@ class BusinessUpdate(BaseModel):
     payments_settings: Optional[dict] = None
 
 
+class WorkingDayOut(BaseModel):
+    """Робочий день закладу для публічної сторінки.
+
+    Раніше сторінка салону визначала вихідні за полем days_off -
+    застарілим. CRM зберігає графік у таблицю business_hours, тому
+    заклад міняв суботу в кабінеті, а сторінка про це не знала.
+    """
+    weekday: int
+    is_open: bool
+    open_time: Optional[str] = None
+    close_time: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class BusinessOut(BusinessBase):
     id: int
     slug: str
+    # Графік роботи - те саме джерело, що й у CRM.
+    working_hours: List[WorkingDayOut] = []
     # Публічні правила запису: клієнт має бачити політику скасування
     # ДО того, як записався, а не дізнаватись про неї постфактум.
     # Віддаємо лише те, що стосується клієнта - решта налаштувань

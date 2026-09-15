@@ -126,3 +126,35 @@ async def test_closed_day_returns_no_slots(client, auth_headers):
     )
     assert r.status_code == 200, r.text
     assert r.json()["slots"] == [], "у вихідний слотів бути не має"
+
+
+@pytest.mark.asyncio
+async def test_public_page_gets_working_hours(client, auth_headers):
+    """
+    Сторінка салону визначала вихідні за застарілим полем days_off,
+    а CRM зберігає графік у business_hours. Заклад міняв суботу
+    в кабінеті, а клієнт бачив її закритою - сторінка дивилась
+    в інше місце.
+
+    Тепер заклад віддає working_hours: те саме джерело, що й CRM.
+    """
+    headers = auth_headers("public-hours-owner")
+    business_id, _ = await _salon_with_hours(
+        client, headers, "Public Hours Salon", [(5, "12:00", "16:00")],
+    )
+
+    r = await client.get(f"/crm/businesses/me", headers=headers)
+    slug = r.json()["business"]["slug"]
+
+    r = await client.get(f"/businesses/{slug}")
+    assert r.status_code == 200, r.text
+
+    hours = r.json().get("working_hours")
+    assert hours, "публічна сторінка має отримувати графік"
+
+    saturday = next(h for h in hours if h["weekday"] == 5)
+    assert saturday["is_open"] is True, "субота відкрита в CRM - має бути відкрита й тут"
+    assert saturday["open_time"] == "12:00"
+
+    monday = next(h for h in hours if h["weekday"] == 0)
+    assert monday["is_open"] is False, "понеділок закритий"

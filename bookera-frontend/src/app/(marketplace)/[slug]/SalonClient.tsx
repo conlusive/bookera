@@ -30,52 +30,28 @@ const fmtDate = (d: Date) => {
 };
 
 // Точна перевірка вихідного дня (Python-індекси 0=Пн..6=Нд та JS 0=Нд..6=Сб)
+/**
+ * Чи заклад не працює цього дня.
+ *
+ * Джерело - working_hours, та сама таблиця business_hours, з якою
+ * працює CRM. Раніше тут читалось поле days_off: заклад міняв графік
+ * у кабінеті, а сторінка салону про це не знала й показувала суботу
+ * закритою.
+ *
+ * Якщо графік ще не заповнений - вважаємо, що заклад працює. Порожній
+ * графік означає «не налаштовано», а не «зачинено назавжди»: новий
+ * заклад не має виглядати закритим одразу після реєстрації.
+ */
 const isSalonDayOff = (date: Date, salonObj: any): boolean => {
-  if (!salonObj) return false;
-  let raw = salonObj.days_off;
-  if (typeof raw === 'string') {
-    try {
-      raw = JSON.parse(raw);
-    } catch {
-      raw = raw.split(',').map((s: string) => s.trim());
-    }
-  }
+  const hours = salonObj?.working_hours;
+  if (!Array.isArray(hours) || hours.length === 0) return false;
 
-  const jsDay = date.getDay(); // 0 = Нд, 1 = Пн, ..., 6 = Сб
-  const pyDay = (jsDay + 6) % 7; // 0 = Пн, 1 = Вт, ..., 5 = Сб, 6 = Нд
-
-  if (Array.isArray(raw) && raw.length > 0) {
-    const isOff = raw.some((item: any) => {
-      const n = Number(item);
-      if (!isNaN(n)) {
-        return n === pyDay;
-      }
-      const s = String(item).toLowerCase().trim();
-      if (pyDay === 6 && (s === '6' || s.includes('нд') || s.includes('нед') || s.includes('sun'))) return true;
-      if (pyDay === 5 && (s === '5' || s.includes('сб') || s.includes('суб') || s.includes('sat'))) return true;
-      if (pyDay === 4 && (s === '4' || s.includes('пт') || s.includes('пят') || s.includes('fri'))) return true;
-      if (pyDay === 3 && (s === '3' || s.includes('чт') || s.includes('чет') || s.includes('thu'))) return true;
-      if (pyDay === 2 && (s === '2' || s.includes('ср') || s.includes('сер') || s.includes('wed'))) return true;
-      if (pyDay === 1 && (s === '1' || s.includes('вт') || s.includes('вів') || s.includes('tue'))) return true;
-      if (pyDay === 0 && (s === '0' || s.includes('пн') || s.includes('пон') || s.includes('mon'))) return true;
-      return false;
-    });
-    if (isOff) return true;
-  }
-
-  const schedule = salonObj.schedule || salonObj.working_hours;
-  if (schedule && typeof schedule === 'object') {
-    const dayNamesPy = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    const key = dayNamesPy[pyDay];
-    const daySched = schedule[key] || schedule[String(pyDay)];
-    if (daySched) {
-      if (daySched.is_working === false || daySched.is_open === false || daySched.closed === true) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  // weekday у базі: 0 = понеділок ... 6 = неділя.
+  // getDay(): 0 = неділя ... 6 = субота.
+  const weekday = (date.getDay() + 6) % 7;
+  const day = hours.find((h: any) => Number(h.weekday) === weekday);
+  if (!day) return false;
+  return !day.is_open;
 };
 
 const getFirstAvailableWorkingDate = (salonObj: any) => {

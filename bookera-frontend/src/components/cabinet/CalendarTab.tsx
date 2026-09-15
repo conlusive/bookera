@@ -72,6 +72,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
   }, [isMasterUser, myMasterId]);
   const [isMasterFilterOpen, setIsMasterFilterOpen] = useState(false);
   const [clipboardApp, setClipboardApp] = useState<any>(null);
+  const [apptAddonIds, setApptAddonIds] = useState<number[]>([]);
   // Останнє перенесення - щоб його можна було відкотити одним кліком.
   // Перетягнути картку не туди легко, а згадувати, звідки саме її
   // перетягнули, доводиться по памʼяті.
@@ -441,6 +442,7 @@ const handleSaveShifts = async () => {
         client_phone: isBlockMode ? undefined : finalPhone,
         notes: isBlockMode ? (apptForm.block_reason || 'Перерва') : undefined,
         is_block: isBlockMode,
+        addon_service_ids: apptAddonIds.length > 0 ? apptAddonIds : undefined,
       });
 
       if (!isBlockMode && refreshClients) refreshClients();
@@ -1867,6 +1869,7 @@ const handleSaveShifts = async () => {
                         value={apptForm.service_id}
                         onChange={e => {
                           const selectedService = services.find((s:any) => String(s.id) === e.target.value);
+                          setApptAddonIds([]);
                           setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? selectedService.duration : apptForm.duration });
                         }}
                       >
@@ -1886,6 +1889,38 @@ const handleSaveShifts = async () => {
                       <div className="modal-select-icon"><Icons.ChevronDown /></div>
                     </div>
                   </div>
+
+                  {/* Додаткові послуги. Мінімальний вигляд: адміністратор
+                      бере трубку й записує клієнта, який просить ще й
+                      бороду - це має лягти в ТОЙ САМИЙ запис, інакше
+                      тривалість і ціна будуть неправильні. */}
+                  {(() => {
+                    const svc = services.find((s: any) => String(s.id) === String(apptForm.service_id));
+                    const addons = svc?.addons || [];
+                    if (addons.length === 0) return null;
+                    return (
+                      <div>
+                        <label className="modal-label">Додатково</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          {addons.map((addon: any) => (
+                            <label key={addon.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={apptAddonIds.includes(addon.id)}
+                                onChange={e => setApptAddonIds(prev =>
+                                  e.target.checked ? [...prev, addon.id] : prev.filter(id => id !== addon.id)
+                                )}
+                              />
+                              <span>{addon.name}</span>
+                              <span style={{ marginLeft: 'auto', color: '#64748b' }}>
+                                +{addon.price} ₴ · {addon.duration_minutes} хв
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               ) : (
                 <div>

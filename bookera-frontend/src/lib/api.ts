@@ -681,6 +681,7 @@ export const api = {
       client_email?: string;
       notes?: string;
       is_block?: boolean;
+    addon_service_ids?: number[];
     }
   ): Promise<Appointment> {
     return authFetch(`/crm/appointments`, token, { method: 'POST', body: JSON.stringify(payload) });

@@ -127,6 +127,7 @@ async def get_available_slots(
             service_id=service.id,
             duration_minutes=service.duration_minutes,
             slots=[],
+            server_time=local_time_now.strftime("%Y-%m-%d %H:%M"),
         )
 
     # 1.3 Межі робочого дня (дефолт 09:00-20:00, якщо графік ще не заповнений)
@@ -261,6 +262,7 @@ async def get_available_slots(
         service_id=service.id,
         duration_minutes=service.duration_minutes,
         slots=slots_result,
+        server_time=local_time_now.strftime('%Y-%m-%d %H:%M'),
     )
 
 

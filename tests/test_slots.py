@@ -158,3 +158,35 @@ async def test_public_page_gets_working_hours(client, auth_headers):
 
     monday = next(h for h in hours if h["weekday"] == 0)
     assert monday["is_open"] is False, "понеділок закритий"
+
+
+@pytest.mark.asyncio
+async def test_duration_param_shrinks_available_slots(client, auth_headers):
+    """
+    Тривалість візиту з додатковими послугами має впливати на сітку.
+
+    Без цього людина обирала стрижку з бородою на 70 хвилин, а слот
+    на 19:00 показувався вільним - хоча заклад закривається о 20:00
+    і візит не вміщається.
+    """
+    headers = auth_headers("duration-param-owner")
+    business_id, service_id = await _salon_with_hours(
+        client, headers, "Duration Salon",
+        [(wd, "09:00", "18:00") for wd in range(7)],
+    )
+
+    d = (local_now().date() + timedelta(days=3)).isoformat()
+    base = f"/appointments/available-slots?business_id={business_id}&service_id={service_id}&target_date={d}"
+
+    r = await client.get(base)
+    short_slots = [s["time"] for s in r.json()["slots"]]
+
+    # Той самий день, але візит на 3 години
+    r = await client.get(f"{base}&duration_minutes=180")
+    long_slots = [s["time"] for s in r.json()["slots"]]
+
+    assert len(long_slots) < len(short_slots), "довший візит - менше слотів"
+    # Останній слот має вміститись до закриття о 18:00
+    last = long_slots[-1]
+    hh, mm = map(int, last.split(":"))
+    assert hh * 60 + mm + 180 <= 18 * 60, f"слот {last} не встигає до закриття"

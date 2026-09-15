@@ -77,6 +77,7 @@ async def get_available_slots(
     target_date: date = Query(...),
     master_id: Optional[str] = Query("0"),
     step_minutes: Optional[int] = Query(None, ge=5, le=60, description="Крок сітки; за замовчуванням - налаштування закладу"),
+    duration_minutes: Optional[int] = Query(None, ge=5, le=480, description="Сумарна тривалість візиту з додатковими послугами"),
     db: AsyncSession = Depends(get_db),
 ):
     now = get_utc_now()
@@ -133,7 +134,16 @@ async def get_available_slots(
     # 1.3 Межі робочого дня (дефолт 09:00-20:00, якщо графік ще не заповнений)
     open_mins = parse_hhmm_to_minutes(day_hours.open_time if day_hours else "09:00")
     close_mins = parse_hhmm_to_minutes(day_hours.close_time if day_hours else "20:00")
-    duration = service.duration_minutes
+    # Тривалість візиту.
+    #
+    # Клієнт може передати сумарну - з додатковими послугами. Без цього
+    # сітка рахувалась би за самою послугою: людина обрала стрижку
+    # з бородою на 70 хвилин, а слот на 19:00 показувався вільним,
+    # хоча заклад закривається о 20:00 і візит не вміщається.
+    #
+    # Верхня межа стоїть у Query (480 хв): без неї можна було б
+    # передати будь-яке число й забити весь день одним запитом.
+    duration = duration_minutes or service.duration_minutes
 
     # Буфер після візиту: прибрати, підготувати місце, помити руки.
     #

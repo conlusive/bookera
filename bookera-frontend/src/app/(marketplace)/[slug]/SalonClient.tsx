@@ -289,7 +289,7 @@ export default function SalonClient({
         target_date: selectedDate,
         master_id: selectedMasterId ? String(selectedMasterId) : '0',
         duration_minutes: totalCalculatedDuration,
-      } as any);
+      });
       setSlotItems(data.slots || []);
     } catch {
       setSlotItems([]);

@@ -56,6 +56,10 @@ class ManualAppointmentCreate(BaseModel):
     """Для CRM-календаря: staff вручну вносить запис (дзвінок/walk-in)."""
     business_id: int
     service_id: Optional[int] = None  # None лише якщо is_block=true
+    # Додаткові послуги й при ручному записі: адміністратор бере трубку
+    # й записує клієнта, який просить ще й бороду - це має лягти в той
+    # самий запис, а не в окремий.
+    addon_service_ids: Optional[List[int]] = None
     start_time: datetime
     duration_minutes: Optional[int] = None  # обов'язково, якщо is_block=true (немає послуги, щоб узяти тривалість звідти)
     master_id: Optional[str] = None

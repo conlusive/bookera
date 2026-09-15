@@ -340,40 +340,68 @@ export default function SalonClient({
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  // Розрахунок найближчих годин (враховує вихідні дні та розклад)
-  const getServiceAvailabilityText = useCallback((service: any) => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMin = now.getMinutes();
-    const isClosedToday = isSalonDayOff(now, salon);
+  /**
+   * Найближче вільне вікно послуги.
+   *
+   * Раніше цей текст був ВИГАДАНИЙ: брався поточний час, округлювався
+   * до 15 хвилин, і виходило «Сьогодні о 13:15» - незалежно від того,
+   * чи вільний цей час насправді. Години 10:00 і 20:00 були
+   * захардкоджені й не мали стосунку до графіка закладу.
+   *
+   * Тепер питаємо сервер. Поки відповідь не прийшла - не пишемо нічого:
+   * «Сьогодні о 13:15», яке через секунду міняється на «Завтра»,
+   * виглядає як поломка.
+   */
+  const [nearestSlots, setNearestSlots] = useState<Record<number, string>>({});
 
-    let nextMin = Math.ceil((currentMin + 15) / 15) * 15;
-    let nextHour = currentHour;
-    if (nextMin >= 60) {
-      nextHour += Math.floor(nextMin / 60);
-      nextMin = nextMin % 60;
-    }
+  useEffect(() => {
+    if (!salon?.id || !services?.length) return;
+    let cancelled = false;
 
-    if (!isClosedToday && nextHour < 20) {
-      if (nextHour < 10) {
-        return "Сьогодні о 10:00";
+    void (async () => {
+      const found: Record<number, string> = {};
+
+      for (const service of services.slice(0, 12)) {
+        // Шукаємо на 14 днів уперед: далі вже не «найближче»,
+        // і 14 запитів на послугу - забагато.
+        for (let offset = 0; offset < 14; offset++) {
+          const day = new Date();
+          day.setDate(day.getDate() + offset);
+          // Локальна дата, а не ISO: у ISO вечірні дати зсуваються
+          // на наступний день через UTC.
+          const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+
+          try {
+            const data = await api.getAvailableSlots({
+              business_id: salon.id,
+              service_id: service.id,
+              target_date: dateStr,
+              master_id: '0',
+            });
+            const free = (data.slots || []).find((s: any) => s.status === 'available');
+            if (free) {
+              const label = offset === 0 ? 'Сьогодні' : offset === 1 ? 'Завтра'
+                : day.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+              found[service.id] = `${label} о ${free.time}`;
+              break;
+            }
+          } catch {
+            break;
+          }
+        }
       }
-      const timeFormatted = `${String(nextHour).padStart(2, '0')}:${String(nextMin).padStart(2, '0')}`;
-      return `Сьогодні о ${timeFormatted}`;
-    }
 
-    const dayNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-    for (let i = 1; i <= 14; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      if (!isSalonDayOff(d, salon)) {
-        const dayLabel = i === 1 ? 'Завтра' : dayNames[d.getDay()];
-        return `${dayLabel} о 10:00`;
-      }
-    }
+      if (!cancelled) setNearestSlots(found);
+    })();
 
-    return "Є вільні слоти";
-  }, [salon]);
+    return () => { cancelled = true; };
+  }, [salon?.id, services]);
+
+  const getServiceAvailabilityText = useCallback(
+    (service: any) => nearestSlots[service.id] || '',
+    [nearestSlots]
+  );
+
 
   const galleryPhotos = useMemo(() => {
     if (!salon) return [];

@@ -35,7 +35,7 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 LOCK_TIMEOUT_MINUTES = 10
 
 
-from app.core.time_utils import utc_now as get_utc_now
+from app.core.time_utils import utc_now as get_utc_now, local_now, to_utc, to_local
 
 
 def normalize_master_id(raw) -> Optional[str]:
@@ -100,6 +100,10 @@ async def get_available_slots(
         rules = business.booking_settings or {}
         raw_step = rules.get("time_step")
         step_minutes = int(raw_step) if isinstance(raw_step, (int, float)) and 5 <= raw_step <= 60 else 15
+
+    # Поточний час У ПОЯСІ ЗАКЛАДУ: слоти живуть у локальному часі,
+    # тому й порівнювати їх треба з локальним «зараз».
+    local_time_now = local_now(business)
 
     srv_res = await db.execute(select(Service).where(Service.id == service_id, Service.business_id == business_id))
     service = srv_res.scalars().first()
@@ -182,7 +186,15 @@ async def get_available_slots(
         slot_str = format_minutes_to_hhmm(current_mins)
 
         # Пропускаємо години, що вже минули сьогодні
-        if target_date == now.date() and slot_start_dt < now:
+        # Минулі слоти не показуємо.
+        #
+        # Порівнюємо з ЛОКАЛЬНИМ часом закладу, а не з UTC. Раніше тут
+        # стояв now (UTC), і о 12:00 за Києвом він давав 09:00 - слоти
+        # з 10:00 виглядали майбутніми, хоча вже минули.
+        #
+        # Плюс невеликий запас: показувати слот, до якого лишилось
+        # 5 хвилин, безглуздо - людина не встигне доїхати.
+        if target_date == local_time_now.date() and slot_start_dt < local_time_now + timedelta(minutes=5):
             current_mins += step_minutes
             continue
 

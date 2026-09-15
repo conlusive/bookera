@@ -1,5 +1,6 @@
 import os
 import secrets
+from decimal import Decimal
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -87,14 +88,38 @@ async def create_manual_appointment(
             await award_points_for_new_client(db, business, payload.client_phone, client.id)
         client_id = client.id
 
+    # Додаткові послуги: та сама логіка, що й у публічному записі.
+    # Приймаємо лише прикріплені до цієї послуги - навіть від свого
+    # адміністратора, бо помилка в id тут так само зіпсує тривалість.
+    addon_ids: list[int] = []
+    addon_minutes = 0
+    addon_price = Decimal("0")
+
+    if payload.addon_service_ids and service:
+        addons_res = await db.execute(
+            select(Service).where(
+                Service.id.in_([int(i) for i in payload.addon_service_ids]),
+                Service.business_id == payload.business_id,
+            )
+        )
+        for addon in addons_res.scalars().all():
+            addon_ids.append(addon.id)
+            addon_minutes += addon.duration_minutes or 0
+            addon_price += Decimal(str(addon.price or 0))
+
+    total_minutes = (duration_minutes or 60) + addon_minutes
+    if addon_price:
+        price = (price or Decimal("0")) + addon_price
+
     appointment = Appointment(
         business_id=payload.business_id,
         service_id=service.id if service else None,
+        addon_service_ids=addon_ids or None,
         client_id=client_id,
         master_id=normalize_master_id(payload.master_id),
         created_by_staff_id=current_user.id,
         start_time=payload.start_time,
-        end_time=payload.start_time + timedelta(minutes=duration_minutes or 60),
+        end_time=payload.start_time + timedelta(minutes=total_minutes),
         status="confirmed",
         source="manual",
         price=price,

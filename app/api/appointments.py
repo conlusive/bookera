@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 import os
 import secrets
 from typing import List, Optional
@@ -77,6 +78,7 @@ async def get_available_slots(
     target_date: date = Query(...),
     master_id: Optional[str] = Query("0"),
     step_minutes: Optional[int] = Query(None, ge=5, le=60, description="Крок сітки; за замовчуванням - налаштування закладу"),
+    duration_minutes: Optional[int] = Query(None, ge=5, le=480, description="Сумарна тривалість послуги з додатковими опціями"),
     db: AsyncSession = Depends(get_db),
 ):
     now = get_utc_now()
@@ -86,6 +88,25 @@ async def get_available_slots(
     business = biz_res.scalars().first()
     if not business:
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    # Локальний час закладу (дефолт для України — Europe/Kyiv)
+    tz_name = getattr(business, "timezone", None) or (business.booking_settings or {}).get("timezone") or "Europe/Kyiv"
+    try:
+        biz_tz = ZoneInfo(tz_name)
+    except Exception:
+        biz_tz = ZoneInfo("Europe/Kyiv")
+    local_now = datetime.now(biz_tz).replace(tzinfo=None)
+
+    # Якщо запитувана дата вже минула — слотів немає
+    if target_date < local_now.date():
+        return AvailableSlotsResponse(
+            date=target_date,
+            service_id=service_id,
+            duration_minutes=0,
+            slots=[],
+        )
+
+    # Крок сітки бере заклад, а не клієнт.
 
     # Крок сітки бере заклад, а не клієнт.
     #
@@ -128,7 +149,7 @@ async def get_available_slots(
     # 1.3 Межі робочого дня (дефолт 09:00-20:00, якщо графік ще не заповнений)
     open_mins = parse_hhmm_to_minutes(day_hours.open_time if day_hours else "09:00")
     close_mins = parse_hhmm_to_minutes(day_hours.close_time if day_hours else "20:00")
-    duration = service.duration_minutes
+    duration = duration_minutes if (duration_minutes and duration_minutes > 0) else service.duration_minutes
 
     # Буфер після візиту: прибрати, підготувати місце, помити руки.
     #
@@ -143,16 +164,39 @@ async def get_available_slots(
     buffer_minutes = int(raw_buffer) if isinstance(raw_buffer, (int, float)) and 0 <= raw_buffer <= 60 else 0
     occupied_duration = duration + buffer_minutes
 
-    # 1.4 Майстри закладу
+    # 1.4 Майстри закладу (враховуємо master, vendor та business_owner)
     masters_query = select(User).where(
         User.business_id == business_id,
-        or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)
+        User.is_active.is_(True),
+        or_(
+            User.role == RoleEnum.MASTER,
+            User.role == RoleEnum.VENDOR,
+            User.role.in_(["master", "vendor", "business_owner"]),
+        )
     )
     if master_id not in ("0", "", None, "null"):
         masters_query = masters_query.where(User.id == master_id)
 
     masters_res = await db.execute(masters_query)
-    active_masters = masters_res.scalars().all()
+    all_masters = masters_res.scalars().all()
+
+    # Відсікаємо майстрів, які не надають обрану послугу або вимкнули запис
+    active_masters = [
+        m for m in all_masters
+        if getattr(m, "provides_services", True) is not False and (
+                getattr(m, "assigned_services", None) is None
+                or str(service.id) in [str(s) for s in m.assigned_services]
+        )
+    ]
+
+    # Якщо для індивідуальної послуги немає жодного активного спеціаліста — слотів немає
+    if not service.is_group and not active_masters:
+        return AvailableSlotsResponse(
+            date=target_date,
+            service_id=service.id,
+            duration_minutes=service.duration_minutes,
+            slots=[],
+        )
 
     # 1.5 Отримуємо всі записи на цей день
     day_start = datetime.combine(target_date, time(0, 0, 0))
@@ -182,7 +226,7 @@ async def get_available_slots(
         slot_str = format_minutes_to_hhmm(current_mins)
 
         # Пропускаємо години, що вже минули сьогодні
-        if target_date == now.date() and slot_start_dt < now:
+        if target_date == local_now.date() and slot_start_dt < local_now:
             current_mins += step_minutes
             continue
 
@@ -197,43 +241,30 @@ async def get_available_slots(
                 status_str = "available"
             free_masters_count = max(0, (service.max_participants or 1) - active_participants)
         else:
-            if not active_masters:
-                # Якщо майстрів окремо не додано, перевіряємо зайнятість слотів самого закладу
+            free_masters = 0
+            locked_by_others = 0
+
+            for m in active_masters:
                 conflict = next(
-                    (b for b in existing_bookings if b.start_time < slot_end_dt and b.end_time > slot_start_dt),
-                    None
+                    (
+                        b for b in existing_bookings
+                        if str(b.master_id) == str(m.id) and b.start_time < slot_end_dt and b.end_time > slot_start_dt
+                    ),
+                    None,
                 )
                 if not conflict:
-                    status_str = "available"
-                    free_masters_count = 1
+                    free_masters += 1
                 elif conflict.status == "blocked" and conflict.expires_at and conflict.expires_at > now:
-                    status_str = "locked"
-                    free_masters_count = 0
-                else:
-                    status_str = "booked"
-                    free_masters_count = 0
+                    locked_by_others += 1
+
+            if free_masters > 0:
+                status_str = "available"
+            elif locked_by_others > 0:
+                status_str = "locked"
             else:
-                free_masters = 0
-                locked_by_others = 0
+                status_str = "booked"
 
-                for m in active_masters:
-                    conflict = next(
-                        (b for b in existing_bookings if str(b.master_id) == str(m.id) and b.start_time < slot_end_dt and b.end_time > slot_start_dt),
-                        None
-                    )
-                    if not conflict:
-                        free_masters += 1
-                    elif conflict.status == "blocked" and conflict.expires_at and conflict.expires_at > now:
-                        locked_by_others += 1
-
-                if free_masters > 0:
-                    status_str = "available"
-                elif locked_by_others > 0:
-                    status_str = "locked"
-                else:
-                    status_str = "booked"
-
-                free_masters_count = free_masters
+            free_masters_count = free_masters
 
         slots_result.append(
             SlotStatusItem(
@@ -269,7 +300,8 @@ async def lock_time_slot(
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
 
-    requested_end_time = request.start_time + timedelta(minutes=service.duration_minutes)
+    lock_duration = getattr(request, "duration_minutes", None) or service.duration_minutes
+    requested_end_time = request.start_time + timedelta(minutes=lock_duration)
 
     # Очищення прострочених локів
     await db.execute(
@@ -284,17 +316,35 @@ async def lock_time_slot(
     assigned_master_id = master_id
 
     if not service.is_group:
-        if master_id in ("0", "", "None", "null"):
-            masters_result = await db.execute(
-                select(User).where(
-                    User.business_id == request.business_id,
-                    or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)
+        # Отримуємо всіх потенційних майстрів закладу
+        masters_result = await db.execute(
+            select(User).where(
+                User.business_id == request.business_id,
+                User.is_active.is_(True),
+                or_(
+                    User.role == RoleEnum.MASTER,
+                    User.role == RoleEnum.VENDOR,
+                    User.role.in_(["master", "vendor", "business_owner"]),
                 )
             )
-            active_masters = masters_result.scalars().all()
-            assigned_master_id = None
+        )
+        eligible_masters = [
+            m for m in masters_result.scalars().all()
+            if getattr(m, "provides_services", True) is not False and (
+                    getattr(m, "assigned_services", None) is None
+                    or str(service.id) in [str(s) for s in m.assigned_services]
+            )
+        ]
 
-            for master in active_masters:
+        if not eligible_masters:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Для цієї послуги немає доступних спеціалістів.",
+            )
+
+        if master_id in ("0", "", "None", "null"):
+            assigned_master_id = None
+            for master in eligible_masters:
                 overlap = await db.execute(
                     select(Appointment).where(
                         Appointment.business_id == request.business_id,
@@ -310,7 +360,21 @@ async def lock_time_slot(
                 if not overlap.scalars().first():
                     assigned_master_id = str(master.id)
                     break
+
+            if not assigned_master_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Немає вільних спеціалістів на обраний час.",
+                )
         else:
+            # Перевіряємо, чи обраний майстер надає цю послугу
+            selected_master = next((m for m in eligible_masters if str(m.id) == master_id), None)
+            if not selected_master:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Обраний спеціаліст не надає цю послугу.",
+                )
+
             overlap = await db.execute(
                 select(Appointment).where(
                     Appointment.business_id == request.business_id,
@@ -325,6 +389,7 @@ async def lock_time_slot(
             )
             if overlap.scalars().first():
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
+            assigned_master_id = master_id
 
     # Очищуємо старі незавершені блоки цієї ж браузерної сесії
     if request.session_token:
@@ -343,6 +408,7 @@ async def lock_time_slot(
         master_id=str(assigned_master_id) if assigned_master_id else None,
         start_time=request.start_time,
         end_time=requested_end_time,
+        addon_service_ids=getattr(request, "addon_service_ids", None),
         status="blocked",
         source=str(getattr(request, "source", BookingSourceEnum.DIRECT)),
         price=service.price,
@@ -519,9 +585,16 @@ async def create_appointment(
                     )
             break
 
+    tz_name = getattr(business_for_rules, "timezone", None) or rules.get("timezone") or "Europe/Kyiv"
+    try:
+        biz_tz = ZoneInfo(tz_name)
+    except Exception:
+        biz_tz = ZoneInfo("Europe/Kyiv")
+    local_now = datetime.now(biz_tz).replace(tzinfo=None)
+
     min_hours = rules.get("min_advance_hours")
     if isinstance(min_hours, (int, float)) and min_hours > 0:
-        earliest = now + timedelta(hours=float(min_hours))
+        earliest = local_now + timedelta(hours=float(min_hours))
         if booking_start < earliest:
             hours_word = int(min_hours)
             raise HTTPException(
@@ -531,7 +604,7 @@ async def create_appointment(
 
     max_days = rules.get("max_advance_days")
     if isinstance(max_days, (int, float)) and max_days > 0:
-        latest = now + timedelta(days=float(max_days))
+        latest = local_now + timedelta(days=float(max_days))
         if booking_start > latest:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -650,20 +723,76 @@ async def create_appointment(
         resolved_client_id = crm_client.id
 
     if not appointment:
-        # Створюємо прямий запис, якщо блоку не було
         requested_end_time = appointment_in.start_time + timedelta(minutes=total_minutes)
+        final_master_id = normalize_master_id(appointment_in.master_id)
+
+        # Якщо послуга індивідуальна — перевіряємо та підбираємо майстра
+        if service and not service.is_group:
+            masters_result = await db.execute(
+                select(User).where(
+                    User.business_id == appointment_in.business_id,
+                    User.is_active.is_(True),
+                    or_(
+                        User.role == RoleEnum.MASTER,
+                        User.role == RoleEnum.VENDOR,
+                        User.role.in_(["master", "vendor", "business_owner"]),
+                    )
+                )
+            )
+            eligible_masters = [
+                m for m in masters_result.scalars().all()
+                if getattr(m, "provides_services", True) is not False and (
+                        getattr(m, "assigned_services", None) is None
+                        or str(service.id) in [str(s) for s in m.assigned_services]
+                )
+            ]
+
+            if not eligible_masters:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Для цієї послуги немає доступних спеціалістів.",
+                )
+
+            if not final_master_id:
+                for master in eligible_masters:
+                    overlap = await db.execute(
+                        select(Appointment).where(
+                            Appointment.business_id == appointment_in.business_id,
+                            Appointment.master_id == str(master.id),
+                            Appointment.start_time < requested_end_time,
+                            Appointment.end_time > appointment_in.start_time,
+                            or_(
+                                Appointment.status == "confirmed",
+                                and_(Appointment.status == "blocked", Appointment.expires_at > now),
+                            ),
+                        )
+                    )
+                    if not overlap.scalars().first():
+                        final_master_id = str(master.id)
+                        break
+
+                if not final_master_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Немає вільних спеціалістів на обраний час.",
+                    )
+            else:
+                if not any(str(m.id) == str(final_master_id) for m in eligible_masters):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Обраний спеціаліст не надає цю послугу.",
+                    )
+
+        # Створюємо прямий запис, якщо блоку не було
         appointment = Appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
-            master_id=normalize_master_id(appointment_in.master_id),
+            master_id=final_master_id,
             client_id=resolved_client_id,
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
             addon_service_ids=addon_ids or None,
-            # auto_approve - налаштування закладу, яке досі нічого не робило:
-            # запис завжди ставав підтвердженим. Тепер, якщо автопідтвердження
-            # вимкнене, візит чекає на рішення закладу.
             status="confirmed" if auto_approve else "pending_approval",
             price=final_price,
             client_name=appointment_in.client_name,
@@ -680,13 +809,15 @@ async def create_appointment(
         appointment.expires_at = None
         appointment.client_id = resolved_client_id
         appointment.price = final_price
+        # Оновлюємо тривалість візиту з урахуванням доданих послуг
+        appointment.end_time = appointment.start_time + timedelta(minutes=total_minutes)
+        # Зберігаємо ID додаткових послуг у запис
+        appointment.addon_service_ids = addon_ids or None
         appointment.client_name = appointment_in.client_name
         appointment.client_phone = appointment_in.client_phone
         appointment.client_email = appointment_in.client_email
         appointment.deposit_due = deposit_due
         appointment.manage_token = secrets.token_urlsafe(24)
-        # source визначає сервер (resolved_source), а не клієнтське поле -
-        # раніше тут лишався appointment_in.source, якого в схемі вже немає.
         appointment.source = resolved_source
 
     try:

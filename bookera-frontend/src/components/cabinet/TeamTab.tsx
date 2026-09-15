@@ -60,6 +60,31 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [localAssignedServices, setLocalAssignedServices] = useState<string[]>([]);
   const [staffServiceSearchQuery, setStaffServiceSearchQuery] = useState('');
 
+  // 🟢 Актуальні робочі години закладу з бази даних
+  const [salonBusinessHours, setSalonBusinessHours] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    if (!business?.id) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const token = await getAuthToken();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/crm/businesses/${business.id}/hours`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data) && data.length > 0) {
+            setSalonBusinessHours(data);
+          }
+        }
+      } catch (err) {
+        console.error('Помилка завантаження графіка закладу:', err);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [business?.id]);
+
   // 🟢 СТЕЙТ ДЛЯ ЗАРПЛАТИ
   const [payoutHistory, setPayoutHistory] = useState<any[]>([]);
   const [duePayouts, setDuePayouts] = useState<any[]>([]);
@@ -194,16 +219,34 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   /**
    * Графік ЗАКЛАДУ - рамка, у межах якої існує графік майстра.
    *
-   * Без цього звʼязку майстра можна було поставити працювати в день,
-   * коли салон зачинений: два графіки жили окремо й ніде не звірялись.
+   * Синхронізується з актуальним графіком закладу (business_hours),
+   * тому збережена в налаштуваннях субота одразу стає доступною.
    */
   const salonShifts = useMemo(() => {
+    const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+    const hoursSource = salonBusinessHours || business?.hours;
+
+    if (Array.isArray(hoursSource) && hoursSource.length > 0) {
+      return dayNames.map((name, idx) => {
+        const h = hoursSource.find((item: any) => item.weekday === idx);
+        if (h) {
+          return {
+            day: name,
+            active: Boolean(h.is_open),
+            start: h.open_time || '09:00',
+            end: h.close_time || '20:00',
+          };
+        }
+        return defaultWeekShifts[idx];
+      });
+    }
+
     let g: any = globalShifts;
     if (typeof g === 'string') {
       try { g = JSON.parse(g); } catch { g = null; }
     }
     return Array.isArray(g) && g.length === 7 ? g : null;
-  }, [globalShifts]);
+  }, [salonBusinessHours, business?.hours, globalShifts]);
 
   const staffShifts = useMemo(() => {
     let s = currentStaff?.shifts;
@@ -957,11 +1000,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                  showToast('Цього дня заклад зачинений — спершу змініть графік закладу', 'error');
                                  return;
                                }
-                               // map замість мутації елемента: staffShifts - результат
-                               // useMemo, і зміна "на місці" не створює новий масив,
-                               // тому React міг не перемалювати рядок.
+                               // При увімкненні підставляємо робочі години закладу (для суботи 10:00-18:00)
+                               const willBeActive = !schedule.active;
                                const newShifts = staffShifts.map((s: any, i: number) =>
-                                 i === idx ? { ...s, active: !schedule.active } : s
+                                 i === idx ? {
+                                   ...s,
+                                   active: willBeActive,
+                                   start: willBeActive ? (s.start || salonDay?.start || '10:00') : s.start,
+                                   end: willBeActive ? (s.end || salonDay?.end || '18:00') : s.end,
+                                 } : s
                                );
                                handleUpdateLocalStaff({ shifts: newShifts });
                                handleSaveSettingsDB({ shifts: newShifts }); // Автозбереження тогла

@@ -240,6 +240,23 @@ export default function SalonClient({
   const [slotItems, setSlotItems] = useState<SlotStatusItem[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
+  const totalCalculatedPrice = useMemo(() => {
+    const base = Number(selectedService?.price || 0);
+    const addons = (selectedService?.addons || [])
+      .filter((a: any) => selectedAddonIds.includes(a.id))
+      .reduce((sum: number, a: any) => sum + Number(a.price || 0), 0);
+    const discount = certState?.valid ? Math.min(certState.amount, base + addons) : 0;
+    return Math.max(0, base + addons - discount);
+  }, [selectedService, selectedAddonIds, certState]);
+
+  const totalCalculatedDuration = useMemo(() => {
+    const base = Number(selectedService?.duration_minutes || selectedService?.duration || 60);
+    const addons = (selectedService?.addons || [])
+      .filter((a: any) => selectedAddonIds.includes(a.id))
+      .reduce((sum: number, a: any) => sum + Number(a.duration_minutes || 0), 0);
+    return base + addons;
+  }, [selectedService, selectedAddonIds]);
+
   useEffect(() => {
     setMounted(true);
     const storedName = localStorage.getItem('userName');
@@ -295,14 +312,15 @@ export default function SalonClient({
         service_id: selectedService.id,
         target_date: selectedDate,
         master_id: selectedMasterId ? String(selectedMasterId) : '0',
-      });
+        duration_minutes: totalCalculatedDuration,
+      } as any);
       setSlotItems(data.slots || []);
     } catch {
       setSlotItems([]);
     } finally {
       setIsLoadingSlots(false);
     }
-  }, [salon?.id, selectedService?.id, selectedDate, selectedMasterId]);
+  }, [salon?.id, selectedService?.id, selectedDate, selectedMasterId, totalCalculatedDuration]);
 
   useEffect(() => {
     if (isModalOpen && selectedDate && selectedService && currentStep === 3) {
@@ -488,7 +506,7 @@ export default function SalonClient({
     router.push(`/?${params.toString()}`);
   };
 
-  const activeTeam = useMemo(() => team, [team]);
+const activeTeam = useMemo(() => team, [team]);
   const staffers = useMemo(() => {
     const list: any[] = [{ id: 0, name: "Будь-який майстер", role: "Найближчий вільний час", photo: null }];
     activeTeam.forEach((t) => {
@@ -496,11 +514,38 @@ export default function SalonClient({
         id: t.id,
         name: getStaffName(t),
         role: t.role || "Спеціаліст",
-        photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null
+        photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null,
+        assigned_services: t.assigned_services,
+        provides_services: t.provides_services,
       });
     });
     return list;
   }, [activeTeam]);
+
+  // Фільтруємо список майстрів під обрану послугу
+  const availableStaffersForService = useMemo(() => {
+    if (!selectedService) return staffers;
+    const matchingMasters = staffers.filter((staff) => {
+      if (staff.id === 0) return false;
+      if (staff.provides_services === false) return false;
+      if (Array.isArray(staff.assigned_services)) {
+        return staff.assigned_services.map(String).includes(String(selectedService.id));
+      }
+      return true;
+    });
+
+    if (matchingMasters.length === 0) return [];
+    return [staffers[0], ...matchingMasters];
+  }, [staffers, selectedService]);
+
+  useEffect(() => {
+    if (selectedMasterId !== 0) {
+      const isStillAvailable = availableStaffersForService.some(s => String(s.id) === String(selectedMasterId));
+      if (!isStillAvailable) {
+        setSelectedMasterId(0);
+      }
+    }
+  }, [availableStaffersForService, selectedMasterId]);
 
   const processedServices = useMemo(() => {
     let result = [...services];
@@ -633,7 +678,7 @@ export default function SalonClient({
     setPendingBookingId(null);
     setBookingSuccess(false);
 
-    setCurrentStep(service ? 2 : 1);
+    setCurrentStep(1);
     setIsModalOpen(true);
   };
 
@@ -659,6 +704,10 @@ export default function SalonClient({
   };
 
   const handleProceedToConfirmation = async () => {
+    if (availableStaffersForService.length === 0) {
+      showToast("Для цієї послуги немає доступних спеціалістів", 'error');
+      return;
+    }
     if (!selectedTime) {
       showToast("Будь ласка, оберіть час запису", 'info');
       return;
@@ -677,8 +726,10 @@ export default function SalonClient({
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: selectedMasterId ? String(selectedMasterId) : "0",
         session_token: userId || undefined,
-        direct_link_token: directLinkToken
-      });
+        direct_link_token: directLinkToken,
+        duration_minutes: totalCalculatedDuration,
+        addon_service_ids: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
+      } as any);
 
       setPendingBookingId(lockRes.booking_id);
       setCurrentStep(4);
@@ -1008,23 +1059,6 @@ export default function SalonClient({
     const clean = raw.replace(/\s*р\.?$/i, '').trim();
     return clean.charAt(0).toUpperCase() + clean.slice(1);
   }, [bookingCalendarMonth]);
-
-  const totalCalculatedPrice = useMemo(() => {
-    const base = Number(selectedService?.price || 0);
-    const addons = (selectedService?.addons || [])
-      .filter((a: any) => selectedAddonIds.includes(a.id))
-      .reduce((sum: number, a: any) => sum + Number(a.price || 0), 0);
-    const discount = certState?.valid ? Math.min(certState.amount, base + addons) : 0;
-    return Math.max(0, base + addons - discount);
-  }, [selectedService, selectedAddonIds, certState]);
-
-  const totalCalculatedDuration = useMemo(() => {
-    const base = Number(selectedService?.duration_minutes || selectedService?.duration || 60);
-    const addons = (selectedService?.addons || [])
-      .filter((a: any) => selectedAddonIds.includes(a.id))
-      .reduce((sum: number, a: any) => sum + Number(a.duration_minutes || 0), 0);
-    return base + addons;
-  }, [selectedService, selectedAddonIds]);
 
   const validSlots = useMemo(() => {
     if (!slotItems || slotItems.length === 0) return [];
@@ -2570,26 +2604,127 @@ export default function SalonClient({
                     />
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {modalFilteredServices.map((srv) => {
                       const isSelected = selectedService?.id === srv.id;
+                      const hasAddons = (srv.addons?.length ?? 0) > 0;
+
                       return (
                         <div
                           key={srv.id}
                           className={`apple-card-selectable ${isSelected ? 'selected' : ''}`}
-                          onClick={() => setSelectedService(srv)}
-                          style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                          onClick={() => {
+                            if (selectedService?.id !== srv.id) {
+                              setSelectedService(srv);
+                              setSelectedAddonIds([]);
+                            }
+                          }}
+                          style={{ padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', transition: 'all 0.2s ease' }}
                         >
-                          <div>
-                            <div style={{ fontWeight: '600', color: '#1D1D1F', fontSize: '0.98rem', marginBottom: '3px' }}>{srv.name}</div>
-                            <div style={{ color: '#86868B', fontSize: '0.82rem' }}>
-                              {srv.duration_minutes || srv.duration || 60} хв
+                          {/* Головний рядок послуги */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                            <div>
+                              <div style={{ fontWeight: '700', color: '#1D1D1F', fontSize: '1rem', marginBottom: '3px' }}>
+                                {srv.name}
+                              </div>
+                              <div style={{ color: '#86868B', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>{isSelected && selectedAddonIds.length > 0 ? totalCalculatedDuration : (srv.duration_minutes || srv.duration || 60)} хв</span>
+                                {hasAddons && !isSelected && (
+                                  <span style={{ background: '#F5F5F7', padding: '1px 6px', borderRadius: '6px', fontSize: '0.74rem', color: '#5C6B5E' }}>
+                                    є дод. послуги
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
+                              <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1D1D1F' }}>
+                                {isSelected && selectedAddonIds.length > 0 ? totalCalculatedPrice : srv.price} ₴
+                              </span>
+                              <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: isSelected ? '5px solid #000000' : '1.5px solid #D2D2D7', backgroundColor: '#FFFFFF', transition: 'all 0.15s ease' }}></div>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-                            <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#1D1D1F' }}>{srv.price} ₴</span>
-                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: isSelected ? '5px solid #000000' : '1.5px solid #D2D2D7', backgroundColor: '#FFFFFF', transition: 'all 0.15s ease' }}></div>
-                          </div>
+
+                          {/* Випадаючий список додаткових послуг при виборі цієї послуги */}
+                          {isSelected && hasAddons && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                marginTop: '1rem',
+                                paddingTop: '0.9rem',
+                                borderTop: '1px solid rgba(0,0,0,0.06)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.5rem',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#1D1D1F', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Додати до послуги
+                                </span>
+                                <span style={{ fontSize: '0.74rem', color: '#86868B' }}>
+                                  збільшує час візиту
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {srv.addons.map((addon: any) => {
+                                  const isPicked = selectedAddonIds.includes(addon.id);
+                                  return (
+                                    <div
+                                      key={addon.id}
+                                      onClick={() => {
+                                        setSelectedAddonIds(prev =>
+                                          isPicked ? prev.filter(id => id !== addon.id) : [...prev, addon.id]
+                                        );
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '0.65rem 0.85rem',
+                                        borderRadius: '10px',
+                                        border: `1.5px solid ${isPicked ? '#000000' : 'rgba(0,0,0,0.06)'}`,
+                                        background: isPicked ? '#FBFBFD' : '#FFFFFF',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease',
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div
+                                          style={{
+                                            width: '16px',
+                                            height: '16px',
+                                            borderRadius: '4px',
+                                            border: isPicked ? 'none' : '1.5px solid #C7C7CC',
+                                            backgroundColor: isPicked ? '#000000' : '#FFFFFF',
+                                            color: '#FFFFFF',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '10px',
+                                            fontWeight: 'bold',
+                                          }}
+                                        >
+                                          {isPicked && '✓'}
+                                        </div>
+                                        <span style={{ fontSize: '0.88rem', fontWeight: isPicked ? '600' : '500', color: '#1D1D1F' }}>
+                                          {addon.name}
+                                        </span>
+                                        {addon.duration_minutes > 0 && (
+                                          <span style={{ fontSize: '0.74rem', color: '#5C6B5E', background: '#F2F6F1', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                            +{addon.duration_minutes} хв
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1D1D1F' }}>
+                                        +{addon.price} ₴
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -2606,7 +2741,7 @@ export default function SalonClient({
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.85rem' }}>
-                    {staffers.map((staff) => {
+                    {availableStaffersForService.map((staff) => {
                       const isSelected = selectedMasterId === staff.id;
                       return (
                         <div
@@ -2631,6 +2766,27 @@ export default function SalonClient({
                       );
                     })}
                   </div>
+                  {availableStaffersForService.length === 0 && (
+                    <div style={{ padding: '2.5rem 1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F5F5F7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86868B' }}>
+                        <Icons.User />
+                      </div>
+                      <div style={{ fontWeight: '700', color: '#1D1D1F', fontSize: '1.05rem' }}>
+                        Немає доступних спеціалістів
+                      </div>
+                      <p style={{ color: '#86868B', fontSize: '0.88rem', margin: 0, maxWidth: '360px', lineHeight: 1.4 }}>
+                        Наразі в закладі немає майстрів, які виконують послугу «{selectedService?.name}». Будь ласка, оберіть іншу послугу.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(1)}
+                        className="apple-btn-secondary"
+                        style={{ marginTop: '0.5rem' }}
+                      >
+                        ← Обрати іншу послугу
+                      </button>
+                    </div>
+                  )}
                 </div>
 
               ) : currentStep === 3 ? (
@@ -2715,29 +2871,6 @@ export default function SalonClient({
                         )}
                       </div>
 
-                      {/* Додаткові послуги */}
-                      {(selectedService?.addons?.length ?? 0) > 0 && (
-                        <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', marginBottom: '0.5rem' }}>
-                            Додати до візиту
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {selectedService.addons.map((addon: any) => {
-                              const isPicked = selectedAddonIds.includes(addon.id);
-                              return (
-                                <div
-                                  key={addon.id}
-                                  onClick={() => setSelectedAddonIds(prev => isPicked ? prev.filter(id => id !== addon.id) : [...prev, addon.id])}
-                                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.85rem', borderRadius: '10px', border: `1px solid ${isPicked ? '#000000' : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', background: isPicked ? '#F5F5F7' : '#FFFFFF', transition: 'all 0.15s ease' }}
-                                >
-                                  <span style={{ fontSize: '0.85rem', fontWeight: '500', color: '#1D1D1F' }}>{addon.name}</span>
-                                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F' }}>+{addon.price} ₴</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
 
                     </div>
                   </div>
@@ -2958,7 +3091,11 @@ export default function SalonClient({
                   {currentStep === 2 && (
                     <button
                       type="button"
-                      onClick={() => setCurrentStep(3)}
+                      disabled={availableStaffersForService.length === 0}
+                      onClick={() => {
+                        if (availableStaffersForService.length === 0) return;
+                        setCurrentStep(3);
+                      }}
                       className="apple-btn-primary"
                     >
                       Продовжити

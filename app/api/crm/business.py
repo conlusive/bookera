@@ -30,14 +30,25 @@ router = APIRouter(prefix="/crm/businesses", tags=["CRM - Business"])
 async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_db)):
     """
     Публічний список майстрів для клієнта, що обирає, до кого записатись -
-    навмисно віддає лише безпечні поля (без телефону/email/комісії),
-    на відміну від /crm/businesses/{id}/staff, який вимагає авторизації.
+    віддає безпечні поля включно з переліком закріплених послуг та дозволом на прийом записів.
     """
     result = await db.execute(
-        select(User).where(User.business_id == business_id, User.role.in_(["master", "business_owner"]), User.is_active == True)
+        select(User).where(
+            User.business_id == business_id,
+            User.role.in_(["master", "business_owner"]),
+            User.is_active == True,
+            User.provides_services != False,
+        )
     )
     return [
-        {"id": u.id, "full_name": u.full_name, "specialization": u.specialization, "avatar_url": u.avatar_url}
+        {
+            "id": u.id,
+            "full_name": u.full_name,
+            "specialization": u.specialization,
+            "avatar_url": u.avatar_url,
+            "assigned_services": u.assigned_services,
+            "provides_services": u.provides_services,
+        }
         for u in result.scalars().all()
     ]
 
@@ -238,23 +249,36 @@ async def get_business_hours(
     db: AsyncSession = Depends(get_db),
 ):
     """Публічне читання (потрібне і клієнтському сайту, і CRM) - лише запис через PUT захищений."""
-    result = await db.execute(select(BusinessHours).where(BusinessHours.business_id == business_id))
+    result = await db.execute(
+        select(BusinessHours)
+        .where(BusinessHours.business_id == business_id)
+        .order_by(BusinessHours.weekday)
+    )
     return result.scalars().all()
 
+
+from typing import List, Optional, Union
+
+class BusinessHoursPayload(BaseModel):
+    hours: Optional[List[BusinessHoursItem]] = None
 
 @router.put("/{business_id}/hours", response_model=List[BusinessHoursItem])
 async def set_business_hours(
     business_id: int,
-    hours: List[BusinessHoursItem],
+    payload: Union[List[BusinessHoursItem], BusinessHoursPayload],
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     await assert_business_admin(db, current_user, business_id)
 
+    items = payload.hours if isinstance(payload, BusinessHoursPayload) and payload.hours is not None else payload
+    if not isinstance(items, list):
+        items = []
+
     existing = await db.execute(select(BusinessHours).where(BusinessHours.business_id == business_id))
     by_weekday = {h.weekday: h for h in existing.scalars().all()}
 
-    for item in hours:
+    for item in items:
         if item.weekday in by_weekday:
             row = by_weekday[item.weekday]
             row.is_open = item.is_open
@@ -264,7 +288,11 @@ async def set_business_hours(
             db.add(BusinessHours(business_id=business_id, **item.model_dump()))
 
     await db.commit()
-    result = await db.execute(select(BusinessHours).where(BusinessHours.business_id == business_id))
+    result = await db.execute(
+        select(BusinessHours)
+        .where(BusinessHours.business_id == business_id)
+        .order_by(BusinessHours.weekday)
+    )
     return result.scalars().all()
 
 

@@ -16,6 +16,92 @@ interface StorefrontTabProps {
   setActiveTab: (tab: string) => void;
 }
 
+// Список усіх доступних зручностей для салону
+const ALL_AMENITIES = [
+  {
+    id: 'parking',
+    label: 'Паркування',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/>
+        <circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'card_payment',
+    label: 'Оплата карткою',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+    )
+  },
+  {
+    id: 'wifi',
+    label: 'Wi-Fi',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+    )
+  },
+  {
+    id: 'accessibility',
+    label: 'Доступність',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/>
+      </svg>
+    )
+  },
+  {
+    id: 'coffee_tea',
+    label: 'Кава та чай',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+      </svg>
+    )
+  },
+  {
+    id: 'ac',
+    label: 'Кондиціонер',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 12h20"/><path d="M7 16l-3-4 3-4"/><path d="M17 16l3-4-3-4"/><path d="M12 2v20"/>
+      </svg>
+    )
+  },
+  {
+    id: 'pet_friendly',
+    label: 'Pet friendly',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="17" r="4"/><circle cx="6" cy="10" r="2.5"/><circle cx="18" cy="10" r="2.5"/><circle cx="9" cy="5" r="2"/><circle cx="15" cy="5" r="2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'generator',
+    label: 'Світло є завжди (генератор)',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'kids_friendly',
+    label: 'Дитяча зона',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/>
+      </svg>
+    )
+  }
+];
+
 export default function StorefrontTab({ business, services, team, Icons, setActiveTab, onNavigate }: StorefrontTabProps) {
   const { showToast } = useToast();
   const router = useRouter();
@@ -23,16 +109,19 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [formData, setFormData] = useState({ name: '', category: '', city: '', address: '', description: '', phone: '', email: '' });
-
   const [accentColor, setAccentColor] = useState('#0f172a');
   const [isSaving, setIsSaving] = useState(false);
 
   const [layoutConfig, setLayoutConfig] = useState({
     showTeam: true,
     showMap: true,
+    showAmenities: true,
   });
 
-  const [logo, setLogo] = useState<string | null>(null);
+  const [amenities, setAmenities] = useState<string[]>([
+    'parking', 'card_payment', 'wifi', 'accessibility', 'coffee_tea'
+  ]);
+
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [workplacePhotos, setWorkplacePhotos] = useState<string[]>([]);
 
@@ -53,12 +142,15 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         email: (business as any).email || '',
       });
       setAccentColor(business.accent_color || '#0f172a');
-      setLogo(business.logo || null);
       setCoverPhoto(business.cover_photo || null);
       setWorkplacePhotos(business.workplace_photos || []);
 
       if (business.layout_config) {
-        setLayoutConfig(business.layout_config);
+        setLayoutConfig(prev => ({ ...prev, ...business.layout_config }));
+      }
+
+      if (Array.isArray(business.amenities) && business.amenities.length > 0) {
+        setAmenities(business.amenities);
       }
 
       setTimeout(() => { canAutoSave.current = true; }, 0);
@@ -93,7 +185,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => { void handleSaveBusinessInfo(true); }, 700);
   }, [formData.name, formData.description, formData.category, accentColor,
-      layoutConfig, logo, coverPhoto, workplacePhotos]);
+      layoutConfig, coverPhoto, workplacePhotos, amenities]);
 
   const handleSaveBusinessInfo = async (silent = false) => {
     if (!business?.id) return;
@@ -107,10 +199,10 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         description: formData.description,
         accent_color: accentColor,
         layout_config: layoutConfig,
-        logo: logo ?? undefined,
         cover_photo: coverPhoto ?? undefined,
         workplace_photos: workplacePhotos,
-      });
+        amenities: amenities,
+      } as any);
     } catch (err: any) {
       console.error("Помилка збереження:", err);
       showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
@@ -119,7 +211,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     }
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'cover' | 'workplace') => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'cover' | 'workplace') => {
     const file = e.target.files?.[0];
     if (!file || !business?.id) return;
 
@@ -154,8 +246,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         .from('business_media')
         .getPublicUrl(filePath);
 
-      if (type === 'logo') setLogo(publicUrl);
-      else if (type === 'cover') setCoverPhoto(publicUrl);
+      if (type === 'cover') setCoverPhoto(publicUrl);
       else if (type === 'workplace') setWorkplacePhotos(prev => [...prev, publicUrl]);
 
     } catch (error: any) {
@@ -164,11 +255,10 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     }
   };
 
-  const handleDeletePhoto = async (type: 'logo' | 'cover' | 'workplace', urlToRemove?: string) => {
+  const handleDeletePhoto = async (type: 'cover' | 'workplace', urlToRemove?: string) => {
     if (!urlToRemove) return;
 
-    if (type === 'logo') setLogo(null);
-    else if (type === 'cover') setCoverPhoto(null);
+    if (type === 'cover') setCoverPhoto(null);
     else if (type === 'workplace') {
       setWorkplacePhotos(prev => prev.filter(url => url !== urlToRemove));
     }
@@ -185,6 +275,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     }
   };
 
+  const toggleAmenity = (id: string) => {
+    setAmenities(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
   const sortedServices = useMemo(() => {
     return [...services]
       .filter(s => s.is_active !== false)
@@ -197,6 +293,10 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     if (minutes > 60) return `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
     return `${minutes} хв`;
   };
+
+  const activeAmenitiesList = useMemo(() => {
+    return ALL_AMENITIES.filter(a => amenities.includes(a.id));
+  }, [amenities]);
 
   return (
     <>
@@ -247,7 +347,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
             <div style={{ width: '1px', height: '24px', background: '#cbd5e1', margin: '0 0.5rem' }}></div>
 
             <button
-              onClick={() => router.push(`/salon/${business?.id}`)}
+              onClick={() => router.push(`/${business?.slug || business?.id}`)}
               style={{ padding: '0.5rem 1rem', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', fontWeight: '500', color: '#475569', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.95rem' }}
             >
               <Icons.Globe style={{ width: '18px', height: '18px' }} /> Переглянути
@@ -263,76 +363,69 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
         {/* Основний контент */}
         <div style={{ padding: '2rem 3rem 5rem 3rem', flex: 1, display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: '100%', maxWidth: '1280px', display: 'flex', flexDirection: 'column', gap: '4rem' }}>
+          <div style={{ width: '100%', maxWidth: '1280px', display: 'flex', flexDirection: 'column', gap: '3rem' }}>
 
-            {/* Менеджер фотографій */}
-            <div className="editable-block" style={{ height: '450px', borderRadius: '24px', overflow: 'hidden', background: coverPhoto ? `url(${coverPhoto}) center/cover` : '#f1f5f9', display: 'flex', alignItems: 'flex-end', padding: '3rem', border: coverPhoto ? 'none' : '2px dashed #cbd5e1', position: 'relative', boxShadow: coverPhoto ? '0 20px 40px rgba(0,0,0,0.1)' : 'none' }}>
+            {/* Менеджер обкладинки (БЕЗ КРУГЛОГО ЛОГОТИПУ) */}
+            <div className="editable-block" style={{ height: '420px', borderRadius: '24px', overflow: 'hidden', background: coverPhoto ? `url(${coverPhoto}) center/cover` : '#f1f5f9', display: 'flex', alignItems: 'flex-end', padding: '2.5rem', border: coverPhoto ? 'none' : '2px dashed #cbd5e1', position: 'relative', boxShadow: coverPhoto ? '0 20px 40px rgba(0,0,0,0.08)' : 'none' }}>
               {!coverPhoto && (
                 <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#94a3b8', textAlign: 'center' }}>
                   <Icons.Image style={{ width: '48px', height: '48px', opacity: 0.5 }} />
-                  <div style={{ fontWeight: '600', marginTop: '1rem', fontSize: '1.1rem' }}>Завантажте обкладинку</div>
+                  <div style={{ fontWeight: '600', marginTop: '1rem', fontSize: '1.1rem' }}>Завантажте головну обкладинку закладу</div>
                 </div>
               )}
-              <div style={{ width: '140px', height: '140px', borderRadius: '50%', background: logo ? `url(${logo}) center/cover` : '#ffffff', border: '6px solid #ffffff', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                {!logo && <div style={{ color: '#94a3b8', fontSize: '0.9rem', fontWeight: '600' }}>Лого</div>}
-              </div>
               <div className="edit-overlay" onClick={() => setIsPhotoModalOpen(true)}>
-                <button className="edit-btn"><Icons.Camera /> Керувати медіафайлами</button>
+                <button className="edit-btn"><Icons.Camera /> Змінити обкладинку та фото інтер'єру</button>
               </div>
             </div>
 
-            {/* Назва та адреса */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1, paddingRight: '2rem' }}>
-                <input
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className="inline-input"
-                  placeholder="Назва вашого закладу"
-                  style={{ fontSize: '2.25rem', fontWeight: '800', color: '#0f172a', lineHeight: 1.15, width: '100%', letterSpacing: '-0.02em' }}
-                />
+            {/* Назва, рейтинг та адреса закладу */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem' }}>
+              <div style={{ flex: 1, minWidth: '300px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+                  <input
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className="inline-input"
+                    placeholder="Назва вашого закладу"
+                    style={{ fontSize: '2.5rem', fontWeight: '800', color: '#1D1D1F', lineHeight: 1.15, letterSpacing: '-0.02em', width: 'auto', minWidth: '240px' }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
+                    <span style={{ color: '#f59e0b', fontSize: '1.25rem', lineHeight: 1 }}>★</span>
+                    <span style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1D1D1F' }}>5.0</span>
+                    <span style={{ color: '#86868B', fontSize: '0.85rem', fontWeight: '500' }}>(відгуки)</span>
+                  </div>
+                </div>
 
-                <div className="editable-block" style={{ marginTop: '0.75rem', borderRadius: '16px', padding: '0.5rem', marginLeft: '-0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b' }}>
-                    <Icons.MapPin style={{ width: '20px', height: '20px', color: accentColor, transition: 'color 0.2s ease' }} />
-                    <span style={{ fontSize: '1.25rem', fontWeight: '500' }}>
-                      {fullAddress || 'Адресу не вказано'}
-                    </span>
+                <div className="editable-block" style={{ marginTop: '0.5rem', borderRadius: '12px', padding: '0.4rem 0.6rem', marginLeft: '-0.6rem', width: 'fit-content' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#86868B', fontSize: '0.92rem', fontWeight: '500' }}>
+                    <Icons.MapPin style={{ width: '16px', height: '16px', color: '#86868B' }} />
+                    <span>{fullAddress || 'Адресу не вказано'}</span>
                   </div>
 
                   {formData.phone && (business as any)?.show_phone_publicly !== false && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#64748b', marginTop: '0.5rem' }}>
-                      <Icons.Phone style={{ width: '18px', height: '18px', color: accentColor, flexShrink: 0, transition: 'color 0.2s ease' }} />
-                      <span style={{ fontSize: '1rem', fontWeight: '500' }}>{formData.phone}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#86868B', marginTop: '0.35rem', fontSize: '0.88rem' }}>
+                      <Icons.Phone style={{ width: '15px', height: '15px', color: '#86868B' }} />
+                      <span>{formData.phone}</span>
                     </div>
                   )}
 
-                  <div className="edit-overlay" style={{ borderRadius: '16px' }} onClick={() => onNavigate?.('Settings', 'profile')}>
-                    <button className="edit-btn"><Icons.Edit /> Адреса й контакти</button>
+                  <div className="edit-overlay" style={{ borderRadius: '12px' }} onClick={() => onNavigate?.('Settings', 'profile')}>
+                    <button className="edit-btn"><Icons.Edit /> Змінити адресу та телефон</button>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Сітка 2 колонки */}
+            {/* Сітка 2 колонки: Основний вміст та Правий сайдбар */}
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '4rem', alignItems: 'start' }}>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4rem' }}>
-                {/* Блок Про нас */}
-                <div style={{ background: '#ffffff', borderRadius: '24px', padding: '3rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-                  <h2 style={{ fontSize: '1.6rem', fontWeight: '800', marginBottom: '1.5rem', color: '#0f172a', letterSpacing: '-0.01em' }}>Про нас</h2>
-                  <textarea
-                    ref={textareaRef} name="description" value={formData.description || ''} onChange={handleInputChange} maxLength={1000} className="inline-input"
-                    style={{ width: '100%', minHeight: '150px', fontSize: '1.1rem', color: '#475569', lineHeight: '1.8', padding: '1rem', marginLeft: '-1rem', resize: 'none', overflow: 'hidden' }}
-                    placeholder="Розкажіть історію вашого закладу..."
-                  />
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
-                {/* 🟢 ПРАЙС-ЛИСТ (Преміальний вигляд із живим акцентним кольором) */}
-                <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2.5rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
+                {/* 🟢 ПРАЙС-ЛИСТ */}
+                <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
-                    <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1D1D1F', margin: 0, letterSpacing: '-0.02em' }}>
                       Послуги
                     </h2>
                     <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '500' }}>
@@ -351,67 +444,54 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
-                              padding: '1.15rem 0',
+                              padding: '1.25rem 0',
                               borderBottom: idx !== sortedServices.length - 1 ? '1px solid #f1f5f9' : 'none',
                               gap: '1.5rem'
                             }}
                           >
                             <div style={{ flex: 1, minWidth: 0, paddingRight: '1rem' }}>
-                              <div style={{ fontWeight: '600', fontSize: '1.05rem', color: '#0f172a', marginBottom: '0.25rem' }}>
+                              <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1D1D1F', marginBottom: '0.35rem' }}>
                                 {service.name}
                               </div>
 
-                              {service.description && (
-                                <p style={{ margin: '0 0 0.4rem 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.4, maxWidth: '480px' }}>
-                                  {service.description}
-                                </p>
-                              )}
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', color: '#64748b' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#64748b' }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
                                   <Icons.Clock style={{ width: '14px', height: '14px', color: '#94a3b8' }} />
                                   {formatServiceDuration(durationVal)}
                                 </span>
-                                <span style={{ color: '#cbd5e1' }}>·</span>
                                 <span style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '5px',
-                                  color: '#166534',
-                                  backgroundColor: '#f0fdf4',
-                                  border: '1px solid #bbf7d0',
-                                  padding: '1px 8px',
-                                  borderRadius: '999px',
-                                  fontSize: '0.72rem',
+                                  color: '#065F46',
+                                  backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
                                   fontWeight: '600'
                                 }}>
-                                  <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: '#22c55e' }}></span>
-                                  Є час сьогодні
+                                  <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: '#10B981' }}></span>
+                                  Є вільні слоти
                                 </span>
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexShrink: 0 }}>
-                              <div style={{ fontSize: '1.15rem', fontWeight: '700', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexShrink: 0 }}>
+                              <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1D1D1F' }}>
                                 {Number(service.price || 0).toLocaleString('uk-UA')} ₴
                               </div>
                               <button
                                 type="button"
                                 style={{
-                                  padding: '0.55rem 1.3rem',
-                                  backgroundColor: accentColor,
+                                  padding: '0.6rem 1.4rem',
+                                  backgroundColor: '#000000',
                                   color: '#ffffff',
                                   border: 'none',
-                                  borderRadius: '10px',
+                                  borderRadius: '14px',
                                   fontWeight: '600',
-                                  fontSize: '0.85rem',
-                                  cursor: 'pointer',
-                                  transition: 'background-color 0.2s ease, opacity 0.2s ease, transform 0.1s ease',
-                                  whiteSpace: 'nowrap',
-                                  boxShadow: `0 3px 10px ${accentColor}25`
+                                  fontSize: '0.92rem',
+                                  cursor: 'pointer'
                                 }}
-                                onMouseOver={e => e.currentTarget.style.opacity = '0.9'}
-                                onMouseOut={e => e.currentTarget.style.opacity = '1'}
                               >
                                 Вибрати
                               </button>
@@ -430,21 +510,39 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     <button className="edit-btn"><Icons.Edit /> Редагувати послуги</button>
                   </div>
                 </div>
+
+                {/* Блок Про нас */}
+                <div style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '1rem', color: '#1D1D1F', letterSpacing: '-0.01em' }}>Про заклад</h2>
+                  <textarea
+                    ref={textareaRef}
+                    name="description"
+                    value={formData.description || ''}
+                    onChange={handleInputChange}
+                    maxLength={1000}
+                    className="inline-input"
+                    style={{ width: '100%', minHeight: '100px', fontSize: '1rem', color: '#475569', lineHeight: '1.7', padding: '0.5rem 0', resize: 'none', overflow: 'hidden' }}
+                    placeholder="Розкажіть історію вашого закладу..."
+                  />
+                </div>
               </div>
 
-              {/* Сайдбар */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem', position: 'sticky', top: '7rem' }}>
+              {/* Сайдбар (Команда, Карта та Зручності) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'sticky', top: '90px' }}>
+
+                {/* Блок Команда */}
                 {layoutConfig.showTeam && (
-                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-                    <h3 style={{ fontSize: '1.3rem', fontWeight: '800', margin: '0 0 1.5rem 0', color: '#0f172a' }}>Наша команда</h3>
+                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: '0 0 1.25rem 0', color: '#1D1D1F' }}>Наша команда</h3>
                     {team.length > 0 ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', alignItems: 'flex-start' }}>
                         {team.map((staff, idx) => (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                               {staff.avatar_url ? <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar"/> : <Icons.User />}
                             </div>
-                            <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a' }}>{staff.name}</div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{staff.name}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#86868B', marginTop: '2px', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{staff.role || 'Спеціаліст'}</div>
                           </div>
                         ))}
                       </div>
@@ -457,20 +555,78 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                   </div>
                 )}
 
+                {/* Блок Карта */}
                 {layoutConfig.showMap && (
-                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', height: '300px', border: '1px solid rgba(226, 232, 240, 0.6)' }}>
-                    <iframe key={fullAddress} width="100%" height="100%" style={{ border: 0, pointerEvents: 'none' }} loading="lazy" src={`https://maps.google.com/maps?q=${encodeURIComponent(fullAddress || 'Київ')}&t=&z=18&ie=UTF8&iwloc=&output=embed`}></iframe>
+                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                    <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', background: '#e2e8f0' }}>
+                      <iframe
+                        key={fullAddress}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0, pointerEvents: 'none' }}
+                        loading="lazy"
+                        src={`https://maps.google.com/maps?q=${encodeURIComponent(fullAddress || 'Львів, Україна')}&t=&z=17&ie=UTF8&iwloc=&output=embed`}
+                      />
+                    </div>
+                    <div style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                      <span style={{ color: '#1D1D1F', fontSize: '0.88rem', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {fullAddress || 'Адреса закладу'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate?.('Settings', 'profile')}
+                        style={{ padding: '0.45rem 0.9rem', fontSize: '0.82rem', fontWeight: 600, background: '#F5F5F7', border: 'none', borderRadius: '10px', cursor: 'pointer', color: '#1D1D1F' }}
+                      >
+                        Карта ↗
+                      </button>
+                    </div>
                     <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => onNavigate?.('Settings', 'profile')}>
-                      <button className="edit-btn"><Icons.Edit /> Точне місцезнаходження</button>
+                      <button className="edit-btn"><Icons.Edit /> Змінити адресу</button>
                     </div>
                   </div>
                 )}
+
+                {/* 🟢 БЛОК ЗРУЧНОСТІ ПІД КАРТОЮ */}
+                {layoutConfig.showAmenities && (
+                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#1D1D1F' }}>Зручності</h3>
+                      <button
+                        type="button"
+                        onClick={() => setIsDesignModalOpen(true)}
+                        style={{ background: 'transparent', border: 'none', color: '#86868B', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Налаштувати ⚙
+                      </button>
+                    </div>
+
+                    {activeAmenitiesList.length > 0 ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
+                        {activeAmenitiesList.map(item => (
+                          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
+                            <span style={{ color: '#86868B', display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                            <span>{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '1.5rem 0', color: '#94a3b8', fontSize: '0.88rem' }}>
+                        Зручності не обрано. Натисніть, щоб додати.
+                      </div>
+                    )}
+
+                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => setIsDesignModalOpen(true)}>
+                      <button className="edit-btn"><Icons.Edit /> Редагувати зручності</button>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
           </div>
         </div>
 
-        {/* МОДАЛЬНЕ ВІКНО КЕРУВАННЯ МЕДІА */}
+        {/* МОДАЛЬНЕ ВІКНО КЕРУВАННЯ МЕДІА (БЕЗ ЛОГО) */}
         {isPhotoModalOpen && (
           <div className="modal-overlay" onClick={() => setIsPhotoModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeInBg 0.2s ease forwards' }}>
             <div onClick={e => e.stopPropagation()} className="hide-scrollbar" style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '800px', maxHeight: '85vh', borderRadius: '24px', padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', animation: 'slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
@@ -478,49 +634,28 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '1.5rem' }}>
                 <div>
                   <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0' }}>Керування медіафайлами</h2>
-                  <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Завантажте логотип, обкладинку та фото інтер'єру.</p>
+                  <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Завантажте головну обкладинку профілю та додаткові фотографії інтер'єру.</p>
                 </div>
                 <button onClick={() => setIsPhotoModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '36px', height: '36px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
 
-              {/* Логотип */}
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Логотип</h3>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  {logo ? (
-                    <div style={{ position: 'relative', width: '120px', height: '120px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                      <img src={logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <button className="media-delete-btn" onClick={() => handleDeletePhoto('logo', logo)}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="media-upload-label" style={{ width: '120px', height: '120px' }}>
-                      <Icons.Camera style={{ marginBottom: '0.5rem' }} />
-                      <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Додати</span>
-                      <input type="file" accept="image/*" hidden onChange={(e) => handlePhotoUpload(e, 'logo')} />
-                    </label>
-                  )}
-                </div>
-              </div>
-
               {/* Обкладинка */}
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Обкладинка профілю</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Головна обкладинка профілю</h3>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   {coverPhoto ? (
-                    <div style={{ position: 'relative', width: '100%', maxWidth: '400px', height: '160px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                    <div style={{ position: 'relative', width: '100%', maxWidth: '440px', height: '180px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
                       <img src={coverPhoto} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <button className="media-delete-btn" onClick={() => handleDeletePhoto('cover', coverPhoto)}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                       </button>
                     </div>
                   ) : (
-                    <label className="media-upload-label" style={{ width: '100%', maxWidth: '400px', height: '160px' }}>
+                    <label className="media-upload-label" style={{ width: '100%', maxWidth: '440px', height: '180px' }}>
                       <Icons.Image style={{ marginBottom: '0.5rem' }} />
-                      <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>Завантажити обкладинку</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>Завантажити головне фото</span>
                       <input type="file" accept="image/*" hidden onChange={(e) => handlePhotoUpload(e, 'cover')} />
                     </label>
                   )}
@@ -530,7 +665,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               {/* Фото інтер'єру */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: 0 }}>Фото інтер'єру</h3>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: 0 }}>Додаткові фото (інтер'єр, роботи)</h3>
                   <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>{workplacePhotos.length} / {MAX_WORKPLACE_PHOTOS}</span>
                 </div>
 
@@ -558,10 +693,10 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
           </div>
         )}
 
-        {/* 🟢 МОДАЛЬНЕ ВІКНО НАЛАШТУВАНЬ ВИГЛЯДУ З ЖИВИМИ ТОГЛАМИ ТА ПАЛІТРОЮ */}
+        {/* 🟢 БІЧНА ПАНЕЛЬ НАЛАШТУВАНЬ ВИГЛЯДУ, БЛОКІВ ТА ЗРУЧНОСТЕЙ */}
         {isDesignModalOpen && (
           <div className="modal-overlay" onClick={() => setIsDesignModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.25)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', justifyContent: 'flex-end', animation: 'fadeInBg 0.3s ease forwards' }}>
-            <div className="hide-scrollbar" onClick={e => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '400px', height: '100%', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '2.5rem', overflowY: 'auto', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
+            <div className="hide-scrollbar" onClick={e => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', height: '100%', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Вигляд та блоки</h2>
                 <button onClick={() => setIsDesignModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '34px', height: '34px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
@@ -569,53 +704,23 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 </button>
               </div>
 
-              {/* Палітра акцентних кольорів */}
+              {/* Відображення блоків на сторінці */}
               <div>
-                <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '16px' }}>Колір акцентів</h3>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  {[
-                    { id: 'navy', color: '#0f172a' },
-                    { id: 'matcha', color: '#436b49' },
-                    { id: 'emerald', color: '#10b981' },
-                    { id: 'red', color: '#ef4444' },
-                    { id: 'orange', color: '#f97316' },
-                    { id: 'purple', color: '#8b5cf6' },
-                    { id: 'pink', color: '#ec4899' }
-                  ].map(item => {
-                    const isSelected = accentColor === item.color;
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => setAccentColor(item.color)}
-                        className="color-swatch-item"
-                        style={{
-                          backgroundColor: item.color,
-                          boxShadow: isSelected ? `0 0 0 2px #ffffff, 0 0 0 4px ${item.color}` : '0 2px 5px rgba(0,0,0,0.12)',
-                          transform: isSelected ? 'scale(1.1)' : 'scale(1)'
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
+                <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '12px' }}>Відображення блоків</h3>
+                <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '6px 18px', border: '1px solid #e2e8f0' }}>
 
-              {/* Конструктор сторінки: живі тогли в кольорі акценту */}
-              <div>
-                <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '16px' }}>Конструктор сторінки</h3>
-                <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '8px 20px', border: '1px solid #e2e8f0' }}>
-
-                  {/* Тогл "Наша команда" */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid #e2e8f0' }}>
+                  {/* Тогл Команда */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #e2e8f0' }}>
                     <div>
-                      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.95rem' }}>Блок "Наша команда"</div>
-                      <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Показувати майстрів клієнтам</div>
+                      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.92rem' }}>Блок "Наша команда"</div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Показувати майстрів клієнтам</div>
                     </div>
                     <div
                       onClick={() => setLayoutConfig(prev => ({ ...prev, showTeam: !prev.showTeam }))}
                       style={{
-                        width: '46px',
-                        height: '26px',
-                        backgroundColor: layoutConfig.showTeam ? accentColor : '#cbd5e1',
+                        width: '44px',
+                        height: '24px',
+                        backgroundColor: layoutConfig.showTeam ? '#10b981' : '#cbd5e1',
                         borderRadius: '999px',
                         position: 'relative',
                         cursor: 'pointer',
@@ -623,35 +728,22 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                         flexShrink: 0
                       }}
                     >
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '3px',
-                          left: '3px',
-                          width: '20px',
-                          height: '20px',
-                          backgroundColor: '#ffffff',
-                          borderRadius: '50%',
-                          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                          transform: layoutConfig.showTeam ? 'translateX(20px)' : 'translateX(0px)',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
-                        }}
-                      />
+                      <div style={{ position: 'absolute', top: '2px', left: '2px', width: '20px', height: '20px', backgroundColor: '#ffffff', borderRadius: '50%', transition: 'transform 0.25s', transform: layoutConfig.showTeam ? 'translateX(20px)' : 'translateX(0px)', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }} />
                     </div>
                   </div>
 
-                  {/* Тогл "Карта" */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0' }}>
+                  {/* Тогл Карта */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #e2e8f0' }}>
                     <div>
-                      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.95rem' }}>Блок "Карта"</div>
-                      <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Відображати Google Maps</div>
+                      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.92rem' }}>Блок "Карта"</div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Інтерактивна Google Карта</div>
                     </div>
                     <div
                       onClick={() => setLayoutConfig(prev => ({ ...prev, showMap: !prev.showMap }))}
                       style={{
-                        width: '46px',
-                        height: '26px',
-                        backgroundColor: layoutConfig.showMap ? accentColor : '#cbd5e1',
+                        width: '44px',
+                        height: '24px',
+                        backgroundColor: layoutConfig.showMap ? '#10b981' : '#cbd5e1',
                         borderRadius: '999px',
                         position: 'relative',
                         cursor: 'pointer',
@@ -659,23 +751,86 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                         flexShrink: 0
                       }}
                     >
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '3px',
-                          left: '3px',
-                          width: '20px',
-                          height: '20px',
-                          backgroundColor: '#ffffff',
-                          borderRadius: '50%',
-                          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                          transform: layoutConfig.showMap ? 'translateX(20px)' : 'translateX(0px)',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.18)'
-                        }}
-                      />
+                      <div style={{ position: 'absolute', top: '2px', left: '2px', width: '20px', height: '20px', backgroundColor: '#ffffff', borderRadius: '50%', transition: 'transform 0.25s', transform: layoutConfig.showMap ? 'translateX(20px)' : 'translateX(0px)', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }} />
                     </div>
                   </div>
 
+                  {/* Тогл Зручності */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0' }}>
+                    <div>
+                      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.92rem' }}>Блок "Зручності"</div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Wi-Fi, паркування, кава тощо</div>
+                    </div>
+                    <div
+                      onClick={() => setLayoutConfig(prev => ({ ...prev, showAmenities: !prev.showAmenities }))}
+                      style={{
+                        width: '44px',
+                        height: '24px',
+                        backgroundColor: layoutConfig.showAmenities ? '#10b981' : '#cbd5e1',
+                        borderRadius: '999px',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.25s ease',
+                        flexShrink: 0
+                      }}
+                    >
+                      <div style={{ position: 'absolute', top: '2px', left: '2px', width: '20px', height: '20px', backgroundColor: '#ffffff', borderRadius: '50%', transition: 'transform 0.25s', transform: layoutConfig.showAmenities ? 'translateX(20px)' : 'translateX(0px)', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }} />
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* 🟢 ВИБІР ЗРУЧНОСТЕЙ ДЛЯ САЛОНУ */}
+              <div>
+                <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '12px' }}>
+                  Зручності закладу
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {ALL_AMENITIES.map(item => {
+                    const isChecked = amenities.includes(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => toggleAmenity(item.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          borderRadius: '12px',
+                          border: `1px solid ${isChecked ? '#10b981' : '#e2e8f0'}`,
+                          backgroundColor: isChecked ? '#f0fdf4' : '#ffffff',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ color: isChecked ? '#166534' : '#64748b', display: 'flex', alignItems: 'center' }}>
+                            {item.icon}
+                          </span>
+                          <span style={{ fontSize: '0.9rem', fontWeight: isChecked ? 600 : 500, color: '#0f172a' }}>
+                            {item.label}
+                          </span>
+                        </div>
+                        <div style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '5px',
+                          border: isChecked ? 'none' : '1.5px solid #cbd5e1',
+                          backgroundColor: isChecked ? '#10b981' : '#ffffff',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '11px',
+                          fontWeight: 'bold'
+                        }}>
+                          {isChecked && '✓'}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

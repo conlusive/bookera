@@ -96,35 +96,48 @@ export default function CalendarTab({ business, team = [], services = [], refres
   const [editingTaskText, setEditingTaskText] = useState('');
   const [hasSeenTaskInfo, setHasSeenTaskInfo] = useState(false);
 
-  // Синхронізація даних при зміні бізнесу
+// Синхронізація даних при зміні бізнесу
   useEffect(() => {
-    if (business) {
-      // Справи тягнемо з бекенду. localStorage більше не читаємо:
-      // старі локальні записи лишились би «привидами», яких немає
-      // на інших пристроях.
-      void (async () => {
-        try {
-          const token = await getAuthToken();
-          const list = await api.listTasks(token, business.id);
-          setTasks(list.map((t: any) => ({ ...t, date: t.task_date })));
-        } catch {
-          // Справи - допоміжний віджет: якщо не завантажились,
-          // календар має працювати як звичайно.
+    if (!business?.id) return;
+
+    void (async () => {
+      try {
+        const token = await getAuthToken();
+        const list = await api.listTasks(token, business.id);
+        setTasks(list.map((t: any) => ({ ...t, date: t.task_date })));
+      } catch {}
+    })();
+
+    if (business.cal_settings) setCalSettings(business.cal_settings);
+
+    // Завантажуємо актуальний розклад із business_hours
+    void (async () => {
+      try {
+        const token = await getAuthToken();
+        const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/crm/businesses/${business.id}/hours`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const loaded = dayNames.map((day, idx) => {
+              const item = data.find((h: any) => h.weekday === idx);
+              return {
+                day,
+                active: item ? Boolean(item.is_open) : idx !== 6,
+                start: item?.open_time ? String(item.open_time).substring(0, 5) : '09:00',
+                end: item?.close_time ? String(item.close_time).substring(0, 5) : '20:00',
+              };
+            });
+            setShifts(loaded);
+          }
         }
-      })();
-      if (business.cal_settings) setCalSettings(business.cal_settings);
-      if (business.shifts) {
-        if (Array.isArray(business.shifts)) {
-          setShifts(business.shifts);
-        } else if (typeof business.shifts === 'string') {
-          try {
-            const parsed = JSON.parse(business.shifts);
-            if (Array.isArray(parsed)) setShifts(parsed);
-          } catch (e) {}
-        }
+      } catch (e) {
+        console.error('Помилка завантаження графіку:', e);
       }
-    }
-  }, [business]);
+    })();
+  }, [business?.id]);
 
   // Відновлення налаштувань календаря після перезавантаження.
   // Раніше читався ЛИШЕ поточний вигляд, а кольорова схема й режим
@@ -280,7 +293,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
     }
   };
 
-  const handleSaveShifts = async () => {
+const handleSaveShifts = async () => {
     if (!business?.id || isSavingShifts) return;
     setIsSavingShifts(true);
     try {
@@ -288,14 +301,25 @@ export default function CalendarTab({ business, team = [], services = [], refres
       const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
       const hoursPayload = shifts.map((s: any) => ({
         weekday: dayNames.indexOf(s.day),
-        is_open: s.active,
-        open_time: s.start,
-        close_time: s.end,
+        is_open: Boolean(s.active),
+        open_time: s.start ? s.start.substring(0, 5) : '09:00',
+        close_time: s.end ? s.end.substring(0, 5) : '20:00',
       }));
-      await Promise.all([
-        new Promise(resolve => setTimeout(resolve, 500)),
-        api.setBusinessHours(token, business.id, hoursPayload),
-      ]);
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/crm/businesses/${business.id}/hours`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(hoursPayload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Не вдалося зберегти графік');
+      }
+
       showToast('Графік змін закладу збережено', 'success');
       setShowShiftsModal(false);
     } catch (err: any) {
@@ -873,15 +897,27 @@ export default function CalendarTab({ business, team = [], services = [], refres
    * Тепер один прохід будує індекс за датою, а клітинка бере готовий
    * масив за ключем - O(1) замість повного сканування.
    */
+  const toCleanDateKey = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') {
+      const match = val.match(/^\d{4}-\d{2}-\d{2}/);
+      if (match) return match[0];
+    }
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const appointmentsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
     for (const app of filteredAppointments) {
       const raw = app.booking_date || app.start_time;
       if (!raw) continue;
-      // Ключ - локальна дата у форматі YYYY-MM-DD. Саме локальна, а не
-      // ISO: у вечірніх записах UTC-дата може бути вже наступним днем,
-      // і запис поїхав би в сусідню клітинку.
-      const key = toLocalDateStr(new Date(raw));
+      const key = toCleanDateKey(raw);
+      if (!key) continue;
       const list = map.get(key);
       if (list) list.push(app);
       else map.set(key, [app]);
@@ -890,7 +926,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
   }, [filteredAppointments]);
 
   const getAppointmentsForDay = useCallback(
-    (date: Date) => appointmentsByDate.get(toLocalDateStr(date)) || [],
+    (date: Date) => appointmentsByDate.get(toCleanDateKey(date)) || [],
     [appointmentsByDate]
   );
 
@@ -1218,18 +1254,18 @@ export default function CalendarTab({ business, team = [], services = [], refres
         {/* Топ бар календаря */}
         <div
           className="cal-toolbar"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'nowrap', padding: '0.85rem 1.25rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', position: 'relative', zIndex: 100 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1.25rem', flexWrap: 'nowrap', padding: '0.85rem 1.25rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff', position: 'relative', zIndex: 100 }}
         >
-          <div className="cal-toolbar__left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '0 1 auto' }}>
+          <div className="cal-toolbar__left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
             <button
               onClick={() => { setCurrentDate(new Date()); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
-              style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: '600', backgroundColor: '#f1f5f9', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }}
+              style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: '600', backgroundColor: '#f1f5f9', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s', flexShrink: 0 }}
               onMouseOver={e=>e.currentTarget.style.backgroundColor='#e2e8f0'}
               onMouseOut={e=>e.currentTarget.style.backgroundColor='#f1f5f9'}
             >
               Сьогодні
             </button>
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
               <button className="action-icon-btn" style={{ padding: '0.4rem' }} onClick={() => {
                   const d = new Date(currentDate);
                   if (calendarView === 'day') d.setDate(d.getDate() - 1);
@@ -1252,7 +1288,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
                 borderRadius: '20px', padding: '0.3rem 0.5rem 0.3rem 0.8rem',
                 fontSize: '0.75rem', fontWeight: 600, color: '#2E3A30', flexShrink: 0,
               }}>
-                <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Копія: {clipboardApp.client_name || 'запис'}
                 </span>
                 <button
@@ -1265,12 +1301,12 @@ export default function CalendarTab({ business, team = [], services = [], refres
               </div>
             )}
 
-            <div className="cal-toolbar__title" style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a', textTransform: 'capitalize', letterSpacing: '-0.02em', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <div style={{ fontSize: '1rem', fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap', flexShrink: 0, paddingRight: '0.5rem' }}>
               {calendarView === 'week'
                 ? `${weekDays[0].getDate()} - ${weekDays[6].getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
                 : calendarView === 'month'
                   ? currentDate.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })
-                  : currentDate.toLocaleString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })
+                  : `${currentDate.toLocaleString('uk-UA', { weekday: 'short' })}, ${currentDate.getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
               }
             </div>
           </div>
@@ -1511,13 +1547,15 @@ export default function CalendarTab({ business, team = [], services = [], refres
 
                 {layoutDayAppointments(getAppointmentsForDay(currentDate)).map((app: any) => {
                   const serviceName = services.find((s:any) => String(s.id) === String(app.service_id))?.name || app.service_name;
+                  const addonNames = (Array.isArray(app.addon_service_ids) ? app.addon_service_ids : [])
+                    .map((id: number) => services.find((s: any) => String(s.id) === String(id))?.name)
+                    .filter(Boolean)
+                    .join(', ');
                   const staffName = team.find((m:any) => String(m.id) === String(app.staff_id))?.name || app.master_name || 'Без майстра';
                   const isBlock = app.status === 'blocked' || app.color === 'blocked';
                   const mColors = getCardColor(app.staff_id);
                   const isCompact = app.heightPx <= 45;
                   const isTiny = app.heightPx <= 25;
-                  // colStart/colSpan - частки ширини сітки. Вони враховують
-                  // і смугу майстра, і накладання всередині неї.
                   const leftPercent = (app.colStart ?? 0) * 100;
                   const widthPercent = (app.colSpan ?? 1) * 100;
 
@@ -1529,28 +1567,42 @@ export default function CalendarTab({ business, team = [], services = [], refres
                       onContextMenu={(e) => handleContextMenu(e, app)}
                       className={`cal-app-card ${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
                       style={{
-                        position: 'absolute', top: `${app.topPx}px`, height: `${app.heightPx}px`,
-                        left: `calc(68px + (100% - 76px) * ${leftPercent / 100})`, width: `calc((100% - 76px) * ${widthPercent / 100} - 6px)`,
-                        backgroundColor: isBlock ? 'transparent' : (mColors.pastelBg),
-                        color: isBlock ? '#64748b' : (mColors.pastelText),
+                        position: 'absolute',
+                        top: `${app.topPx}px`,
+                        height: `${app.heightPx}px`,
+                        left: `calc(68px + (100% - 76px) * ${leftPercent / 100})`,
+                        width: `calc((100% - 76px) * ${widthPercent / 100} - 6px)`,
+                        backgroundColor: isBlock ? 'transparent' : mColors.pastelBg,
+                        color: isBlock ? '#64748b' : mColors.pastelText,
                         borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${mColors.vividBg}`,
                         borderRadius: '8px',
-                        padding: isTiny ? '0.1rem 0.5rem' : (isCompact ? '0.3rem 0.6rem' : '0.5rem 0.75rem'),
-                        display: 'flex', flexDirection: isCompact ? 'row' : 'column', alignItems: isCompact ? 'center' : 'flex-start',
-                        gap: isCompact ? '0.5rem' : '2px', fontSize: isTiny ? '0.7rem' : '0.8rem',
-                        cursor: isBlock ? 'pointer' : 'grab', zIndex: 5 + (app.colIndex || 0), overflow: 'hidden', boxShadow: isBlock ? 'none' : '0 1px 4px rgba(0,0,0,0.03)', boxSizing: 'border-box'
+                        padding: isTiny ? '0.1rem 0.5rem' : isCompact ? '0.3rem 0.6rem' : '0.5rem 0.75rem',
+                        display: 'flex',
+                        flexDirection: isCompact ? 'row' : 'column',
+                        alignItems: isCompact ? 'center' : 'flex-start',
+                        gap: isCompact ? '0.5rem' : '2px',
+                        fontSize: isTiny ? '0.7rem' : '0.8rem',
+                        cursor: isBlock ? 'pointer' : 'grab',
+                        zIndex: 5 + (app.colIndex || 0),
+                        overflow: 'hidden',
+                        boxShadow: isBlock ? 'none' : '0 1px 4px rgba(0,0,0,0.03)',
+                        boxSizing: 'border-box'
                       }}
                       onClick={(e) => openBookingDetails(app, e)}
                     >
                       {isBlock ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCompact?'flex-start':'center', height: '100%', fontWeight: '600', fontSize: '0.85rem', width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCompact ? 'flex-start' : 'center', height: '100%', fontWeight: '600', fontSize: '0.85rem', width: '100%' }}>
                           {app.block_reason || app.service_name || 'Перерва'}
                         </div>
                       ) : (
                         <>
                           <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', width: '100%', minWidth: 0 }}>
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{serviceName} {isCompact && <span style={{ fontWeight: '500', opacity: 0.8, marginLeft: '0.4rem' }}>{app.client_name}</span>}</span>
-                            <span style={{display: 'flex', alignItems: 'center', gap: '0.2rem', flexShrink: 0, fontSize: isTiny ? '0.65rem' : '0.75rem', fontWeight: '700', opacity: 0.7}}>{app.start_time.substring(0, 5)} {getStatusIcon(app.status)}</span>
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                              {serviceName}{addonNames ? ` + ${addonNames}` : ''} {isCompact && <span style={{ fontWeight: '500', opacity: 0.8, marginLeft: '0.4rem' }}>{app.client_name}</span>}
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', flexShrink: 0, fontSize: isTiny ? '0.65rem' : '0.75rem', fontWeight: '700', opacity: 0.7 }}>
+                              {app.start_time.substring(0, 5)} {getStatusIcon(app.status)}
+                            </span>
                           </div>
                           {!isCompact && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '0.1rem', opacity: 0.8, fontSize: '0.75rem', fontWeight: '500', minWidth: 0 }}>
@@ -1643,11 +1695,18 @@ export default function CalendarTab({ business, team = [], services = [], refres
                                 <div style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flexShrink: 1, width: '100%' }}>
                                   {isBlock ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
                                 </div>
-                                {!isBlock && (
-                                  <div style={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: '500', fontSize: isTiny ? '0.6rem' : '0.7rem', minWidth: 0, flexShrink: 1, width: '100%' }}>
-                                    {isCompact ? `• ${service?.name || ''}` : service?.name}
-                                  </div>
-                                )}
+                                {!isBlock && (() => {
+                                  const addonNames = (app.addon_service_ids || [])
+                                    .map((id: number) => services.find((s: any) => String(s.id) === String(id))?.name)
+                                    .filter(Boolean)
+                                    .join(', ');
+                                  return (
+                                    <div style={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: '500', fontSize: isTiny ? '0.6rem' : '0.7rem', minWidth: 0, flexShrink: 1, width: '100%' }}>
+                                      {isCompact ? `• ${service?.name || ''}` : service?.name}
+                                      {addonNames ? ` + ${addonNames}` : ''}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             );
                           })}

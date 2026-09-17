@@ -1020,13 +1020,15 @@ export default function BusinessCabinet() {
       }}>
 
         {/* 1. ВИБІР БІЗНЕСУ (Легкий, не перевантажений дизайн) */}
-        <div style={{ position: 'relative', padding: isSidebarCollapsed ? '0.85rem 0.5rem' : '0.85rem 0.75rem' }} ref={bizMenuRef}>
+        <div style={{ position: 'relative', padding: isSidebarCollapsed ? '0.85rem 0.5rem' : '0.85rem 0.75rem', display: 'flex', justifyContent: 'center' }} ref={bizMenuRef}>
           <div
             onClick={() => setIsBizMenuOpen(!isBizMenuOpen)}
             style={{
               backgroundColor: isBizMenuOpen ? '#f8fafc' : 'transparent',
               borderRadius: '12px',
-              padding: isSidebarCollapsed ? '0.35rem' : '0.45rem 0.6rem',
+              width: isSidebarCollapsed ? '42px' : '100%',
+              height: isSidebarCollapsed ? '42px' : 'auto',
+              padding: isSidebarCollapsed ? '0' : '0.45rem 0.6rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
@@ -1041,7 +1043,7 @@ export default function BusinessCabinet() {
               if (!isBizMenuOpen) e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', gap: isSidebarCollapsed ? '0' : '0.7rem', minWidth: 0 }}>
               <div style={{
                 flexShrink: 0,
                 width: '36px',

@@ -6,6 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate
 
@@ -34,7 +35,7 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 LOCK_TIMEOUT_MINUTES = 10
 
 
-from app.core.time_utils import utc_now as get_utc_now
+from app.core.time_utils import utc_now as get_utc_now, local_now, to_utc, to_local
 
 
 def normalize_master_id(raw) -> Optional[str]:
@@ -76,6 +77,7 @@ async def get_available_slots(
     target_date: date = Query(...),
     master_id: Optional[str] = Query("0"),
     step_minutes: Optional[int] = Query(None, ge=5, le=60, description="Крок сітки; за замовчуванням - налаштування закладу"),
+    duration_minutes: Optional[int] = Query(None, ge=5, le=480, description="Сумарна тривалість візиту з додатковими послугами"),
     db: AsyncSession = Depends(get_db),
 ):
     now = get_utc_now()
@@ -100,6 +102,10 @@ async def get_available_slots(
         raw_step = rules.get("time_step")
         step_minutes = int(raw_step) if isinstance(raw_step, (int, float)) and 5 <= raw_step <= 60 else 15
 
+    # Поточний час У ПОЯСІ ЗАКЛАДУ: слоти живуть у локальному часі,
+    # тому й порівнювати їх треба з локальним «зараз».
+    local_time_now = local_now(business)
+
     srv_res = await db.execute(select(Service).where(Service.id == service_id, Service.business_id == business_id))
     service = srv_res.scalars().first()
     if not service:
@@ -122,12 +128,22 @@ async def get_available_slots(
             service_id=service.id,
             duration_minutes=service.duration_minutes,
             slots=[],
+            server_time=local_time_now.strftime("%Y-%m-%d %H:%M"),
         )
 
     # 1.3 Межі робочого дня (дефолт 09:00-20:00, якщо графік ще не заповнений)
     open_mins = parse_hhmm_to_minutes(day_hours.open_time if day_hours else "09:00")
     close_mins = parse_hhmm_to_minutes(day_hours.close_time if day_hours else "20:00")
-    duration = service.duration_minutes
+    # Тривалість візиту.
+    #
+    # Клієнт може передати сумарну - з додатковими послугами. Без цього
+    # сітка рахувалась би за самою послугою: людина обрала стрижку
+    # з бородою на 70 хвилин, а слот на 19:00 показувався вільним,
+    # хоча заклад закривається о 20:00 і візит не вміщається.
+    #
+    # Верхня межа стоїть у Query (480 хв): без неї можна було б
+    # передати будь-яке число й забити весь день одним запитом.
+    duration = duration_minutes or service.duration_minutes
 
     # Буфер після візиту: прибрати, підготувати місце, помити руки.
     #
@@ -181,7 +197,15 @@ async def get_available_slots(
         slot_str = format_minutes_to_hhmm(current_mins)
 
         # Пропускаємо години, що вже минули сьогодні
-        if target_date == now.date() and slot_start_dt < now:
+        # Минулі слоти не показуємо.
+        #
+        # Порівнюємо з ЛОКАЛЬНИМ часом закладу, а не з UTC. Раніше тут
+        # стояв now (UTC), і о 12:00 за Києвом він давав 09:00 - слоти
+        # з 10:00 виглядали майбутніми, хоча вже минули.
+        #
+        # Плюс невеликий запас: показувати слот, до якого лишилось
+        # 5 хвилин, безглуздо - людина не встигне доїхати.
+        if target_date == local_time_now.date() and slot_start_dt < local_time_now + timedelta(minutes=5):
             current_mins += step_minutes
             continue
 
@@ -248,6 +272,7 @@ async def get_available_slots(
         service_id=service.id,
         duration_minutes=service.duration_minutes,
         slots=slots_result,
+        server_time=local_time_now.strftime('%Y-%m-%d %H:%M'),
     )
 
 
@@ -576,14 +601,35 @@ async def create_appointment(
     )
 
     srv_res = await db.execute(
-        select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id)
+        select(Service).where(Service.id == appointment_in.service_id, Service.business_id == appointment_in.business_id).options(selectinload(Service.addons))
     )
     service = srv_res.scalars().first()
+
+    # Додаткові послуги: тривалість і ціна.
+    #
+    # Перевіряємо, що кожна справді належить ЦІЙ послузі: інакше клієнт
+    # міг би передати будь-який id і додати до візиту те, чого заклад
+    # не пропонував - або чужу послугу з іншого закладу.
+    addon_ids: list[int] = []
+    addon_minutes = 0
+    addon_price = Decimal("0")
+
+    if appointment_in.addon_service_ids and service:
+        allowed = {a.id for a in (service.addons or [])}
+        wanted = [int(i) for i in appointment_in.addon_service_ids if int(i) in allowed]
+        if wanted:
+            addons_res = await db.execute(select(Service).where(Service.id.in_(wanted)))
+            for addon in addons_res.scalars().all():
+                addon_ids.append(addon.id)
+                addon_minutes += addon.duration_minutes or 0
+                addon_price += Decimal(str(addon.price or 0))
+
+    total_minutes = (service.duration_minutes if service else 60) + addon_minutes
 
     # Застосування подарункового сертифіката - зменшує ціну, не робить
     # бронювання безкоштовним понад залишок сертифіката.
     applied_certificate = None
-    final_price = service.price if service else Decimal("0")
+    final_price = (Decimal(str(service.price or 0)) if service else Decimal("0")) + addon_price
     if appointment_in.gift_certificate_code and service:
         cert_res = await db.execute(
             select(GiftCertificate).where(
@@ -629,9 +675,7 @@ async def create_appointment(
 
     if not appointment:
         # Створюємо прямий запис, якщо блоку не було
-        requested_end_time = appointment_in.start_time + timedelta(
-            minutes=(service.duration_minutes if service else 60)
-        )
+        requested_end_time = appointment_in.start_time + timedelta(minutes=total_minutes)
         appointment = Appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
@@ -640,6 +684,7 @@ async def create_appointment(
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
             end_time=requested_end_time,
+            addon_service_ids=addon_ids or None,
             # auto_approve - налаштування закладу, яке досі нічого не робило:
             # запис завжди ставав підтвердженим. Тепер, якщо автопідтвердження
             # вимкнене, візит чекає на рішення закладу.

@@ -30,52 +30,28 @@ const fmtDate = (d: Date) => {
 };
 
 // Точна перевірка вихідного дня (Python-індекси 0=Пн..6=Нд та JS 0=Нд..6=Сб)
+/**
+ * Чи заклад не працює цього дня.
+ *
+ * Джерело - working_hours, та сама таблиця business_hours, з якою
+ * працює CRM. Раніше тут читалось поле days_off: заклад міняв графік
+ * у кабінеті, а сторінка салону про це не знала й показувала суботу
+ * закритою.
+ *
+ * Якщо графік ще не заповнений - вважаємо, що заклад працює. Порожній
+ * графік означає «не налаштовано», а не «зачинено назавжди»: новий
+ * заклад не має виглядати закритим одразу після реєстрації.
+ */
 const isSalonDayOff = (date: Date, salonObj: any): boolean => {
-  if (!salonObj) return false;
-  let raw = salonObj.days_off;
-  if (typeof raw === 'string') {
-    try {
-      raw = JSON.parse(raw);
-    } catch {
-      raw = raw.split(',').map((s: string) => s.trim());
-    }
-  }
+  const hours = salonObj?.working_hours;
+  if (!Array.isArray(hours) || hours.length === 0) return false;
 
-  const jsDay = date.getDay(); // 0 = Нд, 1 = Пн, ..., 6 = Сб
-  const pyDay = (jsDay + 6) % 7; // 0 = Пн, 1 = Вт, ..., 5 = Сб, 6 = Нд
-
-  if (Array.isArray(raw) && raw.length > 0) {
-    const isOff = raw.some((item: any) => {
-      const n = Number(item);
-      if (!isNaN(n)) {
-        return n === pyDay;
-      }
-      const s = String(item).toLowerCase().trim();
-      if (pyDay === 6 && (s === '6' || s.includes('нд') || s.includes('нед') || s.includes('sun'))) return true;
-      if (pyDay === 5 && (s === '5' || s.includes('сб') || s.includes('суб') || s.includes('sat'))) return true;
-      if (pyDay === 4 && (s === '4' || s.includes('пт') || s.includes('пят') || s.includes('fri'))) return true;
-      if (pyDay === 3 && (s === '3' || s.includes('чт') || s.includes('чет') || s.includes('thu'))) return true;
-      if (pyDay === 2 && (s === '2' || s.includes('ср') || s.includes('сер') || s.includes('wed'))) return true;
-      if (pyDay === 1 && (s === '1' || s.includes('вт') || s.includes('вів') || s.includes('tue'))) return true;
-      if (pyDay === 0 && (s === '0' || s.includes('пн') || s.includes('пон') || s.includes('mon'))) return true;
-      return false;
-    });
-    if (isOff) return true;
-  }
-
-  const schedule = salonObj.schedule || salonObj.working_hours;
-  if (schedule && typeof schedule === 'object') {
-    const dayNamesPy = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    const key = dayNamesPy[pyDay];
-    const daySched = schedule[key] || schedule[String(pyDay)];
-    if (daySched) {
-      if (daySched.is_working === false || daySched.is_open === false || daySched.closed === true) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  // weekday у базі: 0 = понеділок ... 6 = неділя.
+  // getDay(): 0 = неділя ... 6 = субота.
+  const weekday = (date.getDay() + 6) % 7;
+  const day = hours.find((h: any) => Number(h.weekday) === weekday);
+  if (!day) return false;
+  return !day.is_open;
 };
 
 const getFirstAvailableWorkingDate = (salonObj: any) => {
@@ -145,6 +121,96 @@ const getStaffName = (t: any): string => {
   if (t.email && typeof t.email === 'string') return t.email.split('@')[0];
   return 'Майстер';
 };
+
+// Список усіх доступних зручностей із лапкою для тварин
+const ALL_AMENITIES = [
+  {
+    id: 'parking',
+    label: 'Паркування',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/>
+        <circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'card_payment',
+    label: 'Оплата карткою',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+    )
+  },
+  {
+    id: 'wifi',
+    label: 'Wi-Fi',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+    )
+  },
+  {
+    id: 'accessibility',
+    label: 'Доступність',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/>
+      </svg>
+    )
+  },
+  {
+    id: 'coffee_tea',
+    label: 'Кава та чай',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+      </svg>
+    )
+  },
+  {
+    id: 'ac',
+    label: 'Кондиціонер',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 12h20"/><path d="M7 16l-3-4 3-4"/><path d="M17 16l3-4-3-4"/><path d="M12 2v20"/>
+      </svg>
+    )
+  },
+  {
+    id: 'pet_friendly',
+    label: 'Pet friendly',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="15" r="3.2" />
+        <circle cx="6.8" cy="11.5" r="1.8" />
+        <circle cx="17.2" cy="11.5" r="1.8" />
+        <circle cx="9.2" cy="7.2" r="1.8" />
+        <circle cx="14.8" cy="7.2" r="1.8" />
+      </svg>
+    )
+  },
+  {
+    id: 'generator',
+    label: 'Світло є завжди (генератор)',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'kids_friendly',
+    label: 'Дитяча зона',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 1 0-16 0"/>
+      </svg>
+    )
+  }
+];
 
 export default function SalonClient({
   initialSalon,
@@ -240,6 +306,31 @@ export default function SalonClient({
   const [slotItems, setSlotItems] = useState<SlotStatusItem[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
+  const activeAmenities = useMemo(() => {
+    const rawList = salon?.layout_config?.amenities ?? salon?.amenities;
+    const list = Array.isArray(rawList)
+      ? rawList
+      : ['parking', 'card_payment', 'wifi', 'accessibility', 'coffee_tea'];
+    return ALL_AMENITIES.filter(a => list.includes(a.id));
+  }, [salon?.layout_config, salon?.amenities]);
+
+  const totalCalculatedPrice = useMemo(() => {
+    const base = Number(selectedService?.price || 0);
+    const addons = (selectedService?.addons || [])
+      .filter((a: any) => selectedAddonIds.includes(a.id))
+      .reduce((sum: number, a: any) => sum + Number(a.price || 0), 0);
+    const discount = certState?.valid ? Math.min(certState.amount, base + addons) : 0;
+    return Math.max(0, base + addons - discount);
+  }, [selectedService, selectedAddonIds, certState]);
+
+  const totalCalculatedDuration = useMemo(() => {
+    const base = Number(selectedService?.duration_minutes || selectedService?.duration || 60);
+    const addons = (selectedService?.addons || [])
+      .filter((a: any) => selectedAddonIds.includes(a.id))
+      .reduce((sum: number, a: any) => sum + Number(a.duration_minutes || 0), 0);
+    return base + addons;
+  }, [selectedService, selectedAddonIds]);
+
   useEffect(() => {
     setMounted(true);
     const storedName = localStorage.getItem('userName');
@@ -295,6 +386,7 @@ export default function SalonClient({
         service_id: selectedService.id,
         target_date: selectedDate,
         master_id: selectedMasterId ? String(selectedMasterId) : '0',
+        duration_minutes: totalCalculatedDuration,
       });
       setSlotItems(data.slots || []);
     } catch {
@@ -302,7 +394,7 @@ export default function SalonClient({
     } finally {
       setIsLoadingSlots(false);
     }
-  }, [salon?.id, selectedService?.id, selectedDate, selectedMasterId]);
+  }, [salon?.id, selectedService?.id, selectedDate, selectedMasterId, totalCalculatedDuration]);
 
   useEffect(() => {
     if (isModalOpen && selectedDate && selectedService && currentStep === 3) {
@@ -340,40 +432,68 @@ export default function SalonClient({
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  // Розрахунок найближчих годин (враховує вихідні дні та розклад)
-  const getServiceAvailabilityText = useCallback((service: any) => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMin = now.getMinutes();
-    const isClosedToday = isSalonDayOff(now, salon);
+  /**
+   * Найближче вільне вікно послуги.
+   *
+   * Раніше цей текст був ВИГАДАНИЙ: брався поточний час, округлювався
+   * до 15 хвилин, і виходило «Сьогодні о 13:15» - незалежно від того,
+   * чи вільний цей час насправді. Години 10:00 і 20:00 були
+   * захардкоджені й не мали стосунку до графіка закладу.
+   *
+   * Тепер питаємо сервер. Поки відповідь не прийшла - не пишемо нічого:
+   * «Сьогодні о 13:15», яке через секунду міняється на «Завтра»,
+   * виглядає як поломка.
+   */
+  const [nearestSlots, setNearestSlots] = useState<Record<number, string>>({});
 
-    let nextMin = Math.ceil((currentMin + 15) / 15) * 15;
-    let nextHour = currentHour;
-    if (nextMin >= 60) {
-      nextHour += Math.floor(nextMin / 60);
-      nextMin = nextMin % 60;
-    }
+  useEffect(() => {
+    if (!salon?.id || !services?.length) return;
+    let cancelled = false;
 
-    if (!isClosedToday && nextHour < 20) {
-      if (nextHour < 10) {
-        return "Сьогодні о 10:00";
+    void (async () => {
+      const found: Record<number, string> = {};
+
+      for (const service of services.slice(0, 12)) {
+        // Шукаємо на 14 днів уперед: далі вже не «найближче»,
+        // і 14 запитів на послугу - забагато.
+        for (let offset = 0; offset < 14; offset++) {
+          const day = new Date();
+          day.setDate(day.getDate() + offset);
+          // Локальна дата, а не ISO: у ISO вечірні дати зсуваються
+          // на наступний день через UTC.
+          const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+
+          try {
+            const data = await api.getAvailableSlots({
+              business_id: salon.id,
+              service_id: service.id,
+              target_date: dateStr,
+              master_id: '0',
+            });
+            const free = (data.slots || []).find((s: any) => s.status === 'available');
+            if (free) {
+              const label = offset === 0 ? 'Сьогодні' : offset === 1 ? 'Завтра'
+                : day.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+              found[service.id] = `${label} о ${free.time}`;
+              break;
+            }
+          } catch {
+            break;
+          }
+        }
       }
-      const timeFormatted = `${String(nextHour).padStart(2, '0')}:${String(nextMin).padStart(2, '0')}`;
-      return `Сьогодні о ${timeFormatted}`;
-    }
 
-    const dayNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-    for (let i = 1; i <= 14; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      if (!isSalonDayOff(d, salon)) {
-        const dayLabel = i === 1 ? 'Завтра' : dayNames[d.getDay()];
-        return `${dayLabel} о 10:00`;
-      }
-    }
+      if (!cancelled) setNearestSlots(found);
+    })();
 
-    return "Є вільні слоти";
-  }, [salon]);
+    return () => { cancelled = true; };
+  }, [salon?.id, services]);
+
+  const getServiceAvailabilityText = useCallback(
+    (service: any) => nearestSlots[service.id] || '',
+    [nearestSlots]
+  );
+
 
   const galleryPhotos = useMemo(() => {
     if (!salon) return [];
@@ -488,19 +608,70 @@ export default function SalonClient({
     router.push(`/?${params.toString()}`);
   };
 
-  const activeTeam = useMemo(() => team, [team]);
+const formatRole = (role?: string) => {
+    if (!role) return 'Спеціаліст';
+    if (role === 'business_owner' || role === 'owner' || role === 'vendor') return 'Власник';
+    if (role === 'admin') return 'Адміністратор';
+    if (role === 'master') return 'Спеціаліст';
+    return role;
+  };
+
+  // Сортуємо команду згідно з налаштованим у CRM порядком
+  const activeTeam = useMemo(() => {
+    const order = salon?.layout_config?.team_order;
+    if (Array.isArray(order) && order.length > 0) {
+      const copy = [...team];
+      return copy.sort((a, b) => {
+        const idxA = order.indexOf(String(a.id));
+        const idxB = order.indexOf(String(b.id));
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+    }
+    return team;
+  }, [team, salon?.layout_config?.team_order]);
+
   const staffers = useMemo(() => {
     const list: any[] = [{ id: 0, name: "Будь-який майстер", role: "Найближчий вільний час", photo: null }];
     activeTeam.forEach((t) => {
       list.push({
         id: t.id,
         name: getStaffName(t),
-        role: t.role || "Спеціаліст",
-        photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null
+        role: t.specialization || t.title || formatRole(t.role),
+        photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null,
+        assigned_services: t.assigned_services,
+        provides_services: t.provides_services,
       });
     });
     return list;
   }, [activeTeam]);
+
+  // Фільтруємо список майстрів під обрану послугу
+  const availableStaffersForService = useMemo(() => {
+    if (!selectedService) return staffers;
+    const matchingMasters = staffers.filter((staff) => {
+      if (staff.id === 0) return false;
+      if (staff.provides_services === false) return false;
+      if (Array.isArray(staff.assigned_services)) {
+        return staff.assigned_services.map(String).includes(String(selectedService.id));
+      }
+      return true;
+    });
+
+    if (matchingMasters.length === 0) return [];
+    return [staffers[0], ...matchingMasters];
+  }, [staffers, selectedService]);
+
+  useEffect(() => {
+    if (selectedMasterId !== 0) {
+      const isStillAvailable = availableStaffersForService.some(s => String(s.id) === String(selectedMasterId));
+      if (!isStillAvailable) {
+        setSelectedMasterId(0);
+      }
+    }
+  }, [availableStaffersForService, selectedMasterId]);
 
   const processedServices = useMemo(() => {
     let result = [...services];
@@ -633,7 +804,7 @@ export default function SalonClient({
     setPendingBookingId(null);
     setBookingSuccess(false);
 
-    setCurrentStep(service ? 2 : 1);
+    setCurrentStep(1);
     setIsModalOpen(true);
   };
 
@@ -659,6 +830,10 @@ export default function SalonClient({
   };
 
   const handleProceedToConfirmation = async () => {
+    if (availableStaffersForService.length === 0) {
+      showToast("Для цієї послуги немає доступних спеціалістів", 'error');
+      return;
+    }
     if (!selectedTime) {
       showToast("Будь ласка, оберіть час запису", 'info');
       return;
@@ -677,8 +852,10 @@ export default function SalonClient({
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: selectedMasterId ? String(selectedMasterId) : "0",
         session_token: userId || undefined,
-        direct_link_token: directLinkToken
-      });
+        direct_link_token: directLinkToken,
+        duration_minutes: totalCalculatedDuration,
+        addon_service_ids: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
+      } as any);
 
       setPendingBookingId(lockRes.booking_id);
       setCurrentStep(4);
@@ -724,7 +901,11 @@ export default function SalonClient({
         client_name: clientDisplayName,
         client_phone: safePhone,
         client_email: clientUserEmail,
-        direct_link_token: directLinkToken
+        direct_link_token: directLinkToken,
+        // Додаткові послуги. Без них клієнт обирав послуг на 800 ₴,
+        // а заклад бачив у календарі 500 ₴ і 45 хвилин замість 75 -
+        // майстер не знав, що робити, і не встигав.
+        addon_service_ids: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
       });
 
       setBookingSuccess(true);
@@ -1004,23 +1185,6 @@ export default function SalonClient({
     const clean = raw.replace(/\s*р\.?$/i, '').trim();
     return clean.charAt(0).toUpperCase() + clean.slice(1);
   }, [bookingCalendarMonth]);
-
-  const totalCalculatedPrice = useMemo(() => {
-    const base = Number(selectedService?.price || 0);
-    const addons = (selectedService?.addons || [])
-      .filter((a: any) => selectedAddonIds.includes(a.id))
-      .reduce((sum: number, a: any) => sum + Number(a.price || 0), 0);
-    const discount = certState?.valid ? Math.min(certState.amount, base + addons) : 0;
-    return Math.max(0, base + addons - discount);
-  }, [selectedService, selectedAddonIds, certState]);
-
-  const totalCalculatedDuration = useMemo(() => {
-    const base = Number(selectedService?.duration_minutes || selectedService?.duration || 60);
-    const addons = (selectedService?.addons || [])
-      .filter((a: any) => selectedAddonIds.includes(a.id))
-      .reduce((sum: number, a: any) => sum + Number(a.duration_minutes || 0), 0);
-    return base + addons;
-  }, [selectedService, selectedAddonIds]);
 
   const validSlots = useMemo(() => {
     if (!slotItems || slotItems.length === 0) return [];
@@ -1671,6 +1835,28 @@ export default function SalonClient({
               <div style={{ display: 'flex', width: '16px', height: '16px', color: '#86868B' }}><Icons.MapPin /></div>
               {salon ? salon.address : "Адреса завантажується..."}
             </div>
+
+            {salon?.phone && salon?.show_phone_publicly !== false && (
+              <a
+                href={`tel:${salon.phone}`}
+                style={{
+                  color: '#86868B',
+                  fontSize: '0.92rem',
+                  fontWeight: '500',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  textDecoration: 'none',
+                  transition: 'color 0.15s ease',
+                  width: 'fit-content'
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.color = '#1D1D1F')}
+                onMouseOut={(e) => (e.currentTarget.style.color = '#86868B')}
+              >
+                <div style={{ display: 'flex', width: '15px', height: '15px', color: '#86868B' }}><Icons.Phone /></div>
+                <span>{salon.phone}</span>
+              </a>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -2092,17 +2278,46 @@ export default function SalonClient({
           <div>
             <div style={{ position: 'sticky', top: '96px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-              {/* НАША КОМАНДА */}
-              <div className="section-card">
-                <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Наша команда</h3>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', alignItems: 'flex-start' }}>
+              {/* НАША КОМАНДА (Плавний свайп при великій кількості майстрів) */}
+              <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <h3 className="section-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
+                  {staffers.length > 4 && (
+                    <span style={{ fontSize: '0.74rem', color: '#86868B', fontWeight: 500 }}>
+                      Свайп →
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  className="hide-scrollbar"
+                  style={{
+                    display: 'flex',
+                    gap: '1.25rem',
+                    overflowX: 'auto',
+                    paddingBottom: '0.25rem',
+                    scrollSnapType: 'x mandatory',
+                    WebkitOverflowScrolling: 'touch',
+                  }}
+                >
                   {staffers.slice(1).map((staff, idx) => (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center' }}>
-                      <div className="team-avatar" style={{ width: '48px', height: '48px', borderRadius: '50%', marginBottom: '0.45rem', position: 'relative', flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        width: '76px',
+                        textAlign: 'center',
+                        flexShrink: 0,
+                        scrollSnapAlign: 'start',
+                      }}
+                    >
+                      <div className="team-avatar" style={{ width: '50px', height: '50px', borderRadius: '50%', marginBottom: '0.45rem', position: 'relative', flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {staff.photo ? (
-                          <Image src={staff.photo} alt={staff.name} fill sizes="48px" style={{ objectFit: 'cover' }} />
+                          <Image src={staff.photo} alt={staff.name} fill sizes="50px" style={{ objectFit: 'cover' }} />
                         ) : (
-                          <div style={{ display: 'flex', width: '20px', height: '20px', color: '#86868B' }}><Icons.User /></div>
+                          <div style={{ display: 'flex', width: '22px', height: '22px', color: '#86868B' }}><Icons.User /></div>
                         )}
                       </div>
                       <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', lineHeight: '1.2', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={staff.name}>
@@ -2170,31 +2385,19 @@ export default function SalonClient({
               </div>
 
               {/* ЗРУЧНОСТІ */}
-              <div className="section-card">
-                <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Зручності</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
-                    <span>Паркування</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                    <span>Оплата карткою</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-                    <span>Wi-Fi</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-                    <span>Доступність</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500', gridColumn: 'span 2' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
-                    <span>Кава та чай</span>
+              {salon?.layout_config?.showAmenities !== false && activeAmenities.length > 0 && (
+                <div className="section-card">
+                  <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Зручності</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
+                    {activeAmenities.map((item) => (
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
+                        <span style={{ color: '#86868B', display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
+              )}
 
             </div>
           </div>
@@ -2566,26 +2769,127 @@ export default function SalonClient({
                     />
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {modalFilteredServices.map((srv) => {
                       const isSelected = selectedService?.id === srv.id;
+                      const hasAddons = (srv.addons?.length ?? 0) > 0;
+
                       return (
                         <div
                           key={srv.id}
                           className={`apple-card-selectable ${isSelected ? 'selected' : ''}`}
-                          onClick={() => setSelectedService(srv)}
-                          style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                          onClick={() => {
+                            if (selectedService?.id !== srv.id) {
+                              setSelectedService(srv);
+                              setSelectedAddonIds([]);
+                            }
+                          }}
+                          style={{ padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', transition: 'all 0.2s ease' }}
                         >
-                          <div>
-                            <div style={{ fontWeight: '600', color: '#1D1D1F', fontSize: '0.98rem', marginBottom: '3px' }}>{srv.name}</div>
-                            <div style={{ color: '#86868B', fontSize: '0.82rem' }}>
-                              {srv.duration_minutes || srv.duration || 60} хв
+                          {/* Головний рядок послуги */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                            <div>
+                              <div style={{ fontWeight: '700', color: '#1D1D1F', fontSize: '1rem', marginBottom: '3px' }}>
+                                {srv.name}
+                              </div>
+                              <div style={{ color: '#86868B', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>{isSelected && selectedAddonIds.length > 0 ? totalCalculatedDuration : (srv.duration_minutes || srv.duration || 60)} хв</span>
+                                {hasAddons && !isSelected && (
+                                  <span style={{ background: '#F5F5F7', padding: '1px 6px', borderRadius: '6px', fontSize: '0.74rem', color: '#5C6B5E' }}>
+                                    є дод. послуги
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
+                              <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1D1D1F' }}>
+                                {isSelected && selectedAddonIds.length > 0 ? totalCalculatedPrice : srv.price} ₴
+                              </span>
+                              <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: isSelected ? '5px solid #000000' : '1.5px solid #D2D2D7', backgroundColor: '#FFFFFF', transition: 'all 0.15s ease' }}></div>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-                            <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#1D1D1F' }}>{srv.price} ₴</span>
-                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: isSelected ? '5px solid #000000' : '1.5px solid #D2D2D7', backgroundColor: '#FFFFFF', transition: 'all 0.15s ease' }}></div>
-                          </div>
+
+                          {/* Випадаючий список додаткових послуг при виборі цієї послуги */}
+                          {isSelected && hasAddons && (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                marginTop: '1rem',
+                                paddingTop: '0.9rem',
+                                borderTop: '1px solid rgba(0,0,0,0.06)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.5rem',
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#1D1D1F', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Додати до послуги
+                                </span>
+                                <span style={{ fontSize: '0.74rem', color: '#86868B' }}>
+                                  збільшує час візиту
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {srv.addons.map((addon: any) => {
+                                  const isPicked = selectedAddonIds.includes(addon.id);
+                                  return (
+                                    <div
+                                      key={addon.id}
+                                      onClick={() => {
+                                        setSelectedAddonIds(prev =>
+                                          isPicked ? prev.filter(id => id !== addon.id) : [...prev, addon.id]
+                                        );
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '0.65rem 0.85rem',
+                                        borderRadius: '10px',
+                                        border: `1.5px solid ${isPicked ? '#000000' : 'rgba(0,0,0,0.06)'}`,
+                                        background: isPicked ? '#FBFBFD' : '#FFFFFF',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease',
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div
+                                          style={{
+                                            width: '16px',
+                                            height: '16px',
+                                            borderRadius: '4px',
+                                            border: isPicked ? 'none' : '1.5px solid #C7C7CC',
+                                            backgroundColor: isPicked ? '#000000' : '#FFFFFF',
+                                            color: '#FFFFFF',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '10px',
+                                            fontWeight: 'bold',
+                                          }}
+                                        >
+                                          {isPicked && '✓'}
+                                        </div>
+                                        <span style={{ fontSize: '0.88rem', fontWeight: isPicked ? '600' : '500', color: '#1D1D1F' }}>
+                                          {addon.name}
+                                        </span>
+                                        {addon.duration_minutes > 0 && (
+                                          <span style={{ fontSize: '0.74rem', color: '#5C6B5E', background: '#F2F6F1', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                            +{addon.duration_minutes} хв
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1D1D1F' }}>
+                                        +{addon.price} ₴
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -2602,7 +2906,7 @@ export default function SalonClient({
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.85rem' }}>
-                    {staffers.map((staff) => {
+                    {availableStaffersForService.map((staff) => {
                       const isSelected = selectedMasterId === staff.id;
                       return (
                         <div
@@ -2627,6 +2931,27 @@ export default function SalonClient({
                       );
                     })}
                   </div>
+                  {availableStaffersForService.length === 0 && (
+                    <div style={{ padding: '2.5rem 1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F5F5F7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#86868B' }}>
+                        <Icons.User />
+                      </div>
+                      <div style={{ fontWeight: '700', color: '#1D1D1F', fontSize: '1.05rem' }}>
+                        Немає доступних спеціалістів
+                      </div>
+                      <p style={{ color: '#86868B', fontSize: '0.88rem', margin: 0, maxWidth: '360px', lineHeight: 1.4 }}>
+                        Наразі в закладі немає майстрів, які виконують послугу «{selectedService?.name}». Будь ласка, оберіть іншу послугу.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(1)}
+                        className="apple-btn-secondary"
+                        style={{ marginTop: '0.5rem' }}
+                      >
+                        ← Обрати іншу послугу
+                      </button>
+                    </div>
+                  )}
                 </div>
 
               ) : currentStep === 3 ? (
@@ -2711,29 +3036,6 @@ export default function SalonClient({
                         )}
                       </div>
 
-                      {/* Додаткові послуги */}
-                      {(selectedService?.addons?.length ?? 0) > 0 && (
-                        <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', marginBottom: '0.5rem' }}>
-                            Додати до візиту
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {selectedService.addons.map((addon: any) => {
-                              const isPicked = selectedAddonIds.includes(addon.id);
-                              return (
-                                <div
-                                  key={addon.id}
-                                  onClick={() => setSelectedAddonIds(prev => isPicked ? prev.filter(id => id !== addon.id) : [...prev, addon.id])}
-                                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.85rem', borderRadius: '10px', border: `1px solid ${isPicked ? '#000000' : 'rgba(0,0,0,0.06)'}`, cursor: 'pointer', background: isPicked ? '#F5F5F7' : '#FFFFFF', transition: 'all 0.15s ease' }}
-                                >
-                                  <span style={{ fontSize: '0.85rem', fontWeight: '500', color: '#1D1D1F' }}>{addon.name}</span>
-                                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F' }}>+{addon.price} ₴</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
 
                     </div>
                   </div>
@@ -2954,7 +3256,11 @@ export default function SalonClient({
                   {currentStep === 2 && (
                     <button
                       type="button"
-                      onClick={() => setCurrentStep(3)}
+                      disabled={availableStaffersForService.length === 0}
+                      onClick={() => {
+                        if (availableStaffersForService.length === 0) return;
+                        setCurrentStep(3);
+                      }}
                       className="apple-btn-primary"
                     >
                       Продовжити

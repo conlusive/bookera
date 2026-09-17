@@ -298,14 +298,22 @@ export const api = {
     target_date: string;
     master_id?: string;
     step_minutes?: number;
+    /** Сумарна тривалість візиту з додатковими послугами. */
+    duration_minutes?: number;
   }): Promise<AvailableSlotsResponse> {
     const query = new URLSearchParams({
       business_id: String(params.business_id),
       service_id: String(params.service_id),
       target_date: params.target_date,
       master_id: params.master_id || '0',
-      step_minutes: String(params.step_minutes || 15),
     });
+    // step_minutes надсилаємо ЛИШЕ якщо він заданий явно.
+    //
+    // Раніше тут стояло `params.step_minutes || 15`, тобто 15 летіло
+    // завжди - і налаштування «крок сітки» в кабінеті не працювало
+    // взагалі: сервер отримував 15 і брав його замість свого значення.
+    if (params.step_minutes) query.set('step_minutes', String(params.step_minutes));
+    if (params.duration_minutes) query.set('duration_minutes', String(params.duration_minutes));
     return publicFetch(`/appointments/available-slots?${query}`);
   },
 
@@ -344,6 +352,7 @@ export const api = {
     client_email?: string;
     direct_link_token?: string;
     gift_certificate_code?: string;
+    addon_service_ids?: number[];
   }): Promise<Appointment> {
     return publicFetch(`/appointments`, { method: 'POST', body: JSON.stringify(payload) });
   },
@@ -680,6 +689,7 @@ export const api = {
       client_email?: string;
       notes?: string;
       is_block?: boolean;
+    addon_service_ids?: number[];
     }
   ): Promise<Appointment> {
     return authFetch(`/crm/appointments`, token, { method: 'POST', body: JSON.stringify(payload) });

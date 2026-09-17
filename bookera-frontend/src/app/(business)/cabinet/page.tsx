@@ -11,7 +11,7 @@ import type { SubscriptionState } from '@/lib/api';
 import { isOwnerRole } from '@/lib/roles';
 import { Business } from '@/types';
 
-// 🟢 ІМПОРТУЄМО ІКОНКИ ТА КОНСТАНТИ З ТВОГО ОКРЕМОГО ФАЙЛУ
+// Іконки та константи
 import { Icons, navItems, toLocalDateStr } from '@/components/shared';
 
 import CalendarTab from '@/components/cabinet/CalendarTab';
@@ -24,14 +24,6 @@ import MarketingTab from '@/components/cabinet/MarketingTab';
 import SettingsTab from '@/components/cabinet/SettingsTab';
 import StorefrontTab from '@/components/cabinet/StorefrontTab';
 
-
-/**
- * Бекенд повертає співробітника з полем full_name (як у моделі User),
- * а компоненти кабінету історично читають .name. Нормалізуємо один раз
- * тут, щоб не правити те саме в 15 місцях TeamTab/CalendarTab - і щоб
- * порожнє імʼя не валило інтерфейс (member.name.toLowerCase() падав з
- * "Cannot read properties of undefined").
- */
 function normalizeStaff(list: any[]): any[] {
   return (list || []).map((s: any) => ({
     ...s,
@@ -39,15 +31,6 @@ function normalizeStaff(list: any[]): any[] {
   }));
 }
 
-/**
- * Людська назва ролі.
- *
- * Свідомо тут, а не в lib/roles: next dev не перевіряє типи, тому
- * відсутній експорт із зовнішнього модуля не дає помилки збірки -
- * сторінка просто падає в браузері. Саме так і сталось, коли roles.ts
- * та цей файл розійшлись при злитті гілок. Для трирядкового хелпера
- * окремий модуль не вартий такого ризику.
- */
 function roleLabel(role?: string | null): string {
   if (isOwnerRole(role)) return 'Власник';
   if (role === 'admin') return 'Адміністратор';
@@ -58,12 +41,7 @@ function roleLabel(role?: string | null): string {
 export default function BusinessCabinet() {
   const { showToast } = useToast();
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
-  // Куди відкрити налаштування. Потрібне для переходів на кшталт
-  // «змінити адресу» з вітрини: вони мають вести до самих полів.
   const [settingsTarget, setSettingsTarget] = useState<string | undefined>();
-  // Банер можна закрити на добу. Попередження, яке не прибрати, - це
-  // не попередження, а докір: людина бачить його щодня й перестає
-  // помічати. Через добу нагадаємо знову.
   const [bannerHiddenUntil, setBannerHiddenUntil] = useState<number>(() => {
     if (typeof window === 'undefined') return 0;
     return Number(localStorage.getItem('bookera_sub_banner_hidden') || 0);
@@ -116,7 +94,35 @@ export default function BusinessCabinet() {
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
   const [isSavingClient, setIsSavingClient] = useState(false);
 
-  // 🟢 Змінено тип параметра bizId на number | string
+  // Синхронізація посади для нижньої плашки профілю
+  const currentStaffMember = useMemo(() => {
+    return (team || []).find((m: any) =>
+      (userProfile?.email && m.email?.toLowerCase() === userProfile.email.toLowerCase()) ||
+      (userProfile?.id && String(m.id) === String(userProfile.id))
+    );
+  }, [team, userProfile]);
+
+  const userRoleDisplay = useMemo(() => {
+    if (currentStaffMember?.specialization?.trim()) {
+      return currentStaffMember.specialization.trim();
+    }
+    if (currentStaffMember?.title?.trim()) {
+      return currentStaffMember.title.trim();
+    }
+    return roleLabel(userProfile?.role);
+  }, [currentStaffMember, userProfile?.role]);
+
+  // Слухач подій для швидкого оновлення імені/телефону
+  useEffect(() => {
+    const handleProfileUpdate = (e: any) => {
+      if (e.detail?.name) {
+        setUserProfile((prev: any) => prev ? { ...prev, full_name: e.detail.name, phone: e.detail.phone ?? prev.phone } : prev);
+      }
+    };
+    window.addEventListener('user-profile-updated', handleProfileUpdate);
+    return () => window.removeEventListener('user-profile-updated', handleProfileUpdate);
+  }, []);
+
   const fetchClientsFromDB = async (bizId: number | string) => {
     try {
       const token = await getAuthToken();
@@ -177,8 +183,6 @@ export default function BusinessCabinet() {
       setClientsList(prev => prev.filter(c => c.id !== clientId));
       setViewingClient(null);
     } catch (err: any) {
-      // Бекенд свідомо забороняє видаляти клієнтів з історією бронювань
-      // або нарахованими балами (409) - показуємо причину, а не спільну помилку.
       console.error("Помилка видалення клієнта:", err);
       showToast(err?.message || 'Не вдалося видалити клієнта', 'error');
     }
@@ -192,7 +196,6 @@ export default function BusinessCabinet() {
       const updatedClients = clientsList.map(c => c.id === viewingClient.id ? { ...c, notes: editingClientNotes, allergies: editingClientAllergies } : c);
       setClientsList(updatedClients);
       setViewingClient({ ...viewingClient, notes: editingClientNotes, allergies: editingClientAllergies });
-      // Підтвердження показує сама кнопка - тост тут був би зайвим шумом.
     } catch (err: any) {
       console.error("Системна помилка:", err);
       showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
@@ -274,7 +277,6 @@ export default function BusinessCabinet() {
     { day: 'Неділя', active: false, start: '09:00', end: '20:00' },
   ]);
 
-  // 🟢 Змінено тип параметра bizId на number | string
   const loadSpecificBusiness = async (bizId: number | string) => {
     setLoading(true);
     try {
@@ -286,14 +288,6 @@ export default function BusinessCabinet() {
       }
 
       if (targetBiz) {
-        // Повідомляємо бекенд про перемикання ДО завантаження даних.
-        //
-        // Уся логіка доступу спирається на user.business_id, тому без
-        // цього виклику запити пішли б від імені попереднього закладу -
-        // і повернули б або чужі дані, або відмову.
-        //
-        // Роль теж перемикається: людина може бути власником свого
-        // салону й майстром у чужому, і права мають відповідати місцю.
         try {
           const switched = await api.switchWorkplace(token, Number(targetBiz.id));
           setUserProfile((prev: any) => prev ? { ...prev, role: switched.role, business_id: switched.business_id } : prev);
@@ -358,8 +352,6 @@ export default function BusinessCabinet() {
         const userEmail = session.user.email;
         const token = session.access_token;
 
-        // GET /crm/businesses/me замінює стару таблицю 'profiles' (її більше
-        // немає) - business_id власника/персоналу тепер визначає сам бекенд.
         const me = await api.getMyProfile(token);
 
         if (!isMounted) return;
@@ -371,29 +363,14 @@ export default function BusinessCabinet() {
           role: me.role || 'client',
         });
 
-        console.info('[cabinet] Профіль з бекенду:', { role: me.role, business_id: me.business_id });
         setSubscription(me.subscription ?? null);
 
         if (!me.business_id) {
-          // Людина залогінена, але салону ще не має - їй тут нема чого
-          // робити, ведемо на реєстрацію бізнесу. Раніше цю перевірку
-          // робив middleware за роллю з user_metadata, але там завжди
-          // 'client' (роль там записується при реєстрації акаунта, ДО
-          // створення салону), тому власника викидало з його ж кабінету.
           router.push('/business/register');
           return;
         }
 
         if (me.business && me.business_id) {
-          // Список закладів для перемикача.
-          //
-          // Раніше тут був масив з ОДНОГО елемента - поточного закладу.
-          // Перемикач існував, але перемикати не було на що: майстер,
-          // який працює у двох салонах, бачив лише той, куди зайшов.
-          //
-          // Поточний заклад кладемо одразу, а повний список підвантажуємо
-          // окремо: інтерфейс не має чекати на другий запит, щоб
-          // показати те, що вже відоме.
           setMyBusinesses([me.business]);
           void (async () => {
             try {
@@ -401,14 +378,11 @@ export default function BusinessCabinet() {
               if (places.length > 1) {
                 setMyBusinesses(places.map(p => ({
                   id: p.business_id, name: p.name, slug: p.slug,
-                  city: p.city, logo: p.logo, role: p.role,
+                  city: p.city, logo: p.logo, cover_photo: (p as any).cover_photo || p.logo, role: p.role,
                   has_access: p.has_access,
                 })));
               }
-            } catch {
-              // Перемикач - зручність, а не необхідність: якщо список
-              // не завантажився, кабінет має працювати як раніше.
-            }
+            } catch {}
           })();
           setBusiness(me.business);
           localStorage.setItem('bookera_active_biz_id', String(me.business.id));
@@ -446,7 +420,6 @@ export default function BusinessCabinet() {
     }
 
     void loadCabinetData();
-
     return () => { isMounted = false; };
   }, []);
 
@@ -456,10 +429,6 @@ export default function BusinessCabinet() {
 
       try {
         const token = await getAuthToken();
-        // Бекенд віддає одне поле start_time/end_time (повний ISO datetime),
-        // а решта цього файлу очікує старий формат booking_date + окремі
-        // "HH:MM:SS" рядки - перетворюємо на межі отримання даних, щоб не
-        // чіпати весь рендер-код нижче.
         const apiAppointments = await api.getBookedAppointments(token, business.id);
         const currentTime = new Date();
 
@@ -478,10 +447,6 @@ export default function BusinessCabinet() {
 
           if (mapped.status === 'blocked') return mapped;
           if (mapped.status === 'confirmed' && currentTime > end) {
-            // Той самий "автозавершити минулі візити" ефект, що був раніше -
-            // тепер справжній PATCH замість fire-and-forget Supabase-виклику,
-            // і що важливо: тепер це коректно нараховує комісію (якщо джерело -
-            // маркетплейс), бо йде через ту саму логіку update_appointment_status.
             api.updateAppointmentStatus(token, app.id, 'completed').catch(() => {});
             return { ...mapped, status: 'completed' };
           }
@@ -606,9 +571,6 @@ export default function BusinessCabinet() {
       const startDateTime = new Date(`${apptForm.date}T00:00:00`);
       startDateTime.setHours(hours, minutes, 0, 0);
 
-      // Весь пошук/створення клієнта за телефоном тепер робить бекенд
-      // (POST /crm/appointments) - раніше тут було ~40 рядків ручного
-      // select+update/insert напряму в Supabase.
       const created = await api.createManualAppointment(token, {
         business_id: business.id,
         service_id: isBlockMode ? undefined : Number(apptForm.service_id),
@@ -743,9 +705,6 @@ export default function BusinessCabinet() {
 
     try {
       const token = await getAuthToken();
-      // 'cancelled' замість жорсткого видалення - узгоджено з рештою системи,
-      // де історія запису зберігається (потрібна для статистики й обліку),
-      // а не зникає безслідно.
       await api.updateAppointmentStatus(token, selectedBooking.id, 'cancelled');
       setAppointments(prev => prev.filter(a => a.id !== selectedBooking.id));
       setIsBookingDetailsModalOpen(false);
@@ -855,11 +814,6 @@ export default function BusinessCabinet() {
     return slots.slice(0, 3);
   }, [appointments, shifts]);
 
-  // Підписка завершилась - показуємо екран оплати замість кабінету.
-  //
-  // ПІСЛЯ перевірки loading: поки дані не прийшли, subscription = null,
-  // і без цієї послідовності екран «підписка завершилась» блимав би
-  // на секунду при кожному завантаженні кабінету.
   if (!loading && subscription && !subscription.has_access && business?.id) {
     return (
       <SubscriptionExpired
@@ -871,81 +825,6 @@ export default function BusinessCabinet() {
   }
 
   if (loading) {
-    const renderTabSkeleton = () => {
-      switch (activeTab) {
-        case 'Calendar':
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div className="skel-bg" style={{ width: '260px', height: '36px', borderRadius: '10px' }}></div>
-                <div className="skel-bg" style={{ width: '180px', height: '36px', borderRadius: '10px' }}></div>
-              </div>
-              <div style={{ display: 'flex', gap: '2.5rem', flex: 1 }}>
-                <div className="skel-bg" style={{ width: '280px', borderRadius: '16px' }}></div>
-                <div className="skel-bg" style={{ flex: 1, borderRadius: '16px' }}></div>
-              </div>
-            </div>
-          );
-        case 'Stats':
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '2.5rem' }}>
-              <div style={{ display: 'flex', gap: '2.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-                {[1, 2, 3, 4].map(i => <div key={i} className="skel-bg" style={{ width: '80px', height: '14px', borderRadius: '6px' }}></div>)}
-              </div>
-              <div style={{ display: 'flex', gap: '2.5rem', flex: 1 }}>
-                <div className="skel-bg" style={{ flex: 1, borderRadius: '16px', minHeight: '500px' }}></div>
-                <div style={{ width: '340px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                   <div className="skel-bg" style={{ width: '100%', height: '140px', borderRadius: '16px' }}></div>
-                   <div className="skel-bg" style={{ width: '100%', height: '220px', borderRadius: '16px' }}></div>
-                   <div className="skel-bg" style={{ width: '100%', height: '260px', borderRadius: '16px' }}></div>
-                </div>
-              </div>
-            </div>
-          );
-        case 'Clients':
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2.5rem', marginTop: '0.5rem' }}>
-                 <div style={{ display: 'flex', gap: '1rem' }}>
-                    <div className="skel-bg" style={{ width: '60px', height: '36px', borderRadius: '20px' }}></div>
-                    <div className="skel-bg" style={{ width: '60px', height: '36px', borderRadius: '20px' }}></div>
-                 </div>
-                 <div className="skel-bg" style={{ width: '280px', height: '44px', borderRadius: '10px' }}></div>
-              </div>
-              <div className="skel-bg" style={{ width: '100%', height: '50px', borderRadius: '12px 12px 0 0', marginBottom: '4px' }}></div>
-              {[1, 2, 3, 4, 5, 6, 7].map(i => <div key={i} className="skel-bg" style={{ width: '100%', height: '65px', marginBottom: '4px', borderRadius: '4px' }}></div>)}
-            </div>
-          );
-        case 'Services':
-        case 'Inventory':
-        case 'Team':
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '2.5rem', marginTop: '0.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
-                 <div className="skel-bg" style={{ width: '300px', height: '40px', borderRadius: '12px' }}></div>
-              </div>
-              <div style={{ display: 'flex', gap: '2.5rem', flex: 1 }}>
-                <div style={{ flex: 1 }}>
-                   <div className="skel-bg" style={{ width: '100%', height: '50px', borderRadius: '12px 12px 0 0', marginBottom: '4px' }}></div>
-                   {[1, 2, 3, 4, 5].map(i => <div key={i} className="skel-bg" style={{ width: '100%', height: '70px', marginBottom: '4px', borderRadius: '4px' }}></div>)}
-                </div>
-                <div style={{ width: '340px', display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '4rem' }}>
-                   <div className="skel-bg" style={{ width: '100%', height: '150px', borderRadius: '16px' }}></div>
-                   <div className="skel-bg" style={{ width: '100%', height: '200px', borderRadius: '16px' }}></div>
-                </div>
-              </div>
-            </div>
-          );
-        default:
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              <div className="skel-bg" style={{ width: '280px', height: '40px', borderRadius: '10px' }}></div>
-              <div className="skel-bg" style={{ width: '100%', height: '450px', borderRadius: '16px' }}></div>
-            </div>
-          );
-      }
-    };
-
     return (
       <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <style>{`
@@ -955,9 +834,9 @@ export default function BusinessCabinet() {
           }
           .skel-bg { background-color: #e2e8f0; animation: pulse-skel 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; border-radius: 8px; }
         `}</style>
-        <aside style={{ width: isSidebarCollapsed ? '80px' : '260px', backgroundColor: '#ffffff', borderRight: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', padding: '1rem', flexShrink: 0, transition: 'width 0.3s' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', gap: '0.75rem', marginBottom: '2.5rem', padding: '0.5rem' }}>
-            <div className="skel-bg" style={{ width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0 }}></div>
+        <aside style={{ width: isSidebarCollapsed ? '80px' : '265px', backgroundColor: '#ffffff', borderRight: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', padding: '1rem', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem', padding: '0.5rem' }}>
+            <div className="skel-bg" style={{ width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0 }}></div>
             {!isSidebarCollapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div className="skel-bg" style={{ width: '110px', height: '14px' }}></div>
@@ -965,29 +844,18 @@ export default function BusinessCabinet() {
               </div>
             )}
           </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {[1, 2, 3, 4, 5, 6, 7].map(i => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: isSidebarCollapsed ? '0.75rem 0' : '0.6rem 0.8rem', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start' }}>
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.8rem' }}>
                 <div className="skel-bg" style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0 }}></div>
                 {!isSidebarCollapsed && <div className="skel-bg" style={{ width: '120px', height: '14px' }}></div>}
               </div>
             ))}
           </div>
-
-          <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', gap: '0.75rem', padding: '0.5rem' }}>
-            <div className="skel-bg" style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0 }}></div>
-            {!isSidebarCollapsed && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div className="skel-bg" style={{ width: '90px', height: '12px' }}></div>
-                <div className="skel-bg" style={{ width: '50px', height: '10px' }}></div>
-              </div>
-            )}
-          </div>
         </aside>
-
-        <main style={{ flex: 1, padding: '2rem 3rem', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {renderTabSkeleton()}
+        <main style={{ flex: 1, padding: '2rem 3rem', display: 'flex', flexDirection: 'column' }}>
+          <div className="skel-bg" style={{ width: '260px', height: '36px', borderRadius: '10px', marginBottom: '1.5rem' }}></div>
+          <div className="skel-bg" style={{ flex: 1, borderRadius: '16px' }}></div>
         </main>
       </div>
     );
@@ -1005,11 +873,21 @@ export default function BusinessCabinet() {
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <style>{`
-        /* 🟢 ДОДАНО: Приховані скроли для Apple-style сайдбару */
         .apple-sidebar-nav::-webkit-scrollbar { display: none; }
         .apple-sidebar-nav { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 🟩 ІДЕАЛЬНА ШТРИХОВКА для неробочих годин */
+        .non-working-bg {
+          background-image: repeating-linear-gradient(
+            45deg,
+            #ffffff,
+            #ffffff 10px,
+            #f1f5f9 10px,
+            #f1f5f9 20px
+          ) !important;
+          background-color: #ffffff !important;
+        }
 
-        /* 🟢 ДОДАНО: Стилі для крутих тултипів при згорнутому сайдбарі */
         .nav-item-wrapper .nav-tooltip {
            position: absolute;
            left: calc(100% + 15px);
@@ -1052,9 +930,21 @@ export default function BusinessCabinet() {
         .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-        .menu-popup { animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        @keyframes menuPopIn {
+          from {
+            opacity: 0;
+            transform: scale(0.96) translateY(-6px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+        .menu-popup {
+          animation: menuPopIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          transform-origin: top center;
+        }
 
         .editable-block { position: relative; border-radius: 16px; transition: all 0.2s; border: 2px dashed transparent; }
         .editable-block:hover { border-color: #3b82f6; }
@@ -1089,68 +979,17 @@ export default function BusinessCabinet() {
         .search-input { width: 100%; padding: 0.75rem 1rem 0.75rem 2.5rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; outline: none; transition: 0.2s; background: #f8fafc; color: #0f172a; font-family: inherit; }
         .search-input:focus { background: #fff; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
 
-        .custom-select-trigger { width: 100%; padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; background: #f8fafc; color: #0f172a; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; font-weight: 500; }
-        .custom-select-trigger:hover { background: #f1f5f9; border-color: #cbd5e1; }
-        .custom-select-dropdown { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); z-index: 50; overflow: hidden; animation: slideUp 0.2s ease; }
-        .custom-select-option { padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: #475569; cursor: pointer; transition: 0.2s; font-weight: 500; }
-        .custom-select-option:hover { background: #f8fafc; color: #0f172a; }
-        .custom-select-option.selected { background: #f1f5f9; color: #0f172a; font-weight: 600; }
-
-        .tag-pill { background: #f1f5f9; color: #475569; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
-        .tag-pill:hover { background: #e2e8f0; color: #0f172a; }
-
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; overflow-y: auto; padding: 2rem 0; }
         .modal-content { background: #fff; width: 100%; max-width: 480px; border-radius: 20px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); margin: auto; }
         .modal-input { width: 100%; padding: 0.8rem 1rem; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; outline: none; transition: 0.2s; background: #fff; color: #0f172a; font-family: inherit; }
         .modal-input:focus { border-color: #0f172a; box-shadow: 0 0 0 2px rgba(15,23,42,0.1); }
         .modal-label { display: block; font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 0.4rem; }
 
-        /* Стилі для Календаря */
         .cal-sidebar { width: 280px; display: flex; flexDirection: column; gap: 1.5rem; flexShrink: 0; }
-        .cal-mini-day { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; border-radius: 50%; cursor: pointer; transition: 0.2s; color: #475569; }
-        .cal-mini-day:hover { background: #f1f5f9; }
-        .cal-mini-day.selected { background: #0f172a; color: #fff; font-weight: 700; }
-        
-        .cal-grid-row { display: flex; border-bottom: 1px dashed #e2e8f0; position: relative; cursor: pointer; transition: background-color 0.2s; -webkit-tap-highlight-color: transparent; user-select: none; }
+        .cal-grid-row { display: flex; border-bottom: 1px dashed #e2e8f0; position: relative; cursor: pointer; transition: background-color 0.2s; user-select: none; }
         .cal-grid-row:hover { background-color: #f8fafc; }
-        .cal-grid-row:active { background-color: #f1f5f9; transition: none; }
+        .cal-time-col { width: 60px; padding: 0.5rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; text-align: right; border-right: 1px solid #e2e8f0; flex-shrink: 0; background: #ffffff !important; }
         
-        .cal-week-cell { height: 60px; border-bottom: 1px solid #f1f5f9; cursor: pointer; position: relative; z-index: 1; transition: background-color 0.2s; -webkit-tap-highlight-color: transparent; user-select: none; }
-        .cal-week-cell:hover { background-color: #f8fafc; }
-        .cal-week-cell:active { background-color: #f1f5f9; transition: none; }
-
-        .month-view-cell { border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 0.5rem; cursor: pointer; transition: background-color 0.2s; background-color: #ffffff; position: relative; -webkit-tap-highlight-color: transparent; user-select: none; }
-        .month-view-cell:hover { background-color: #f8fafc; }
-        .month-view-cell:active { background-color: #f1f5f9; transition: none; }
-        
-        .cal-time-col { width: 60px; padding: 0.5rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; text-align: right; border-right: 1px solid #e2e8f0; flex-shrink: 0; position: relative; z-index: 10; background: #ffffff !important; }
-        
-        /* Стилі статусів візиту */
-        .cal-app-card.status-completed { opacity: 0.6; }
-        .cal-app-card.status-no-show { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #991b1b !important; opacity: 0.8; text-decoration: line-through; border-left-color: #ef4444 !important; }
-        .cal-app-card.status-late { border-left-color: #f59e0b !important; border-left-width: 6px !important; }
-        
-        /* 🟩 ІДЕАЛЬНА ШТРИХОВКА для неробочих годин */
-        .non-working-bg {
-          background-image: repeating-linear-gradient(
-            45deg,
-            #ffffff,
-            #ffffff 10px,
-            #f1f5f9 10px,
-            #f1f5f9 20px
-          ) !important;
-          background-color: #ffffff !important;
-        }
-
-        .week-day-header { flex: 1; text-align: center; padding: 0.5rem; cursor: pointer; border-left: 1px solid #e2e8f0; transition: 0.2s; overflow: hidden; position: relative; z-index: 10; }
-        .week-day-header:hover { background-color: #f1f5f9; }
-
-        .fab-button { position: fixed; bottom: 2rem; right: 3rem; width: 60px; height: 60px; border-radius: 50%; background: #0f172a; color: #fff; border: none; box-shadow: 0 10px 20px rgba(15,23,42,0.3); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; z-index: 50; }
-        .fab-button:hover { transform: translateY(-4px); box-shadow: 0 15px 25px rgba(15,23,42,0.4); }
-        .quick-add-hint { opacity: 0; transition: 0.2s; color: #94a3b8; font-size: 0.85rem; position: absolute; right: 20px; top: 50%; transform: translateY(-50%); pointer-events: none; display: flex; align-items: center; gap: 0.3rem; }
-        .cal-grid-row:hover .quick-add-hint { opacity: 1; }
-
-        /* Стилі для кастомних select у модалці */
         .modal-select-wrapper { position: relative; }
         .modal-select-wrapper select {
           appearance: none; -webkit-appearance: none; width: 100%;
@@ -1165,152 +1004,230 @@ export default function BusinessCabinet() {
           position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
           pointer-events: none; color: #64748b;
         }
-
-        /* Стилі для фото-менеджера */
-        .photo-upload-card {
-            border: 2px dashed #cbd5e1;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #94a3b8;
-            cursor: pointer;
-            transition: 0.2s;
-            background: #f8fafc;
-            position: relative;
-            overflow: hidden;
-        }
-        .photo-upload-card:hover {
-            border-color: #3b82f6;
-            background: #eff6ff;
-            color: #3b82f6;
-        }
-        .photo-remove-btn {
-            position: absolute; top: 0.5rem; right: 0.5rem; background: rgba(15, 23, 42, 0.7); color: #fff; border: none; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s;
-        }
-        .photo-upload-card:hover .photo-remove-btn { opacity: 1; }
-        
-        /* --- СТИЛІ ДЛЯ ТАБЛИЦІ КЛІЄНТІВ --- */
-        .client-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-        .client-table th { text-align: left; padding: 1.2rem 1.5rem; color: #64748b; font-weight: 700; font-size: 0.85rem; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.05em; background: #fff; position: sticky; top: 0; z-index: 10; }
-        .client-table td { padding: 1.2rem 1.5rem; color: #0f172a; font-size: 0.95rem; border-bottom: 1px solid #f1f5f9; background: #fff; transition: 0.2s; }
-        .client-table tr { cursor: pointer; transition: 0.2s; }
-        .client-table tr:hover td { background: #f8fafc; }
-        .status-badge { padding: 0.3rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-block; white-space: nowrap; }
-        .status-badge.vip { background: #fef08a; color: #854d0e; }
-        .status-badge.new { background: #dcfce7; color: #166534; }
-        .status-badge.problem { background: #fee2e2; color: #991b1b; }
-        .status-badge.default { background: #f1f5f9; color: #475569; }
       `}</style>
 
+      {/* САЙДБАР (Шовковистий Apple SaaS Стиль) */}
+      <aside style={{
+        width: isSidebarCollapsed ? '76px' : '265px',
+        backgroundColor: '#ffffff',
+        borderRight: '1px solid #f1f5f9',
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        transition: 'width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        willChange: 'width',
+        zIndex: 100,
+      }}>
 
-      {/* 🔴 САЙДБАР (Світлий, повітряний Apple/SaaS Стиль) */}
-      <aside style={{ width: isSidebarCollapsed ? '88px' : '280px', backgroundColor: '#ffffff', borderRight: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', flexShrink: 0, transition: 'width 0.3s cubic-bezier(0.25, 1, 0.5, 1)', zIndex: 100 }}>
-
-        {/* 1. ВИБІР БІЗНЕСУ */}
-        <div style={{ position: 'relative', padding: isSidebarCollapsed ? '1rem 0' : '1rem' }} ref={bizMenuRef}>
+        {/* 1. ВИБІР БІЗНЕСУ (Легкий, не перевантажений дизайн) */}
+        <div style={{ position: 'relative', padding: isSidebarCollapsed ? '0.85rem 0.5rem' : '0.85rem 0.75rem' }} ref={bizMenuRef}>
           <div
             onClick={() => setIsBizMenuOpen(!isBizMenuOpen)}
             style={{
               backgroundColor: isBizMenuOpen ? '#f8fafc' : 'transparent',
               borderRadius: '12px',
-              padding: isSidebarCollapsed ? '0' : '0.6rem 0.8rem',
-              width: isSidebarCollapsed ? '44px' : '100%',
-              height: isSidebarCollapsed ? '44px' : 'auto',
-              margin: '0 auto',
+              padding: isSidebarCollapsed ? '0.35rem' : '0.45rem 0.6rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
               cursor: 'pointer',
-              transition: 'all 0.2s',
-              position: 'relative',
-              zIndex: 51
+              transition: 'background-color 0.15s ease',
+              boxSizing: 'border-box',
             }}
-            onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
-            onMouseOut={e => { if (!isBizMenuOpen) e.currentTarget.style.backgroundColor = 'transparent' }}
+            onMouseOver={e => {
+              if (!isBizMenuOpen) e.currentTarget.style.backgroundColor = '#f8fafc';
+            }}
+            onMouseOut={e => {
+              if (!isBizMenuOpen) e.currentTarget.style.backgroundColor = 'transparent';
+            }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: isSidebarCollapsed ? '0' : '0.75rem', justifyContent: 'center' }}>
-              <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#0f172a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: '800', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                {business?.logo ? <img src={business.logo} alt="Лого" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : business?.name?.charAt(0).toUpperCase() || 'B'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: 0 }}>
+              <div style={{
+                flexShrink: 0,
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                backgroundColor: '#0f172a',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.95rem',
+                fontWeight: '700',
+                overflow: 'hidden',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              }}>
+                {(business?.cover_photo || business?.logo) ? (
+                  <img src={business.cover_photo || business.logo} alt={business?.name || 'Лого'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  business?.name?.charAt(0).toUpperCase() || 'B'
+                )}
               </div>
-              <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '130px', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-                <div style={{ color: '#0f172a', fontSize: '1rem', fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden' }}>{business?.name || 'Завантаження'}</div>
+
+              {/* Плавне зникнення тексту без ламання рядків */}
+              <div style={{
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                maxWidth: isSidebarCollapsed ? 0 : '140px',
+                opacity: isSidebarCollapsed ? 0 : 1,
+                transform: isSidebarCollapsed ? 'translateX(-6px)' : 'translateX(0)',
+                transition: 'max-width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, transform 0.2s ease',
+                pointerEvents: isSidebarCollapsed ? 'none' : 'auto',
+              }}>
+                <div style={{ color: '#0f172a', fontSize: '0.92rem', fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                  {business?.name || 'Завантаження'}
+                </div>
               </div>
             </div>
-            <div style={{ color: '#94a3b8', flexShrink: 0, opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : 'auto', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)', transform: isBizMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-              <Icons.ChevronDown />
-            </div>
+
+            {!isSidebarCollapsed && (
+              <div style={{
+                color: '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                transform: isBizMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                flexShrink: 0,
+                marginLeft: '0.4rem',
+              }}>
+                <Icons.ChevronDown />
+              </div>
+            )}
           </div>
 
+          {/* Легке плаваюче меню вибору закладів */}
           {isBizMenuOpen && (
-            <div className="menu-popup" style={{
-              position: 'absolute', top: 'calc(100% + 4px)', left: isSidebarCollapsed ? 'calc(100% + 10px)' : '1rem', right: isSidebarCollapsed ? 'auto' : '1rem', width: isSidebarCollapsed ? '240px' : 'calc(100% - 2rem)',
-              backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '0.5rem', boxShadow: '0 12px 40px rgba(0,0,0,0.08)', zIndex: 200
-            }}>
-              <div style={{ padding: '0.4rem 0.8rem 0.6rem 0.8rem', fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ваші заклади</div>
-              {myBusinesses.map(biz => {
-                const isActive = business?.id === biz.id;
-                return (
-                  <button
-                    key={biz.id}
-                    onClick={() => { setIsBizMenuOpen(false); if (!isActive) void loadSpecificBusiness(biz.id); }}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: isActive ? '#f8fafc' : 'transparent', border: 'none', color: '#0f172a', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', textAlign: 'left', transition: '0.2s', marginBottom: '0.2rem' }}
-                    onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                    onMouseOut={e => e.currentTarget.style.backgroundColor = isActive ? '#f8fafc' : 'transparent'}
-                  >
-                    <div style={{ width: '24px', height: '24px', borderRadius: '6px', backgroundColor: biz.logo ? 'transparent' : (isActive ? '#0f172a' : '#f1f5f9'), color: isActive ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', flexShrink: 0, overflow: 'hidden' }}>
-                      {biz.logo ? <img src={biz.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : biz.name?.charAt(0).toUpperCase()}
-                    </div>
-                    <span style={{ fontWeight: isActive ? '700' : '500', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{biz.name}</span>
-                    {isActive && <div style={{ color: '#0f172a' }}><Icons.CheckCircle /></div>}
-                  </button>
-                )
-              })}
-              <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.4rem 0' }}></div>
+            <div
+              className="menu-popup"
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                left: isSidebarCollapsed ? 'calc(100% + 8px)' : '0.75rem',
+                right: isSidebarCollapsed ? 'auto' : '0.75rem',
+                width: isSidebarCollapsed ? '230px' : 'calc(100% - 1.5rem)',
+                backgroundColor: '#ffffff',
+                border: '1px solid rgba(0,0,0,0.08)',
+                borderRadius: '14px',
+                padding: '0.4rem',
+                boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.04)',
+                zIndex: 300,
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ padding: '0.35rem 0.6rem 0.45rem 0.6rem', fontSize: '0.68rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Ваші заклади
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {myBusinesses.map(biz => {
+                  const isActive = business?.id === biz.id;
+                  const photo = biz.cover_photo || biz.logo;
+
+                  return (
+                    <button
+                      key={biz.id}
+                      type="button"
+                      onClick={() => {
+                        setIsBizMenuOpen(false);
+                        if (!isActive) void loadSpecificBusiness(biz.id);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem 0.65rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: isActive ? '#f1f5f9' : 'transparent',
+                        border: 'none',
+                        borderRadius: '9px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'background-color 0.12s ease',
+                        boxSizing: 'border-box',
+                      }}
+                      onMouseOver={e => { if (!isActive) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                      onMouseOut={e => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                        <div style={{
+                          width: '26px',
+                          height: '26px',
+                          borderRadius: '7px',
+                          backgroundColor: photo ? 'transparent' : (isActive ? '#0f172a' : '#f1f5f9'),
+                          color: isActive ? '#ffffff' : '#64748b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          fontWeight: '700',
+                          flexShrink: 0,
+                          overflow: 'hidden',
+                        }}>
+                          {photo ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : biz.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: '0.88rem', fontWeight: isActive ? '700' : '500', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {biz.name}
+                        </span>
+                      </div>
+
+                      {isActive && (
+                        <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: '800', flexShrink: 0, marginLeft: '0.4rem' }}>
+                          ✓
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.35rem 0.2rem' }}></div>
+
               <button
+                type="button"
                 onClick={() => router.push('/business/register')}
-                style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '600' }}
-                onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }}
-                onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem 0.65rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.65rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: '9px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background-color 0.12s ease',
+                  boxSizing: 'border-box',
+                }}
+                onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', background: '#f1f5f9', borderRadius: '6px' }}><Icons.Plus /></div>
-                Створити заклад
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', background: '#f1f5f9', borderRadius: '7px', color: '#475569', flexShrink: 0 }}>
+                  <Icons.Plus />
+                </div>
+                <span style={{ fontSize: '0.86rem', fontWeight: '600', color: '#334155' }}>
+                  Створити заклад
+                </span>
               </button>
             </div>
           )}
         </div>
 
-        {/* 2. НАВІГАЦІЯ (Apple Style: прихований скрол, ідеальні квадрати при згорнутому меню) */}
-        <nav className="apple-sidebar-nav" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: isSidebarCollapsed ? '0 0.5rem' : '0 0.75rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {!isSidebarCollapsed && <div style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.05em', textTransform: 'uppercase', padding: '0.5rem 0.8rem', marginTop: '0.5rem' }}>Робоче середовище</div>}
+        {/* 2. НАВІГАЦІЯ */}
+        <nav className="apple-sidebar-nav" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: isSidebarCollapsed ? '0 0.5rem' : '0 0.75rem', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          {!isSidebarCollapsed && (
+            <div style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase', padding: '0.4rem 0.75rem', marginTop: '0.3rem' }}>
+              Робоче середовище
+            </div>
+          )}
 
           {navItems
             .filter(item => {
               const role = userProfile?.role;
-
-              // Раніше тут ховалась «Команда» для приватного майстра.
-              // Прибрано: людина міняє тип бізнесу в налаштуваннях і
-              // РАПТОМ втрачає вкладку, не розуміючи, куди та поділась.
-              //
-              // Приховувати те, чим зараз не користуються, і приховувати
-              // те, що людина щойно налаштувала, - різні речі. Друге
-              // виглядає як поломка.
-
-              // Власник бачить усе решта. Перевірка через isOwnerRole,
-              // а не порівняння з одним рядком: роль приходить як
-              // 'business_owner', але в старих записах трапляються
-              // 'vendor' і 'owner'.
               if (isOwnerRole(role)) return true;
-
-              // Адміністратор: усе, крім налаштувань закладу, онлайн-вітрини
-              // й маркетингу - це рішення власника про сам бізнес.
               if (role === 'admin') {
                 return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats'].includes(item.id);
               }
-
-              // Майстер: лише те, що потрібно для роботи з клієнтами.
-              // Склад, витрати й аналітика - чужі гроші, не його справа.
               return ['Calendar', 'Clients', 'Services', 'Team'].includes(item.id);
             })
             .map(item => {
@@ -1323,28 +1240,36 @@ export default function BusinessCabinet() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
-                    width: isSidebarCollapsed ? '44px' : '100%',
-                    height: isSidebarCollapsed ? '44px' : 'auto',
-                    padding: isSidebarCollapsed ? '0' : '0.6rem 0.8rem',
+                    width: isSidebarCollapsed ? '42px' : '100%',
+                    height: isSidebarCollapsed ? '42px' : 'auto',
+                    padding: isSidebarCollapsed ? '0' : '0.55rem 0.75rem',
                     backgroundColor: isActive ? '#f1f5f9' : 'transparent',
                     border: 'none',
                     borderRadius: '10px',
                     cursor: 'pointer',
                     color: isActive ? '#0f172a' : '#64748b',
-                    transition: 'all 0.2s ease',
+                    transition: 'all 0.15s ease',
                     textAlign: 'left'
                   }}
                   onMouseOver={e => { if (!isActive) { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; } }}
                   onMouseOut={e => { if (!isActive) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b'; } }}
                 >
-                  <div style={{ flexShrink: 0, color: isActive ? '#0f172a' : '#94a3b8', display: 'flex', transition: '0.2s' }}>
+                  <div style={{ flexShrink: 0, color: isActive ? '#0f172a' : '#94a3b8', display: 'flex', transition: '0.15s' }}>
                     <item.icon />
                   </div>
-                  <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '100%', marginLeft: isSidebarCollapsed ? 0 : '0.8rem', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
+                  <div style={{
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    maxWidth: isSidebarCollapsed ? 0 : '180px',
+                    opacity: isSidebarCollapsed ? 0 : 1,
+                    marginLeft: isSidebarCollapsed ? 0 : '0.75rem',
+                    transform: isSidebarCollapsed ? 'translateX(-6px)' : 'translateX(0)',
+                    transition: 'max-width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, margin-left 0.28s ease',
+                    pointerEvents: isSidebarCollapsed ? 'none' : 'auto',
+                  }}>
                     <span style={{ fontSize: '0.9rem', fontWeight: isActive ? '600' : '500' }}>{item.label}</span>
                   </div>
                 </button>
-                {/* 🟢 Стильний Тултип при згорнутому сайдбарі */}
                 {isSidebarCollapsed && (
                   <div className="nav-tooltip">
                     {item.label}
@@ -1356,7 +1281,7 @@ export default function BusinessCabinet() {
         </nav>
 
         {/* 3. ПРОФІЛЬ ТА КНОПКА ЗГОРТАННЯ */}
-        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: 'auto' }}>
+        <div style={{ padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: 'auto' }}>
 
           <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -1364,59 +1289,87 @@ export default function BusinessCabinet() {
                   background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer',
                   display: 'flex', alignItems: 'center',
                   justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
-                  width: isSidebarCollapsed ? '44px' : '100%',
-                  height: isSidebarCollapsed ? '44px' : 'auto',
-                  padding: isSidebarCollapsed ? '0' : '0.6rem',
-                  borderRadius: '10px', transition: '0.2s', gap: '0.8rem'
+                  width: isSidebarCollapsed ? '42px' : '100%',
+                  height: isSidebarCollapsed ? '42px' : 'auto',
+                  padding: isSidebarCollapsed ? '0' : '0.55rem 0.65rem',
+                  borderRadius: '10px', transition: '0.15s', gap: '0.75rem'
                 }}
                 onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
                 onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
              >
                <Icons.SidebarToggle collapsed={isSidebarCollapsed} />
-               {!isSidebarCollapsed && <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>Згорнути меню</span>}
+               <div style={{
+                 overflow: 'hidden',
+                 whiteSpace: 'nowrap',
+                 maxWidth: isSidebarCollapsed ? 0 : '150px',
+                 opacity: isSidebarCollapsed ? 0 : 1,
+                 transform: isSidebarCollapsed ? 'translateX(-6px)' : 'translateX(0)',
+                 transition: 'max-width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, transform 0.2s ease',
+                 pointerEvents: isSidebarCollapsed ? 'none' : 'auto',
+               }}>
+                 <span style={{ fontSize: '0.88rem', fontWeight: '600' }}>Згорнути меню</span>
+               </div>
              </button>
           </div>
 
           <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.2rem 0' }}></div>
 
+          {/* Картка користувача знизу з актуальною посадою */}
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', width: '100%' }} ref={profileMenuRef}>
             <div onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                  style={{
-                   width: isSidebarCollapsed ? '44px' : '100%',
-                   height: isSidebarCollapsed ? '44px' : 'auto',
-                   padding: isSidebarCollapsed ? '0' : '0.5rem',
+                   width: isSidebarCollapsed ? '42px' : '100%',
+                   height: isSidebarCollapsed ? '42px' : 'auto',
+                   padding: isSidebarCollapsed ? '0' : '0.45rem 0.6rem',
                    borderRadius: '12px',
                    display: 'flex', alignItems: 'center',
                    justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
-                   gap: isSidebarCollapsed ? '0' : '0.75rem', cursor: 'pointer', transition: '0.2s',
+                   gap: isSidebarCollapsed ? '0' : '0.7rem', cursor: 'pointer', transition: '0.15s',
                    backgroundColor: isProfileMenuOpen ? '#f8fafc' : 'transparent'
                  }}
                  onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
                  onMouseOut={e => { if(!isProfileMenuOpen) e.currentTarget.style.backgroundColor = 'transparent' }}
             >
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.95rem', flexShrink: 0 }}>
+              <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.9rem', flexShrink: 0 }}>
                 {getUserInitials(userProfile?.full_name)}
               </div>
-              <div style={{ flex: isSidebarCollapsed ? 'none' : 1, overflow: 'hidden', opacity: isSidebarCollapsed ? 0 : 1, width: isSidebarCollapsed ? 0 : '100%', transform: isSidebarCollapsed ? 'translateX(-10px)' : 'translateX(0)', transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)' }}>
-                <div style={{ color: '#0f172a', fontSize: '0.95rem', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userProfile?.full_name || 'Користувач'}</div>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: '500', whiteSpace: 'nowrap' }}>{roleLabel(userProfile?.role)}</div>
+              <div style={{
+                flex: isSidebarCollapsed ? 'none' : 1,
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                maxWidth: isSidebarCollapsed ? 0 : '160px',
+                opacity: isSidebarCollapsed ? 0 : 1,
+                transform: isSidebarCollapsed ? 'translateX(-6px)' : 'translateX(0)',
+                transition: 'max-width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, transform 0.2s ease',
+                pointerEvents: isSidebarCollapsed ? 'none' : 'auto',
+              }}>
+                <div style={{ color: '#0f172a', fontSize: '0.92rem', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {userProfile?.full_name || 'Користувач'}
+                </div>
+                <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {userRoleDisplay}
+                </div>
               </div>
             </div>
 
             {isProfileMenuOpen && (
-              <div className="menu-popup" style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: isSidebarCollapsed ? 'calc(100% + 10px)' : '0', width: isSidebarCollapsed ? '220px' : '100%', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '0.5rem', boxShadow: '0 12px 40px rgba(0,0,0,0.08)', zIndex: 200 }}>
-                <div style={{ padding: '0.4rem 0.8rem 0.6rem 0.8rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '800' }}>Акаунт</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', marginTop: '2px', wordWrap: 'break-word' }}>{userProfile?.full_name}</div>
+              <div className="menu-popup" style={{
+                position: 'absolute', bottom: 'calc(100% + 6px)', left: isSidebarCollapsed ? 'calc(100% + 8px)' : '0', width: isSidebarCollapsed ? '210px' : '100%',
+                backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '14px', padding: '0.4rem',
+                boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.04)', zIndex: 200
+              }}>
+                <div style={{ padding: '0.35rem 0.65rem 0.45rem 0.65rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.25rem' }}>
+                  <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: '800' }}>Акаунт</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#0f172a', marginTop: '2px', wordWrap: 'break-word' }}>{userProfile?.full_name}</div>
                 </div>
-                <button onClick={() => router.push('/')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
+                <button onClick={() => router.push('/')} style={{ width: '100%', padding: '0.5rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.65rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.88rem', cursor: 'pointer', borderRadius: '8px', transition: '0.12s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
                   <Icons.Globe /> Головна сторінка
                 </button>
-                <button onClick={() => router.push('/profile')} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
+                <button onClick={() => router.push('/profile')} style={{ width: '100%', padding: '0.5rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.65rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.88rem', cursor: 'pointer', borderRadius: '8px', transition: '0.12s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
                   <Icons.User /> Налаштування
                 </button>
-                <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.4rem 0' }}></div>
-                <button onClick={handleLogout} style={{ width: '100%', padding: '0.6rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.9rem', cursor: 'pointer', borderRadius: '10px', transition: '0.2s', textAlign: 'left', fontWeight: '600' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.25rem 0' }}></div>
+                <button onClick={handleLogout} style={{ width: '100%', padding: '0.5rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.65rem', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.88rem', cursor: 'pointer', borderRadius: '8px', transition: '0.12s', textAlign: 'left', fontWeight: '600' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
                   <Icons.LogOut /> Вийти з системи
                 </button>
               </div>
@@ -1426,25 +1379,13 @@ export default function BusinessCabinet() {
         </div>
       </aside>
 
-      {/* 🔴 ГОЛОВНА РОБОЧА ЗОНА */}
+      {/* ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', overflowY: 'auto', position: 'relative' }}>
 
-        {/* Попередження про завершення доступу.
-            Показуємо за 7 днів і менше: раніше - зайвий шум, пізніше -
-            людина може не встигнути оплатити й почне робочий день із
-            закритим кабінетом.
-            Пробний період попереджаємо завжди: там кожен день на рахунку
-            і людина ще не звикла, що доступ узагалі має термін. */}
         {subscription?.has_access && subscription.days_left !== null &&
          (subscription.is_trial || subscription.days_left <= 7) &&
-         // За 2 дні й менше банер закрити не можна: тут ціна пропущеного
-         // попередження - закритий кабінет посеред робочого дня.
          (subscription.days_left <= 2 || Date.now() > bannerHiddenUntil) && (
           <div style={{
-            // Групуємо праворуч, а не по центру: смуга тягнеться на всю
-            // ширину, і по центру повідомлення опиняється посеред порожнечі.
-            // Праворуч воно ближче до краю екрана, куди природно падає
-            // погляд після роботи з вмістом, і не перекриває сам вміст.
             display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
             gap: '0.75rem', flexWrap: 'wrap',
             padding: '0.6rem 1.5rem',
@@ -1465,8 +1406,6 @@ export default function BusinessCabinet() {
                   const token = await getAuthToken();
                   const checkout = await api.createSubscriptionCheckout(token, business.id);
                   if (checkout.payment_url) { window.location.href = checkout.payment_url; return; }
-                  // Провайдер не підключений - підписку продовжено одразу.
-                  // Оновлюємо стан, щоб банер зник без перезавантаження.
                   if (checkout.activated) {
                     const me = await api.getMyProfile(token);
                     setSubscription(me.subscription ?? null);
@@ -1507,7 +1446,6 @@ export default function BusinessCabinet() {
           </div>
         )}
 
-        {/* 🟢 ВСІ ВКЛАДКИ ПІДКЛЮЧЕНІ ТУТ */}
         {activeTab === 'Calendar' && <CalendarTab business={business} team={team} services={services} userProfile={userProfile} />}
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
         {activeTab === 'Clients' && <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} />}
@@ -1532,7 +1470,6 @@ export default function BusinessCabinet() {
 
         {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} initialView={settingsTarget} />}
 
-        {/* 🟢 БУФЕР ОБМІНУ (КОПІЮВАННЯ) */}
         {clipboardApp && (
            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, background: '#eff6ff', borderBottom: '1px solid #bfdbfe', padding: '0.6rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 101, animation: 'slideDown 0.2s ease-out' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#1d4ed8', fontWeight: '600' }}>
@@ -1543,7 +1480,6 @@ export default function BusinessCabinet() {
            </div>
         )}
 
-        {/* 🟢 КОНТЕКСТНЕ МЕНЮ (ПРАВИЙ КЛІК) */}
         {contextMenu && (
           <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, background: '#fff', borderRadius: '12px', boxShadow: '0 10px 40px rgba(0,0,0,0.15)', zIndex: 3000, overflow: 'hidden', border: '1px solid #e2e8f0', width: '220px', animation: 'slideUp 0.1s ease-out' }}>
             <div style={{ padding: '0.8rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1563,7 +1499,7 @@ export default function BusinessCabinet() {
 
       </main>
 
-      {/* 🟢 МОДАЛКА ГЛОБАЛЬНОГО ПОШУКУ (CMD+K) */}
+      {/* МОДАЛКА ГЛОБАЛЬНОГО ПОШУКУ (CMD+K) */}
       {isGlobalSearchOpen && (
          <div className="modal-overlay" style={{ alignItems: 'flex-start', paddingTop: '10vh' }} onClick={() => setIsGlobalSearchOpen(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()} style={{ padding: '0', maxWidth: '600px', overflow: 'hidden', background: '#fff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
@@ -1592,7 +1528,7 @@ export default function BusinessCabinet() {
          </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ КЛІЄНТА (ОКРЕМО ВІД КАЛЕНДАРЯ) --- */}
+      {/* МОДАЛЬНЕ ВІКНО ДОДАВАННЯ КЛІЄНТА */}
       {isAddClientModalOpen && (
         <div className="modal-overlay" onClick={() => setIsAddClientModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '450px' }}>
@@ -1648,7 +1584,7 @@ export default function BusinessCabinet() {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО КАРТКИ КЛІЄНТА (CRM) --- */}
+      {/* МОДАЛЬНЕ ВІКНО КАРТКИ КЛІЄНТА */}
       {viewingClient && (
         <div className="modal-overlay" onClick={() => setViewingClient(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '850px', padding: 0, overflow: 'hidden' }}>
@@ -1703,7 +1639,6 @@ export default function BusinessCabinet() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', padding: '2rem', gap: '2.5rem' }}>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
                 <div>
                   <h3 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', marginBottom: '1rem' }}>Контактна інформація</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1754,7 +1689,6 @@ export default function BusinessCabinet() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
@@ -1799,7 +1733,6 @@ export default function BusinessCabinet() {
                         vDate.setHours(0,0,0,0);
                         const tDate = new Date();
                         tDate.setHours(0,0,0,0);
-
                         const isFuture = vDate >= tDate;
 
                         return (
@@ -1830,7 +1763,7 @@ export default function BusinessCabinet() {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО НОВОГО ЗАПИСУ (КАЛЕНДАР) --- */}
+      {/* МОДАЛЬНЕ ВІКНО НОВОГО ЗАПИСУ */}
       {isApptModalOpen && (
         <div className="modal-overlay" onClick={() => setIsApptModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease' }}>
@@ -1939,80 +1872,6 @@ export default function BusinessCabinet() {
                   </select>
                   <div className="modal-select-icon"><Icons.ChevronDown /></div>
                 </div>
-
-                {(() => {
-                   if (apptForm.date && apptForm.time) {
-                      const apptDate = new Date(apptForm.date);
-                      const dayIdx = apptDate.getDay() === 0 ? 6 : apptDate.getDay() - 1;
-                      const [appH, appM] = apptForm.time.split(':').map(Number);
-                      const appTime = appH * 60 + appM;
-
-                      if (apptForm.staff_id) {
-                         const selectedM = team.find(t => String(t.id) === String(apptForm.staff_id));
-                         if (selectedM && selectedM.shifts && selectedM.shifts.length === 7) {
-                            const shift = selectedM.shifts[dayIdx];
-                            if (!shift.active) {
-                               return (
-                                 <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fff1f2', border: '1px dashed #f87171', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-                                   <Icons.AlertCircle /> У майстра вихідний на цю дату!
-                                 </div>
-                               );
-                            } else {
-                               const [startH, startM] = shift.start.split(':').map(Number);
-                               const [endH, endM] = shift.end.split(':').map(Number);
-                               if (appTime < startH * 60 + startM || appTime >= endH * 60 + endM) {
-                                  return (
-                                     <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fffbeb', border: '1px dashed #fcd34d', borderRadius: '8px', color: '#b45309', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-                                       <Icons.AlertCircle /> Час поза графіком майстра ({shift.start} - {shift.end})
-                                     </div>
-                                  );
-                               }
-                            }
-                         }
-                      } else {
-                         const activeMasters = team.filter(m => m.provides_services !== false);
-
-                         if (activeMasters.length > 0) {
-                            const isAnyoneWorking = activeMasters.some(m => {
-                               if (!m.shifts || m.shifts.length !== 7) return false;
-                               const shift = m.shifts[dayIdx];
-                               if (!shift.active) return false;
-                               const [startH, startM] = shift.start.split(':').map(Number);
-                               const [endH, endM] = shift.end.split(':').map(Number);
-                               return appTime >= startH * 60 + startM && appTime < endH * 60 + endM;
-                            });
-
-                            if (!isAnyoneWorking) {
-                               return (
-                                 <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fff1f2', border: '1px dashed #f87171', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-                                   <Icons.AlertCircle /> Увага! Жоден майстер не працює в цей час.
-                                 </div>
-                               );
-                            }
-                         } else {
-                            const shift = shifts[dayIdx];
-                            if (shift && !shift.active) {
-                               return (
-                                 <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fff1f2', border: '1px dashed #f87171', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-                                   <Icons.AlertCircle /> У закладу вихідний на цю дату!
-                                 </div>
-                               );
-                            } else if (shift) {
-                               const [startH, startM] = shift.start.split(':').map(Number);
-                               const [endH, endM] = shift.end.split(':').map(Number);
-                               if (appTime < startH * 60 + startM || appTime >= endH * 60 + endM) {
-                                  return (
-                                     <div style={{ marginTop: '0.8rem', padding: '0.8rem', background: '#fffbeb', border: '1px dashed #fcd34d', borderRadius: '8px', color: '#b45309', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-                                       <Icons.AlertCircle /> Час поза графіком закладу ({shift.start} - {shift.end})
-                                     </div>
-                                  );
-                               }
-                            }
-                         }
-                      }
-                   }
-                   return null;
-                })()}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: !isBlockMode ? '1fr' : '1fr 1fr', gap: '1rem' }}>
@@ -2036,7 +1895,7 @@ export default function BusinessCabinet() {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО ДЕТАЛЕЙ ЗАПИСУ (З РЕДАГУВАННЯМ ЧАСУ ТА ДІЯМИ) --- */}
+      {/* МОДАЛЬНЕ ВІКНО ДЕТАЛЕЙ ЗАПИСУ */}
       {isBookingDetailsModalOpen && selectedBooking && (
         <div className="modal-overlay" onClick={() => setIsBookingDetailsModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '400px' }}>
@@ -2105,12 +1964,10 @@ export default function BusinessCabinet() {
               </div>
             </div>
 
-            {/* 🟢 МЕНЮ ДІЙ (ОПТИМІЗОВАНЕ) */}
             {selectedBooking.status !== 'blocked' && selectedBooking.color !== 'blocked' && (
               <div style={{ marginBottom: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '700', display: 'block', marginBottom: '0.8rem', textTransform: 'uppercase' }}>Дії з візитом</span>
 
-                {/* 1. Статуси */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', marginBottom: '0.6rem' }}>
                   <button onClick={() => handleUpdateBookingStatus('completed')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', padding: '0.6rem 0', border: '1px solid #86efac', background: selectedBooking.status === 'completed' ? '#dcfce7' : '#fff', color: '#166534', borderRadius: '8px', fontWeight: '700', fontSize: '0.75rem', cursor: 'pointer', transition: '0.2s', whiteSpace: 'nowrap' }}>
                     <Icons.CheckCircle /> Завершено
@@ -2123,7 +1980,6 @@ export default function BusinessCabinet() {
                   </button>
                 </div>
 
-                {/* 2. Швидкі інструменти */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
                    <button onClick={() => {
                       setApptForm({ ...apptForm, client_name: selectedBooking.client_name, client_phone: selectedBooking.client_phone || '+380', service_id: selectedBooking.service_id, staff_id: selectedBooking.staff_id, duration: services.find(s=>String(s.id)===String(selectedBooking.service_id))?.duration || 60, date: toLocalDateStr(currentDate) });
@@ -2152,7 +2008,7 @@ export default function BusinessCabinet() {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО ПІДТВЕРДЖЕННЯ ПЕРЕНЕСЕННЯ (DRAG & DROP) --- */}
+      {/* МОДАЛЬНЕ ВІКНО ПІДТВЕРДЖЕННЯ ПЕРЕНЕСЕННЯ */}
       {dragConfirmData && (
         <div className="modal-overlay" onClick={() => setDragConfirmData(null)} style={{ zIndex: 2000 }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)', maxWidth: '420px', textAlign: 'center', padding: '2.5rem' }}>
@@ -2179,8 +2035,6 @@ export default function BusinessCabinet() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.7rem', color: '#3b82f6', fontWeight: '800', textTransform: 'uppercase', marginBottom: '2px' }}>Стане</span>
-
-                  {/* 🟢 ІНТЕРАКТИВНА ЗМІНА ЧАСУ ПРЯМО ТУТ */}
                   <input
                     type="time"
                     value={dragConfirmData.newStart.substring(0, 5)}
@@ -2197,7 +2051,6 @@ export default function BusinessCabinet() {
                     }}
                     style={{ fontSize: '1.2rem', fontWeight: '800', color: '#3b82f6', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
                   />
-
                 </div>
               </div>
 
@@ -2218,7 +2071,7 @@ export default function BusinessCabinet() {
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО: НАЛАШТУВАННЯ КАЛЕНДАРЯ --- */}
+      {/* МОДАЛЬНЕ ВІКНО НАЛАШТУВАННЯ КАЛЕНДАРЯ */}
       {showCalSettingsModal && (
         <div className="modal-overlay" onClick={() => setShowCalSettingsModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '750px', padding: '0' }}>
@@ -2236,9 +2089,6 @@ export default function BusinessCabinet() {
                   btn.disabled = true;
 
                   if (business) {
-                    // cal_settings - лише вигляд календаря (кольори, режим
-                    // перегляду), не бізнес-дані - достатньо зберігати
-                    // локально в браузері, без окремого бекенд-запиту.
                     localStorage.setItem(`bookera_cal_settings_${business.id}`, JSON.stringify(calSettings));
                     setCalendarView(calSettings.defaultView as any);
                     localStorage.setItem('bookera_calendarView', calSettings.defaultView);
@@ -2262,7 +2112,6 @@ export default function BusinessCabinet() {
             </div>
 
             <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '80vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-
               <div>
                 <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Вигляд за замовчуванням</label>
                 <div style={{ display: 'flex', gap: '2rem' }}>
@@ -2309,35 +2158,6 @@ export default function BusinessCabinet() {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '800', color: '#0f172a', marginBottom: '1rem' }}>Відображення кольорів у розкладі</label>
-                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
-                    <input
-                      type="radio"
-                      checked={calSettings.colorMode === 'master' || !calSettings.colorMode}
-                      onChange={() => setCalSettings({...calSettings, colorMode: 'master'})}
-                      style={{ display: 'none' }}
-                    />
-                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: (calSettings.colorMode === 'master' || !calSettings.colorMode) ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
-                    Колір за майстром
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569', fontWeight: '500' }}>
-                    <input
-                      type="radio"
-                      checked={calSettings.colorMode === 'category'}
-                      onChange={() => setCalSettings({...calSettings, colorMode: 'category'})}
-                      style={{ display: 'none' }}
-                    />
-                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: calSettings.colorMode === 'category' ? '6px solid #0f172a' : '1.5px solid #cbd5e1', transition: 'all 0.2s ease', flexShrink: 0, boxSizing: 'border-box' }}></div>
-                    Колір за послугою
-                  </label>
-                </div>
-                <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.8rem', lineHeight: '1.4' }}>
-                  {calSettings.colorMode === 'category' ? 'Записи будуть забарвлені автоматично на основі категорії послуги.' : 'Кожен майстер матиме свій індивідуальний колір.'}
-                </p>
-              </div>
-
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1rem' }}>Робочі години та перерви</div>
                 <button
@@ -2352,13 +2172,12 @@ export default function BusinessCabinet() {
                   <Icons.Clock /> Налаштувати зміни
                 </button>
               </div>
-
             </div>
           </div>
         </div>
       )}
 
-      {/* --- МОДАЛКА: НАЛАШТУВАННЯ РОБОЧИХ ЗМІН --- */}
+      {/* МОДАЛКА НАЛАШТУВАННЯ РОБОЧИХ ЗМІН */}
       {showShiftsModal && (
         <div className="modal-overlay" onClick={() => setShowShiftsModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '600px', padding: '0' }}>
@@ -2380,7 +2199,6 @@ export default function BusinessCabinet() {
             <div className="custom-scroll" style={{ padding: '2rem', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {shifts.map((shift, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', transition: '0.2s', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', width: '160px' }}>
                     <div
                       onClick={() => { const newShifts = [...shifts]; newShifts[idx].active = !shift.active; setShifts(newShifts); }}

@@ -7,8 +7,8 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
 from app.core.time_utils import utc_now
-from app.models import Business, User, RoleEnum, Appointment, Service, RadarBoost
-from app.schemas.business import BusinessOut
+from app.models import Business, User, RoleEnum, Appointment, Service, RadarBoost, BusinessHours
+from app.schemas.business import BusinessOut, WorkingDayOut
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
@@ -197,4 +197,27 @@ async def get_business_by_slug_or_id(
             detail="Заклад не знайдено"
         )
 
-    return business
+    # Графік роботи з business_hours - того самого джерела, що й CRM.
+    #
+    # Без цього сторінка салону визначала вихідні за застарілим полем
+    # days_off: заклад міняв суботу в кабінеті, а клієнт бачив її
+    # закритою, бо сторінка дивилась в інше місце.
+    hours_res = await db.execute(
+        select(BusinessHours)
+        .where(BusinessHours.business_id == business.id)
+        .order_by(BusinessHours.weekday)
+    )
+    response = BusinessOut.model_validate(business, from_attributes=True)
+    response.working_hours = [
+        WorkingDayOut(
+            weekday=h.weekday,
+            is_open=h.is_open,
+            # У базі це тип time, а клієнту потрібен рядок «12:00»:
+            # фронтенд порівнює години як текст, і об'єкт часу там
+            # перетворився б на щось нечитабельне.
+            open_time=h.open_time.strftime("%H:%M") if h.open_time else None,
+            close_time=h.close_time.strftime("%H:%M") if h.close_time else None,
+        )
+        for h in hours_res.scalars().all()
+    ]
+    return response

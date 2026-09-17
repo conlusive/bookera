@@ -15,6 +15,12 @@ class AvailableSlotsResponse(BaseModel):
     service_id: int
     duration_minutes: int
     slots: List[SlotStatusItem]
+    # Час сервера в поясі закладу.
+    #
+    # Додано як діагностику: якщо слоти виглядають неправильними,
+    # це перше, що треба перевірити - чи збігається «зараз» сервера
+    # з реальним часом. Розбіжність одразу пояснює минулі слоти.
+    server_time: Optional[str] = None
 
 
 class LockSlotRequest(BaseModel):
@@ -37,6 +43,10 @@ class LockSlotRequest(BaseModel):
 class AppointmentCreate(BaseModel):
     business_id: int
     service_id: int
+    # Додаткові послуги, обрані клієнтом. Впливають і на ціну, і на
+    # тривалість: без цього заклад бачив би 45 хвилин там, де людина
+    # записалась на 75, і майстер не встигав би.
+    addon_service_ids: Optional[List[int]] = None
     start_time: datetime
     master_id: Optional[str] = "0"
     session_token: Optional[str] = None
@@ -52,6 +62,10 @@ class ManualAppointmentCreate(BaseModel):
     """Для CRM-календаря: staff вручну вносить запис (дзвінок/walk-in)."""
     business_id: int
     service_id: Optional[int] = None  # None лише якщо is_block=true
+    # Додаткові послуги й при ручному записі: адміністратор бере трубку
+    # й записує клієнта, який просить ще й бороду - це має лягти в той
+    # самий запис, а не в окремий.
+    addon_service_ids: Optional[List[int]] = None
     start_time: datetime
     duration_minutes: Optional[int] = None  # обов'язково, якщо is_block=true (немає послуги, щоб узяти тривалість звідти)
     master_id: Optional[str] = None
@@ -102,6 +116,7 @@ class AppointmentResponse(BaseModel):
     # без жодного натяку, куди й до кого вона йде: id послуги їй
     # нічого не каже. Заповнюються лише там, де потрібні, - решта
     # ендпоінтів віддає їх порожніми й нічого не втрачає.
+    addon_service_ids: Optional[List[int]] = None
     business_name: Optional[str] = None
     service_name: Optional[str] = None
     master_name: Optional[str] = None

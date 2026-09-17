@@ -179,7 +179,13 @@ async def get_available_slots(
         Appointment.start_time <= day_end,
         or_(
             Appointment.status == "confirmed",
-            and_(Appointment.status == "blocked", Appointment.expires_at > now),
+            and_(
+                Appointment.status == "blocked",
+                # Постійні блокування (обід, перерва) не мають expires_at,
+                # і порівняння NULL > now завжди хибне - через це клієнт
+                # міг записатись на час, який заклад заблокував.
+                or_(Appointment.expires_at.is_(None), Appointment.expires_at > now),
+            ),
         ),
     )
     app_res = await db.execute(appointments_query)
@@ -327,7 +333,13 @@ async def lock_time_slot(
                         Appointment.end_time > request.start_time,
                         or_(
                             Appointment.status == "confirmed",
-                            and_(Appointment.status == "blocked", Appointment.expires_at > now),
+                            and_(
+                Appointment.status == "blocked",
+                # Постійні блокування (обід, перерва) не мають expires_at,
+                # і порівняння NULL > now завжди хибне - через це клієнт
+                # міг записатись на час, який заклад заблокував.
+                or_(Appointment.expires_at.is_(None), Appointment.expires_at > now),
+            ),
                         ),
                     )
                 )
@@ -343,7 +355,13 @@ async def lock_time_slot(
                     Appointment.end_time > request.start_time,
                     or_(
                         Appointment.status == "confirmed",
-                        and_(Appointment.status == "blocked", Appointment.expires_at > now),
+                        and_(
+                Appointment.status == "blocked",
+                # Постійні блокування (обід, перерва) не мають expires_at,
+                # і порівняння NULL > now завжди хибне - через це клієнт
+                # міг записатись на час, який заклад заблокував.
+                or_(Appointment.expires_at.is_(None), Appointment.expires_at > now),
+            ),
                     ),
                 )
             )
@@ -883,11 +901,31 @@ async def get_booked_appointments(
     if include_cancelled is False:
         statuses.remove("cancelled")
 
+    # Блокування часу.
+    #
+    # ГОЛОВНИЙ БАГ, який це виправляє: умова була
+    # `status == "blocked" AND expires_at > now`. Але expires_at - це
+    # поле ТИМЧАСОВОГО замка слота на 15 хвилин, поки клієнт заповнює
+    # форму бронювання.
+    #
+    # Постійні блокування від закладу (обід, перерва, ремонт) його не
+    # мають узагалі - expires_at у них NULL, і порівняння NULL > now
+    # завжди хибне. Тому заклад блокував час, бачив його на екрані,
+    # перезавантажував сторінку - і блокування зникало назавжди.
+    #
+    # Тепер повертаємо і постійні (expires_at IS NULL), і тимчасові,
+    # які ще не спливли.
     query = select(Appointment).where(
         Appointment.business_id == business_id,
         or_(
             Appointment.status.in_(statuses),
-            and_(Appointment.status == "blocked", Appointment.expires_at > now),
+            and_(
+                Appointment.status == "blocked",
+                or_(
+                    Appointment.expires_at.is_(None),
+                    Appointment.expires_at > now,
+                ),
+            ),
         ),
     )
 

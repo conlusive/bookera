@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.api.appointments import normalize_master_id
 from app.core.auth import CurrentUser, assert_business_access, get_current_user
-from app.core.time_utils import utc_now
+from app.core.time_utils import utc_now, business_tz
 from app.models import Appointment, Business, Client, Service, User
 from app.schemas.appointment import AppointmentResponse, AppointmentRescheduleRequest, ManualAppointmentCreate
 from app.core.email import send_booking_rescheduled_email
@@ -27,13 +27,30 @@ class StatusUpdatePayload(BaseModel):
     status: str
 
 
-def to_naive_utc(dt: datetime | None) -> datetime | None:
-    """Перетворює datetime на offset-naive UTC для коректного збереження в TIMESTAMP WITHOUT TIME ZONE (asyncpg)."""
+def to_naive_local(dt: datetime | None) -> datetime | None:
+    """
+    Приводить час до naive ЛОКАЛЬНОГО часу закладу.
+
+    У базі час зберігається локальним: створення запису шле
+    «2026-09-15T14:00» без зони, і воно лягає в базу як є.
+
+    А перенесення слало UTC (.toISOString() на фронтенді) - і запис
+    зсувався на 3 години після кожного перетягування. Дві різні
+    угоди про час в одній таблиці неминуче розходяться.
+
+    Тому: якщо зона є - переводимо в пояс закладу й знімаємо її.
+    Якщо немає - час уже локальний, лишаємо як є.
+    """
     if dt is None:
         return None
     if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt.astimezone(business_tz()).replace(tzinfo=None)
     return dt
+
+
+# Стара назва як синонім: на неї посилається решта коду, і
+# перейменовувати все заради одного виправлення - зайвий ризик.
+to_naive_utc = to_naive_local
 
 
 def clean_master_id(val) -> str | None:
@@ -69,6 +86,18 @@ async def create_manual_appointment(
     service = None
     duration_minutes = payload.duration_minutes
     price = Decimal("0")
+
+    if payload.is_block and not duration_minutes:
+        # Тривалість для блокування обовʼязкова.
+        #
+        # Мовчки ставити 60 хвилин небезпечно: заклад думає, що
+        # заблокував перерву на потрібний час, а насправді - годину.
+        # Помилка виявляється, коли клієнт записується в той проміжок,
+        # який мав бути закритий.
+        raise HTTPException(
+            status_code=400,
+            detail="Для блокування часу потрібно вказати тривалість",
+        )
 
     if not payload.is_block:
         if not payload.service_id:

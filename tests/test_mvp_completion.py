@@ -105,12 +105,20 @@ async def test_manual_time_block_and_reschedule(client, auth_headers):
     }, headers=headers)
     assert r.status_code == 201, r.text
     assert r.json()["service_id"] is None
-    assert r.json()["client_name"] == "Неробочий час"
+    # Назва за замовчуванням - «Перерва»: коротша й краще читається
+    # у вузькій колонці календаря, ніж «Неробочий час».
+    assert r.json()["client_name"] == "Перерва"
     block_id = r.json()["id"]
 
-    # Без duration_minutes блокування створити не можна
+    # Без duration_minutes блокування створити не можна.
+    #
+    # Беремо ІНШИЙ час: на тому самому тепер справедливо повертається
+    # 409 (час зайнято попереднім блокуванням), і тест перевіряв би
+    # не те, що задумано. Раніше це проходило лише тому, що блокування
+    # були невидимі й конфлікт не виявлявся.
+    free_slot = slot + timedelta(days=1)
     r = await client.post("/crm/appointments", json={
-        "business_id": business_id, "start_time": slot.isoformat(), "is_block": True,
+        "business_id": business_id, "start_time": free_slot.isoformat(), "is_block": True,
     }, headers=headers)
     assert r.status_code == 400
 

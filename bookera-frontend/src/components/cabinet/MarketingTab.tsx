@@ -393,10 +393,10 @@ export default function MarketingTab({
         .mini-action-btn:hover { background: #e2e8f0; color: #0f172a; }
 
         .tab-btn { background: transparent; border: none; padding: 0.8rem 1.5rem; font-size: 0.95rem; font-weight: 600; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; transition: 0.2s; }
-        .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .tab-btn.active { color: #5C7A61; border-bottom-color: #5C7A61; }
         
         .form-input { width: 100%; padding: 0.8rem 1rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; outline: none; transition: border 0.2s; background: #ffffff; color: #0f172a; appearance: none; cursor: pointer; }
-        .form-input:focus { border-color: #3b82f6; }
+        .form-input:focus { border-color: #6F9273; }
         
         .editable-discount { width: 44px; padding: 0.2rem 0; border: none; border-bottom: 1px dashed #10b981; background: transparent; color: #10b981; font-weight: 800; font-size: 1rem; text-align: center; outline: none; transition: 0.2s; }
         .editable-discount:hover { background: #ecfdf5; border-radius: 4px; border-bottom: 1px solid transparent; }
@@ -416,7 +416,7 @@ export default function MarketingTab({
         
         .radar-banner { background: #ffffff; transition: 0.2s; }
         .radar-banner:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); }
-        .radar-banner.has-slots { background: linear-gradient(90deg, #eff6ff 0%, #ffffff 100%); border-left: 4px solid #3b82f6; }
+        .radar-banner.has-slots { background: linear-gradient(90deg, #F4FAF5 0%, #ffffff 100%); border-left: 4px solid #6F9273; }
         
         .row-icon-btn { background: #ffffff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04); cursor: pointer; transition: transform 0.2s; border: 1px solid transparent; }
         .row-icon-btn:hover { transform: translateY(-1px); border-color: #e2e8f0; }
@@ -425,7 +425,7 @@ export default function MarketingTab({
         
         .row-badge { padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem; text-transform: uppercase; letter-spacing: 0.05em; }
         .row-badge.urgent { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
-        .row-badge.lull { background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe; }
+        .row-badge.lull { background: #F4FAF5; color: #6F9273; border: 1px solid #bfdbfe; }
         .row-badge.gap { background: #fdf4ff; color: #d946ef; border: 1px solid #f5d0fe; }
         .row-badge.active { background: #f8fafc; color: #64748b; }
         
@@ -527,7 +527,7 @@ export default function MarketingTab({
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
                 {!isRadarEmpty && (
                   <>
-                    <div className="icon-container" style={{ color: '#3b82f6' }}><SvgRadar size={24} /></div>
+                    <div className="icon-container" style={{ color: '#6F9273' }}><SvgRadar size={24} /></div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.3rem' }}>
                         <h3 style={{ fontWeight: '800', fontSize: '1.15rem', margin: 0, color: '#0f172a' }}>Знайдено {freeSlotsCount} інсайти в розкладі</h3>
@@ -572,7 +572,7 @@ export default function MarketingTab({
               <div className="static-card" style={{ padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                   <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase' }}>Повернуто клієнтів</div>
-                  <div style={{ background: '#e0f2fe', color: '#2563eb', padding: '0.5rem', borderRadius: '10px' }}><SvgUsers size={20} /></div>
+                  <div style={{ background: '#e0f2fe', color: '#5C7A61', padding: '0.5rem', borderRadius: '10px' }}><SvgUsers size={20} /></div>
                 </div>
                 <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#0f172a' }}>{stats.returnedClients}</div>
                 <div className={`stats-trend ${stats.returnedTrend >= 0 ? 'up' : 'down'}`}>
@@ -597,7 +597,7 @@ export default function MarketingTab({
               {[
                 { icon: SvgLink, color: '#f59e0b', bg: '#fef3c7', title: 'Онлайн-запис & SMM', desc: 'Ваше посилання та інструменти', action: () => setMarketingView('smm') },
                 { icon: SvgTag, color: '#ec4899', bg: '#fce7f3', title: 'Промокоди', desc: 'Створення купонів на знижку', action: () => setMarketingView('promotions') },
-                { icon: SvgGift, color: '#0ea5e9', bg: '#dbeafe', title: 'Програми лояльності', desc: 'Приведи друга & Бонуси', action: () => setComingSoonModal({ isOpen: true, title: 'Програма лояльності', desc: 'Кешбек та реферальні посилання з\'являться у наступному оновленні.' }) }
+                { icon: SvgGift, color: '#0ea5e9', bg: '#E4EEE3', title: 'Програми лояльності', desc: 'Приведи друга & Бонуси', action: () => setComingSoonModal({ isOpen: true, title: 'Програма лояльності', desc: 'Кешбек та реферальні посилання з\'являться у наступному оновленні.' }) }
               ].map((item, i) => (
                 <div key={i} onClick={item.action} className="static-card" style={{ padding: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
                   <div style={{ width: '48px', height: '48px', background: item.bg, borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color }}><item.icon size={24} /></div>
@@ -641,7 +641,7 @@ export default function MarketingTab({
                     <div key={slot.id} className="static-card" style={{ overflow: 'hidden' }}>
                       <div style={{
                         padding: '1rem 1.5rem',
-                        background: slot.type === 'urgent' ? '#fef2f2' : slot.type === 'lull' ? '#eff6ff' : '#fdf4ff',
+                        background: slot.type === 'urgent' ? '#fef2f2' : slot.type === 'lull' ? '#F4FAF5' : '#fdf4ff',
                         borderBottom: `1px solid ${slot.type === 'urgent' ? '#fecaca' : slot.type === 'lull' ? '#bfdbfe' : '#f5d0fe'}`,
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                       }}>
@@ -758,7 +758,7 @@ export default function MarketingTab({
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-               <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '50%', marginBottom: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', color: '#3b82f6' }}>
+               <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '50%', marginBottom: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', color: '#6F9273' }}>
                  <SvgSparkles size={32} />
                </div>
                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>
@@ -925,7 +925,7 @@ export default function MarketingTab({
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.5rem' }}>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Текст повідомлення</label>
-                    <button onClick={handleAIGenerate} disabled={isGenerating} style={{ background: 'transparent', color: '#2563eb', border: 'none', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', borderRadius: '8px' }}>
+                    <button onClick={handleAIGenerate} disabled={isGenerating} style={{ background: 'transparent', color: '#5C7A61', border: 'none', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', borderRadius: '8px' }}>
                       <SvgSparkles size={16} /> {isGenerating ? 'AI працює...' : 'Згенерувати з AI'}
                     </button>
                   </div>
@@ -1024,7 +1024,7 @@ export default function MarketingTab({
                  <li>Вставте посилання на ваш запис у поле URL:
                     <div style={{ background: '#f1f5f9', padding: '0.6rem 0.8rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', fontWeight: '500' }}>
                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{businessLink}</span>
-                       <button onClick={() => copyToClipboard(`https://${businessLink}`)} style={{ background: 'transparent', border: 'none', color: '#3b82f6', fontWeight: '700', cursor: 'pointer', padding: 0 }}>Копіювати</button>
+                       <button onClick={() => copyToClipboard(`https://${businessLink}`)} style={{ background: 'transparent', border: 'none', color: '#6F9273', fontWeight: '700', cursor: 'pointer', padding: 0 }}>Копіювати</button>
                     </div>
                  </li>
                  <li>У полі «Назва» (Title) напишіть: <b>Запис онлайн</b>.</li>

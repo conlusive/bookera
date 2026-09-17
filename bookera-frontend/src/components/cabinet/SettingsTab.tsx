@@ -48,7 +48,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const businessSettingsCards = [
   { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgStorefront, color: '#0f766e', bg: '#f0fdfa' },
-  { id: 'booking', title: 'Онлайн-бронювання', desc: 'Правила сітки, зупинка запису та скасування.', icon: SvgGlobe, color: '#3b82f6', bg: '#eff6ff' },
+  { id: 'booking', title: 'Онлайн-бронювання', desc: 'Правила сітки, зупинка запису та скасування.', icon: SvgGlobe, color: '#6F9273', bg: '#F4FAF5' },
   { id: 'security', title: 'Безпека та Чорний список', desc: 'Захист від фейкових записів та спаму.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
   { id: 'payments', title: 'Платежі та Каса', desc: 'Депозити, передоплата та валюта.', icon: SvgCreditCard, color: '#10b981', bg: '#ecfdf5' },
   { id: 'notifications', title: 'Системні сповіщення', desc: 'SMS-нагадування, підтвердження та пуші.', icon: SvgBell, color: '#f59e0b', bg: '#fffbeb' },

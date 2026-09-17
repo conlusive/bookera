@@ -988,7 +988,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
       {/* ТОСТИ */}
       {toast.show && (
-        <div className="toast-animate" style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: toast.type === 'error' ? '#ef4444' : (toast.type === 'info' ? '#3b82f6' : '#0f172a'), color: '#fff', padding: '0.8rem 1.2rem', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.6rem', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', zIndex: 9999, fontWeight: '600', fontSize: '0.85rem' }}>
+        <div className="toast-animate" style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: toast.type === 'error' ? '#ef4444' : (toast.type === 'info' ? '#6F9273' : '#0f172a'), color: '#fff', padding: '0.8rem 1.2rem', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.6rem', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', zIndex: 9999, fontWeight: '600', fontSize: '0.85rem' }}>
            {toast.type === 'error' ? <Icons.AlertCircle /> : <Icons.CheckCircle />}
            {toast.msg}
         </div>

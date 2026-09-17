@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import SalonClient from './SalonClient';
 import { api } from '@/lib/api';
 
-export const revalidate = 60; // Кешуємо на 60 секунд для швидкості
+export const dynamic = 'force-dynamic';
 
 export default async function SalonPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = await params;

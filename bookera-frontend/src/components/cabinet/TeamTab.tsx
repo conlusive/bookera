@@ -7,11 +7,9 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
 import { useToast } from '@/context/ToastContext';
 import Button from '@/components/ui/AppButton';
-import SaveButton from '@/components/ui/SaveButton';
 import { Icons } from '@/components/shared';
 
-
-// 🟢 Локальні іконки
+// Локальні іконки
 const WalletIcon = () => (
   <svg width="1.2em" height="1.2em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
@@ -27,8 +25,13 @@ const CreditCardIcon = () => (
   </svg>
 );
 
-// 🟢 Кнопка збереження зі спінером
-
+// Хелпер форматування часу без секунд (09:00:00 -> 09:00)
+const formatHHMM = (t: any): string => {
+  if (!t) return '09:00';
+  const str = String(t).trim();
+  const match = str.match(/^(\d{1,2}:\d{2})/);
+  return match ? match[1].padStart(5, '0') : str.substring(0, 5);
+};
 
 export default function TeamTab({ business, team = [], setTeam, services = [], userProfile, setActiveTab, setFilterMaster, globalShifts = [] }: any) {
   const supabase = useMemo(() => createClient(), []);
@@ -38,7 +41,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [staffActiveTab, setStaffActiveTab] = useState<'general' | 'services' | 'schedule' | 'finance' | 'security'>('general');
 
-  // 🟢 ЗБЕРЕЖЕННЯ АКТИВНОЇ ВКЛАДКИ ТА ПРАЦІВНИКА ПРИ ОНОВЛЕННІ
   useEffect(() => {
     const savedTab = localStorage.getItem('bookera_staff_active_tab');
     if (savedTab) setStaffActiveTab(savedTab as any);
@@ -60,7 +62,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [localAssignedServices, setLocalAssignedServices] = useState<string[]>([]);
   const [staffServiceSearchQuery, setStaffServiceSearchQuery] = useState('');
 
-  // 🟢 Актуальні робочі години закладу з бази даних
+  // Актуальні робочі години закладу з бази даних
   const [salonBusinessHours, setSalonBusinessHours] = useState<any[] | null>(null);
 
   useEffect(() => {
@@ -85,7 +87,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     return () => { isMounted = false; };
   }, [business?.id]);
 
-  // 🟢 СТЕЙТ ДЛЯ ЗАРПЛАТИ
+  // СТЕЙТ ДЛЯ ЗАРПЛАТИ
   const [payoutHistory, setPayoutHistory] = useState<any[]>([]);
   const [duePayouts, setDuePayouts] = useState<any[]>([]);
   const [payoutPreview, setPayoutPreview] = useState<{
@@ -95,27 +97,13 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     materials_cost?: number; materials_deducted?: boolean;
   } | null>(null);
   const [isLoadingFinance, setIsLoadingFinance] = useState(false);
-
-// 🟢 Стан збереження форми (для кнопки)
   const [isSavingStaff, setIsSavingStaff] = useState(false);
 
-  // 🟢 СТАНИ МОДАЛОК
+  // СТАНИ МОДАЛОК
   const [isInviteStaffModalOpen, setIsInviteStaffModalOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', role: 'master' });
   const [isInvitingStaff, setIsInvitingStaff] = useState(false);
-
-  // 🟢 Стейт та плавний показ Toast-сповіщень (з анімацією випливання і запливання)
-  // Використовуємо СПІЛЬНУ систему повідомлень замість власної: раніше тут
-  // була окрема реалізація зі своєю плашкою, через що на екрані могли
-  // зʼявитись дві різні плашки, а success показувався всупереч загальному
-  // правилу (успіх підтверджує сама кнопка, а не тост у кутку).
   const { showToast } = useToast();
-
-  // ПРИМІТКА: тут раніше був useEffect, що синхронізував ім'я/телефон
-  // співробітника з таблиці 'profiles' (auth-профіль) у таблицю 'staff'.
-  // Обидві таблиці більше не існують - персонал тепер напряму User-модель
-  // на бекенді, і api.listStaff() вже повертає актуальні full_name/phone
-  // без потреби в окремій синхронізації.
 
   // Стани модалки передачі прав
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -123,16 +111,14 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const [transferConfirmed, setTransferConfirmed] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
 
-    // Фірмові кольори системи
-
   const colors = {
     bg: '#ffffff',
     surface: '#f8fafc',
     textPrimary: '#0f172a',
     textSecondary: '#64748b',
     border: '#e2e8f0',
-    blue: '#436b49',       // благородний матча-зелений акцент замість синього
-    blueLight: '#f2f7f3',  // ніжний пастельний матча-фон для активних карток
+    blue: '#436b49',
+    blueLight: '#f2f7f3',
     green: '#10b981',
     red: '#ef4444',
     softRed: '#be4b49',
@@ -141,12 +127,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     wMintText: '#264e32',
   };
 
-// --- ЛОГІКА МАЙСТРА ТА ДОСТУПІВ ---
-  // 🟢 Залізобетонна перевірка прав власника за ID, роллю або email
-  // isOwnerRole приймає всі історичні назви ролі власника ('business_owner'
-  // з бекенду, а також старі 'vendor'/'owner'). Раніше тут звірялось лише
-  // з 'vendor'/'owner' - і власник із роллю 'business_owner' не отримував
-  // прав на редагування власної ж картки.
   const isSystemOwner = Boolean(
     (userProfile?.id && business?.owner_id && String(userProfile.id) === String(business.owner_id)) ||
     isOwnerRole(userProfile?.role)
@@ -156,8 +136,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   const currentUserRole = isSystemOwner ? OWNER_ROLE : (currentLoggedInStaff?.role || 'master');
   const hasAdminRights = isSystemOwner || currentUserRole === 'admin' || isOwnerRole(currentUserRole);
 
-
-  // Гарантуємо наявність картки власника, навіть якщо база staff ще порожня
   const effectiveTeam = useMemo(() => {
     let list = [...(team || [])];
     const hasOwnerInList = list.some((t: any) => isOwnerRole(t.role) || t.email === userProfile?.email || String(t.id) === String(userProfile?.id));
@@ -170,7 +148,8 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         phone: userProfile.phone || business?.phone || '',
         role: 'owner',
         status: 'active',
-        title: 'Власник бізнесу',
+        title: 'Власник',
+        specialization: 'Власник',
         provides_services: true,
         assigned_services: (services || []).map((s: any) => String(s.id)),
         shifts: globalShifts,
@@ -181,27 +160,40 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     return list;
   }, [team, userProfile, isSystemOwner, services, globalShifts, business]);
 
-  let currentStaff = selectedStaffId ? effectiveTeam.find((t: any) => String(t.id) === String(selectedStaffId)) : null;
+  let currentStaff = selectedStaffId ? effectiveTeam.find((t: any) => String(t.id) === String(selectedStaffId)) : (effectiveTeam[0] || null);
 
   let isOwnerProfile = false;
 
   if (currentStaff) {
     currentStaff = { ...currentStaff };
-
-
-    // Перевірка: чи це дійсно профіль власника (навіть якщо роль збилась)
     isOwnerProfile = currentStaff.name?.includes('Власник') || isOwnerRole(currentStaff.role) || (isSystemOwner && currentStaff.email === userProfile?.email);
 
+    const savedTitle = currentStaff.specialization || currentStaff.title;
+
     if (isOwnerProfile) {
-      currentStaff.role = 'owner'; // Примусово повертаємо права
+      currentStaff.role = 'owner';
       if (currentStaff.name === 'Я (Власник)' && userProfile?.full_name && !userProfile.full_name.includes('@')) currentStaff.name = userProfile.full_name;
       if (!currentStaff.phone || currentStaff.phone.trim() === '') currentStaff.phone = userProfile?.phone || business?.phone || '';
       if (!currentStaff.email || currentStaff.email.trim() === '') currentStaff.email = userProfile?.email || business?.email || '';
-      if (!currentStaff.title || currentStaff.title.trim() === '') currentStaff.title = 'Власник бізнесу';
+      currentStaff.title = savedTitle || 'Власник';
+      currentStaff.specialization = currentStaff.title;
     } else {
-      if (!currentStaff.title || currentStaff.title.trim() === '') currentStaff.title = currentStaff.role === 'admin' ? 'Адміністратор' : 'Спеціаліст';
+      currentStaff.title = savedTitle || (currentStaff.role === 'admin' ? 'Адміністратор' : 'Спеціаліст');
+      currentStaff.specialization = currentStaff.title;
     }
   }
+
+  // Ізольована форма: запобігає «живим» змінам до натискання «Зберегти»
+  const [generalForm, setGeneralForm] = useState({ title: '', phone: '' });
+
+  useEffect(() => {
+    if (currentStaff) {
+      setGeneralForm({
+        title: currentStaff.specialization || currentStaff.title || '',
+        phone: currentStaff.phone || '',
+      });
+    }
+  }, [currentStaff?.id, currentStaff?.specialization, currentStaff?.title, currentStaff?.phone]);
 
   const defaultWeekShifts = [
     { day: 'Понеділок', active: true, start: '09:00', end: '20:00' },
@@ -215,13 +207,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   const providesServices = currentStaff?.provides_services !== false;
 
-  // 🟢 Безпечний розбір масиву змін із захистом від null/undefined/string
-  /**
-   * Графік ЗАКЛАДУ - рамка, у межах якої існує графік майстра.
-   *
-   * Синхронізується з актуальним графіком закладу (business_hours),
-   * тому збережена в налаштуваннях субота одразу стає доступною.
-   */
   const salonShifts = useMemo(() => {
     const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
     const hoursSource = salonBusinessHours || business?.hours;
@@ -233,8 +218,8 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
           return {
             day: name,
             active: Boolean(h.is_open),
-            start: h.open_time || '09:00',
-            end: h.close_time || '20:00',
+            start: formatHHMM(h.open_time),
+            end: formatHHMM(h.close_time),
           };
         }
         return defaultWeekShifts[idx];
@@ -245,7 +230,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     if (typeof g === 'string') {
       try { g = JSON.parse(g); } catch { g = null; }
     }
-    return Array.isArray(g) && g.length === 7 ? g : null;
+    return Array.isArray(g) && g.length === 7 ? g.map((s: any) => ({ ...s, start: formatHHMM(s.start), end: formatHHMM(s.end) })) : null;
   }, [salonBusinessHours, business?.hours, globalShifts]);
 
   const staffShifts = useMemo(() => {
@@ -253,29 +238,32 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     if (typeof s === 'string') {
       try { s = JSON.parse(s); } catch { s = null; }
     }
-    if (Array.isArray(s) && s.length > 0) return s;
+    if (Array.isArray(s) && s.length > 0) {
+      return s.map((shift: any) => ({ ...shift, start: formatHHMM(shift.start), end: formatHHMM(shift.end) }));
+    }
 
     let g = globalShifts;
     if (typeof g === 'string') {
       try { g = JSON.parse(g); } catch { g = null; }
     }
-    if (Array.isArray(g) && g.length > 0) return g;
+    if (Array.isArray(g) && g.length > 0) {
+      return g.map((shift: any) => ({ ...shift, start: formatHHMM(shift.start), end: formatHHMM(shift.end) }));
+    }
 
     return defaultWeekShifts;
   }, [currentStaff?.shifts, globalShifts]);
 
   useEffect(() => {
     if (currentStaff) {
-      setLocalAssignedServices(currentStaff.assigned_services || services.map((s: any) => String(s.id)));
-      // Вантажимо розрахунок ОДРАЗУ при виборі співробітника, а не при
-      // відкритті вкладки "Зарплата" - раніше через це зелений блок
-      // зʼявлявся ривком, окремо від решти картки.
+      const raw = currentStaff.assigned_services;
+      const assigned = Array.isArray(raw)
+        ? raw.map((id: any) => String(id))
+        : (services || []).map((s: any) => String(s.id));
+      setLocalAssignedServices(assigned);
       fetchUnpaidAppointments(currentStaff.id, currentStaff.last_payout_date);
     }
-  }, [selectedStaffId, services]);
+  }, [selectedStaffId, currentStaff?.id, services]);
 
-  // Нагадування "кому вже пора платити" - за періодичністю з картки майстра.
-  // Свідомо не автосписання: система нагадує, рішення ухвалює власник.
   useEffect(() => {
     if (!business?.id || !hasAdminRights) return;
     void (async () => {
@@ -283,10 +271,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         const token = await getAuthToken();
         const res = await api.listDuePayouts(token, business.id);
         setDuePayouts(res.due || []);
-      } catch {
-        // Нагадування - річ допоміжна: якщо не завантажилось, решта
-        // вкладки має працювати як звичайно.
-      }
+      } catch {}
     })();
   }, [business?.id, hasAdminRights, payoutHistory.length]);
 
@@ -294,9 +279,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     setIsLoadingFinance(true);
     try {
       const token = await getAuthToken();
-      // Розрахунок тепер повністю на бекенді (той самий period-based підхід,
-      // що не дає одному й тому ж візиту потрапити у дві виплати підряд) -
-      // раніше фронтенд сам тягнув сирі 'bookings' і рахував суму на клієнті.
       const [preview, history] = await Promise.all([
         api.getPayoutPreview(token, business.id, staffId),
         api.listPayouts(token, business.id, staffId).catch(() => []),
@@ -330,8 +312,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         return;
       }
 
-      // Шукаємо дані в профілях
-      // 2. Автоматично шукаємо дані в базі зареєстрованих користувачів (регістронезалежно)
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('full_name, phone')
@@ -340,7 +320,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
       const staffName = existingProfile?.full_name?.trim() || targetEmail.split('@')[0];
       const staffPhone = existingProfile?.phone?.trim() || null;
-      const isRegistered = Boolean(existingProfile && existingProfile.full_name);
 
       const newStaffData = {
         business_id: business.id,
@@ -350,6 +329,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         role: inviteForm.role || 'master',
         status: existingProfile ? 'active' : 'pending',
         title: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
+        specialization: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
         provides_services: inviteForm.role === 'master',
         assigned_services: inviteForm.role === 'master' ? (services || []).map((s: any) => String(s.id)) : [],
         commission_rate: 40,
@@ -365,7 +345,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         .single();
 
       if (error) {
-        console.error("Помилка додавання в staff:", error);
         showToast(error?.message || 'Не вдалося зберегти', 'error');
         return;
       }
@@ -376,7 +355,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       setInviteForm({ email: '', role: 'master' });
       showToast(`Запрошення надіслано: ${data.name}`, 'info');
     } catch (err: any) {
-      console.error(err);
       showToast(err?.message || 'Не вдалося додати співробітника', 'error');
     } finally {
       setIsInvitingStaff(false);
@@ -384,32 +362,37 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   };
 
   const handleUpdateLocalStaff = (updates: any) => {
+    if (!currentStaff) return;
     const updatedStaff = { ...currentStaff, ...updates };
-    setTeam(team.map((t: any) => String(t.id) === String(currentStaff.id) ? updatedStaff : t));
+    const exists = team.some((t: any) => String(t.id) === String(currentStaff.id));
+    if (exists) {
+      setTeam(team.map((t: any) => String(t.id) === String(currentStaff.id) ? updatedStaff : t));
+    } else {
+      setTeam([updatedStaff, ...team]);
+    }
   };
 
-// 🟢 Надійне збереження в базу з реактивним станом кнопки та Toast-сповіщенням
+  // Надійне збереження в базу зі синхронізацією посади та контактів
   const handleSaveSettingsDB = async (updates: any, notify: boolean = true) => {
-    // Раніше тут стояло !hasAdminRights - і майстер не міг зберегти навіть
-    // власне імʼя. Тепер пускаємо, якщо це адмін АБО власна картка; бекенд
-    // усе одно відкине спробу майстра змінити собі ставку чи роль.
     if (!currentStaff || isSavingStaff) return;
     if (!hasAdminRights && !isOwnCard) return;
     setIsSavingStaff(true);
-    handleUpdateLocalStaff(updates);
+
+    const newTitle = updates.title !== undefined ? updates.title : (currentStaff.specialization || currentStaff.title || '');
+    const newPhone = updates.phone !== undefined ? updates.phone : (currentStaff.phone || '');
+
+    const updatedStaffObj = {
+      ...currentStaff,
+      ...updates,
+      title: newTitle,
+      specialization: newTitle,
+      phone: newPhone,
+    };
+
+    handleUpdateLocalStaff(updatedStaffObj);
 
     try {
-      // Бекенд тепер підтримує ВСІ поля картки співробітника, включно з
-      // оплатою праці (оклад/податок/спосіб виплати), особистим графіком
-      // і переліком послуг конкретного майстра. Раніше цих колонок не було,
-      // і я тимчасово прибрав їх з інтерфейсу - це було помилкою, бо для
-      // частини салонів фіксована ставка є основним способом оплати.
-      // Назви полів у CRM і на бекенді історично розійшлись (title проти
-      // specialization, keeps_tips проти tips_full тощо). Раніше ці поля
-      // просто не потрапляли в запит - виглядало наче збереглось, а після
-      // перезавантаження значення зникало. Тепер мапінг єдиною таблицею.
       const FIELD_MAP: Record<string, string> = {
-        name: 'full_name',
         title: 'specialization',
         specialization: 'specialization',
         phone: 'phone',
@@ -438,23 +421,81 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       for (const [key, value] of Object.entries(updates)) {
         const backendKey = FIELD_MAP[key];
         if (!backendKey || value === undefined) continue;
-        backendUpdates[backendKey] = backendKey === 'payout_day' ? String(value) : value;
+        if (backendKey === 'assigned_services' && Array.isArray(value)) {
+          backendUpdates[backendKey] = value.map((v: any) => isNaN(Number(v)) ? v : Number(v));
+        } else if (backendKey === 'payout_day') {
+          backendUpdates[backendKey] = String(value);
+        } else {
+          backendUpdates[backendKey] = value;
+        }
       }
-      // email не редагується тут: він належить обліковому запису Supabase,
-      // змінити його можна лише через процедуру зміни пошти самим
-      // користувачем (з підтвердженням), а не адміністратором CRM.
+
+      if (updates.title !== undefined) {
+        backendUpdates.specialization = updates.title;
+        backendUpdates.title = updates.title;
+      }
+      if (updates.phone !== undefined) {
+        backendUpdates.phone = updates.phone;
+      }
 
       const hasBackendFields = Object.keys(backendUpdates).length > 0;
 
-      const [res] = await Promise.all([
-        hasBackendFields
-          ? (async () => {
-              const token = await getAuthToken();
-              await api.updateStaff(token, String(currentStaff.id), backendUpdates);
-            })()
-          : Promise.resolve(),
-        new Promise(resolve => setTimeout(resolve, 600))
-      ]);
+      if (hasBackendFields) {
+        const token = await getAuthToken();
+        const staffIdStr = String(currentStaff.id);
+        const bizId = business?.id;
+        let updateSuccess = false;
+
+        try {
+          if (typeof (api as any).updateStaff === 'function') {
+            try {
+              await (api as any).updateStaff(token, bizId, staffIdStr, backendUpdates);
+              updateSuccess = true;
+            } catch {
+              await (api as any).updateStaff(token, staffIdStr, backendUpdates);
+              updateSuccess = true;
+            }
+          }
+        } catch {}
+
+        if (!updateSuccess) {
+          const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          const headers = {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          };
+
+          const attempts = [
+            { url: `${baseUrl}/crm/businesses/${bizId}/staff/${staffIdStr}`, method: 'PATCH' },
+            { url: `${baseUrl}/crm/businesses/${bizId}/staff/${staffIdStr}`, method: 'PUT' },
+            { url: `${baseUrl}/crm/staff/${staffIdStr}`, method: 'PATCH' },
+            { url: `${baseUrl}/crm/staff/${staffIdStr}`, method: 'PUT' },
+          ];
+
+          for (const attempt of attempts) {
+            try {
+              const res = await fetch(attempt.url, {
+                method: attempt.method,
+                headers,
+                body: JSON.stringify(backendUpdates),
+              });
+              if (res.ok) {
+                updateSuccess = true;
+                break;
+              }
+            } catch {}
+          }
+        }
+
+        if (isOwnCard && updates.phone) {
+          localStorage.setItem('userPhone', updates.phone);
+          if (userProfile) userProfile.phone = updates.phone;
+        }
+      }
+
+      setTeam((prev: any[]) => prev.map((t: any) =>
+        String(t.id) === String(currentStaff.id) ? updatedStaffObj : t
+      ));
 
       if (notify) showToast("Зміни успішно збережено", "success");
     } catch (err: any) {
@@ -476,25 +517,21 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       setTeam(team.filter((t: any) => String(t.id) !== String(currentStaff.id)));
       setSelectedStaffId(null);
       setStaffActiveTab('general');
-    } catch (err: any) { showToast(err?.message || 'Не вдалося видалити співробітника', 'error'); }
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося видалити співробітника', 'error');
+    }
   };
 
-  // 🟢 ЛОГІКА ПЕРЕДАЧІ ПРАВ ВЛАСНИКА
   const handleTransferOwnership = async () => {
     if (!newOwnerId) return showToast('Оберіть співробітника зі списку', 'error');
     if (!transferConfirmed) return showToast('Підтвердіть передачу прав галочкою', 'error');
 
     setIsTransferring(true);
     try {
-      // Один запит замість трьох окремих (businesses.update + 2x staff.update) -
-      // бекенд сам перевіряє, що це РЕАЛЬНИЙ власник (не просто хтось із
-      // доступом до CRM), і атомарно міняє і owner_id, і ролі обох сторін.
       const token = await getAuthToken();
       await api.transferOwnership(token, business.id, String(newOwnerId));
-
       showToast('Права власності передано', 'info');
       window.location.reload();
-
     } catch (err: any) {
       showToast(err?.message || 'Не вдалося передати права', 'error');
     } finally {
@@ -533,91 +570,120 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     document.body.removeChild(link);
   };
 
-  // Три рівні, дзеркально до перевірок на бекенді:
-  //   isSystemOwner  - власник: усе, включно з передачею прав
-  //   hasAdminRights - адміністратор: усе, крім передачі власності
-  //   isOwnCard      - майстер про себе: контакти й графік, але не ставка/роль
   const isOwnCard = Boolean(
     currentStaff && userProfile &&
     (String(currentStaff.id) === String(userProfile.id) || currentStaff.email === userProfile.email)
   );
-  const canEditContacts = hasAdminRights || isOwnCard;   // імʼя, телефон, посада
-  const canEditSchedule = hasAdminRights || isOwnCard;   // власний графік
-  const canEditFinance = hasAdminRights;                 // ставка, відсоток, податок
-  const canEditServices = hasAdminRights;                // які послуги виконує
+  const canEditContacts = hasAdminRights || isOwnCard;
+  const canEditSchedule = hasAdminRights || isOwnCard;
+  const canEditFinance = hasAdminRights;
+  const canEditServices = hasAdminRights;
 
+  // Динамічне визначення бейджа ролі/посади (пріоритет спеціалізації над захардкодженим текстом)
   const getRoleBadge = (staff: any) => {
-    // Фірмовий напівпрозорий матча-фон (Matcha Mist)
     const matchaText = '#166534';
     const matchaBg = 'rgba(22, 101, 52, 0.08)';
     const matchaBorder = '1px solid rgba(22, 101, 52, 0.16)';
+    const customTitle = staff.specialization || staff.title;
 
     if ((staff.name || '').includes('Власник') || isOwnerRole(staff.role)) {
-      return { label: 'Власник бізнесу', color: matchaText, bg: matchaBg, border: matchaBorder };
+      return {
+        label: customTitle || 'Власник',
+        color: matchaText,
+        bg: matchaBg,
+        border: matchaBorder
+      };
     }
     if (staff.role === 'admin') {
-      return { label: 'Адміністратор', color: '#1e40af', bg: 'rgba(30, 64, 175, 0.08)', border: '1px solid rgba(30, 64, 175, 0.16)' };
+      return {
+        label: customTitle || 'Адміністратор',
+        color: '#1e40af',
+        bg: 'rgba(30, 64, 175, 0.08)',
+        border: '1px solid rgba(30, 64, 175, 0.16)'
+      };
     }
-    return { label: 'Спеціаліст', color: matchaText, bg: matchaBg, border: matchaBorder };
+    return {
+      label: customTitle || 'Спеціаліст',
+      color: matchaText,
+      bg: matchaBg,
+      border: matchaBorder
+    };
   };
 
   const activeStaffTab = staffActiveTab || 'general';
 
-  const currentPhoneDisplay = currentStaff?.phone?.startsWith('+380') ? currentStaff.phone : '+380' + (currentStaff?.phone ? currentStaff.phone.replace(/\D/g, '').replace(/^380/, '') : '');
-
-  // Захищаємо ОБИДВІ сторони порівняння: і поле співробітника, і сам
-  // пошуковий рядок. Компонент може відрендеритись до того, як стан
-  // ініціалізувався, і тоді staffSearchQuery ще undefined - через це
-  // падав увесь кабінет, а не лише вкладка "Команда".
   const filteredTeam = (team || []).filter((member: any) => {
     const label = String(member?.name ?? member?.full_name ?? '');
     const query = String(staffSearchQuery ?? '');
     return label.toLowerCase().includes(query.toLowerCase());
   });
 
-  // 🟢 Реактивна кнопка збереження зі спінером та станом "Збереження..."
-
-
   return (
     <div style={{ display: 'flex', height: '100%', width: '100%', backgroundColor: colors.bg, overflow: 'hidden' }}>
 
-      {/* 🟢 CSS-Анімації для плавного Toast і спінера кнопки */}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
-        @keyframes toastSlideIn {
-          from {
-            opacity: 0;
-            transform: translateY(30px) scale(0.95);
+        @keyframes payoutPulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+            transform: scale(0.95);
           }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
+          70% {
+            box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+            transform: scale(1.05);
           }
-        }
-        @keyframes toastSlideOut {
-          from {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-          to {
-            opacity: 0;
-            transform: translateY(30px) scale(0.95);
+          100% {
+            box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+            transform: scale(0.95);
           }
         }
-        .toast-in {
-          animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        .payout-due-pulse {
+          animation: payoutPulse 1.8s infinite cubic-bezier(0.4, 0, 0.6, 1);
         }
-        .toast-out {
-          animation: toastSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        .payout-indicator-wrap {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .payout-due-tooltip {
+          visibility: hidden;
+          opacity: 0;
+          position: absolute;
+          top: calc(100% + 8px);
+          right: 0;
+          background-color: #0f172a;
+          color: #ffffff;
+          font-size: 0.75rem;
+          font-weight: 600;
+          padding: 6px 10px;
+          border-radius: 8px;
+          white-space: nowrap;
+          pointer-events: none;
+          transition: all 0.15s ease;
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+          z-index: 9999;
+        }
+        .payout-due-tooltip::after {
+          content: '';
+          position: absolute;
+          bottom: 100%;
+          right: 4px;
+          border-width: 5px;
+          border-style: solid;
+          border-color: transparent transparent #0f172a transparent;
+        }
+        .payout-indicator-wrap:hover .payout-due-tooltip {
+          visibility: visible;
+          opacity: 1;
         }
       `}</style>
 
-{/* --- ЛІВА ПАНЕЛЬ КОМАНДИ --- */}
+      {/* --- ЛІВА ПАНЕЛЬ КОМАНДИ --- */}
       <div style={{ width: '300px', borderRight: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', backgroundColor: colors.surface, zIndex: 10 }}>
 
-        {/* Хедер та пошук: встановлено padding 1rem з боків, щоб збігатися з картками */}
         <div style={{ padding: '1.5rem 1rem 0.8rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ fontSize: '1.35rem', fontWeight: '700', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>Команда</h2>
@@ -655,7 +721,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
           </div>
         </div>
 
-        {/* Список карток: ідеальне вирівнювання країв та внутрішнього вмісту */}
         <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: '0.2rem 1rem 1rem 1rem' }}>
           {filteredTeam.map((member: any) => {
             const isSelected = String(selectedStaffId) === String(member.id) || (selectedStaffId === null && member.id === team[0]?.id);
@@ -684,7 +749,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   boxSizing: 'border-box'
                 }}
               >
-                {/* Аватар */}
                 <div style={{
                   width: '40px',
                   height: '40px',
@@ -701,7 +765,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   {getUserInitials(member.name)}
                 </div>
 
-                {/* Текстовий блок: вертикальне центрування */}
                 <div style={{ overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
                   <div style={{
                     fontWeight: isSelected ? '600' : '500',
@@ -729,25 +792,32 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     {isPending ? (
                       <><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }}></span> Очікує</>
                     ) : (
-                      badge.label
+                      member.specialization || member.title || badge.label
                     )}
                   </div>
                 </div>
 
-                {/* Жовтий індикатор виплати: відцентровано по вертикалі */}
                 {due && (
-                  <span
-                    title={`До виплати ${Number(due.amount_due).toLocaleString('uk-UA')} ₴`}
-                    style={{
-                      flexShrink: 0,
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: '#D99A2B',
-                      boxShadow: '0 0 0 3px rgba(217, 154, 43, 0.18)',
-                      marginLeft: '0.25rem'
-                    }}
-                  />
+                  <div
+                    className="payout-indicator-wrap"
+                    title={`Час виплатити зарплату: ${Number(due.amount_due).toLocaleString('uk-UA')} ₴`}
+                    style={{ marginLeft: '0.4rem', flexShrink: 0 }}
+                  >
+                    <span
+                      className="payout-due-pulse"
+                      style={{
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '50%',
+                        backgroundColor: '#f59e0b',
+                        display: 'inline-block',
+                        cursor: 'help'
+                      }}
+                    />
+                    <div className="payout-due-tooltip">
+                      Час виплатити зарплату: {Number(due.amount_due).toLocaleString('uk-UA')} ₴
+                    </div>
+                  </div>
                 )}
               </div>
             );
@@ -772,7 +842,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     {currentStaff.status === 'pending' ? (
                       <span style={{ color: '#b45309', background: '#fef3c7', padding: '0.2rem 0.6rem', borderRadius: '8px' }}>Очікує прийняття</span>
                     ) : (
-                      <span style={{ color: getRoleBadge(currentStaff).color, background: getRoleBadge(currentStaff).bg, padding: '0.2rem 0.6rem', borderRadius: '8px' }}>{getRoleBadge(currentStaff).label}</span>
+                      <span style={{ color: getRoleBadge(currentStaff).color, background: getRoleBadge(currentStaff).bg, padding: '0.2rem 0.6rem', borderRadius: '8px' }}>
+                        {currentStaff.specialization || currentStaff.title || getRoleBadge(currentStaff).label}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -819,9 +891,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       type="button"
                       disabled={isSavingStaff}
                       onClick={() => handleSaveSettingsDB({
-                        name: currentStaff.name,
-                        title: currentStaff.title,
-                        phone: currentStaff.phone,
+                        title: generalForm.title.trim(),
+                        specialization: generalForm.title.trim(),
+                        phone: generalForm.phone.trim(),
                       })}
                     >
                       {isSavingStaff ? (
@@ -845,21 +917,61 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  {/* Ім'я та прізвище зафіксовано за акаунтом */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>ПІБ співробітника</label>
-                    <input type="text" value={currentStaff.name || ''} onChange={e => handleUpdateLocalStaff({ name: e.target.value })} disabled={!canEditContacts} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Ім'я та прізвище</label>
+                    <input
+                      type="text"
+                      value={currentStaff.name || currentStaff.full_name || ''}
+                      readOnly
+                      disabled
+                      title="Ім'я та прізвище прив'язані до облікового запису користувача"
+                      style={{ width: '100%', padding: '0.8rem 1rem', background: '#f8fafc', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', opacity: 0.75, cursor: 'not-allowed' }}
+                    />
+                    <div style={{ fontSize: '0.74rem', color: colors.textSecondary, marginTop: '4px', opacity: 0.85 }}>
+                      *Прив'язано до облікового запису користувача
+                    </div>
                   </div>
+
+                  {/* Посада для клієнтів (редагується і зберігається) */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Посада (Для клієнтів)</label>
-                    <input type="text" value={currentStaff.title || ''} placeholder="Наприклад: Топ-Барбер" onChange={e => handleUpdateLocalStaff({ title: e.target.value })} disabled={!canEditContacts} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <input
+                      type="text"
+                      value={generalForm.title}
+                      placeholder="Наприклад: Власник, Топ-Барбер"
+                      onChange={e => setGeneralForm(prev => ({ ...prev, title: e.target.value }))}
+                      disabled={!canEditContacts}
+                      style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }}
+                      onFocus={e => e.currentTarget.style.borderColor = colors.blue}
+                      onBlur={e => e.currentTarget.style.borderColor = colors.border}
+                    />
                   </div>
+
+                  {/* Телефон */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Телефон</label>
-                    <input type="text" value={currentPhoneDisplay} onChange={e => { if (!canEditContacts) return; let val = e.target.value; if (!val.startsWith('+380')) val = '+380'; const digits = val.slice(4).replace(/\D/g, ''); handleUpdateLocalStaff({ phone: '+380' + digits.slice(0, 9) }); }} disabled={!canEditContacts} style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <input
+                      type="text"
+                      value={generalForm.phone.startsWith('+380') ? generalForm.phone : '+380' + generalForm.phone.replace(/\D/g, '').replace(/^380/, '')}
+                      onChange={e => {
+                        if (!canEditContacts) return;
+                        let val = e.target.value;
+                        if (!val.startsWith('+380')) val = '+380';
+                        const digits = val.slice(4).replace(/\D/g, '');
+                        setGeneralForm(prev => ({ ...prev, phone: '+380' + digits.slice(0, 9) }));
+                      }}
+                      disabled={!canEditContacts}
+                      style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary, outline: 'none', transition: '0.2s' }}
+                      onFocus={e => e.currentTarget.style.borderColor = colors.blue}
+                      onBlur={e => e.currentTarget.style.borderColor = colors.border}
+                    />
                   </div>
+
+                  {/* Email */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Email</label>
-                    <input type="email" value={currentStaff.email || ''} readOnly disabled title="Пошта належить обліковому запису і змінюється власником акаунта" style={{ width: '100%', padding: '0.8rem 1rem', background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', transition: '0.2s' }} onFocus={e => e.currentTarget.style.borderColor = colors.blue} onBlur={e => e.currentTarget.style.borderColor = colors.border} />
+                    <input type="email" value={currentStaff.email || ''} readOnly disabled title="Пошта належить обліковому запису і змінюється власником акаунта" style={{ width: '100%', padding: '0.8rem 1rem', background: '#f8fafc', border: `1px solid ${colors.border}`, borderRadius: '10px', fontSize: '0.95rem', fontWeight: '500', color: colors.textPrimary, outline: 'none', opacity: 0.75, cursor: 'not-allowed' }} />
                   </div>
                 </div>
               </div>
@@ -880,86 +992,88 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                           <input type="text" placeholder="Знайти послугу..." value={staffServiceSearchQuery} onChange={(e) => setStaffServiceSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.7rem 1rem 0.7rem 2.2rem', borderRadius: '10px', border: `1px solid ${colors.border}`, background: '#fff', color: colors.textPrimary, fontSize: '0.9rem', outline: 'none', transition: '0.2s' }} />
                         </div>
 
-                        {/* КНОПКА ВИБРАТИ ВСІ (Автозбереження) */}
-                        {canEditServices && (
-                          <Button
-                            onClick={() => {
-                              const allAssigned = localAssignedServices.length === services.length;
-                              const newAssigned = allAssigned ? [] : services.map((s:any) => String(s.id));
-                              setLocalAssignedServices(newAssigned);
-                              handleSaveSettingsDB({ assigned_services: newAssigned });
-                            }}
-                            variant="primary"
-                            size="sm"
-                          >
-                            {localAssignedServices.length === services.length ? 'Зняти всі' : `Вибрати всі (${services.length})`}
-                          </Button>
-                        )}
+                        {canEditServices && (() => {
+                          const allAssigned = services.length > 0 && services.every((s: any) =>
+                            localAssignedServices.some(id => String(id) === String(s.id))
+                          );
+                          return (
+                            <Button
+                              onClick={() => {
+                                const newAssigned = allAssigned ? [] : services.map((s: any) => String(s.id));
+                                setLocalAssignedServices(newAssigned);
+                                handleSaveSettingsDB({ assigned_services: newAssigned });
+                              }}
+                              variant="primary"
+                              size="sm"
+                            >
+                              {allAssigned ? 'Зняти всі' : `Вибрати всі (${services.length})`}
+                            </Button>
+                          );
+                        })()}
                       </div>
 
                       <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-  {services.map((srv: any) => {
-    const isAssigned = localAssignedServices.includes(String(srv.id));
-    if (staffServiceSearchQuery && !String(srv?.name ?? '').toLowerCase().includes(String(staffServiceSearchQuery ?? '').toLowerCase())) return null;
+                        {services.map((srv: any) => {
+                          const isAssigned = localAssignedServices.some(id => String(id) === String(srv.id));
+                          if (staffServiceSearchQuery && !String(srv?.name ?? '').toLowerCase().includes(String(staffServiceSearchQuery ?? '').toLowerCase())) return null;
 
-    return (
-      <div
-        key={srv.id}
-        onClick={() => {
-          if (!hasAdminRights) return;
-          const newAssigned = isAssigned
-            ? localAssignedServices.filter(id => id !== String(srv.id))
-            : [...localAssignedServices, String(srv.id)];
-          setLocalAssignedServices(newAssigned);
-          handleSaveSettingsDB({ assigned_services: newAssigned });
-        }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '1rem 1.25rem',
-          background: isAssigned ? '#fff' : '#fcfdfc',
+                          return (
+                            <div
+                              key={srv.id}
+                              onClick={() => {
+                                if (!hasAdminRights && !isOwnCard) return;
+                                const isCurrentlyAssigned = localAssignedServices.some(id => String(id) === String(srv.id));
+                                const newAssigned = isCurrentlyAssigned
+                                  ? localAssignedServices.filter(id => String(id) !== String(srv.id))
+                                  : [...localAssignedServices.filter(id => String(id) !== String(srv.id)), String(srv.id)];
+                                setLocalAssignedServices(newAssigned);
+                                handleSaveSettingsDB({ assigned_services: newAssigned });
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '1rem 1.25rem',
+                                background: isAssigned ? '#fff' : '#fcfdfc',
+                                borderRadius: '12px',
+                                cursor: hasAdminRights ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease',
+                                boxShadow: isAssigned ? '0 2px 8px rgba(67, 107, 73, 0.05)' : 'none'
+                              }}
+                            >
+                              <span style={{
+                                fontWeight: isAssigned ? '600' : '500',
+                                color: isAssigned ? colors.textPrimary : colors.textSecondary,
+                                fontSize: '0.95rem'
+                              }}>
+                                {srv.name}
+                              </span>
 
-          borderRadius: '12px',
-          cursor: hasAdminRights ? 'pointer' : 'default',
-          transition: 'all 0.2s ease',
-          boxShadow: isAssigned ? '0 2px 8px rgba(67, 107, 73, 0.05)' : 'none'
-        }}
-      >
-        <span style={{
-          fontWeight: isAssigned ? '600' : '500',
-          color: isAssigned ? colors.textPrimary : colors.textSecondary,
-          fontSize: '0.95rem'
-        }}>
-          {srv.name}
-        </span>
-
-        {/* Плавний матча-перемикач */}
-        <div style={{
-          width: '38px',
-          height: '22px',
-          borderRadius: '20px',
-          background: isAssigned ? colors.green : '#e2e8f0',
-          position: 'relative',
-          transition: 'background 0.25s ease',
-          flexShrink: 0
-        }}>
-          <div style={{
-            width: '18px',
-            height: '18px',
-            borderRadius: '50%',
-            background: '#ffffff',
-            position: 'absolute',
-            top: '2px',
-            left: isAssigned ? '18px' : '2px',
-            transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
-          }} />
-        </div>
-      </div>
-    );
-  })}
-</div>
+                              <div style={{
+                                width: '38px',
+                                height: '22px',
+                                borderRadius: '20px',
+                                background: isAssigned ? colors.green : '#e2e8f0',
+                                position: 'relative',
+                                transition: 'background 0.25s ease',
+                                flexShrink: 0
+                              }}>
+                                <div style={{
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '50%',
+                                  background: '#ffffff',
+                                  position: 'absolute',
+                                  top: '2px',
+                                  left: isAssigned ? '18px' : '2px',
+                                  transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)'
+                                }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                   </>
                 )}
               </div>
@@ -988,86 +1102,136 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', border: `1px solid ${colors.border}`, borderRadius: '12px', overflow: 'hidden' }}>
-                      {staffShifts.map((schedule: any, idx: number) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderBottom: idx !== staffShifts.length - 1 ? `1px solid ${colors.surface}` : 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '180px' }}>
-                            <div onClick={() => {
-                               if (!canEditSchedule) return;
-                               // Салон зачинений - майстер не може працювати.
-                               // Пояснюємо причину замість мовчазної відмови.
-                               const salonDay = salonShifts?.[idx];
-                               if (salonDay && !salonDay.active && !schedule.active) {
-                                 showToast('Цього дня заклад зачинений — спершу змініть графік закладу', 'error');
-                                 return;
-                               }
-                               // При увімкненні підставляємо робочі години закладу (для суботи 10:00-18:00)
-                               const willBeActive = !schedule.active;
-                               const newShifts = staffShifts.map((s: any, i: number) =>
-                                 i === idx ? {
-                                   ...s,
-                                   active: willBeActive,
-                                   start: willBeActive ? (s.start || salonDay?.start || '10:00') : s.start,
-                                   end: willBeActive ? (s.end || salonDay?.end || '18:00') : s.end,
-                                 } : s
-                               );
-                               handleUpdateLocalStaff({ shifts: newShifts });
-                               handleSaveSettingsDB({ shifts: newShifts }); // Автозбереження тогла
-                            }} style={{ userSelect: 'none', WebkitUserSelect: 'none', width: '40px', height: '22px', borderRadius: '12px', background: schedule.active ? (canEditSchedule ? colors.green : colors.textSecondary) : colors.border, position: 'relative', cursor: canEditSchedule ? 'pointer' : 'default', transition: 'background 0.3s', flexShrink: 0 }}>
-                              <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
+                      {staffShifts.map((schedule: any, idx: number) => {
+                        const salonDay = salonShifts?.[idx];
+                        const salonStart = salonDay?.start ? formatHHMM(salonDay.start) : '09:00';
+                        const salonEnd = salonDay?.end ? formatHHMM(salonDay.end) : '20:00';
+
+                        return (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderBottom: idx !== staffShifts.length - 1 ? `1px solid ${colors.surface}` : 'none' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '220px' }}>
+                              <div onClick={() => {
+                                 if (!canEditSchedule) return;
+                                 if (salonDay && !salonDay.active && !schedule.active) {
+                                   showToast('Цього дня заклад зачинений — спершу змініть графік закладу', 'error');
+                                   return;
+                                 }
+                                 const willBeActive = !schedule.active;
+                                 let startToSet = formatHHMM(schedule.start || salonStart);
+                                 let endToSet = formatHHMM(schedule.end || salonEnd);
+
+                                 if (willBeActive && salonDay?.active) {
+                                   if (startToSet < salonStart) startToSet = salonStart;
+                                   if (endToSet > salonEnd) endToSet = salonEnd;
+                                 }
+
+                                 const newShifts = staffShifts.map((s: any, i: number) =>
+                                   i === idx ? {
+                                     ...s,
+                                     active: willBeActive,
+                                     start: startToSet,
+                                     end: endToSet,
+                                   } : s
+                                 );
+                                 handleUpdateLocalStaff({ shifts: newShifts });
+                                 handleSaveSettingsDB({ shifts: newShifts });
+                              }} style={{ userSelect: 'none', WebkitUserSelect: 'none', width: '40px', height: '22px', borderRadius: '12px', background: schedule.active ? (canEditSchedule ? colors.green : colors.textSecondary) : colors.border, position: 'relative', cursor: canEditSchedule ? 'pointer' : 'default', transition: 'background 0.3s', flexShrink: 0 }}>
+                                <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: schedule.active ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: '600', color: schedule.active ? colors.textPrimary : colors.textSecondary, fontSize: '0.95rem' }}>{schedule.day}</div>
+                                {salonDay && (
+                                  <div style={{ fontSize: '0.74rem', color: colors.textSecondary, opacity: 0.8, marginTop: '2px' }}>
+                                    {salonDay.active
+                                      ? `Заклад: ${salonStart}–${salonEnd}`
+                                      : 'Заклад зачинений'}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <div style={{ fontWeight: '600', color: schedule.active ? colors.textPrimary : colors.textSecondary, fontSize: '0.95rem' }}>{schedule.day}</div>
-                              {/* Години закладу як рамка: видно, чому саме такі
-                                  межі допустимі, без переходу в іншу вкладку. */}
-                              {salonShifts?.[idx] && (
-                                <div style={{ fontSize: '0.7rem', color: colors.textSecondary, opacity: 0.75, marginTop: '2px' }}>
-                                  {salonShifts[idx].active
-                                    ? `Заклад: ${salonShifts[idx].start}–${salonShifts[idx].end}`
-                                    : 'Заклад зачинений'}
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                              {schedule.active ? (
+                                <>
+                                  <input
+                                    disabled={!canEditSchedule}
+                                    type="time"
+                                    min={salonDay?.active ? salonStart : undefined}
+                                    max={salonDay?.active ? salonEnd : undefined}
+                                    value={formatHHMM(schedule.start)}
+                                    onChange={(e) => {
+                                      let val = e.target.value;
+                                      if (salonDay?.active && val < salonStart) {
+                                        val = salonStart;
+                                      }
+                                      const newShifts = staffShifts.map((s: any, i: number) =>
+                                        i === idx ? { ...s, start: val } : s
+                                      );
+                                      handleUpdateLocalStaff({ shifts: newShifts });
+                                    }}
+                                    onBlur={(e) => {
+                                      let val = formatHHMM(e.target.value);
+                                      if (salonDay?.active && val < salonStart) {
+                                        val = salonStart;
+                                        showToast(`Заклад відкривається о ${salonStart}. Час скориговано`, 'info');
+                                      }
+                                      if (val >= formatHHMM(schedule.end)) {
+                                        val = salonStart;
+                                        showToast('Час початку має бути раніше завершення', 'error');
+                                      }
+                                      const newShifts = staffShifts.map((s: any, i: number) =>
+                                        i === idx ? { ...s, start: val } : s
+                                      );
+                                      handleUpdateLocalStaff({ shifts: newShifts });
+                                      handleSaveSettingsDB({ shifts: newShifts });
+                                    }}
+                                    style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: canEditSchedule ? 1 : 0.7 }}
+                                  />
+                                  <span style={{ color: colors.textSecondary, fontWeight: '400' }}>—</span>
+                                  <input
+                                    disabled={!canEditSchedule}
+                                    type="time"
+                                    min={salonDay?.active ? salonStart : undefined}
+                                    max={salonDay?.active ? salonEnd : undefined}
+                                    value={formatHHMM(schedule.end)}
+                                    onChange={(e) => {
+                                      let val = e.target.value;
+                                      if (salonDay?.active && val > salonEnd) {
+                                        val = salonEnd;
+                                      }
+                                      const newShifts = staffShifts.map((s: any, i: number) =>
+                                        i === idx ? { ...s, end: val } : s
+                                      );
+                                      handleUpdateLocalStaff({ shifts: newShifts });
+                                    }}
+                                    onBlur={(e) => {
+                                      let val = formatHHMM(e.target.value);
+                                      if (salonDay?.active && val > salonEnd) {
+                                        val = salonEnd;
+                                        showToast(`Заклад зачиняється о ${salonEnd}. Час скориговано`, 'info');
+                                      }
+                                      if (val <= formatHHMM(schedule.start)) {
+                                        val = salonEnd;
+                                        showToast('Час завершення має бути пізніше початку', 'error');
+                                      }
+                                      const newShifts = staffShifts.map((s: any, i: number) =>
+                                        i === idx ? { ...s, end: val } : s
+                                      );
+                                      handleUpdateLocalStaff({ shifts: newShifts });
+                                      handleSaveSettingsDB({ shifts: newShifts });
+                                    }}
+                                    style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: canEditSchedule ? 1 : 0.7 }}
+                                  />
+                                </>
+                              ) : (
+                                <div style={{ padding: '0.5rem 2rem', color: colors.textSecondary, fontWeight: '500', fontSize: '0.95rem', background: colors.surface, borderRadius: '8px', border: `1px dashed ${colors.border}` }}>
+                                  Вихідний
                                 </div>
                               )}
                             </div>
                           </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            {schedule.active ? (
-                              <>
-                                <input disabled={!canEditSchedule} type="time" value={schedule.start} onChange={(e) => {
-                                   // map, а не мутація: [...staffShifts] копіює лише
-                                   // зовнішній масив, самі обʼєкти лишаються спільними,
-                                   // тому запис "на місці" міняв і вихідні дані теж.
-                                   const newShifts = staffShifts.map((s: any, i: number) =>
-                                     i === idx ? { ...s, start: e.target.value } : s
-                                   );
-                                   handleUpdateLocalStaff({ shifts: newShifts });
-                                }} onBlur={() => {
-                                   // Зберігаємо АКТУАЛЬНИЙ графік із currentStaff, а не
-                                   // staffShifts: цей useMemo міг ще не перерахуватись,
-                                   // і на бекенд ішло старе значення - через це зміна
-                                   // часу не зберігалась.
-                                   handleSaveSettingsDB({ shifts: currentStaff.shifts || staffShifts });
-                                }} style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: canEditSchedule ? 1 : 0.7 }} />
-                                <span style={{ color: colors.textSecondary, fontWeight: '400' }}>—</span>
-                                <input disabled={!canEditSchedule} type="time" value={schedule.end} onChange={(e) => {
-                                   // map, а не мутація: [...staffShifts] копіює лише
-                                   // зовнішній масив, самі обʼєкти лишаються спільними,
-                                   // тому запис "на місці" міняв і вихідні дані теж.
-                                   const newShifts = staffShifts.map((s: any, i: number) =>
-                                     i === idx ? { ...s, end: e.target.value } : s
-                                   );
-                                   handleUpdateLocalStaff({ shifts: newShifts });
-                                }} onBlur={() => {
-                                   // Зберігаємо АКТУАЛЬНИЙ графік із currentStaff, а не
-                                   // staffShifts: цей useMemo міг ще не перерахуватись,
-                                   // і на бекенд ішло старе значення - через це зміна
-                                   // часу не зберігалась.
-                                   handleSaveSettingsDB({ shifts: currentStaff.shifts || staffShifts });
-                                }} style={{ padding: '0.5rem 0.8rem', border: `1px solid ${colors.border}`, borderRadius: '8px', fontWeight: '500', color: colors.textPrimary, fontSize: '0.95rem', background: '#fff', outline: 'none', opacity: canEditSchedule ? 1 : 0.7 }} />
-                              </>
-                            ) : <div style={{ padding: '0.5rem 2rem', color: colors.textSecondary, fontWeight: '500', fontSize: '0.95rem', background: colors.surface, borderRadius: '8px', border: `1px dashed ${colors.border}` }}>Вихідний</div>}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}
@@ -1078,11 +1242,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             {activeStaffTab === 'finance' && (
               <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
-                {/* 🟢 М'ЯТНИЙ ВІДЖЕТ ЗАРОБІТКУ ТА ПОДАТКІВ */}
+                {/* М'ЯТНИЙ ВІДЖЕТ ЗАРОБІТКУ ТА ПОДАТКІВ */}
                 {(() => {
                   if (!payoutPreview) {
-                    // Скелетон тієї ж висоти, що й готовий блок - щоб картка
-                    // не «стрибала», коли розрахунок довантажиться.
                     return (
                       <div style={{ background: colors.wMintBg, border: `1.5px dashed ${colors.wMintBorder}`, borderRadius: '16px', padding: '1.5rem', minHeight: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.wMintText, opacity: 0.7, fontSize: '0.9rem', fontWeight: 600 }}>
                         Рахуємо невиплачений дохід…
@@ -1098,9 +1260,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                      try {
                         const token = await getAuthToken();
-                        // Бекенд сам: закриває період (щоб той самий візит не
-                        // потрапив у виплату двічі), створює пов'язаний запис
-                        // витрати - раніше це було 3 окремих ручних Supabase-запити.
                         await api.createPayout(token, business.id, currentStaff.id);
                         await fetchUnpaidAppointments(currentStaff.id, null);
                         showToast(`Виплату ${payoutPreview.payout_amount.toLocaleString('uk-UA')} ₴ успішно зафіксовано!`, "success");
@@ -1188,7 +1347,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   );
                 })()}
 
-                {/* 🟢 ОСНОВНІ НАЛАШТУВАННЯ ЗАРПЛАТИ */}
+                {/* НАЛАШТУВАННЯ ЗАРПЛАТИ */}
                 <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '16px', border: `1px solid ${colors.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
                      <div>
@@ -1382,7 +1541,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   </div>
                 </div>
 
-                {/* 🟢 БЛОК "СПОСІБ ВИПЛАТИ ТА РЕКВІЗИТИ" */}
+                {/* БЛОК "СПОСІБ ВИПЛАТИ ТА РЕКВІЗИТИ" */}
                 <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '16px', border: `1px solid ${colors.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
                      <div>
@@ -1517,7 +1676,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             {activeStaffTab === 'security' && hasAdminRights && (
               <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
-                {/* 🟢 СИСТЕМНА РОЛЬ: Ховаємо вибір ролей повністю, якщо це Власник */}
                 {!isOwnerProfile && (
                   <div>
                     <div style={{ marginBottom: '1.5rem' }}>
@@ -1528,7 +1686,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                       <div onClick={() => {
                          handleUpdateLocalStaff({ role: 'master' });
-                         handleSaveSettingsDB({ role: 'master' }); // Автозбереження
+                         handleSaveSettingsDB({ role: 'master' });
                       }} style={{ padding: '1.25rem', border: `1.5px solid ${currentStaff.role !== 'admin' ? colors.blue : colors.border}`, borderRadius: '12px', cursor: 'pointer', background: currentStaff.role !== 'admin' ? colors.blueLight : '#fff', transition: '0.2s' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
                            <input type="radio" checked={currentStaff.role !== 'admin'} readOnly style={{ accentColor: colors.blue }} />
@@ -1539,7 +1697,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                       <div onClick={() => {
                          handleUpdateLocalStaff({ role: 'admin' });
-                         handleSaveSettingsDB({ role: 'admin' }); // Автозбереження
+                         handleSaveSettingsDB({ role: 'admin' });
                       }} style={{ padding: '1.25rem', border: `1.5px solid ${currentStaff.role === 'admin' ? colors.blue : colors.border}`, borderRadius: '12px', cursor: 'pointer', background: currentStaff.role === 'admin' ? colors.blueLight : '#fff', transition: '0.2s' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
                            <input type="radio" checked={currentStaff.role === 'admin'} readOnly style={{ accentColor: colors.blue }} />
@@ -1551,16 +1709,14 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   </div>
                 )}
 
-                {/* 🟢 БЛОК ЗАПИСІВ */}
                 <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div><h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Приймає записи клієнтів</h3><p style={{ fontSize: '0.8rem', color: colors.textSecondary, margin: 0 }}>Якщо вимкнено, співробітник зникне з онлайн-бронювання та розкладу.</p></div>
                   <div onClick={() => {
                      handleUpdateLocalStaff({ provides_services: !providesServices });
-                     handleSaveSettingsDB({ provides_services: !providesServices }); // Автозбереження тогла
+                     handleSaveSettingsDB({ provides_services: !providesServices });
                   }} style={{ width: '46px', height: '26px', borderRadius: '13px', background: providesServices ? colors.green : colors.border, position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0 }}><div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: providesServices ? '22px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div></div>
                 </div>
 
-                {/* 🟢 ЛОГІКА ЗВІЛЬНЕННЯ / ПЕРЕДАЧІ ПРАВ ВЛАСНИКА */}
                 {!isOwnerProfile ? (
                   <div style={{ background: '#fef2f2', border: `1px dashed ${colors.red}`, borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                     <div>
@@ -1689,7 +1845,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         </div>
       )}
 
-      {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ ПЕРСОНАЛУ (ТІЛЬКИ EMAIL ТА РОЛЬ) --- */}
+      {/* --- МОДАЛЬНЕ ВІКНО ДОДАВАННЯ ПЕРСОНАЛУ --- */}
       {isInviteStaffModalOpen && (
         <div className="modal-overlay" onClick={() => setIsInviteStaffModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '420px', background: '#fff', padding: '2rem', borderRadius: '20px', width: '100%' }}>

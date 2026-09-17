@@ -122,6 +122,96 @@ const getStaffName = (t: any): string => {
   return 'Майстер';
 };
 
+// Список усіх доступних зручностей із лапкою для тварин
+const ALL_AMENITIES = [
+  {
+    id: 'parking',
+    label: 'Паркування',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/>
+        <circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'card_payment',
+    label: 'Оплата карткою',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+    )
+  },
+  {
+    id: 'wifi',
+    label: 'Wi-Fi',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+    )
+  },
+  {
+    id: 'accessibility',
+    label: 'Доступність',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/>
+      </svg>
+    )
+  },
+  {
+    id: 'coffee_tea',
+    label: 'Кава та чай',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+      </svg>
+    )
+  },
+  {
+    id: 'ac',
+    label: 'Кондиціонер',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 12h20"/><path d="M7 16l-3-4 3-4"/><path d="M17 16l3-4-3-4"/><path d="M12 2v20"/>
+      </svg>
+    )
+  },
+  {
+    id: 'pet_friendly',
+    label: 'Pet friendly',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="15" r="3.2" />
+        <circle cx="6.8" cy="11.5" r="1.8" />
+        <circle cx="17.2" cy="11.5" r="1.8" />
+        <circle cx="9.2" cy="7.2" r="1.8" />
+        <circle cx="14.8" cy="7.2" r="1.8" />
+      </svg>
+    )
+  },
+  {
+    id: 'generator',
+    label: 'Світло є завжди (генератор)',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'kids_friendly',
+    label: 'Дитяча зона',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 1 0-16 0"/>
+      </svg>
+    )
+  }
+];
+
 export default function SalonClient({
   initialSalon,
   initialServices,
@@ -215,6 +305,14 @@ export default function SalonClient({
 
   const [slotItems, setSlotItems] = useState<SlotStatusItem[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+
+  const activeAmenities = useMemo(() => {
+    const rawList = salon?.layout_config?.amenities ?? salon?.amenities;
+    const list = Array.isArray(rawList)
+      ? rawList
+      : ['parking', 'card_payment', 'wifi', 'accessibility', 'coffee_tea'];
+    return ALL_AMENITIES.filter(a => list.includes(a.id));
+  }, [salon?.layout_config, salon?.amenities]);
 
   const totalCalculatedPrice = useMemo(() => {
     const base = Number(selectedService?.price || 0);
@@ -510,14 +608,38 @@ export default function SalonClient({
     router.push(`/?${params.toString()}`);
   };
 
-const activeTeam = useMemo(() => team, [team]);
+const formatRole = (role?: string) => {
+    if (!role) return 'Спеціаліст';
+    if (role === 'business_owner' || role === 'owner' || role === 'vendor') return 'Власник';
+    if (role === 'admin') return 'Адміністратор';
+    if (role === 'master') return 'Спеціаліст';
+    return role;
+  };
+
+  // Сортуємо команду згідно з налаштованим у CRM порядком
+  const activeTeam = useMemo(() => {
+    const order = salon?.layout_config?.team_order;
+    if (Array.isArray(order) && order.length > 0) {
+      const copy = [...team];
+      return copy.sort((a, b) => {
+        const idxA = order.indexOf(String(a.id));
+        const idxB = order.indexOf(String(b.id));
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+    }
+    return team;
+  }, [team, salon?.layout_config?.team_order]);
+
   const staffers = useMemo(() => {
     const list: any[] = [{ id: 0, name: "Будь-який майстер", role: "Найближчий вільний час", photo: null }];
     activeTeam.forEach((t) => {
       list.push({
         id: t.id,
         name: getStaffName(t),
-        role: t.role || "Спеціаліст",
+        role: t.specialization || t.title || formatRole(t.role),
         photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null,
         assigned_services: t.assigned_services,
         provides_services: t.provides_services,
@@ -1713,6 +1835,28 @@ const activeTeam = useMemo(() => team, [team]);
               <div style={{ display: 'flex', width: '16px', height: '16px', color: '#86868B' }}><Icons.MapPin /></div>
               {salon ? salon.address : "Адреса завантажується..."}
             </div>
+
+            {salon?.phone && salon?.show_phone_publicly !== false && (
+              <a
+                href={`tel:${salon.phone}`}
+                style={{
+                  color: '#86868B',
+                  fontSize: '0.92rem',
+                  fontWeight: '500',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  textDecoration: 'none',
+                  transition: 'color 0.15s ease',
+                  width: 'fit-content'
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.color = '#1D1D1F')}
+                onMouseOut={(e) => (e.currentTarget.style.color = '#86868B')}
+              >
+                <div style={{ display: 'flex', width: '15px', height: '15px', color: '#86868B' }}><Icons.Phone /></div>
+                <span>{salon.phone}</span>
+              </a>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -2134,17 +2278,46 @@ const activeTeam = useMemo(() => team, [team]);
           <div>
             <div style={{ position: 'sticky', top: '96px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-              {/* НАША КОМАНДА */}
-              <div className="section-card">
-                <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Наша команда</h3>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', alignItems: 'flex-start' }}>
+              {/* НАША КОМАНДА (Плавний свайп при великій кількості майстрів) */}
+              <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <h3 className="section-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
+                  {staffers.length > 4 && (
+                    <span style={{ fontSize: '0.74rem', color: '#86868B', fontWeight: 500 }}>
+                      Свайп →
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  className="hide-scrollbar"
+                  style={{
+                    display: 'flex',
+                    gap: '1.25rem',
+                    overflowX: 'auto',
+                    paddingBottom: '0.25rem',
+                    scrollSnapType: 'x mandatory',
+                    WebkitOverflowScrolling: 'touch',
+                  }}
+                >
                   {staffers.slice(1).map((staff, idx) => (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center' }}>
-                      <div className="team-avatar" style={{ width: '48px', height: '48px', borderRadius: '50%', marginBottom: '0.45rem', position: 'relative', flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        width: '76px',
+                        textAlign: 'center',
+                        flexShrink: 0,
+                        scrollSnapAlign: 'start',
+                      }}
+                    >
+                      <div className="team-avatar" style={{ width: '50px', height: '50px', borderRadius: '50%', marginBottom: '0.45rem', position: 'relative', flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {staff.photo ? (
-                          <Image src={staff.photo} alt={staff.name} fill sizes="48px" style={{ objectFit: 'cover' }} />
+                          <Image src={staff.photo} alt={staff.name} fill sizes="50px" style={{ objectFit: 'cover' }} />
                         ) : (
-                          <div style={{ display: 'flex', width: '20px', height: '20px', color: '#86868B' }}><Icons.User /></div>
+                          <div style={{ display: 'flex', width: '22px', height: '22px', color: '#86868B' }}><Icons.User /></div>
                         )}
                       </div>
                       <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', lineHeight: '1.2', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={staff.name}>
@@ -2212,31 +2385,19 @@ const activeTeam = useMemo(() => team, [team]);
               </div>
 
               {/* ЗРУЧНОСТІ */}
-              <div className="section-card">
-                <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Зручності</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
-                    <span>Паркування</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                    <span>Оплата карткою</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-                    <span>Wi-Fi</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-                    <span>Доступність</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500', gridColumn: 'span 2' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
-                    <span>Кава та чай</span>
+              {salon?.layout_config?.showAmenities !== false && activeAmenities.length > 0 && (
+                <div className="section-card">
+                  <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Зручності</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
+                    {activeAmenities.map((item) => (
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
+                        <span style={{ color: '#86868B', display: 'flex', alignItems: 'center' }}>{item.icon}</span>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
+              )}
 
             </div>
           </div>

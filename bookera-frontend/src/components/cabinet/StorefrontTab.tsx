@@ -16,7 +16,7 @@ interface StorefrontTabProps {
   setActiveTab: (tab: string) => void;
 }
 
-// Список усіх доступних зручностей для салону
+// Список усіх доступних зручностей для салону з покращеними SVG-іконками
 const ALL_AMENITIES = [
   {
     id: 'parking',
@@ -78,7 +78,11 @@ const ALL_AMENITIES = [
     label: 'Pet friendly',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="17" r="4"/><circle cx="6" cy="10" r="2.5"/><circle cx="18" cy="10" r="2.5"/><circle cx="9" cy="5" r="2"/><circle cx="15" cy="5" r="2"/>
+        <circle cx="12" cy="15" r="3.2" />
+        <circle cx="6.8" cy="11.5" r="1.8" />
+        <circle cx="17.2" cy="11.5" r="1.8" />
+        <circle cx="9.2" cy="7.2" r="1.8" />
+        <circle cx="14.8" cy="7.2" r="1.8" />
       </svg>
     )
   },
@@ -96,7 +100,7 @@ const ALL_AMENITIES = [
     label: 'Дитяча зона',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/>
+        <circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 1 0-16 0"/>
       </svg>
     )
   }
@@ -118,6 +122,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     showAmenities: true,
   });
 
+  const [teamOrder, setTeamOrder] = useState<string[]>([]);
   const [amenities, setAmenities] = useState<string[]>([
     'parking', 'card_payment', 'wifi', 'accessibility', 'coffee_tea'
   ]);
@@ -127,8 +132,11 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isDesignModalOpen, setIsDesignModalOpen] = useState(false);
+  const [isTeamOrderModalOpen, setIsTeamOrderModalOpen] = useState(false);
 
   const MAX_WORKPLACE_PHOTOS = 6;
+  const canAutoSave = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (business) {
@@ -145,17 +153,33 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
       setCoverPhoto(business.cover_photo || null);
       setWorkplacePhotos(business.workplace_photos || []);
 
-      if (business.layout_config) {
-        setLayoutConfig(prev => ({ ...prev, ...business.layout_config }));
+      let cfg = business.layout_config;
+      if (typeof cfg === 'string') {
+        try { cfg = JSON.parse(cfg); } catch { cfg = null; }
       }
 
-      if (Array.isArray(business.amenities) && business.amenities.length > 0) {
-        setAmenities(business.amenities);
+      if (cfg && typeof cfg === 'object') {
+        setLayoutConfig(prev => ({ ...prev, ...cfg }));
+        if (Array.isArray(cfg.amenities)) {
+          setAmenities(cfg.amenities);
+        }
+        if (Array.isArray(cfg.team_order) && cfg.team_order.length > 0) {
+          setTeamOrder(cfg.team_order.map(String));
+        } else if (team && team.length > 0) {
+          setTeamOrder(team.map((t: any) => String(t.id)));
+        }
+      } else {
+        if (Array.isArray(business.amenities) && business.amenities.length > 0) {
+          setAmenities(business.amenities);
+        }
+        if (team && team.length > 0) {
+          setTeamOrder(team.map((t: any) => String(t.id)));
+        }
       }
 
-      setTimeout(() => { canAutoSave.current = true; }, 0);
+      setTimeout(() => { canAutoSave.current = true; }, 100);
     }
-  }, [business]);
+  }, [business, team]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -163,6 +187,39 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [formData.description]);
+
+  const allGalleryPhotos = useMemo(() => {
+    const list: string[] = [];
+    if (coverPhoto) list.push(coverPhoto);
+    if (Array.isArray(workplacePhotos)) {
+      list.push(...workplacePhotos.filter(Boolean));
+    }
+    return Array.from(new Set(list));
+  }, [coverPhoto, workplacePhotos]);
+
+  // Впорядкована команда для відображення
+  const orderedTeam = useMemo(() => {
+    if (!team || team.length === 0) return [];
+    const copy = [...team];
+    if (!teamOrder || teamOrder.length === 0) return copy;
+    return copy.sort((a, b) => {
+      const idxA = teamOrder.indexOf(String(a.id));
+      const idxB = teamOrder.indexOf(String(b.id));
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return 0;
+    });
+  }, [team, teamOrder]);
+
+  const moveStaff = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= orderedTeam.length) return;
+    const currentIds = orderedTeam.map((t: any) => String(t.id));
+    const [moved] = currentIds.splice(index, 1);
+    currentIds.splice(targetIndex, 0, moved);
+    setTeamOrder(currentIds);
+  };
 
   const fullAddress = (() => {
     const city = (formData.city || '').trim();
@@ -177,15 +234,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const canAutoSave = useRef(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
   useEffect(() => {
     if (!canAutoSave.current) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => { void handleSaveBusinessInfo(true); }, 700);
   }, [formData.name, formData.description, formData.category, accentColor,
-      layoutConfig, coverPhoto, workplacePhotos, amenities]);
+      layoutConfig, coverPhoto, workplacePhotos, amenities, teamOrder]);
 
   const handleSaveBusinessInfo = async (silent = false) => {
     if (!business?.id) return;
@@ -193,16 +247,31 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
     try {
       const token = await getAuthToken();
+      const updatedLayoutConfig = {
+        ...layoutConfig,
+        amenities: amenities,
+        team_order: teamOrder,
+      };
+
       await api.updateBusiness(token, business.id, {
         name: formData.name,
         category: formData.category,
         description: formData.description,
         accent_color: accentColor,
-        layout_config: layoutConfig,
+        layout_config: updatedLayoutConfig,
         cover_photo: coverPhoto ?? undefined,
+        logo: coverPhoto ?? null,
         workplace_photos: workplacePhotos,
         amenities: amenities,
       } as any);
+
+      business.name = formData.name;
+      business.category = formData.category;
+      business.description = formData.description;
+      business.layout_config = updatedLayoutConfig;
+      business.amenities = amenities;
+      business.cover_photo = coverPhoto;
+      business.workplace_photos = workplacePhotos;
     } catch (err: any) {
       console.error("Помилка збереження:", err);
       showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
@@ -281,6 +350,14 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     );
   };
 
+  const formatRole = (role?: string) => {
+    if (!role) return 'Спеціаліст';
+    if (role === 'business_owner' || role === 'owner' || role === 'vendor') return 'Власник';
+    if (role === 'admin') return 'Адміністратор';
+    if (role === 'master') return 'Спеціаліст';
+    return role;
+  };
+
   const sortedServices = useMemo(() => {
     return [...services]
       .filter(s => s.is_active !== false)
@@ -298,6 +375,11 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     return ALL_AMENITIES.filter(a => amenities.includes(a.id));
   }, [amenities]);
 
+  const mapIframeUrl = useMemo(() => {
+    const mapQuery = encodeURIComponent(`${fullAddress || 'Львів'}, Україна`);
+    return `https://maps.google.com/maps?q=${mapQuery}&t=m&z=17&ie=UTF8&iwloc=&output=embed`;
+  }, [fullAddress]);
+
   return (
     <>
       <style dangerouslySetInnerHTML={{__html: `
@@ -305,21 +387,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
         @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes slideInUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideInUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes fadeInBg { from { opacity: 0; } to { opacity: 1; } }
-        
-        .color-swatch-item {
-          width: 38px;
-          height: 38px;
-          border-radius: 50%;
-          cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-          border: 3px solid #ffffff;
-          box-sizing: border-box;
-        }
-        .color-swatch-item:hover {
-          transform: scale(1.1);
-        }
 
         .media-delete-btn { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; background: rgba(239, 68, 68, 0.9); color: white; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; z-index: 10; backdrop-filter: blur(4px); }
         .media-delete-btn:hover { background: rgba(220, 38, 38, 1); transform: scale(1.1); }
@@ -365,37 +434,48 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         <div style={{ padding: '2rem 3rem 5rem 3rem', flex: 1, display: 'flex', justifyContent: 'center' }}>
           <div style={{ width: '100%', maxWidth: '1280px', display: 'flex', flexDirection: 'column', gap: '3rem' }}>
 
-            {/* Менеджер обкладинки (БЕЗ КРУГЛОГО ЛОГОТИПУ) */}
-            <div className="editable-block" style={{ height: '420px', borderRadius: '24px', overflow: 'hidden', background: coverPhoto ? `url(${coverPhoto}) center/cover` : '#f1f5f9', display: 'flex', alignItems: 'flex-end', padding: '2.5rem', border: coverPhoto ? 'none' : '2px dashed #cbd5e1', position: 'relative', boxShadow: coverPhoto ? '0 20px 40px rgba(0,0,0,0.08)' : 'none' }}>
-              {!coverPhoto && (
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#94a3b8', textAlign: 'center' }}>
-                  <Icons.Image style={{ width: '48px', height: '48px', opacity: 0.5 }} />
-                  <div style={{ fontWeight: '600', marginTop: '1rem', fontSize: '1.1rem' }}>Завантажте головну обкладинку закладу</div>
+            {/* Галерея: головна обкладинка + фото інтер'єру */}
+            <div className="editable-block" style={{ borderRadius: '24px', position: 'relative' }}>
+              {allGalleryPhotos.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: allGalleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', borderRadius: '24px', overflow: 'hidden' }}>
+                  <div style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', position: 'relative', background: '#f1f5f9' }}>
+                    <img src={allGalleryPhotos[0]} alt="Головна обкладинка" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  {allGalleryPhotos.length > 1 && (
+                    <div style={{ display: 'grid', gridTemplateRows: allGalleryPhotos.length > 2 ? 'repeat(2, 1fr)' : '1fr', gap: '1rem', height: '100%' }}>
+                      {allGalleryPhotos.slice(1, 3).map((photo, idx) => (
+                        <div key={idx} style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.04)', position: 'relative', background: '#f1f5f9' }}>
+                          <img src={photo} alt={`Фото ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ height: '420px', borderRadius: '24px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #cbd5e1', position: 'relative' }}>
+                  <div style={{ color: '#94a3b8', textAlign: 'center' }}>
+                    <Icons.Image style={{ width: '48px', height: '48px', opacity: 0.5 }} />
+                    <div style={{ fontWeight: '600', marginTop: '1rem', fontSize: '1.1rem' }}>Завантажте головну обкладинку та фото інтер'єру</div>
+                  </div>
                 </div>
               )}
+
               <div className="edit-overlay" onClick={() => setIsPhotoModalOpen(true)}>
-                <button className="edit-btn"><Icons.Camera /> Змінити обкладинку та фото інтер'єру</button>
+                <button className="edit-btn"><Icons.Camera /> Змінити обкладинку та фото ({allGalleryPhotos.length})</button>
               </div>
             </div>
 
-            {/* Назва, рейтинг та адреса закладу */}
+            {/* Назва та адреса закладу */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem' }}>
               <div style={{ flex: 1, minWidth: '300px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
-                  <input
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="inline-input"
-                    placeholder="Назва вашого закладу"
-                    style={{ fontSize: '2.5rem', fontWeight: '800', color: '#1D1D1F', lineHeight: 1.15, letterSpacing: '-0.02em', width: 'auto', minWidth: '240px' }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
-                    <span style={{ color: '#f59e0b', fontSize: '1.25rem', lineHeight: 1 }}>★</span>
-                    <span style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1D1D1F' }}>5.0</span>
-                    <span style={{ color: '#86868B', fontSize: '0.85rem', fontWeight: '500' }}>(відгуки)</span>
-                  </div>
-                </div>
+                <input
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className="inline-input"
+                  placeholder="Назва вашого закладу"
+                  style={{ fontSize: '2.5rem', fontWeight: '800', color: '#1D1D1F', lineHeight: 1.15, letterSpacing: '-0.02em', width: 'auto', minWidth: '240px' }}
+                />
 
                 <div className="editable-block" style={{ marginTop: '0.5rem', borderRadius: '12px', padding: '0.4rem 0.6rem', marginLeft: '-0.6rem', width: 'fit-content' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#86868B', fontSize: '0.92rem', fontWeight: '500' }}>
@@ -410,8 +490,21 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     </div>
                   )}
 
-                  <div className="edit-overlay" style={{ borderRadius: '12px' }} onClick={() => onNavigate?.('Settings', 'profile')}>
-                    <button className="edit-btn"><Icons.Edit /> Змінити адресу та телефон</button>
+                  <div className="edit-overlay" style={{ borderRadius: '10px' }} onClick={() => onNavigate?.('Settings', 'profile')}>
+                    <button
+                      className="edit-btn"
+                      style={{
+                        padding: '0.3rem 0.75rem',
+                        fontSize: '0.78rem',
+                        fontWeight: '600',
+                        borderRadius: '6px',
+                        gap: '0.35rem',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 2px 8px rgba(59, 130, 246, 0.25)'
+                      }}
+                    >
+                      <Icons.Edit style={{ width: '13px', height: '13px' }} /> Змінити
+                    </button>
                   </div>
                 </div>
               </div>
@@ -422,7 +515,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
-                {/* 🟢 ПРАЙС-ЛИСТ */}
+                {/* ПРАЙС-ЛИСТ */}
                 <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1D1D1F', margin: 0, letterSpacing: '-0.02em' }}>
@@ -530,27 +623,46 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               {/* Сайдбар (Команда, Карта та Зручності) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'sticky', top: '90px' }}>
 
-                {/* Блок Команда */}
+                {/* Блок Команда (Свайп та пряме відкриття вікна черги) */}
                 {layoutConfig.showTeam && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: '0 0 1.25rem 0', color: '#1D1D1F' }}>Наша команда</h3>
-                    {team.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', alignItems: 'flex-start' }}>
-                        {team.map((staff, idx) => (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center' }}>
-                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                              {staff.avatar_url ? <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar"/> : <Icons.User />}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#1D1D1F' }}>Наша команда</h3>
+                      <button
+                        type="button"
+                        onClick={() => setIsTeamOrderModalOpen(true)}
+                        style={{ background: 'transparent', border: 'none', color: '#86868B', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Впорядкувати ⇅
+                      </button>
+                    </div>
+
+                    {orderedTeam.length > 0 ? (
+                      <div className="hide-scrollbar" style={{ display: 'flex', gap: '1.25rem', overflowX: 'auto', paddingBottom: '0.25rem', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+                        {orderedTeam.map((staff, idx) => (
+                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
+                              {staff.avatar_url ? (
+                                <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
+                              ) : (
+                                <div style={{ display: 'flex', width: '20px', height: '20px', color: '#86868B' }}><Icons.User /></div>
+                              )}
                             </div>
-                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{staff.name}</div>
-                            <div style={{ fontSize: '0.72rem', color: '#86868B', marginTop: '2px', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{staff.role || 'Спеціаліст'}</div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={staff.name}>
+                              {staff.name}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: '#86868B', marginTop: '2px', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={formatRole(staff.role)}>
+                              {formatRole(staff.role)}
+                            </div>
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div style={{ textAlign: 'center', padding: '1rem 0', color: '#94a3b8' }}>Команда не додана</div>
                     )}
-                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => setActiveTab('Team')}>
-                      <button className="edit-btn"><Icons.Edit /> Керувати командою</button>
+
+                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={() => setIsTeamOrderModalOpen(true)}>
+                      <button className="edit-btn"><Icons.Edit /> Впорядкувати чергу майстрів</button>
                     </div>
                   </div>
                 )}
@@ -559,14 +671,21 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 {layoutConfig.showMap && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', background: '#e2e8f0' }}>
-                      <iframe
-                        key={fullAddress}
-                        width="100%"
-                        height="100%"
-                        style={{ border: 0, pointerEvents: 'none' }}
-                        loading="lazy"
-                        src={`https://maps.google.com/maps?q=${encodeURIComponent(fullAddress || 'Львів, Україна')}&t=&z=17&ie=UTF8&iwloc=&output=embed`}
-                      />
+                      <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
+                        <iframe
+                          key={fullAddress}
+                          src={mapIframeUrl}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            border: 0,
+                            pointerEvents: 'none'
+                          }}
+                          allowFullScreen={false}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
+                      </div>
                     </div>
                     <div style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
                       <span style={{ color: '#1D1D1F', fontSize: '0.88rem', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -586,7 +705,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                   </div>
                 )}
 
-                {/* 🟢 БЛОК ЗРУЧНОСТІ ПІД КАРТОЮ */}
+                {/* БЛОК ЗРУЧНОСТІ ПІД КАРТОЮ */}
                 {layoutConfig.showAmenities && (
                   <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
@@ -626,7 +745,135 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
           </div>
         </div>
 
-        {/* МОДАЛЬНЕ ВІКНО КЕРУВАННЯ МЕДІА (БЕЗ ЛОГО) */}
+        {/* 🟢 ОКРЕМЕ МОДАЛЬНЕ ВІКНО ДЛЯ ВПОРЯДКУВАННЯ МАЙСТРІВ */}
+        {isTeamOrderModalOpen && (
+          <div className="modal-overlay" onClick={() => setIsTeamOrderModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeInBg 0.2s ease forwards' }}>
+            <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '440px', borderRadius: '20px', padding: '1.75rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 20px 45px rgba(0,0,0,0.18)', animation: 'slideInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.85rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Порядок майстрів</h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '2px 0 0 0' }}>Налаштуйте черговість відображення на сторінці</p>
+                </div>
+                <button onClick={() => setIsTeamOrderModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  ✕
+                </button>
+              </div>
+
+              <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '50vh', overflowY: 'auto', paddingRight: '2px' }}>
+                {orderedTeam.length > 0 ? (
+                  orderedTeam.map((staff, idx) => (
+                    <div
+                      key={staff.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: '#f8fafc',
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8', width: '18px' }}>
+                          #{idx + 1}
+                        </span>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#e2e8f0', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {staff.avatar_url ? (
+                            <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                          ) : (
+                            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{staff.name?.[0] || 'М'}</span>
+                          )}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {staff.name}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#86868B' }}>
+                            {formatRole(staff.role)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveStaff(idx, -1)}
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                            opacity: idx === 0 ? 0.35 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            color: '#0f172a',
+                          }}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === orderedTeam.length - 1}
+                          onClick={() => moveStaff(idx, 1)}
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            cursor: idx === orderedTeam.length - 1 ? 'not-allowed' : 'pointer',
+                            opacity: idx === orderedTeam.length - 1 ? 0.35 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            color: '#0f172a',
+                          }}
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '1.5rem 0', color: '#94a3b8', fontSize: '0.9rem' }}>
+                    Співробітників не знайдено
+                  </div>
+                )}
+              </div>
+
+              {orderedTeam.length <= 1 && (
+                <div style={{ padding: '0.75rem 1rem', background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: '10px', fontSize: '0.78rem', color: '#0369A1' }}>
+                  Додайте більше співробітників у вкладці «Команда», щоб міняти їх місцями стрілками ↑ ↓.
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSaveBusinessInfo();
+                    setIsTeamOrderModalOpen(false);
+                    showToast('Порядок майстрів збережено!', 'success');
+                  }}
+                  style={{ padding: '0.65rem 1.4rem', backgroundColor: '#0f172a', color: '#fff', borderRadius: '10px', fontWeight: 600, fontSize: '0.88rem', border: 'none', cursor: 'pointer' }}
+                >
+                  Готово
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* МОДАЛЬНЕ ВІКНО КЕРУВАННЯ МЕДІА */}
         {isPhotoModalOpen && (
           <div className="modal-overlay" onClick={() => setIsPhotoModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', justifyContent: 'center', alignItems: 'center', animation: 'fadeInBg 0.2s ease forwards' }}>
             <div onClick={e => e.stopPropagation()} className="hide-scrollbar" style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '800px', maxHeight: '85vh', borderRadius: '24px', padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column', gap: '2.5rem', overflowY: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', animation: 'slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
@@ -693,11 +940,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
           </div>
         )}
 
-        {/* 🟢 БІЧНА ПАНЕЛЬ НАЛАШТУВАНЬ ВИГЛЯДУ, БЛОКІВ ТА ЗРУЧНОСТЕЙ */}
+        {/* БІЧНА ПАНЕЛЬ НАЛАШТУВАНЬ ВИГЛЯДУ, БЛОКІВ ТА ЗРУЧНОСТЕЙ */}
         {isDesignModalOpen && (
           <div className="modal-overlay" onClick={() => setIsDesignModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.25)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', justifyContent: 'flex-end', animation: 'fadeInBg 0.3s ease forwards' }}>
-            <div className="hide-scrollbar" onClick={e => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', height: '100%', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="hide-scrollbar" onClick={e => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', height: '100%', padding: '24px 28px 4.5rem 28px', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Вигляд та блоки</h2>
                 <button onClick={() => setIsDesignModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '34px', height: '34px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -731,6 +979,36 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                       <div style={{ position: 'absolute', top: '2px', left: '2px', width: '20px', height: '20px', backgroundColor: '#ffffff', borderRadius: '50%', transition: 'transform 0.25s', transform: layoutConfig.showTeam ? 'translateX(20px)' : 'translateX(0px)', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }} />
                     </div>
                   </div>
+
+                  {/* Кнопка впорядкування команди у сайдбарі */}
+                  {layoutConfig.showTeam && (
+                    <div style={{ padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDesignModalOpen(false);
+                          setIsTeamOrderModalOpen(true);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem 0.8rem',
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          color: '#0f172a',
+                          fontWeight: 600,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>Порядок майстрів ({orderedTeam.length})</span>
+                        <span>⇅</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Тогл Карта */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #e2e8f0' }}>
@@ -781,8 +1059,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 </div>
               </div>
 
-              {/* 🟢 ВИБІР ЗРУЧНОСТЕЙ ДЛЯ САЛОНУ */}
-              <div>
+              {/* ВИБІР ЗРУЧНОСТЕЙ ДЛЯ САЛОНУ */}
+              <div style={{ paddingBottom: '2rem' }}>
                 <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '12px' }}>
                   Зручності закладу
                 </h3>
@@ -797,34 +1075,36 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          padding: '10px 14px',
-                          borderRadius: '12px',
+                          padding: '12px 16px',
+                          borderRadius: '14px',
                           border: `1px solid ${isChecked ? '#10b981' : '#e2e8f0'}`,
                           backgroundColor: isChecked ? '#f0fdf4' : '#ffffff',
                           cursor: 'pointer',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          boxShadow: isChecked ? '0 2px 6px rgba(16, 185, 129, 0.08)' : 'none'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <span style={{ color: isChecked ? '#166534' : '#64748b', display: 'flex', alignItems: 'center' }}>
                             {item.icon}
                           </span>
-                          <span style={{ fontSize: '0.9rem', fontWeight: isChecked ? 600 : 500, color: '#0f172a' }}>
+                          <span style={{ fontSize: '0.92rem', fontWeight: isChecked ? 600 : 500, color: '#0f172a' }}>
                             {item.label}
                           </span>
                         </div>
                         <div style={{
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '5px',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '6px',
                           border: isChecked ? 'none' : '1.5px solid #cbd5e1',
                           backgroundColor: isChecked ? '#10b981' : '#ffffff',
                           color: '#ffffff',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: '11px',
-                          fontWeight: 'bold'
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          transition: 'all 0.15s ease'
                         }}>
                           {isChecked && '✓'}
                         </div>

@@ -408,7 +408,7 @@ async def list_my_workplaces(
             name=biz.name,
             slug=biz.slug,
             city=biz.city,
-            logo=biz.logo,
+            logo=biz.cover_photo or biz.logo,
             role=membership.role,
             is_current=(user.business_id == biz.id),
             has_access=has_access(biz),

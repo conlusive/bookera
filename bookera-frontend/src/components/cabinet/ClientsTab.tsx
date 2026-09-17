@@ -419,7 +419,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .timeline-item { position: relative; }
         .timeline-dot { position: absolute; left: -27px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 2px solid #cbd5e1; box-shadow: 0 0 0 4px #fff; }
         .timeline-dot.success { border-color: #10b981; background: #d1fae5; }
-        .timeline-dot.system { border-color: #3b82f6; background: #dbeafe; }
+        .timeline-dot.system { border-color: #6F9273; background: #E4EEE3; }
 
         .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
         .gallery-placeholder { aspect-ratio: 1; background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; color: #94a3b8; cursor: pointer; transition: 0.2s; }
@@ -596,7 +596,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
                        <div style={{ background: '#fff', padding: '1.25rem 1rem', borderRadius: '16px', border: '1px solid #e2e8f0', position: 'relative' }}>
                           <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Депозит</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: (viewingClient.balance || 0) < 0 ? '#ef4444' : '#3b82f6' }}>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: (viewingClient.balance || 0) < 0 ? '#ef4444' : '#6F9273' }}>
                              {viewingClient.balance || 0}₴
                           </div>
                           <button onClick={() => setIsBalanceModalOpen(true)} title="Керувати балансом" style={{ position: 'absolute', top: '0.8rem', right: '0.8rem', width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', fontSize: '1.2rem', paddingBottom: '2px' }}>
@@ -690,7 +690,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
                           {viewingClient.medical_pdf_url ? (
                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f1f5f9', padding: '0.6rem 1rem', borderRadius: '10px' }}>
-                                <a href={viewingClient.medical_pdf_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontSize: '0.85rem', fontWeight: '600', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <a href={viewingClient.medical_pdf_url} target="_blank" rel="noreferrer" style={{ color: '#6F9273', fontSize: '0.85rem', fontWeight: '600', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                    <Icons.Paperclip /> Переглянути PDF
                                 </a>
                                 <button onClick={handleRemovePDF} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }} title="Видалити файл"><Icons.TrashSmall /></button>
@@ -820,7 +820,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                             </td>
                             <td style={{ color: '#64748b' }}>{client.phone || '—'}</td>
                             <td style={{ color: '#64748b' }}>{client.last_visit ? new Date(client.last_visit).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }) : '—'}</td>
-                            <td style={{ fontWeight: '700', color: (client.balance || 0) < 0 ? '#ef4444' : (client.balance > 0 ? '#3b82f6' : '#64748b') }}>{client.balance || 0} ₴</td>
+                            <td style={{ fontWeight: '700', color: (client.balance || 0) < 0 ? '#ef4444' : (client.balance > 0 ? '#6F9273' : '#64748b') }}>{client.balance || 0} ₴</td>
                             <td><span style={{ fontWeight: '600' }}>{client.visits || 0}</span></td>
                             <td style={{ fontWeight: '700', color: '#0f172a' }}>{client.spent || 0} ₴</td>
                           </tr>
@@ -860,7 +860,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
               <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '1rem', textAlign: 'center', marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Поточний баланс</div>
-                 <div style={{ fontSize: '1.8rem', fontWeight: '800', color: (viewingClient?.balance || 0) < 0 ? '#ef4444' : '#3b82f6', marginTop: '0.2rem' }}>{viewingClient?.balance || 0} ₴</div>
+                 <div style={{ fontSize: '1.8rem', fontWeight: '800', color: (viewingClient?.balance || 0) < 0 ? '#ef4444' : '#6F9273', marginTop: '0.2rem' }}>{viewingClient?.balance || 0} ₴</div>
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', background: '#f1f5f9', padding: '4px', borderRadius: '10px' }}>

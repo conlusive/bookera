@@ -1246,7 +1246,7 @@ const handleSaveShifts = async () => {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontWeight: '800', color: '#0f172a', marginBottom: '1rem', fontSize: '1.1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             Справи на {isToday ? 'сьогодні' : currentDate.toLocaleDateString('uk-UA', {day: 'numeric', month: 'short'})}
-            <button onClick={handleAddTaskClick} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: '0.2s', padding: 0 }} onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
+            <button onClick={handleAddTaskClick} style={{ background: 'transparent', border: 'none', color: '#6F9273', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: '0.2s', padding: 0 }} onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
           </div>
@@ -1254,7 +1254,7 @@ const handleSaveShifts = async () => {
 <div className="custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.2rem' }}>
             {tasksForSelectedDay.length === 0 && !isAddingTask && (
               <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.85rem', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
-                Немає завдань на цей день.<br/>Натисніть <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>+</span> щоб додати.
+                Немає завдань на цей день.<br/>Натисніть <span style={{ color: '#6F9273', fontWeight: 'bold' }}>+</span> щоб додати.
               </div>
             )}
 
@@ -1318,7 +1318,7 @@ const handleSaveShifts = async () => {
             })}
 
             {isAddingTask && (
-              <div style={{ background: '#ffffff', border: '1px solid #3b82f6', borderRadius: '8px', padding: '0.4rem 0.6rem', display: 'flex', gap: '0.6rem', alignItems: 'center', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}>
+              <div style={{ background: '#ffffff', border: '1px solid #8FAE93', borderRadius: '8px', padding: '0.4rem 0.6rem', display: 'flex', gap: '0.6rem', alignItems: 'center', boxShadow: '0 2px 8px rgba(59,130,246,0.1)' }}>
                 <div className="min-checkbox" style={{ opacity: 0.3, cursor: 'default' }}></div>
                 <input
                   autoFocus
@@ -2294,7 +2294,7 @@ const handleSaveShifts = async () => {
       {dragConfirmData && (
         <div className="modal-overlay" onClick={() => setDragConfirmData(null)} style={{ zIndex: 2000 }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)', maxWidth: '420px', textAlign: 'center', padding: '2.5rem' }}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#F4FAF5', color: '#6F9273', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 9l4-4 4 4"/><path d="M9 5v14"/><path d="M19 15l-4 4-4-4"/><path d="M15 19V5"/></svg>
             </div>
             <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.8rem' }}>Перенести запис?</h2>
@@ -2307,7 +2307,7 @@ const handleSaveShifts = async () => {
                 </div>
                 <div style={{ color: '#cbd5e1' }}><Icons.ChevronRight /></div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.7rem', color: '#3b82f6', fontWeight: '800', textTransform: 'uppercase', marginBottom: '2px' }}>Стане</span>
+                  <span style={{ fontSize: '0.7rem', color: '#6F9273', fontWeight: '800', textTransform: 'uppercase', marginBottom: '2px' }}>Стане</span>
                   <input
                     type="time" value={dragConfirmData.newStart.substring(0, 5)}
                     onChange={e => {
@@ -2321,7 +2321,7 @@ const handleSaveShifts = async () => {
                         const newEndStr = `${String(Math.floor(totalEnd / 60) % 24).padStart(2, '0')}:${String(totalEnd % 60).padStart(2, '0')}:00`;
                         setDragConfirmData({...dragConfirmData, newStart: `${newStartTime}:00`, newEnd: newEndStr});
                     }}
-                    style={{ fontSize: '1.2rem', fontWeight: '800', color: '#3b82f6', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
+                    style={{ fontSize: '1.2rem', fontWeight: '800', color: '#2E3A30', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
                   />
                 </div>
               </div>
@@ -2339,12 +2339,12 @@ const handleSaveShifts = async () => {
       {showTaskInfoModal && (
         <div className="modal-overlay" onClick={() => setShowTaskInfoModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '400px', textAlign: 'center' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}><Icons.Sparkles /></div>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F4FAF5', color: '#6F9273', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}><Icons.Sparkles /></div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.5rem' }}>Менеджер задач</h2>
             <p style={{ color: '#475569', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '2rem' }}>Тут ви можете створювати швидкі списки справ на день (To-Do).</p>
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
               <button onClick={() => setShowTaskInfoModal(false)} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '8px', fontWeight: '600', color: '#475569', cursor: 'pointer', flex: 1 }}>Скасувати</button>
-              <button onClick={confirmTaskInfo} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#3b82f6', border: 'none', borderRadius: '8px', fontWeight: '600', color: '#ffffff', cursor: 'pointer', flex: 1, boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>Зрозуміло</button>
+              <button onClick={confirmTaskInfo} style={{ padding: '0.75rem 1.5rem', backgroundColor: '#222222', border: 'none', borderRadius: '8px', fontWeight: '600', color: '#ffffff', cursor: 'pointer', flex: 1, boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>Зрозуміло</button>
             </div>
           </div>
         </div>

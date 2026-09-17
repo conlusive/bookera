@@ -531,7 +531,7 @@ export default function InventoryTab({ business, team }: any) {
     textMuted: '#64748b',
     border: '#e2e8f0',
     bgLight: '#f8fafc',
-    blue: '#3b82f6',
+    blue: '#6F9273',
     red: '#ef4444',
     darkBg: '#0f172a',
     darkTextMuted: '#94a3b8',
@@ -539,7 +539,7 @@ export default function InventoryTab({ business, team }: any) {
   };
 
   const categoryStyles: Record<string, { fill: string, bg: string }> = {
-    'Матеріали': { fill: '#3b82f6', bg: '#eff6ff' },
+    'Матеріали': { fill: '#6F9273', bg: '#F4FAF5' },
     'Оренда': { fill: '#f59e0b', bg: '#fffbeb' },
     'Комунальні': { fill: '#0ea5e9', bg: '#ecfeff' },
     'Зарплата': { fill: '#10b981', bg: '#ecfdf5' },
@@ -762,7 +762,7 @@ export default function InventoryTab({ business, team }: any) {
                             <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', color: theme.textMuted, fontWeight: '500' }}>
                               {new Date(e.expense_date).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })}
 
-                              {isPlanned && <div style={{ fontSize: '0.65rem', color: theme.blue, background: '#eff6ff', padding: '2px 6px', borderRadius: '6px', display: 'inline-block', marginLeft: '6px', fontWeight: '700' }}>Заплановано</div>}
+                              {isPlanned && <div style={{ fontSize: '0.65rem', color: theme.blue, background: '#F4FAF5', padding: '2px 6px', borderRadius: '6px', display: 'inline-block', marginLeft: '6px', fontWeight: '700' }}>Заплановано</div>}
 
                               {e.recurrence === 'monthly' && <div style={{ fontSize: '0.65rem', color: '#8b5cf6', background: '#faf5ff', padding: '2px 6px', borderRadius: '6px', display: 'inline-block', marginLeft: '6px', fontWeight: '700' }}>Щомісяця</div>}
                               {e.recurrence === 'weekly' && <div style={{ fontSize: '0.65rem', color: '#10b981', background: '#ecfdf5', padding: '2px 6px', borderRadius: '6px', display: 'inline-block', marginLeft: '6px', fontWeight: '700' }}>Щотижня</div>}
@@ -779,7 +779,7 @@ export default function InventoryTab({ business, team }: any) {
                             </td>
                             <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
                               {e.isVirtual ? (
-                                <span style={{ fontSize: '0.75rem', color: theme.blue, background: '#eff6ff', padding: '4px 8px', borderRadius: '6px', fontWeight: '600' }}>Авто-прогноз</span>
+                                <span style={{ fontSize: '0.75rem', color: theme.blue, background: '#F4FAF5', padding: '4px 8px', borderRadius: '6px', fontWeight: '600' }}>Авто-прогноз</span>
                               ) : (
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                   <button onClick={() => startEditExpense(e)} style={{ background: 'transparent', border: 'none', color: '#cbd5e1', cursor: 'pointer', transition: '0.2s' }} onMouseOver={ev=>ev.currentTarget.style.color=theme.blue} onMouseOut={ev=>ev.currentTarget.style.color='#cbd5e1'} title="Редагувати">
@@ -938,7 +938,7 @@ export default function InventoryTab({ business, team }: any) {
                        План: {formattedNextMonth}
                      </h4>
                    </div>
-                   <div style={{ background: '#eff6ff', color: theme.blue, padding: '0.25rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700' }}>
+                   <div style={{ background: '#F4FAF5', color: theme.blue, padding: '0.25rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700' }}>
                      {upcomingMonthItems.length}
                    </div>
                  </div>
@@ -958,7 +958,7 @@ export default function InventoryTab({ business, team }: any) {
                              </div>
                              <div style={{ color: theme.textMuted, fontSize: '0.75rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 {new Date(f.expense_date).toLocaleDateString('uk-UA', {day:'numeric', month:'short'})}
-                                {f.isVirtual && <span style={{ color: theme.blue, background: '#eff6ff', padding: '2px 4px', borderRadius: '4px', fontSize: '0.6rem' }}>Прогноз</span>}
+                                {f.isVirtual && <span style={{ color: theme.blue, background: '#F4FAF5', padding: '2px 4px', borderRadius: '4px', fontSize: '0.6rem' }}>Прогноз</span>}
                              </div>
                            </div>
                            <div style={{ fontWeight: '700', color: theme.textMain, fontSize: '0.9rem' }}>
@@ -1032,10 +1032,10 @@ export default function InventoryTab({ business, team }: any) {
             <>
               <div style={{ background: '#fff', border: `1px solid ${theme.border}`, padding: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.2rem' }}>
-                   <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#eff6ff', color: theme.blue, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                   <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#F4FAF5', color: theme.blue, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                      <Icons.Archive />
                    </div>
-                   <div style={{ background: '#eff6ff', color: theme.blue, padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700' }}>
+                   <div style={{ background: '#F4FAF5', color: theme.blue, padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700' }}>
                      Актив
                    </div>
                  </div>
@@ -1165,7 +1165,7 @@ export default function InventoryTab({ business, team }: any) {
                   <div className="modal-select-icon"><Icons.ChevronDown /></div>
                 </div>
                 {expForm.recurrence !== 'none' && (
-                  <div style={{ fontSize: '0.75rem', color: theme.blue, marginTop: '0.5rem', background: '#eff6ff', padding: '0.6rem', borderRadius: '8px', lineHeight: '1.4' }}>
+                  <div style={{ fontSize: '0.75rem', color: theme.blue, marginTop: '0.5rem', background: '#F4FAF5', padding: '0.6rem', borderRadius: '8px', lineHeight: '1.4' }}>
                     {editingExpense
                       ? "Увага: старі майбутні платежі цієї категорії будуть оновлені та перенесені відповідно до нової дати."
                       : "Система автоматично створить майбутні платежі починаючи з цієї дати. Вони з'являться у графі 'Заплановано'."}

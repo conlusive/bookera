@@ -4,7 +4,7 @@ import secrets
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +37,14 @@ async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_d
             User.business_id == business_id,
             User.role.in_(["master", "business_owner"]),
             User.is_active == True,
-            User.provides_services != False,
+            # NULL обробляємо явно.
+            #
+            # У SQL `provides_services != False` для NULL дає NULL, а не
+            # істину - і рядок ВИКЛЮЧАЄТЬСЯ з результату. Майстри, у яких
+            # це поле ніколи не заповнювали, просто зникали зі списку:
+            # власник бачив, що людина не приймає записів, хоча нічого
+            # такого не вмикав.
+            or_(User.provides_services.is_(None), User.provides_services == True),
         )
     )
     return [
@@ -46,6 +53,13 @@ async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_d
             "full_name": u.full_name,
             "specialization": u.specialization,
             "avatar_url": u.avatar_url,
+            # Чи показувати людину в блоці «Наша команда».
+            #
+            # Фільтрувати ТУТ не можна: цей ендпоінт живить і вибір
+            # майстра при бронюванні. Прибравши людину звідси, ми
+            # позбавили б її записів - а йдеться саме про те, щоб вона
+            # працювала, але не була на вітрині.
+            "show_in_storefront": u.show_in_storefront,
             "assigned_services": u.assigned_services,
             "provides_services": u.provides_services,
         }

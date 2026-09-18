@@ -536,9 +536,13 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               {/* Сайдбар (Команда, Карта та Зручності) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'sticky', top: '90px' }}>
 
-                {/* Блок Команда (Свайп та пряме відкриття вікна черги) */}
-                {layoutConfig.showTeam && (
-                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                {/* Блок Команда.
+                    Показуємо ЗАВЖДИ, навіть вимкнений - приглушеним і
+                    з плашкою. Раніше він зникав із редактора, і ввімкнути
+                    назад можна було лише через модальне вікно, де ще
+                    треба здогадатись, що воно там. */}
+                {(
+                  <div className="editable-block" style={{ opacity: layoutConfig.showTeam ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                       <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#1D1D1F' }}>Наша команда</h3>
                       <button
@@ -552,8 +556,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
                     {orderedTeam.length > 0 ? (
                       <div className="hide-scrollbar" style={{ display: 'flex', gap: '1.25rem', overflowX: 'auto', paddingBottom: '0.25rem', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+                        {/* Прихованих з вітрини показуємо приглушеними, а не
+                            ховаємо: порядок налаштовують для всіх, і людина,
+                            яка зникла зі списку, виглядає як помилка. Видно
+                            і що вона в команді, і що клієнт її не побачить. */}
                         {orderedTeam.map((staff, idx) => (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
+                          <div key={idx} title={staff.show_in_storefront === false ? 'Не показується на сторінці закладу' : undefined} style={{ opacity: staff.show_in_storefront === false ? 0.4 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
                               {staff.avatar_url ? (
                                 <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
@@ -565,7 +573,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                               {staff.name}
                             </div>
                             <div style={{ fontSize: '0.74rem', color: '#86868B', marginTop: '2px', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={formatRole(staff.role)}>
-                              {formatRole(staff.role)}
+                              {staff.show_in_storefront === false ? 'Прихований' : formatRole(staff.role)}
                             </div>
                           </div>
                         ))}
@@ -581,8 +589,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 )}
 
                 {/* Блок Карта */}
-                {layoutConfig.showMap && (
-                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                {(
+                  <div className="editable-block" style={{ opacity: layoutConfig.showMap ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', background: '#e2e8f0' }}>
                       <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
                         <iframe
@@ -619,8 +627,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 )}
 
                 {/* БЛОК ЗРУЧНОСТІ ПІД КАРТОЮ */}
-                {layoutConfig.showAmenities && (
-                  <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                {(
+                  <div className="editable-block" style={{ opacity: layoutConfig.showAmenities ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     {/* Кнопку «Налаштувати ⚙» прибрано: блок редагується
                         при наведенні, як решта на цій сторінці. Окрема
                         кнопка біля одного заголовка виглядала винятком

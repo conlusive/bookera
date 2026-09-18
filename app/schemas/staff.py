@@ -37,6 +37,7 @@ class StaffUpdate(BaseModel):
     shifts: Optional[List[dict]] = None
     assigned_services: Optional[List[int]] = None
     provides_services: Optional[bool] = None
+    show_in_storefront: Optional[bool] = None
     payout_period: Optional[str] = None
     payout_day: Optional[str] = None
     tips_full: Optional[bool] = None
@@ -58,6 +59,7 @@ class StaffResponse(BaseModel):
     shifts: Optional[List[dict]] = None
     assigned_services: Optional[List[int]] = []
     provides_services: bool = True
+    show_in_storefront: bool = True
     payout_period: Optional[str] = None
     payout_day: Optional[str] = None
     tips_full: bool = True

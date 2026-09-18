@@ -210,3 +210,35 @@ async def test_reschedule_keeps_local_time(client, auth_headers):
     assert stored.hour == 14, (
         f"запис має лишитись о 14:00, а не зсунутись на {stored.hour}:00"
     )
+
+
+@pytest.mark.asyncio
+async def test_hidden_master_still_takes_bookings(client, auth_headers):
+    """
+    show_in_storefront ховає людину ЛИШЕ з блоку «Наша команда».
+
+    Майстер може працювати, але не хотіти своє фото на сайті - або
+    бути на заміні. Якби поле фільтрувало сам ендпоінт майстрів,
+    людина зникла б і з вибору при бронюванні, тобто перестала б
+    отримувати записи. Це рівно те, чого власник НЕ хотів.
+    """
+    headers = auth_headers("hidden-master-owner")
+    business_id, service_id = await _setup(client, headers, "Hidden Master Salon")
+
+    r = await client.get(f"/crm/businesses/me", headers=headers)
+    owner_id = r.json()["id"]
+
+    # Ховаємо власника з вітрини
+    r = await client.patch(f"/crm/staff/{owner_id}", json={
+        "show_in_storefront": False,
+    }, headers=headers)
+    assert r.status_code == 200, r.text
+
+    # Але він лишається в списку майстрів - інакше не прийме запис
+    r = await client.get(f"/crm/businesses/{business_id}/masters")
+    assert r.status_code == 200, r.text
+    masters = r.json()
+
+    me = next((m for m in masters if str(m["id"]) == str(owner_id)), None)
+    assert me is not None, "прихований майстер має лишатись доступним для запису"
+    assert me["show_in_storefront"] is False, "але позначений як прихований"

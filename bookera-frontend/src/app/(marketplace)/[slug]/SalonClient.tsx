@@ -594,6 +594,7 @@ const formatRole = (role?: string) => {
         photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null,
         assigned_services: t.assigned_services,
         provides_services: t.provides_services,
+        show_in_storefront: t.show_in_storefront,
       });
     });
     return list;

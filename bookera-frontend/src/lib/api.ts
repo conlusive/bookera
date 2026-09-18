@@ -609,6 +609,16 @@ export const api = {
     return authFetch(`/crm/businesses/${businessId}/direct-link`, token);
   },
 
+  /**
+   * Записи поточного користувача - для сторінки профілю.
+   *
+   * Шукаються за поштою й телефоном: людина записується як гість,
+   * і жодного звʼязку з її акаунтом при цьому не виникає.
+   */
+  async listMyAppointments(token: string): Promise<any[]> {
+    return authFetch('/appointments/my', token);
+  },
+
   // === Робота в кількох закладах ===
 
   /** Заклади, у яких людина працює. */

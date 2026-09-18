@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import {
   CalendarDays,
@@ -96,6 +98,7 @@ export default function ClientProfilePage() {
 
   // --- Дані з БД ---
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<any[]>([]);
   const [currentFavPage, setCurrentFavPage] = useState(1);
 
@@ -216,25 +219,22 @@ export default function ClientProfilePage() {
 
       // 2. Бронювання
       try {
-        const { data: apptsData } = await supabase
-          .from('appointments')
-          .select(`
-            id,
-            start_time,
-            end_time,
-            status,
-            price,
-            businesses ( id, name, address, city, cover_photo, logo, slug, rating ),
-            services ( id, name, price, duration_minutes )
-          `)
-          .or(`user_id.eq.${user.id},client_id.eq.${user.id}`)
-          .order('start_time', { ascending: false });
-
-        if (apptsData) {
-          setAppointments(apptsData);
-        }
-      } catch (err) {
+        // Раніше тут був прямий запит до Supabase із умовою
+        // `user_id.eq.{id}` або `client_id.eq.{id}`. Обидві хибні:
+        // поля user_id в записах немає взагалі, а client_id посилається
+        // на клієнта ЗАКЛАДУ - це інший ідентифікатор, ніж обліковий
+        // запис. Тому список був порожній завжди.
+        //
+        // Тепер через API: він шукає за поштою й телефоном - єдиним,
+        // що повʼязує акаунт із візитом.
+        const token = await getAuthToken();
+        const apptsData = await api.listMyAppointments(token);
+        setAppointments(apptsData || []);
+      } catch (err: any) {
         console.error("Помилка завантаження бронювань:", err);
+        // Порожній список і помилка виглядають однаково, але означають
+        // різне. Кажемо прямо, інакше людина вважатиме, що записів немає.
+        setAppointmentsError(err?.message || 'Не вдалося завантажити записи');
       }
 
       // 3. Улюблені заклади

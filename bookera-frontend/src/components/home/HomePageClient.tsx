@@ -1611,15 +1611,49 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         <HeroVideoBackdrop />
 
         <div className="reveal-on-scroll" style={{ position: 'relative', zIndex: 50, maxWidth: '1340px', width: '100%', margin: '0 auto', padding: '4rem 4rem 0 4rem', boxSizing: 'border-box', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '3.2rem', fontWeight: '800', color: '#ffffff', maxWidth: '800px', margin: '0 auto 1rem auto', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
-            Догляд за собою в один клік
+          {/* Заголовок зʼявляється по словах.
+              Цілий рядок, що виринає разом, читається як картинка -
+              око бачить пляму тексту й чекає, поки вона стане чіткою.
+              Послідовна поява змушує читати, а не дивитись.
+
+              Затримка 90 мс на слово: менше - зливається в один рух,
+              більше - людина встигає занудьгувати до кінця фрази. */}
+          <h1 style={{
+            fontSize: 'clamp(2.2rem, 4.5vw, 3.4rem)', fontWeight: 800, color: '#ffffff',
+            maxWidth: '820px', margin: '0 auto 1rem auto', lineHeight: 1.12,
+            letterSpacing: '-0.03em',
+          }}>
+            {'Догляд за собою в один клік'.split(' ').map((word, i) => (
+              <span
+                key={i}
+                style={{
+                  display: 'inline-block',
+                  marginRight: '0.28em',
+                  animation: `heroWordIn 0.75s cubic-bezier(0.22, 1, 0.36, 1) ${i * 90}ms both`,
+                }}
+              >
+                {word}
+              </span>
+            ))}
           </h1>
-          <p style={{ fontSize: '1.15rem', color: 'rgba(255,255,255,0.92)', maxWidth: '600px', margin: '0 auto 2.5rem auto', lineHeight: '1.5', fontWeight: '500' }}>
+
+          {/* Підзаголовок виринає після заголовка - коли фраза вже
+              прочитана. Одночасна поява робить із них один блок,
+              а це два різні повідомлення. */}
+          <p style={{
+            fontSize: '1.15rem', color: 'rgba(255,255,255,0.92)', maxWidth: '600px',
+            margin: '0 auto 2.5rem auto', lineHeight: 1.5, fontWeight: 400,
+            animation: 'heroWordIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 620ms both',
+          }}>
             Знаходьте перевірених фахівців поблизу та миттєво бронюйте візити онлайн без зайвих дзвінків.
           </p>
 
-          {/* ПОШУК (HERO) */}
+          {/* ПОШУК (HERO)
+              Зʼявляється останнім: спершу людина читає, чим корисний
+              сайт, і лише потім бачить, де це зробити. Одночасна поява
+              змусила б обирати, куди дивитись. */}
           <div style={{
+            animation: 'heroWordIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 820ms both',
             backgroundColor: 'rgba(255, 255, 255, 0.96)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',

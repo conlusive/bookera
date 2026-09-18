@@ -371,3 +371,31 @@
   transform: translateY(0);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+/* Поява слів у заголовку банера.
+   Слово виринає знизу з легким розмиттям - так рух читається як
+   проявлення, а не як стрибок. Зсув малий (14px): великий виглядає
+   як падіння, і око встигає простежити траєкторію замість слова. */
+@keyframes heroWordIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* Поважаємо системне налаштування: людям із вестибулярними розладами
+   рух на весь екран буває нестерпним, і браузер уже знає про це. */
+@media (prefers-reduced-motion: reduce) {
+  [style*="heroWordIn"] {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+}

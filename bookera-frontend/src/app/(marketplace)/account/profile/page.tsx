@@ -691,14 +691,17 @@ function ProfileContent() {
    * хоча головної немає, вибір залежить від наміру людини.
    */
   const visitActionStyle: React.CSSProperties = {
-    height: '30px',
-    padding: '0 0.75rem',
-    borderRadius: '8px',
-    border: '1px solid #E5E5EA',
+    // 34px замість 30 і світліша рамка: дрібні кнопки з темним
+    // контуром читаються як елементи форми. Тут вони - тихі дії,
+    // до яких звертаються зрідка.
+    height: '34px',
+    padding: '0 1rem',
+    borderRadius: '10px',
+    border: '1px solid #E8E8ED',
     background: '#fff',
-    color: '#111827',
-    fontSize: '0.78rem',
-    fontWeight: 600,
+    color: '#1D1D1F',
+    fontSize: '0.875rem',
+    fontWeight: 500,
     fontFamily: 'inherit',
     cursor: 'pointer',
     display: 'inline-flex',
@@ -1042,7 +1045,9 @@ function ProfileContent() {
                           <div style={{
                             fontSize: '0.78rem', fontWeight: 600, color: '#8E8E93',
                             textTransform: 'uppercase', letterSpacing: '0.04em',
-                            margin: '1.1rem 0 0.6rem 0.2rem',
+                            // Повітря перед групою: місяць має відділяти
+                            // блоки, а не тулитись до попереднього.
+                            margin: '2.25rem 0 0.75rem 0.25rem',
                           }}>
                             {group.label}
                           </div>
@@ -1053,8 +1058,12 @@ function ProfileContent() {
                               прямокутників, які око читає як стіну.
                               Тонкі лінії між рядками спокійніші. */}
                           <div style={{
-                            background: '#fff', border: '1px solid #E5E5EA',
-                            borderRadius: '14px', padding: '0.25rem 1.1rem',
+                            background: '#fff',
+                            // Світліша рамка й більше заокруглення: 14px на
+                            // великому блоці виглядає різко, 18 - спокійно.
+                            border: '1px solid #EDEDF0',
+                            borderRadius: '18px',
+                            padding: '0.25rem 1.75rem',
                           }}>
                             {group.items.map((app, itemIdx) => {
                               const start = app.start_time ? new Date(app.start_time) : null;
@@ -1073,93 +1082,106 @@ function ProfileContent() {
                                 : days <= 7 ? `через ${days} дні${days >= 5 ? 'в' : ''}`
                                 : null;
 
+                              const hasActions = isUpcoming || (isDone && app.business_slug && app.service_id);
+
                               return (
                                 <div
                                   key={app.id}
                                   style={{
-                                    padding: '1.1rem 0',
-                                    borderBottom: itemIdx < group.items.length - 1 ? '1px solid #F2F2F5' : 'none',
-                                    opacity: isCancelled ? 0.5 : 1,
+                                    // Повітря: 28px згори й знизу замість 18.
+                                    // Рядок має дихати - у списку візитів їх
+                                    // небагато, і щільність тут нічого не
+                                    // виграє, лише тисне.
+                                    padding: hasActions ? '1.75rem 0 1.5rem' : '1.75rem 0',
+                                    borderBottom: itemIdx < group.items.length - 1 ? '1px solid #F5F5F7' : 'none',
+                                    opacity: isCancelled ? 0.45 : 1,
                                   }}
                                 >
-                                  {/* Рядок 1: час і послуга.
-                                      Час ліворуч фіксованою колонкою - так
-                                      погляд читає список згори вниз одним
-                                      рухом, не стрибаючи за різною довжиною
-                                      назв. Градієнт прибрано: різнокольорові
-                                      смуги в діловому списку виглядають
-                                      строкато й нічого не пояснюють. */}
-                                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'baseline' }}>
+                                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                                    {/* Час: більший кегль і табличні цифри.
+                                        Це головний орієнтир у рядку, і він має
+                                        читатись першим, не змагаючись із
+                                        назвою послуги за вагою. */}
                                     <div style={{
-                                      flexShrink: 0, width: '52px',
-                                      fontSize: '0.95rem', fontWeight: 600,
-                                      color: isUpcoming ? '#111827' : '#8E8E93',
+                                      flexShrink: 0, width: '68px', paddingTop: '1px',
+                                      fontSize: '1.0625rem', fontWeight: 500,
+                                      color: isUpcoming ? '#1D1D1F' : '#86868B',
                                       fontVariantNumeric: 'tabular-nums',
+                                      letterSpacing: '-0.01em',
                                     }}>
                                       {timeLabel}
                                     </div>
 
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{
-                                        fontSize: '0.95rem', fontWeight: 600, color: '#111827',
+                                        fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
+                                        letterSpacing: '-0.01em', lineHeight: 1.3,
                                         textDecoration: isCancelled ? 'line-through' : 'none',
                                       }}>
                                         {app.service_name || 'Візит'}
                                       </div>
 
-                                      <div style={{ fontSize: '0.85rem', color: '#8E8E93', marginTop: '2px' }}>
+                                      {/* Заклад і майстер окремими рядками,
+                                          а не через крапку: два імені в один
+                                          рядок зливаються в кашу, коли обидва
+                                          довгі. */}
+                                      <div style={{
+                                        fontSize: '0.9375rem', color: '#86868B',
+                                        marginTop: '0.375rem', lineHeight: 1.45,
+                                      }}>
                                         {app.business_name}
-                                        {app.master_name ? ` · ${app.master_name}` : ''}
                                       </div>
 
+                                      {app.master_name && (
+                                        <div style={{ fontSize: '0.9375rem', color: '#86868B', lineHeight: 1.45 }}>
+                                          {app.master_name}
+                                        </div>
+                                      )}
+
                                       {(app.addon_names?.length ?? 0) > 0 && (
-                                        <div style={{ fontSize: '0.8rem', color: '#A1A1A6', marginTop: '2px' }}>
-                                          + {app.addon_names.join(', ')}
+                                        <div style={{
+                                          fontSize: '0.875rem', color: '#AEAEB2',
+                                          marginTop: '0.375rem', lineHeight: 1.45,
+                                        }}>
+                                          {app.addon_names.join(' · ')}
                                         </div>
                                       )}
                                     </div>
 
-                                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                                    <div style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px' }}>
                                       {app.price ? (
-                                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#111827' }}>
+                                        <div style={{
+                                          fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
+                                          letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums',
+                                        }}>
                                           {Number(app.price).toLocaleString('uk-UA')} ₴
                                         </div>
                                       ) : null}
                                       {countdown && (
-                                        <div style={{ fontSize: '0.78rem', color: '#5C7A61', marginTop: '2px' }}>
+                                        <div style={{ fontSize: '0.875rem', color: '#6F9273', marginTop: '0.3rem' }}>
                                           {countdown}
                                         </div>
                                       )}
                                       {isCancelled && (
-                                        <div style={{ fontSize: '0.78rem', color: '#A1A1A6', marginTop: '2px' }}>
+                                        <div style={{ fontSize: '0.875rem', color: '#AEAEB2', marginTop: '0.3rem' }}>
                                           Скасовано
                                         </div>
                                       )}
                                     </div>
                                   </div>
 
-                                  {/* Рядок 2: дії.
-                                      Три однакові кнопки в ряд, вирівняні під
-                                      текстом. Раніше вони були різної ваги й
-                                      стояли врозтіч - око не розуміло, яка
-                                      головна, хоча всі рівнозначні. */}
-                                  {(isUpcoming || (isDone && app.business_slug && app.service_id)) && (
+                                  {hasActions && (
                                     <div style={{
-                                      display: 'flex', gap: '0.4rem', marginTop: '0.75rem',
-                                      paddingLeft: '3.25rem', flexWrap: 'wrap',
+                                      display: 'flex', gap: '0.5rem',
+                                      marginTop: '1.125rem', paddingLeft: '4.25rem',
+                                      flexWrap: 'wrap',
                                     }}>
                                       {isUpcoming && (
                                         <>
-                                          <button
-                                            onClick={() => setRescheduleModalAppt(app)}
-                                            style={visitActionStyle}
-                                          >
+                                          <button onClick={() => setRescheduleModalAppt(app)} style={visitActionStyle}>
                                             Перенести
                                           </button>
-                                          <button
-                                            onClick={() => setCancelModalAppt(app)}
-                                            style={visitActionStyle}
-                                          >
+                                          <button onClick={() => setCancelModalAppt(app)} style={visitActionStyle}>
                                             Скасувати
                                           </button>
                                         </>
@@ -1170,7 +1192,7 @@ function ProfileContent() {
                                           href={`/${app.business_slug}?service=${app.service_id}${app.master_id ? `&master=${app.master_id}` : ''}`}
                                           style={{ ...visitActionStyle, textDecoration: 'none' }}
                                         >
-                                          {isUpcoming ? 'Записатись ще' : 'Повторити візит'}
+                                          {isUpcoming ? 'Записатись ще' : 'Повторити'}
                                         </Link>
                                       )}
                                     </div>

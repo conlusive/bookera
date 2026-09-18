@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
-import CategoriesSection from '@/components/home/CategoriesSection';
+import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 
 const categoriesData = [
   { name: 'Рекомендовані', slug: 'all' },
@@ -1577,18 +1577,17 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       </header>
 
       {/* HERO БАНЕР */}
-      <section style={{ position: 'relative', width: '100%', padding: '4.5rem 0 3.5rem', background: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        {/* Відео-фон прибрано: замість одного банера тепер секція
-            категорій нижче. Вона показує, ЩО тут можна знайти, а не
-            просто створює настрій.
-
-            Секція лишається світлою, тому текст став темним. */}
+      <section style={{ position: 'relative', width: '100%', height: '560px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
+        {/* Фон: три відео поруч замість одного.
+            Обличчя, волосся, тіло - за секунду показують, чим тут
+            займаються, і роблять це без жодного слова. */}
+        <HeroVideoBackdrop />
 
         <div className="reveal-on-scroll" style={{ position: 'relative', zIndex: 50, maxWidth: '1340px', width: '100%', margin: '0 auto', padding: '4rem 4rem 0 4rem', boxSizing: 'border-box', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '3.2rem', fontWeight: '800', color: '#1D1D1F', maxWidth: '800px', margin: '0 auto 1rem auto', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: '3.2rem', fontWeight: '800', color: '#ffffff', maxWidth: '800px', margin: '0 auto 1rem auto', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
             Догляд за собою в один клік
           </h1>
-          <p style={{ fontSize: '1.15rem', color: '#86868B', maxWidth: '600px', margin: '0 auto 2.5rem auto', lineHeight: '1.5', fontWeight: '500' }}>
+          <p style={{ fontSize: '1.15rem', color: 'rgba(255,255,255,0.92)', maxWidth: '600px', margin: '0 auto 2.5rem auto', lineHeight: '1.5', fontWeight: '500' }}>
             Знаходьте перевірених фахівців поблизу та миттєво бронюйте візити онлайн без зайвих дзвінків.
           </p>
 
@@ -1676,8 +1675,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* КАТЕГОРІЇ */}
-      <CategoriesSection />
 
       {/* КАТЕГОРІЇ ПОСЛУГ */}
       <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '2.5rem', paddingBottom: '3rem', position: 'relative', zIndex: 40 }}>

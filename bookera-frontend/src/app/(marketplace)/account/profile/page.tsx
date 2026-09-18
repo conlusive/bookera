@@ -140,29 +140,52 @@ function ProfileContent() {
   const [newRescheduleTime, setNewRescheduleTime] = useState<string>('12:00');
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
-  // Гарантоване завантаження улюблених закладів
-  const fetchFavorites = useCallback(async (uid?: string) => {
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
+
+// Гарантоване завантаження улюблених закладів
+  const fetchFavorites = useCallback(async () => {
     try {
-      let targetUserId = uid;
-      if (!targetUserId) {
-        const { data: { user } } = await supabase.auth.getUser();
-        targetUserId = user?.id;
-      }
-      if (!targetUserId) {
-        setFavorites([]);
-        return;
+      const token = await getAuthToken().catch(() => null);
+      let list: any[] = [];
+
+      // 1. Отримуємо улюблені з бази через API
+      if (token) {
+        try {
+          const data = await api.listMyFavorites(token);
+          if (Array.isArray(data) && data.length > 0) {
+            list = data;
+          }
+        } catch (err) {
+          console.warn('api.listMyFavorites помилка:', err);
+        }
       }
 
-      // Раніше тут був прямий запит до Supabase у таблицю favorites,
-      // якої немає в моделях: список був порожній завжди, скільки б
-      // закладів людина не зберігала.
-      try {
-        const token = await getAuthToken();
-        setFavorites(await api.listMyFavorites(token));
-      } catch (err) {
-        console.error('Помилка завантаження улюблених:', err);
-        setFavorites([]);
+      // 2. Якщо в базі порожньо, підтягуємо збережені з головної (localStorage)
+      if (list.length === 0 && typeof window !== 'undefined') {
+        const raw = localStorage.getItem('bookera_favs');
+        if (raw) {
+          try {
+            const ids: number[] = JSON.parse(raw);
+            if (ids.length > 0) {
+              const { data: businesses } = await supabase
+                .from('businesses')
+                .select('*')
+                .in('id', ids);
+              if (businesses && businesses.length > 0) {
+                list = businesses;
+                if (token) {
+                  for (const id of ids) {
+                    api.addFavorite(token, id).catch(() => {});
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
       }
+
+      setFavorites(list);
     } catch (err) {
       console.error("Загальна помилка favorites:", err);
       setFavorites([]);
@@ -228,13 +251,79 @@ function ProfileContent() {
       }
 
       // 3. Улюблені заклади
-      await fetchFavorites(user.id);
+      await fetchFavorites();
 
       setLoading(false);
     }
 
     void loadData();
   }, [supabase, router, fetchFavorites]);
+
+   // Отримання точного графіку салону, послуги та майстра через реальний API
+  useEffect(() => {
+    if (!rescheduleModalAppt || !newRescheduleDate) return;
+
+    let isMounted = true;
+    async function fetchSlots() {
+      setIsSlotsLoading(true);
+      setAvailableSlots([]);
+
+      try {
+        const bizId = rescheduleModalAppt.business_id || rescheduleModalAppt.businesses?.id;
+        const srvId = rescheduleModalAppt.service_id || rescheduleModalAppt.services?.id;
+        const mstId = rescheduleModalAppt.master_id || rescheduleModalAppt.staff_id || rescheduleModalAppt.master?.id;
+
+        if (!bizId || !srvId) {
+          if (isMounted) setAvailableSlots([]);
+          return;
+        }
+
+        // 1. Отримуємо слоти для майстра
+        const data = await api.getAvailableSlots({
+          business_id: Number(bizId),
+          service_id: Number(srvId),
+          target_date: newRescheduleDate,
+          master_id: mstId ? String(mstId) : '0',
+        });
+
+        let free = (data.slots || [])
+          .filter((s: any) => s.status === 'available')
+          .map((s: any) => s.time.substring(0, 5));
+
+        // 2. Якщо саме цей майстер вихідний або зайнятий, перевіряємо вільні вікна інших майстрів закладу
+        if (free.length === 0 && mstId && String(mstId) !== '0') {
+          try {
+            const fallbackData = await api.getAvailableSlots({
+              business_id: Number(bizId),
+              service_id: Number(srvId),
+              target_date: newRescheduleDate,
+              master_id: '0',
+            });
+            free = (fallbackData.slots || [])
+              .filter((s: any) => s.status === 'available')
+              .map((s: any) => s.time.substring(0, 5));
+          } catch {}
+        }
+
+        if (isMounted) {
+          setAvailableSlots(free);
+          if (free.length > 0) {
+            setNewRescheduleTime(prev => free.includes(prev) ? prev : free[0]);
+          } else {
+            setNewRescheduleTime('');
+          }
+        }
+      } catch (err) {
+        console.error('Помилка отримання слотів:', err);
+        if (isMounted) setAvailableSlots([]);
+      } finally {
+        if (isMounted) setIsSlotsLoading(false);
+      }
+    }
+
+    void fetchSlots();
+    return () => { isMounted = false; };
+  }, [rescheduleModalAppt, newRescheduleDate]);
 
   // Оновлення списку улюблених при переході на вкладку
   useEffect(() => {
@@ -343,23 +432,26 @@ function ProfileContent() {
     }
   };
 
-  // Видалення салону з улюблених
+// Видалення салону з улюблених
   const handleRemoveFavorite = async (businessId: string | number) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const targetBizId = Number(businessId);
+    setFavorites(prev => prev.filter(b => Number(b.id) !== targetBizId));
 
-    const targetBizId = isNaN(Number(businessId)) ? businessId : Number(businessId);
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('bookera_favs');
+        if (raw) {
+          const ids: number[] = JSON.parse(raw);
+          localStorage.setItem('bookera_favs', JSON.stringify(ids.filter(id => id !== targetBizId)));
+        }
+      } catch {}
+    }
 
     try {
-      const { error } = await supabase
-        .from('favorites')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('business_id', targetBizId);
-
-      if (error) throw error;
-
-      setFavorites(prev => prev.filter(b => String(b.id) !== String(businessId)));
+      const token = await getAuthToken().catch(() => null);
+      if (token) {
+        await api.removeFavorite(token, targetBizId);
+      }
       showToast('Заклад видалено з улюблених', 'info');
     } catch {
       showToast('Не вдалося оновити улюблені', 'error');
@@ -504,35 +596,63 @@ function ProfileContent() {
     }
   };
 
-  // Перенесення візиту
   const confirmRescheduleAppointment = async () => {
     if (!rescheduleModalAppt || !newRescheduleDate) {
       showToast('Оберіть нову дату!', 'error');
       return;
     }
+    if (!newRescheduleTime) {
+      showToast('Оберіть вільний час!', 'error');
+      return;
+    }
     setIsSubmittingAction(true);
 
     try {
-      await supabase
-        .from('appointments')
-        .update({
-          date: newRescheduleDate,
-          time: newRescheduleTime + ':00',
-          status: 'confirmed'
-        })
-        .eq('id', rescheduleModalAppt.id);
+      const durationMin = (rescheduleModalAppt.start_time && rescheduleModalAppt.end_time)
+        ? Math.round((new Date(rescheduleModalAppt.end_time).getTime() - new Date(rescheduleModalAppt.start_time).getTime()) / 60000)
+        : (rescheduleModalAppt.services?.duration_minutes || 60);
 
+      const startDt = new Date(`${newRescheduleDate}T${newRescheduleTime}:00`);
+      const endDt = new Date(startDt.getTime() + durationMin * 60000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+
+      const startStr = `${newRescheduleDate}T${newRescheduleTime}:00`;
+      const endStr = `${endDt.getFullYear()}-${pad(endDt.getMonth() + 1)}-${pad(endDt.getDate())}T${pad(endDt.getHours())}:${pad(endDt.getMinutes())}:00`;
+
+      // 1. Оновлюємо безпосередньо в базі даних через API
+      const token = await getAuthToken();
+      let updatedApp: any = null;
+
+      try {
+        updatedApp = await api.rescheduleAppointment(token, Number(rescheduleModalAppt.id), startStr);
+      } catch (apiErr) {
+        console.warn('api.rescheduleAppointment помилка, резервне оновлення через Supabase:', apiErr);
+        const { error: supaErr } = await supabase
+          .from('appointments')
+          .update({
+            start_time: startStr,
+            end_time: endStr,
+            status: 'confirmed'
+          })
+          .eq('id', Number(rescheduleModalAppt.id));
+
+        if (supaErr) throw supaErr;
+      }
+
+      // 2. Оновлюємо стейт інтерфейсу
       setAppointments(prev => prev.map(a => a.id === rescheduleModalAppt.id ? {
         ...a,
-        date: newRescheduleDate,
-        time: newRescheduleTime + ':00',
+        ...(updatedApp || {}),
+        start_time: startStr,
+        end_time: endStr,
         status: 'confirmed'
       } : a));
 
       setRescheduleModalAppt(null);
       showToast('Час візиту успішно змінено', 'success');
-    } catch {
-      showToast('Помилка при зміні часу', 'error');
+    } catch (err: any) {
+      console.error('Помилка при зміні часу:', err);
+      showToast(err?.message || 'Помилка при зміні часу', 'error');
     } finally {
       setIsSubmittingAction(false);
     }
@@ -646,7 +766,7 @@ function ProfileContent() {
    * сторінці, вони гортають. Кнопка «Показати ще» дешевша за
    * нумерацію і не вимагає тримати в голові, де ти зараз.
    */
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 3;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Зміна вкладки починає показ спочатку: лишити 40 видимих записів
@@ -719,8 +839,6 @@ function ProfileContent() {
   const nameParts = displayName.split(' ');
   const initials = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
 
-  const timeSlots = ['09:00', '10:30', '12:00', '13:30', '15:00', '16:30', '18:00', '19:30'];
-
   // Пагінація улюблених
   const totalFavPages = Math.ceil(favorites.length / FAVS_PER_PAGE);
   const paginatedFavorites = useMemo(() => {
@@ -785,34 +903,100 @@ function ProfileContent() {
         }
         .clean-card:hover { border-color: #e5e7eb; box-shadow: 0 4px 16px rgba(0,0,0,0.03); }
 
-        /* Картки улюблених закладів */
-        .tour-card { 
-          background: #ffffff; border-radius: 20px; overflow: hidden; 
-          box-shadow: 0 12px 30px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04); transition: transform 0.3s ease, box-shadow 0.3s ease; 
-          display: flex; flex-direction: column; text-decoration: none; position: relative; border: 1px solid #f1f5f9; 
+        /* Картки улюблених закладів (стиль як на головній) */
+        .apple-biz-card {
+          background: #ffffff;
+          border-radius: 20px;
+          border: 1px solid rgba(0, 0, 0, 0.06);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          text-decoration: none;
+          position: relative;
+          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
+          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+          box-sizing: border-box;
         }
-        .tour-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.06); }
-        .tour-card-img-wrapper { width: 100%; height: 170px; position: relative; overflow: hidden; background: #f1f5f9; }
-        .tour-card-bg { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
-        .tour-card:hover .tour-card-bg { transform: scale(1.05); }
-        
-        .tour-badge-top { position: absolute; top: 12px; left: 12px; background: #ffffff; color: #111827; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 2; }
-        .tour-badge-top .star { color: #f59e0b; font-size: 0.9rem; }
-        
-        .tour-card-content { padding: 1.25rem; display: flex; flex-direction: column; flex: 1; }
-        .tour-title { font-size: 1.15rem; font-weight: 800; color: #111827; margin: 0 0 0.4rem 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
-        .tour-desc { color: #6b7280; font-size: 0.85rem; margin: 0 0 1rem 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        
-        .tour-info-row { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; padding: 0.65rem 0; margin-bottom: 1rem; }
-        .tour-info-item { display: flex; align-items: center; gap: 6px; color: #374151; font-size: 0.8rem; font-weight: 600; }
-        .tour-info-item svg { color: #9ca3af; width: 14px; height: 14px; }
-        .tour-info-divider { width: 1px; height: 20px; background: #e5e7eb; }
-        
-        .tour-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
-        .tour-tag-pill { background: #f3f4f6; color: #111827; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
-        
-        .tour-book-btn { width: 100%; background: linear-gradient(180deg, #2d2d2d 0%, #111111 100%); color: #ffffff; padding: 0.85rem; border-radius: 999px; font-weight: 700; font-size: 0.95rem; text-align: center; cursor: pointer; transition: all 0.2s ease; border: none; box-shadow: 0 4px 14px rgba(0,0,0,0.15); }
-        .tour-card:hover .tour-book-btn { background: linear-gradient(180deg, #3d3d3d 0%, #1a1a1a 100%); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+        .apple-biz-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.08);
+          border-color: rgba(0, 0, 0, 0.1);
+        }
+        .card-photo-box {
+          width: 100%;
+          height: 175px;
+          position: relative;
+          overflow: hidden;
+          background-color: #f1f5f9;
+        }
+        .card-photo-img {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+          object-fit: cover;
+          transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .apple-biz-card:hover .card-photo-img {
+          transform: scale(1.04);
+        }
+        .glass-pill {
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          padding: 4px 9px;
+          border-radius: 999px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          color: #111827;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        }
+        .glass-fav-btn {
+          position: absolute; top: 10px; right: 10px; z-index: 2;
+          width: 32px; height: 32px; border-radius: 50%;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+          border: none;
+        }
+        .glass-fav-btn:hover {
+          transform: scale(1.1);
+          background: #ffffff;
+        }
+        .card-body {
+          padding: 1.15rem;
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+        }
+        .card-heading {
+          font-size: 1.12rem;
+          font-weight: 800;
+          color: #111827;
+          margin: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          letter-spacing: -0.015em;
+        }
+        .card-action-link {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: #111827;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          transition: color 0.15s ease, transform 0.15s ease;
+        }
+        .apple-biz-card:hover .card-action-link {
+          color: #8fae92;
+          transform: translateX(2px);
+        }
 
         .page-btn { width: 34px; height: 34px; border-radius: 8px; background: #ffffff; border: 1px solid #e2e8f0; color: #475569; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
         .page-btn:hover { border-color: #cbd5e1; color: #111827; }
@@ -974,8 +1158,13 @@ function ProfileContent() {
               <button onClick={() => setActiveTab('favorites')} className={`nav-item anim ${activeTab === 'favorites' ? 'active' : ''}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                   <Heart className="w-4 h-4 text-slate-400" />
-                  <span>Улюблені ({favorites.length})</span>
+                  <span>Улюблені</span>
                 </div>
+                {favorites.length > 0 && (
+                  <span style={{ backgroundColor: '#f1f5f9', color: '#111827', fontSize: '0.75rem', fontWeight: '700', padding: '1px 7px', borderRadius: '99px' }}>
+                    {favorites.length}
+                  </span>
+                )}
               </button>
 
               <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '0.4rem 0' }}></div>
@@ -1073,14 +1262,18 @@ function ProfileContent() {
                               const isDone = app.status === 'completed';
                               const isUpcoming = !isCancelled && !isDone && start && start >= new Date();
 
+                              // Форматування дати: день, місяць і день тижня
+                              const dateDayMonth = start
+                                ? start.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
+                                : '';
+                              const weekday = start
+                                ? start.toLocaleDateString('uk-UA', { weekday: 'short' })
+                                : '';
+
                               const timeLabel = start
                                 ? start.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
                                 : '';
 
-                              // Тривалість: людина планує свій день, а не
-                              // лише момент приходу. Додаткові послуги вже
-                              // враховані в end_time, тому рахувати окремо
-                              // не треба.
                               const minutes = start && end
                                 ? Math.round((end.getTime() - start.getTime()) / 60000)
                                 : null;
@@ -1096,14 +1289,9 @@ function ProfileContent() {
                                 : days <= 7 ? `через ${days} дні${days >= 5 ? 'в' : ''}`
                                 : null;
 
-                              // Послуги одним рядком: основна плюс додаткові.
-                              // Розкидані по трьох рядках вони читалися як
-                              // окремі сутності, хоча це один візит.
                               const allServices = [app.service_name, ...(app.addon_names || [])]
                                 .filter(Boolean).join(', ');
 
-                              // Заклад і майстер теж одним рядком - це
-                              // відповідь на одне питання «куди і до кого».
                               const placeAndMaster = [app.business_name, app.master_name]
                                 .filter(Boolean).join(', ');
 
@@ -1119,15 +1307,14 @@ function ProfileContent() {
                                   }}
                                 >
                                   <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
-                                    {/* Час і тривалість однією колонкою.
-                                        Усе, що стосується «коли», зібране
-                                        разом і вирівняне по одній лінії. */}
+
+                                    {/* Ліва колонка: Лише час і тривалість візиту */}
                                     <div style={{ flexShrink: 0, width: '68px', paddingTop: '1px' }}>
                                       <div style={{
-                                        fontSize: '1.0625rem', fontWeight: 500,
+                                        fontSize: '1.125rem', fontWeight: 600,
                                         color: isUpcoming ? '#1D1D1F' : '#86868B',
                                         fontVariantNumeric: 'tabular-nums',
-                                        letterSpacing: '-0.01em', lineHeight: 1.3,
+                                        letterSpacing: '-0.01em', lineHeight: 1.2,
                                       }}>
                                         {timeLabel}
                                       </div>
@@ -1141,9 +1328,10 @@ function ProfileContent() {
                                       )}
                                     </div>
 
+                                    {/* Середня колонка: Назва послуг, заклад і майстер */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{
-                                        fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
+                                        fontSize: '1.0625rem', fontWeight: 600, color: '#1D1D1F',
                                         letterSpacing: '-0.01em', lineHeight: 1.4,
                                         textDecoration: isCancelled ? 'line-through' : 'none',
                                       }}>
@@ -1158,38 +1346,63 @@ function ProfileContent() {
                                       </div>
                                     </div>
 
-                                    <div style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px' }}>
+                                    {/* Права колонка: Ціна, дата та статус */}
+                                    <div style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                       {app.price ? (
                                         <div style={{
-                                          fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
+                                          fontSize: '1.0625rem', fontWeight: 600, color: '#1D1D1F',
                                           letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums',
                                           lineHeight: 1.3,
                                         }}>
                                           {Number(app.price).toLocaleString('uk-UA')} ₴
                                         </div>
                                       ) : null}
+
+                                      {dateDayMonth && (
+                                        <div style={{
+                                          fontSize: '0.8125rem', fontWeight: 500,
+                                          color: '#86868B', lineHeight: 1.3,
+                                          textTransform: 'capitalize',
+                                        }}>
+                                          {dateDayMonth}{weekday && `, ${weekday}`}
+                                        </div>
+                                      )}
+
                                       {countdown && (
-                                        <div style={{ fontSize: '0.8125rem', color: '#6F9273', marginTop: '0.25rem' }}>
+                                        <div style={{ fontSize: '0.78rem', color: '#6F9273', fontWeight: 600, marginTop: '2px' }}>
                                           {countdown}
                                         </div>
                                       )}
                                       {isCancelled && (
-                                        <div style={{ fontSize: '0.8125rem', color: '#AEAEB2', marginTop: '0.25rem' }}>
+                                        <div style={{ fontSize: '0.78rem', color: '#AEAEB2', marginTop: '2px' }}>
                                           Скасовано
                                         </div>
                                       )}
                                     </div>
                                   </div>
 
+                                  {/* Кнопки дій: ідеально починаються на одній лінії з текстом послуги */}
                                   {hasActions && (
                                     <div style={{
                                       display: 'flex', gap: '0.5rem',
-                                      marginTop: '1.125rem', paddingLeft: '4.25rem',
+                                      marginTop: '1.125rem', paddingLeft: 'calc(68px + 1.5rem)',
                                       flexWrap: 'wrap',
                                     }}>
                                       {isUpcoming && (
                                         <>
-                                          <button onClick={() => setRescheduleModalAppt(app)} style={visitActionStyle}>
+                                          <button
+                                            onClick={() => {
+                                              const rawDate = app.start_time ? String(app.start_time).split('T')[0] : today;
+                                              const initialDate = rawDate >= today ? rawDate : today;
+                                              setRescheduleModalAppt(app);
+                                              setNewRescheduleDate(initialDate);
+                                              const rawTime = app.start_time && String(app.start_time).includes('T')
+                                                ? String(app.start_time).split('T')[1].substring(0, 5)
+                                                : '';
+                                              setNewRescheduleTime(rawTime);
+                                            }}
+                                            style={visitActionStyle}
+                                          >
                                             Перенести
                                           </button>
                                           <button onClick={() => setCancelModalAppt(app)} style={visitActionStyle}>
@@ -1235,9 +1448,7 @@ function ProfileContent() {
                           У «Майбутніх» вона показувала б минуле поруч
                           зі списком того, що попереду: два різні часи
                           на одному екрані плутають. */}
-                      {appointmentFilter === 'completed' && (
-                        <VisitsHeatmap appointments={appointments} />
-                      )}
+                      <VisitsHeatmap appointments={appointments} />
                     </div>
                   )}
                 </div>
@@ -1289,25 +1500,40 @@ function ProfileContent() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: '1.5rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
                         {paginatedFavorites.map(item => {
                           const rank = parseFloat(item.rating);
                           const hasRating = !isNaN(rank) && rank > 0;
-                          const displayRank = hasRating ? rank.toFixed(1) : '-';
+                          const displayRank = hasRating ? rank.toFixed(1) : '5.0';
                           const reviewCount = parseInt(item.reviews_count) || 0;
                           const bgImage = item.cover_photo || item.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
-                          const category = item.category || 'Салон краси';
+
+                          const categoryLabels: Record<string, string> = {
+                            barber: 'Барбер',
+                            hair: 'Волосся',
+                            nails: 'Нігті',
+                            skincare: 'Догляд',
+                            brows: 'Брови',
+                            massage: 'Масаж',
+                            makeup: 'Макіяж',
+                            spa: 'Spa',
+                          };
+                          const category = categoryLabels[item.category] || item.category || 'Студія';
+                          const locationText = [item.city, item.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
 
                           return (
-                            <Link key={item.id} href={`/${item.slug || item.id}`} className="tour-card anim">
-                              {/* Фото + Топ вибір + Кнопка видалення */}
-                              <div className="tour-card-img-wrapper">
-                                <img src={bgImage} alt={item.name} loading="lazy" decoding="async" className="tour-card-bg" />
-                                {hasRating && rank >= 4.8 && (
-                                  <div className="tour-badge-top">
-                                    <span className="star">★</span> Топ Вибір
-                                  </div>
-                                )}
+                            <Link key={item.id} href={`/${item.slug || item.id}`} className="apple-biz-card anim">
+                              <div className="card-photo-box">
+                                <img src={bgImage} alt={item.name} loading="lazy" decoding="async" className="card-photo-img" />
+
+                                <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>
+                                  {(!hasRating || rank >= 4.8) && (
+                                    <div className="glass-pill">
+                                      <span style={{ color: '#f59e0b' }}>★</span>
+                                      <span>Топ вибір</span>
+                                    </div>
+                                  )}
+                                </div>
 
                                 <button
                                   type="button"
@@ -1316,74 +1542,50 @@ function ProfileContent() {
                                     e.stopPropagation();
                                     void handleRemoveFavorite(item.id);
                                   }}
+                                  className="glass-fav-btn anim"
                                   title="Видалити з улюблених"
-                                  style={{
-                                    position: 'absolute',
-                                    top: '10px',
-                                    right: '10px',
-                                    background: '#ffffff',
-                                    border: 'none',
-                                    borderRadius: '50%',
-                                    width: '32px',
-                                    height: '32px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                    zIndex: 10
-                                  }}
-                                  className="anim"
                                 >
-                                  <Heart className="w-4 h-4 fill-red-500 text-red-500" />
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                  </svg>
                                 </button>
                               </div>
 
-                              {/* Контент картки */}
-                              <div className="tour-card-content">
-                                <h3 className="tour-title">{item.name}</h3>
-                                <p className="tour-desc">
-                                  {item.city ? `${item.city}, ` : ''}{item.address || 'Комфортна атмосфера, професійні майстри та індивідуальний підхід до кожного клієнта.'}
-                                </p>
-
-                                <div className="tour-info-row">
-                                  <div className="tour-info-item">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                                    <span>{hasRating ? displayRank : 'Новий'}</span>
-                                  </div>
-                                  <div className="tour-info-divider"></div>
-                                  <div className="tour-info-item">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                                    <span>{reviewCount} відг.</span>
-                                  </div>
-                                  <div className="tour-info-divider"></div>
-                                  <div className="tour-info-item">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg>
-                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60px' }}>{category}</span>
-                                  </div>
+                              <div className="card-body">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
+                                  <h3 className="card-heading">{item.name}</h3>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111827', whiteSpace: 'nowrap' }}>
+                                    від 450 ₴
+                                  </span>
                                 </div>
 
-                                {(() => {
-                                  const cardTags = Array.isArray(item.tags) ? item.tags : [];
-                                  if (cardTags.length === 0) return null;
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '700' }}>
+                                    <span style={{ color: '#f59e0b' }}>★</span> {displayRank}
+                                    <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.75rem' }}>({reviewCount})</span>
+                                  </span>
+                                  <span>•</span>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{category}</span>
+                                </div>
 
-                                  const maxTags = 2;
-                                  const visibleTags = cardTags.slice(0, maxTags);
-                                  const hiddenCount = cardTags.length - maxTags;
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+                                  <span style={{ color: '#10b981', fontWeight: '600' }}>Відкрито</span>
+                                  <span>•</span>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationText}</span>
+                                </div>
 
-                                  return (
-                                    <div className="tour-tags">
-                                      {visibleTags.map((tag: string, i: number) => (
-                                        <span key={i} className="tour-tag-pill">{tag}</span>
-                                      ))}
-                                      {hiddenCount > 0 && (
-                                        <span className="tour-tag-pill">+{hiddenCount}</span>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-
-                                <button type="button" className="tour-book-btn">Записатись</button>
+                                <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '500' }}>
+                                    Швидкий запис
+                                  </span>
+                                  <span className="card-action-link">
+                                    Записатись
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M5 12h14M12 5l7 7-7 7"/>
+                                    </svg>
+                                  </span>
+                                </div>
                               </div>
                             </Link>
                           );
@@ -1750,24 +1952,31 @@ function ProfileContent() {
       {/* ==================== МОДАЛКА: ПЕРЕНЕСЕННЯ ВІЗИТУ ==================== */}
       {rescheduleModalAppt && (
         <div className="modal-overlay" onClick={() => setRescheduleModalAppt(null)}>
-          <div className="modal-window anim" onClick={e => e.stopPropagation()}>
+          <div className="modal-window anim" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
             <button
               onClick={() => setRescheduleModalAppt(null)}
-              style={{ position: 'absolute', top: '1rem', right: '1rem', background: '#f3f4f6', border: 'none', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ position: 'absolute', top: '1.1rem', right: '1.1rem', background: '#f8fafc', border: 'none', width: '30px', height: '30px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              <X className="w-3.5 h-3.5 text-slate-500" />
+              <X className="w-4 h-4 text-slate-500" />
             </button>
 
-            <div style={{ fontSize: '1.15rem', fontWeight: '700', color: '#111827', marginBottom: '0.2rem' }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: '700', color: '#111827', marginBottom: '0.25rem' }}>
               Зміна часу візиту
             </div>
-            <div style={{ color: '#6b7280', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-              {rescheduleModalAppt.services?.name} • {rescheduleModalAppt.businesses?.name}
+
+            <div style={{ color: '#6b7280', fontSize: '0.84rem', marginBottom: '1.25rem', lineHeight: '1.4' }}>
+              <span style={{ color: '#111827', fontWeight: '600' }}>
+                {rescheduleModalAppt.service_name || rescheduleModalAppt.services?.name || 'Візит'}
+              </span>
+              <br />
+              {[rescheduleModalAppt.business_name || rescheduleModalAppt.businesses?.name, rescheduleModalAppt.master_name].filter(Boolean).join(' • ')}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', marginBottom: '1.5rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#4b5563', marginBottom: '0.35rem' }}>Нова дата</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#374151', marginBottom: '0.4rem' }}>
+                  Оберіть нову дату
+                </label>
                 <input
                   type="date"
                   value={newRescheduleDate}
@@ -1779,26 +1988,57 @@ function ProfileContent() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#4b5563', marginBottom: '0.45rem' }}>Оберіть час</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-                  {timeSlots.map(t => (
-                    <div
-                      key={t}
-                      onClick={() => setNewRescheduleTime(t)}
-                      className={`time-pill anim ${newRescheduleTime === t ? 'selected' : ''}`}
-                    >
-                      {t}
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#374151' }}>
+                    Вільний час
+                  </label>
+                  {isSlotsLoading && (
+                    <span style={{ fontSize: '0.75rem', color: '#86868B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Loader2 className="w-3 h-3 animate-spin" /> завантаження графіка...
+                    </span>
+                  )}
                 </div>
+
+                {isSlotsLoading ? (
+                  <div style={{ padding: '2rem 0', display: 'flex', justifyContent: 'center' }}>
+                    <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
+                  </div>
+                ) : availableSlots.length === 0 ? (
+                  <div style={{
+                    padding: '1.25rem', borderRadius: '12px', background: '#f8fafc',
+                    border: '1px dashed #e2e8f0', textAlign: 'center', color: '#64748b', fontSize: '0.82rem'
+                  }}>
+                    На обрану дату немає вільних місць у закладі. Оберіть інший день.
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px',
+                    maxHeight: '190px', overflowY: 'auto', paddingRight: '2px'
+                  }}>
+                    {availableSlots.map(t => (
+                      <div
+                        key={t}
+                        onClick={() => setNewRescheduleTime(t)}
+                        className={`time-pill anim ${newRescheduleTime === t ? 'selected' : ''}`}
+                        style={{ padding: '0.55rem 0', fontWeight: 600, fontSize: '0.86rem' }}
+                      >
+                        {t}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
             <button
               onClick={confirmRescheduleAppointment}
-              disabled={isSubmittingAction}
+              disabled={isSubmittingAction || isSlotsLoading || !newRescheduleTime}
               className="btn-dark anim"
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', fontSize: '0.88rem' }}
+              style={{
+                width: '100%', padding: '0.75rem', borderRadius: '12px', fontSize: '0.88rem',
+                opacity: (isSubmittingAction || isSlotsLoading || !newRescheduleTime) ? 0.4 : 1,
+                cursor: (isSubmittingAction || isSlotsLoading || !newRescheduleTime) ? 'not-allowed' : 'pointer'
+              }}
             >
               {isSubmittingAction ? 'Збереження...' : 'Підтвердити зміну'}
             </button>

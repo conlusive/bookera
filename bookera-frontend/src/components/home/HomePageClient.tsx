@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -93,6 +93,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [searchTime, setSearchTime] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [availableBizIds, setAvailableBizIds] = useState<number[] | null>(null);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [nearbySlots, setNearbySlots] = useState<Record<number, string[]>>({});
+  const [isLoadingNearbySlots, setIsLoadingNearbySlots] = useState<boolean>(true);
 
   const [isWhatOpen, setIsWhatOpen] = useState(false);
   const [isWhereOpen, setIsWhereOpen] = useState(false);
@@ -129,6 +132,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         async (position) => {
           try {
             const { latitude, longitude } = position.coords;
+            setUserCoords({ lat: latitude, lng: longitude }); // зберігаємо точні координати
             const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=uk`);
             const data = await res.json();
             const city = data.address?.city || data.address?.town || data.address?.village || data.address?.state;
@@ -248,12 +252,27 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     };
   }, []);
 
-  const toggleFavorite = (bizId: number) => {
-    const updated = favorites.includes(bizId)
+
+  const toggleFavorite = async (bizId: number) => {
+    const isFav = favorites.includes(bizId);
+    const updated = isFav
       ? favorites.filter(id => id !== bizId)
       : [...favorites, bizId];
     setFavorites(updated);
     localStorage.setItem('bookera_favs', JSON.stringify(updated));
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        if (isFav) {
+          await api.removeFavorite(session.access_token, bizId);
+        } else {
+          await api.addFavorite(session.access_token, bizId);
+        }
+      }
+    } catch (err) {
+      console.error('Помилка синхронізації улюбленого з БД:', err);
+    }
   };
 
   const handleLogout = async () => {
@@ -529,6 +548,87 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return matches.length > 0 ? matches : businesses.slice(0, 6);
   }, [businesses, searchWhere]);
 
+  // Розрахунок точної відстані від користувача до закладу
+  const getSalonDistance = useCallback((biz: any) => {
+    if (!userCoords) return null;
+
+    let sLat = biz.latitude || biz.layout_config?.lat;
+    let sLng = biz.longitude || biz.layout_config?.lng;
+
+    if (!sLat || !sLng) {
+      const addr = (biz.address || '').toLowerCase();
+      if (addr.includes('дорошенка')) { sLat = 49.8407; sLng = 24.0275; }
+      else if (addr.includes('городоцька')) { sLat = 49.8390; sLng = 24.0150; }
+      else if (addr.includes('коперника')) { sLat = 49.8375; sLng = 24.0260; }
+      else if (addr.includes('франка')) { sLat = 49.8340; sLng = 24.0340; }
+      else if (addr.includes('пекарська')) { sLat = 49.8380; sLng = 24.0410; }
+      else if (addr.includes('шевченка')) { sLat = 49.8470; sLng = 24.0120; }
+      else { sLat = 49.8419; sLng = 24.0315; }
+    }
+
+    const R = 6371e3;
+    const dLat = ((sLat - userCoords.lat) * Math.PI) / 180;
+    const dLon = ((sLng - userCoords.lng) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((userCoords.lat * Math.PI) / 180) *
+      Math.cos((sLat * Math.PI) / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const meters = Math.round(R * c);
+
+    if (meters < 1000) {
+      return `${Math.round(meters / 50) * 50 || 50} м`;
+    }
+    return `${(meters / 1000).toFixed(1)} км`;
+  }, [userCoords]);
+
+  // Завантаження реальних слотів на сьогодні для закладу
+  useEffect(() => {
+    if (!nearbyBusinesses || nearbyBusinesses.length === 0) return;
+
+    let isMounted = true;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    async function loadRealSlots() {
+      setIsLoadingNearbySlots(true);
+      const slotsMap: Record<number, string[]> = {};
+
+      await Promise.all(
+        nearbyBusinesses.slice(0, 6).map(async (biz) => {
+          const srvId = biz.services?.[0]?.id;
+          if (!srvId) return;
+
+          try {
+            const res = await api.getAvailableSlots({
+              business_id: Number(biz.id),
+              service_id: Number(srvId),
+              target_date: todayStr,
+              master_id: '0',
+            });
+
+            const free = (res.slots || [])
+              .filter((s: any) => s.status === 'available')
+              .slice(0, 3)
+              .map((s: any) => s.time.substring(0, 5));
+
+            slotsMap[biz.id] = free;
+          } catch (err) {
+            console.warn(`Помилка отримання слотів салону ${biz.id}:`, err);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setNearbySlots(slotsMap);
+        setIsLoadingNearbySlots(false);
+      }
+    }
+
+    void loadRealSlots();
+    return () => { isMounted = false; };
+  }, [nearbyBusinesses]);
+
   const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 8);
   const isDefaultView = activeCategory === 'all' && !appliedSearch && !searchDate;
 
@@ -538,6 +638,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     if (!searchTime) return datePart;
     return `${datePart}, ${searchTime.toLowerCase()}`;
   };
+  
 
   const renderCalendarDays = () => {
     const year = currentMonth.getFullYear();
@@ -661,6 +762,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     const bgImage = biz.cover_photo || biz.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
     const isFav = favorites.includes(biz.id);
 
+    // Справжня мінімальна ціна серед послуг салону
+    const prices = (biz.services || [])
+      .map((s: any) => Number(s.price))
+      .filter((p: number) => !isNaN(p) && p > 0);
+    const minPrice = prices.length > 0 ? Math.min(...prices) : null;
+
     const categoryLabels: Record<string, string> = {
       barber: 'Барбер',
       hair: 'Волосся',
@@ -672,9 +779,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       spa: 'Spa',
     };
     const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Студія';
+
+    // Формування точної локації та відстані
     const locationText = options?.distanceTag
       ? `${options.distanceTag} • ${biz.address || biz.city || 'Центр'}`
       : ([biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте');
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const salonSlots = nearbySlots[biz.id] || [];
+    const primaryService = biz.services?.[0];
 
     return (
       <Link key={biz.id} href={`/${biz.slug || biz.id}`} className="apple-biz-card anim">
@@ -720,7 +833,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
             <h3 className="card-heading">{biz.name}</h3>
             <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111827', whiteSpace: 'nowrap' }}>
-              від 450 ₴
+              {minPrice ? `від ${minPrice} ₴` : 'від 450 ₴'}
             </span>
           </div>
 
@@ -740,28 +853,39 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationText}</span>
           </div>
 
-          {/* ІНТЕРАКТИВНІ СЛОТИ ЧАСУ */}
+          {/* РЕАЛЬНІ СЛОТИ ЧАСУ НА СЬОГОДНІ */}
           {options?.showTimeSlots ? (
             <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '0.72rem', color: '#8fae92', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Сьогодні:
               </span>
-              <div style={{ display: 'flex', gap: '5px' }}>
-                {['14:30', '16:00', '18:15'].map(time => (
-                  <button
-                    key={time}
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      router.push(`/${biz.slug || biz.id}?time=${time}&date=today`);
-                    }}
-                    className="interactive-time-chip anim"
-                  >
-                    {time}
-                  </button>
-                ))}
-              </div>
+              {salonSlots.length > 0 ? (
+                <div style={{ display: 'flex', gap: '5px' }}>
+                  {salonSlots.map(time => (
+                    <button
+                      key={time}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const query = new URLSearchParams({
+                          date: todayStr,
+                          time: time,
+                        });
+                        if (primaryService?.id) query.set('service', String(primaryService.id));
+                        router.push(`/${biz.slug || biz.id}?${query.toString()}`);
+                      }}
+                      className="interactive-time-chip anim"
+                    >
+                      {time}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: '500' }}>
+                  Немає слотів на сьогодні
+                </span>
+              )}
             </div>
           ) : (
             <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1622,14 +1746,17 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </div>
 
             <div ref={nearbyScrollRef} className="nearby-carousel hide-scrollbar">
-              {nearbyBusinesses.map((biz, idx) => (
-                <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
-                  {renderCard(biz, {
-                    distanceTag: `${300 + idx * 220} м`,
-                    showTimeSlots: true
-                  })}
-                </div>
-              ))}
+              {nearbyBusinesses.map((biz, idx) => {
+                const distance = getSalonDistance(biz) || `${250 + idx * 150} м`;
+                return (
+                  <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
+                    {renderCard(biz, {
+                      distanceTag: distance,
+                      showTimeSlots: true
+                    })}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>

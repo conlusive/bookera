@@ -684,29 +684,27 @@ function ProfileContent() {
   }, [appointments]);
 
   /**
-   * Колір закладу для м'якого градієнта в картці.
+   * Стиль кнопки дії у візиті.
    *
-   * Виводиться з НАЗВИ, а не з логотипу. Витягти колір із зображення
-   * можна лише через canvas у браузері, і для зовнішніх картинок це
-   * вимагає CORS - Supabase Storage його дає не завжди. Градієнт
-   * працював би в одних закладів і не працював в інших, а нерівність
-   * помітніша за відсутність.
-   *
-   * Хеш стабільний: той самий заклад завжди має той самий відтінок,
-   * і людина впізнає його в списку, не читаючи назви.
-   *
-   * Відтінки приглушені (насиченість 45%, світлість 92%): градієнт має
-   * ледь відчуватись, а не забарвлювати картку.
+   * Усі три рівнозначні - перенести, скасувати, повторити. Раніше
+   * вони були різної ваги й стояли врозтіч: око шукало головну,
+   * хоча головної немає, вибір залежить від наміру людини.
    */
-  const businessTint = useCallback((name?: string | null) => {
-    if (!name) return null;
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash) % 360;
-    return `hsl(${hue}, 45%, 92%)`;
-  }, []);
+  const visitActionStyle: React.CSSProperties = {
+    height: '30px',
+    padding: '0 0.75rem',
+    borderRadius: '8px',
+    border: '1px solid #E5E5EA',
+    background: '#fff',
+    color: '#111827',
+    fontSize: '0.78rem',
+    fontWeight: 600,
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    whiteSpace: 'nowrap',
+  };
 
   const upcomingCount = appointments.filter(app => {
     if (!app.start_time) return false;
@@ -1064,18 +1062,10 @@ function ProfileContent() {
                               const isDone = app.status === 'completed';
                               const isUpcoming = !isCancelled && !isDone && start && start >= new Date();
 
-                              // Найближчий візит - ПЕРШИЙ у списку майбутніх,
-                              // а не окрема картка згори. Дублювати його було
-                              // зайвим: та сама інформація двічі, до того ж
-                              // у скороченому вигляді.
-                              const isNext = isUpcoming && appointmentFilter === 'upcoming' && itemIdx === 0;
-
                               const timeLabel = start
                                 ? start.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
                                 : '';
 
-                              // Зворотний відлік біля часу: людина рахує
-                              // в днях, а не звіряє число з календарем.
                               const days = start ? Math.ceil((start.getTime() - Date.now()) / 86400000) : null;
                               const countdown = !isUpcoming || days === null ? null
                                 : days <= 0 ? 'сьогодні'
@@ -1083,136 +1073,108 @@ function ProfileContent() {
                                 : days <= 7 ? `через ${days} дні${days >= 5 ? 'в' : ''}`
                                 : null;
 
-                              // Стан кольором смуги, а не словом: матча -
-                              // попереду, сірий - завершено, нічого -
-                              // скасовано. Три слова в списку з десяти
-                              // рядків перетворюються на шум.
-                              const tint = businessTint(app.business_name);
-
-                              const stripe = isCancelled ? 'transparent' : isNext ? '#8FAE93' : isDone ? '#E5E5EA' : '#D6E3D8';
-
                               return (
                                 <div
                                   key={app.id}
                                   style={{
-                                    display: 'flex',
-                                    gap: '1rem',
-                                    alignItems: 'flex-start',
-                                    padding: '1rem 0.9rem 1rem 0.9rem',
-                                    borderLeft: `2px solid ${stripe}`,
-                                    borderRadius: '0 10px 10px 0',
-                                    // Ледь помітний градієнт кольору закладу.
-                                    // Гасне на 60% ширини: далі текст, і
-                                    // забарвлене тло під ним читалося б гірше.
-                                    background: !isCancelled && tint
-                                      ? `linear-gradient(100deg, ${tint} 0%, rgba(255,255,255,0) 60%)`
-                                      : 'transparent',
+                                    padding: '1.1rem 0',
                                     borderBottom: itemIdx < group.items.length - 1 ? '1px solid #F2F2F5' : 'none',
                                     opacity: isCancelled ? 0.5 : 1,
                                   }}
                                 >
-                                  {/* Лише число: місяць уже в заголовку групи,
-                                      повторювати його в кожному рядку зайво. */}
-                                  <div style={{
-                                    flexShrink: 0, width: '34px', textAlign: 'center',
-                                    fontSize: '1.15rem', fontWeight: 600, color: '#111827',
-                                    lineHeight: 1.3, letterSpacing: '-0.01em',
-                                  }}>
-                                    {start ? start.getDate() : '—'}
-                                  </div>
-
-                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                  {/* Рядок 1: час і послуга.
+                                      Час ліворуч фіксованою колонкою - так
+                                      погляд читає список згори вниз одним
+                                      рухом, не стрибаючи за різною довжиною
+                                      назв. Градієнт прибрано: різнокольорові
+                                      смуги в діловому списку виглядають
+                                      строкато й нічого не пояснюють. */}
+                                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'baseline' }}>
                                     <div style={{
-                                      fontSize: '0.95rem', fontWeight: 600, color: '#111827',
-                                      textDecoration: isCancelled ? 'line-through' : 'none',
+                                      flexShrink: 0, width: '52px',
+                                      fontSize: '0.95rem', fontWeight: 600,
+                                      color: isUpcoming ? '#111827' : '#8E8E93',
+                                      fontVariantNumeric: 'tabular-nums',
                                     }}>
-                                      {app.service_name || 'Візит'}
-                                    </div>
-
-                                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '2px' }}>
                                       {timeLabel}
-                                      {countdown ? ` · ${countdown}` : ''}
-                                      {app.master_name ? ` · ${app.master_name}` : ''}
                                     </div>
 
-                                    <div style={{ fontSize: '0.82rem', color: '#8E8E93', marginTop: '2px' }}>
-                                      {app.business_slug ? (
-                                        <Link href={`/${app.business_slug}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                                          {app.business_name}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{
+                                        fontSize: '0.95rem', fontWeight: 600, color: '#111827',
+                                        textDecoration: isCancelled ? 'line-through' : 'none',
+                                      }}>
+                                        {app.service_name || 'Візит'}
+                                      </div>
+
+                                      <div style={{ fontSize: '0.85rem', color: '#8E8E93', marginTop: '2px' }}>
+                                        {app.business_name}
+                                        {app.master_name ? ` · ${app.master_name}` : ''}
+                                      </div>
+
+                                      {(app.addon_names?.length ?? 0) > 0 && (
+                                        <div style={{ fontSize: '0.8rem', color: '#A1A1A6', marginTop: '2px' }}>
+                                          + {app.addon_names.join(', ')}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                                      {app.price ? (
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#111827' }}>
+                                          {Number(app.price).toLocaleString('uk-UA')} ₴
+                                        </div>
+                                      ) : null}
+                                      {countdown && (
+                                        <div style={{ fontSize: '0.78rem', color: '#5C7A61', marginTop: '2px' }}>
+                                          {countdown}
+                                        </div>
+                                      )}
+                                      {isCancelled && (
+                                        <div style={{ fontSize: '0.78rem', color: '#A1A1A6', marginTop: '2px' }}>
+                                          Скасовано
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Рядок 2: дії.
+                                      Три однакові кнопки в ряд, вирівняні під
+                                      текстом. Раніше вони були різної ваги й
+                                      стояли врозтіч - око не розуміло, яка
+                                      головна, хоча всі рівнозначні. */}
+                                  {(isUpcoming || (isDone && app.business_slug && app.service_id)) && (
+                                    <div style={{
+                                      display: 'flex', gap: '0.4rem', marginTop: '0.75rem',
+                                      paddingLeft: '3.25rem', flexWrap: 'wrap',
+                                    }}>
+                                      {isUpcoming && (
+                                        <>
+                                          <button
+                                            onClick={() => setRescheduleModalAppt(app)}
+                                            style={visitActionStyle}
+                                          >
+                                            Перенести
+                                          </button>
+                                          <button
+                                            onClick={() => setCancelModalAppt(app)}
+                                            style={visitActionStyle}
+                                          >
+                                            Скасувати
+                                          </button>
+                                        </>
+                                      )}
+
+                                      {app.business_slug && app.service_id && (
+                                        <Link
+                                          href={`/${app.business_slug}?service=${app.service_id}${app.master_id ? `&master=${app.master_id}` : ''}`}
+                                          style={{ ...visitActionStyle, textDecoration: 'none' }}
+                                        >
+                                          {isUpcoming ? 'Записатись ще' : 'Повторити візит'}
                                         </Link>
-                                      ) : app.business_name}
-                                      {(app.addon_names?.length ?? 0) > 0 ? ` · +${app.addon_names.join(', ')}` : ''}
+                                      )}
                                     </div>
-
-                                    {/* Дії лише там, де вони мають сенс:
-                                        маршрут і дзвінок - перед найближчим
-                                        візитом, повтор - після завершеного. */}
-                                    {isNext && (
-                                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
-                                        {app.business_address && (
-                                          <a
-                                            href={`https://maps.google.com/maps?q=${encodeURIComponent(app.business_address)}`}
-                                            target="_blank" rel="noreferrer"
-                                            style={{
-                                              height: '30px', padding: '0 0.75rem', borderRadius: '8px',
-                                              border: '1px solid #E5E5EA', background: '#fff', color: '#111827',
-                                              fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none',
-                                              display: 'inline-flex', alignItems: 'center',
-                                            }}
-                                          >
-                                            Маршрут
-                                          </a>
-                                        )}
-                                        {app.business_phone && (
-                                          <a
-                                            href={`tel:${app.business_phone}`}
-                                            style={{
-                                              height: '30px', padding: '0 0.75rem', borderRadius: '8px',
-                                              border: '1px solid #E5E5EA', background: '#fff', color: '#111827',
-                                              fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none',
-                                              display: 'inline-flex', alignItems: 'center',
-                                            }}
-                                          >
-                                            Подзвонити
-                                          </a>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {isDone && app.business_slug && app.service_id && (
-                                      <Link
-                                        href={`/${app.business_slug}?service=${app.service_id}${app.master_id ? `&master=${app.master_id}` : ''}`}
-                                        style={{
-                                          display: 'inline-flex', alignItems: 'center', height: '30px',
-                                          padding: '0 0.75rem', borderRadius: '8px', marginTop: '0.7rem',
-                                          border: '1px solid #E5E5EA', background: '#fff', color: '#111827',
-                                          fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none',
-                                        }}
-                                      >
-                                        Повторити візит
-                                      </Link>
-                                    )}
-                                  </div>
-
-                                  <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                                    {app.price ? (
-                                      <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#111827' }}>
-                                        {Number(app.price).toLocaleString('uk-UA')} ₴
-                                      </div>
-                                    ) : null}
-                                    {isUpcoming && (
-                                      <button
-                                        onClick={() => setCancelModalAppt(app)}
-                                        style={{
-                                          border: 'none', background: 'transparent', color: '#8E8E93',
-                                          fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-                                          fontFamily: 'inherit', padding: '0.3rem 0 0', marginRight: '-0.3rem',
-                                        }}
-                                      >
-                                        Скасувати
-                                      </button>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                               );
                             })}

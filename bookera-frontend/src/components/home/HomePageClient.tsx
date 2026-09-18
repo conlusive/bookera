@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
+import TypingHeadline from '@/components/home/TypingHeadline';
 
 const categoriesData = [
   { name: 'Рекомендовані', slug: 'all' },
@@ -1611,31 +1612,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         <HeroVideoBackdrop />
 
         <div className="reveal-on-scroll" style={{ position: 'relative', zIndex: 50, maxWidth: '1340px', width: '100%', margin: '0 auto', padding: '4rem 4rem 0 4rem', boxSizing: 'border-box', textAlign: 'center' }}>
-          {/* Заголовок зʼявляється по словах.
-              Цілий рядок, що виринає разом, читається як картинка -
-              око бачить пляму тексту й чекає, поки вона стане чіткою.
-              Послідовна поява змушує читати, а не дивитись.
+          <TypingHeadline />
 
-              Затримка 90 мс на слово: менше - зливається в один рух,
-              більше - людина встигає занудьгувати до кінця фрази. */}
-          <h1 style={{
-            fontSize: 'clamp(2.2rem, 4.5vw, 3.4rem)', fontWeight: 800, color: '#ffffff',
-            maxWidth: '820px', margin: '0 auto 1rem auto', lineHeight: 1.12,
-            letterSpacing: '-0.03em',
-          }}>
-            {'Догляд за собою в один клік'.split(' ').map((word, i) => (
-              <span
-                key={i}
-                style={{
-                  display: 'inline-block',
-                  marginRight: '0.28em',
-                  animation: `heroWordIn 0.75s cubic-bezier(0.22, 1, 0.36, 1) ${i * 90}ms both`,
-                }}
-              >
-                {word}
-              </span>
-            ))}
-          </h1>
 
           {/* Підзаголовок виринає після заголовка - коли фраза вже
               прочитана. Одночасна поява робить із них один блок,

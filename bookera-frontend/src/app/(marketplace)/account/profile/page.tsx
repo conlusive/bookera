@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -81,7 +81,7 @@ const compressImage = (file: File): Promise<Blob> => {
   });
 };
 
-export default function ClientProfilePage() {
+function ProfileContent() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { showToast } = useToast();
@@ -1941,5 +1941,25 @@ export default function ClientProfilePage() {
       )}
 
     </div>
+  );
+}
+
+
+/**
+ * Обгортка Suspense.
+ *
+ * useSearchParams() у App Router вимагає межі Suspense: без неї
+ * збірка сторінки падає, і вона віддає 404. Саме це й сталось,
+ * коли я додав читання ?tab=settings для переходу з меню.
+ *
+ * Запасний вміст - порожнє тло тієї ж висоти, а не спінер:
+ * сторінка з'являється миттєво, і блимання індикатором лише
+ * створює відчуття повільності.
+ */
+export default function ClientProfilePage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#FAFAFA' }} />}>
+      <ProfileContent />
+    </Suspense>
   );
 }

@@ -207,6 +207,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   ];
 
   const providesServices = currentStaff?.provides_services !== false;
+  const showInStorefront = currentStaff?.show_in_storefront !== false;
 
   const salonShifts = useMemo(() => {
     const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
@@ -408,6 +409,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         shifts: 'shifts',
         assigned_services: 'assigned_services',
         provides_services: 'provides_services',
+        show_in_storefront: 'show_in_storefront',
         payout_period: 'payout_period',
         payout_day: 'payout_day',
         keeps_tips: 'tips_full',
@@ -1700,6 +1702,22 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                      handleUpdateLocalStaff({ provides_services: !providesServices });
                      handleSaveSettingsDB({ provides_services: !providesServices });
                   }} style={{ width: '46px', height: '26px', borderRadius: '13px', background: providesServices ? colors.green : colors.border, position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0 }}><div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: providesServices ? '22px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div></div>
+                </div>
+
+                {/* Показ у вітрині - ОКРЕМО від прийому записів.
+                    Майстер може працювати, але не хотіти своє фото на
+                    сайті, або бути на заміні. Одне поле на дві потреби
+                    змушувало б вимикати прийом записів заради
+                    приховування з вітрини. */}
+                <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Показувати на сторінці закладу</h3>
+                    <p style={{ fontSize: '0.82rem', color: colors.textSecondary, margin: 0 }}>Блок «Наша команда». На запис це не впливає.</p>
+                  </div>
+                  <div onClick={() => {
+                     handleUpdateLocalStaff({ show_in_storefront: !showInStorefront });
+                     handleSaveSettingsDB({ show_in_storefront: !showInStorefront });
+                  }} style={{ width: '46px', height: '26px', borderRadius: '13px', background: showInStorefront ? colors.green : colors.border, position: 'relative', cursor: 'pointer', transition: 'background 0.3s', flexShrink: 0 }}><div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: showInStorefront ? '22px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div></div>
                 </div>
 
                 {!isOwnerProfile ? (

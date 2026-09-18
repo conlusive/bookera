@@ -118,6 +118,11 @@ class AppointmentResponse(BaseModel):
     # ендпоінтів віддає їх порожніми й нічого не втрачає.
     addon_service_ids: Optional[List[int]] = None
     business_name: Optional[str] = None
+    business_slug: Optional[str] = None
+    business_address: Optional[str] = None
+    business_phone: Optional[str] = None
+    business_photo: Optional[str] = None
+    addon_names: List[str] = []
     service_name: Optional[str] = None
     master_name: Optional[str] = None
 

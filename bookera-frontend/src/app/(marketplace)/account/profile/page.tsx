@@ -610,22 +610,38 @@ export default function ClientProfilePage() {
   const today = new Date().toISOString().split('T')[0];
   const nowIso = new Date().toISOString();
   const filteredAppointments = useMemo(() => {
-    return appointments.filter(app => {
-      const appDateIso = app.start_time || app.date || '';
-      const isUpcoming = appDateIso >= nowIso && app.status !== 'cancelled';
-      const isCompleted = appDateIso < nowIso && app.status !== 'cancelled';
-      const isCancelled = app.status === 'cancelled';
+    // Порівнюємо ДАТИ, а не рядки.
+    //
+    // Раніше тут було `appDateIso >= nowIso` - порівняння ISO-рядків.
+    // Воно працює лише поки формат у обох однаковий; варто одному
+    // прийти без мілісекунд або з іншою зоною - і візит опиняється
+    // не в тій вкладці.
+    const now = new Date();
 
-      if (appointmentFilter === 'upcoming') return isUpcoming;
-      if (appointmentFilter === 'completed') return isCompleted;
-      if (appointmentFilter === 'cancelled') return isCancelled;
-      return true;
+    return appointments.filter(app => {
+      const start = app.start_time ? new Date(app.start_time) : null;
+      if (!start) return false;
+
+      if (appointmentFilter === 'cancelled') {
+        return app.status === 'cancelled' || app.status === 'no-show';
+      }
+      if (app.status === 'cancelled' || app.status === 'no-show') return false;
+
+      // «Майбутні» - ті, що ще не почались і не позначені завершеними.
+      // Статус важливіший за час: майстер міг завершити візит достроково.
+      if (appointmentFilter === 'upcoming') {
+        return start >= now && app.status !== 'completed';
+      }
+
+      // «Минулі» - завершені АБО ті, чий час уже минув.
+      return app.status === 'completed' || start < now;
     });
-  }, [appointments, appointmentFilter, nowIso]);
+  }, [appointments, appointmentFilter]);
 
   const upcomingCount = appointments.filter(app => {
-    const appDateIso = app.start_time || app.date || '';
-    return appDateIso >= nowIso && app.status !== 'cancelled';
+    if (!app.start_time) return false;
+    if (app.status === 'cancelled' || app.status === 'no-show' || app.status === 'completed') return false;
+    return new Date(app.start_time) >= new Date();
   }).length;
   const displayName = fullName || profile?.full_name || 'Користувач';
   const nameParts = displayName.split(' ');
@@ -938,107 +954,142 @@ export default function ClientProfilePage() {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                       {filteredAppointments.map((app) => {
-                        const isUpcoming = app.date >= today && app.status !== 'cancelled';
-                        const isCancelled = app.status === 'cancelled';
-                        const dateObj = new Date(app.date);
+                        // Дані приходять ПЛОСКИМИ з /appointments/my.
+                        //
+                        // Раніше картка читала app.businesses?.name і
+                        // app.services?.name - вкладену структуру старого
+                        // прямого запиту до Supabase. Тому всюди було
+                        // «Послуга» і зображення за замовчуванням.
+                        const start = app.start_time ? new Date(app.start_time) : null;
+                        const isCancelled = app.status === 'cancelled' || app.status === 'no-show';
+                        const isDone = app.status === 'completed';
+                        const isUpcoming = !isCancelled && !isDone && start && start >= new Date();
+
+                        const dayLabel = start
+                          ? start.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
+                          : '—';
+                        const timeLabel = start
+                          ? start.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+                          : '';
 
                         return (
-                          <div key={app.id} className="clean-card anim" style={{ padding: '1.25rem 1.5rem', opacity: isCancelled ? 0.6 : 1 }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1.25rem' }}>
-
-                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <img
-                                  src={app.businesses?.cover_photo || app.businesses?.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=400&q=80"}
-                                  alt={app.businesses?.name || 'Салон'}
-                                  style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' }}
-                                />
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
-                                    <h3 style={{ fontSize: '1.05rem', fontWeight: '700', margin: 0 }}>
-                                      {app.services?.name || 'Послуга'}
-                                    </h3>
-                                    {isUpcoming && getRelativeDateBadge(app.date)}
-                                    {isCancelled && (
-                                      <span style={{ fontSize: '0.72rem', color: '#ef4444', fontWeight: '600' }}>(Скасовано)</span>
-                                    )}
-                                  </div>
-
-                                  {/* Клікабельна адреса */}
-                                  <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${app.businesses?.name || ''} ${app.businesses?.city || ''} ${app.businesses?.address || ''}`)}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#6b7280', fontSize: '0.85rem', textDecoration: 'none' }}
-                                    className="anim"
-                                    onMouseOver={e => e.currentTarget.style.color = '#111827'}
-                                    onMouseOut={e => e.currentTarget.style.color = '#6b7280'}
-                                  >
-                                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>{app.businesses?.name} • {app.businesses?.city || 'Львів'}, {app.businesses?.address || ''}</span>
-                                  </a>
-
-                                  <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.35rem', fontSize: '0.8rem', color: '#4b5563', fontWeight: '600' }}>
-                                    <span>{dateObj.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                                    <span>•</span>
-                                    <span>{app.time?.substring(0, 5)}</span>
-                                    <span>•</span>
-                                    <span style={{ color: '#111827' }}>{app.price || app.services?.price || 0} ₴</span>
-                                  </div>
-                                </div>
+                          <div
+                            key={app.id}
+                            className="clean-card anim"
+                            style={{
+                              padding: '1.25rem 1.4rem',
+                              opacity: isCancelled ? 0.55 : 1,
+                              display: 'flex',
+                              gap: '1rem',
+                              alignItems: 'flex-start',
+                            }}
+                          >
+                            {/* Дата окремим блоком ліворуч - як у системному
+                                календарі. Погляд шукає «коли» першим, і цифра
+                                має бути там, де він зупиняється. */}
+                            <div style={{
+                              flexShrink: 0, width: '54px', textAlign: 'center',
+                              paddingTop: '2px',
+                            }}>
+                              <div style={{
+                                fontSize: '1.5rem', fontWeight: 700, color: '#111827',
+                                lineHeight: 1, letterSpacing: '-0.02em',
+                              }}>
+                                {start ? start.getDate() : '—'}
                               </div>
+                              <div style={{
+                                fontSize: '0.7rem', color: '#8E8E93', marginTop: '3px',
+                                textTransform: 'uppercase', letterSpacing: '0.03em',
+                              }}>
+                                {start ? start.toLocaleDateString('uk-UA', { month: 'short' }).replace('.', '') : ''}
+                              </div>
+                            </div>
 
-                              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                                {isUpcoming ? (
-                                  <>
-                                    {/* Google Calendar */}
-                                    <a
-                                      href={getGoogleCalendarUrl(app)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Google Календар"
-                                      className="btn-subtle anim"
-                                      style={{ padding: '0.5rem 0.65rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', textDecoration: 'none' }}
-                                    >
-                                      <CalendarPlus className="w-3.5 h-3.5 text-slate-600" />
-                                      <span>Google</span>
-                                    </a>
-
-                                    {/* Apple Calendar (.ics) */}
-                                    <button
-                                      onClick={() => downloadAppleIcs(app)}
-                                      title="Apple / iCal (.ics)"
-                                      className="btn-subtle anim"
-                                      style={{ padding: '0.5rem 0.65rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                                    >
-                                      <Download className="w-3.5 h-3.5 text-slate-600" />
-                                      <span>iCal</span>
-                                    </button>
-
-                                    <button
-                                      onClick={() => { setRescheduleModalAppt(app); setNewRescheduleDate(app.date); }}
-                                      className="btn-subtle anim"
-                                      style={{ padding: '0.5rem 0.85rem', borderRadius: '8px', fontSize: '0.82rem' }}
-                                    >
-                                      Перенести
-                                    </button>
-                                    <button
-                                      onClick={() => setCancelModalAppt(app)}
-                                      className="btn-danger-subtle anim"
-                                      style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', fontSize: '0.82rem' }}
-                                    >
-                                      Скасувати
-                                    </button>
-                                  </>
-                                ) : (
-                                  <Link href={`/${app.businesses?.slug || app.businesses?.id}`} style={{ textDecoration: 'none' }}>
-                                    <button className="btn-subtle anim" style={{ padding: '0.5rem 0.9rem', borderRadius: '8px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                      <RotateCcw className="w-3 h-3" /> Повторити
-                                    </button>
-                                  </Link>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <h3 style={{
+                                  fontSize: '1rem', fontWeight: 600, margin: 0, color: '#111827',
+                                  textDecoration: isCancelled ? 'line-through' : 'none',
+                                }}>
+                                  {app.service_name || 'Візит'}
+                                </h3>
+                                {isUpcoming && (
+                                  <span style={{
+                                    fontSize: '0.72rem', fontWeight: 600, color: '#5C7A61',
+                                    background: '#F4FAF5', padding: '2px 8px', borderRadius: '6px',
+                                  }}>
+                                    {timeLabel}
+                                  </span>
                                 )}
                               </div>
 
+                              <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '3px' }}>
+                                {app.business_name || 'Заклад'}
+                                {app.master_name ? ` · ${app.master_name}` : ''}
+                              </div>
+
+                              {/* Додаткові послуги вже в ціні й тривалості -
+                                  людина має бачити, за що заплатила. */}
+                              {(app.addon_names?.length ?? 0) > 0 && (
+                                <div style={{ fontSize: '0.8rem', color: '#8E8E93', marginTop: '3px' }}>
+                                  + {app.addon_names.join(', ')}
+                                </div>
+                              )}
+
+                              <div style={{
+                                display: 'flex', alignItems: 'center', gap: '0.9rem',
+                                marginTop: '0.7rem', flexWrap: 'wrap',
+                                fontSize: '0.82rem', color: '#8E8E93',
+                              }}>
+                                <span>{dayLabel}{!isUpcoming && timeLabel ? `, ${timeLabel}` : ''}</span>
+                                {app.price ? (
+                                  <span style={{ color: '#111827', fontWeight: 600 }}>
+                                    {Number(app.price).toLocaleString('uk-UA')} ₴
+                                  </span>
+                                ) : null}
+                                {isCancelled && <span style={{ color: '#A83934' }}>Скасовано</span>}
+                                {isDone && <span>Завершено</span>}
+                              </div>
+
+                              {/* Дії лише для майбутніх: кнопка «Скасувати»
+                                  біля минулого візиту збиває з пантелику. */}
+                              {isUpcoming && (
+                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.85rem' }}>
+                                  <button
+                                    onClick={() => setRescheduleModalAppt(app)}
+                                    style={{
+                                      height: '32px', padding: '0 0.85rem', borderRadius: '8px',
+                                      border: '1px solid #E5E5EA', background: '#fff', color: '#111827',
+                                      fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                                    }}
+                                  >
+                                    Перенести
+                                  </button>
+                                  <button
+                                    onClick={() => setCancelModalAppt(app)}
+                                    style={{
+                                      height: '32px', padding: '0 0.85rem', borderRadius: '8px',
+                                      border: 'none', background: 'transparent', color: '#8E8E93',
+                                      fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                                    }}
+                                  >
+                                    Скасувати
+                                  </button>
+                                </div>
+                              )}
                             </div>
+
+                            {app.business_slug && (
+                              <Link
+                                href={`/${app.business_slug}`}
+                                style={{
+                                  flexShrink: 0, color: '#8E8E93', textDecoration: 'none',
+                                  fontSize: '0.8rem', fontWeight: 600, paddingTop: '3px',
+                                }}
+                              >
+                                Заклад
+                              </Link>
+                            )}
                           </div>
                         );
                       })}

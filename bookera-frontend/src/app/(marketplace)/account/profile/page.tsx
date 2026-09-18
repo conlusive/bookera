@@ -1014,45 +1014,57 @@ export default function ClientProfilePage() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {/* Найближчий візит - окремою карткою згори.
-                          У профіль заходять переважно щоб подивитись
-                          НАСТУПНИЙ візит; решта це історія. */}
+                      {/* Найближчий візит.
+                          Раніше тут була темна картка - вона тиснула й
+                          виглядала чужою на світлій сторінці. Тепер та сама
+                          світла картка, що й решта, з тонкою матчевою
+                          смугою ліворуч: досить, щоб око знайшло її першою,
+                          і не досить, щоб вона кричала. */}
                       {appointmentFilter === 'upcoming' && nextAppointment && (() => {
                         const start = new Date(nextAppointment.start_time);
                         const days = Math.ceil((start.getTime() - Date.now()) / 86400000);
-                        const countdown = days <= 0 ? 'Сьогодні' : days === 1 ? 'Завтра' : `Через ${days} дні${days >= 5 ? 'в' : ''}`;
+                        const countdown = days <= 0 ? 'сьогодні' : days === 1 ? 'завтра' : `через ${days} дні${days >= 5 ? 'в' : ''}`;
 
                         return (
                           <div style={{
-                            background: '#111827', color: '#fff', borderRadius: '18px',
-                            padding: '1.5rem 1.6rem', marginBottom: '1.25rem',
+                            background: '#fff',
+                            border: '1px solid #E5E5EA',
+                            borderLeft: '3px solid #8FAE93',
+                            borderRadius: '14px',
+                            padding: '1.25rem 1.4rem',
+                            marginBottom: '1rem',
                           }}>
                             <div style={{
-                              fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.05em',
-                              textTransform: 'uppercase', color: '#C2D8C4', marginBottom: '0.6rem',
+                              fontSize: '0.78rem', fontWeight: 600, color: '#5C7A61',
+                              marginBottom: '0.5rem',
                             }}>
-                              {countdown}
+                              Найближчий візит — {countdown}
                             </div>
 
-                            <div style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                            <div style={{
+                              fontSize: '1.15rem', fontWeight: 600, color: '#111827',
+                              letterSpacing: '-0.01em',
+                            }}>
                               {start.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}
                               {', '}
                               {start.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
                             </div>
 
-                            <div style={{ fontSize: '0.95rem', color: '#D1D5DB', marginTop: '0.35rem' }}>
+                            <div style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '0.3rem' }}>
                               {nextAppointment.service_name || 'Візит'}
                               {nextAppointment.master_name ? ` · ${nextAppointment.master_name}` : ''}
                             </div>
 
-                            <div style={{ fontSize: '0.875rem', color: '#9CA3AF', marginTop: '0.2rem' }}>
+                            <div style={{ fontSize: '0.85rem', color: '#8E8E93', marginTop: '0.15rem' }}>
                               {nextAppointment.business_name}
                               {nextAppointment.business_address ? ` · ${nextAppointment.business_address}` : ''}
                             </div>
 
-                            {/* Дії поруч із візитом: подзвонити й побудувати
-                                маршрут - це те, що роблять перед виходом. */}
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.1rem', flexWrap: 'wrap' }}>
+                            {/* Маршрут і дзвінок - те, що роблять перед
+                                виходом з дому. Скасування відсунуте праворуч
+                                і без заливки: це рідкісна дія, і вона не має
+                                стояти поруч із корисними. */}
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
                               {nextAppointment.business_address && (
                                 <a
                                   href={`https://maps.google.com/maps?q=${encodeURIComponent(nextAppointment.business_address)}`}
@@ -1060,7 +1072,7 @@ export default function ClientProfilePage() {
                                   rel="noreferrer"
                                   style={{
                                     height: '34px', padding: '0 0.9rem', borderRadius: '9px',
-                                    background: 'rgba(255,255,255,0.12)', color: '#fff',
+                                    border: '1px solid #E5E5EA', background: '#fff', color: '#111827',
                                     fontSize: '0.82rem', fontWeight: 600, textDecoration: 'none',
                                     display: 'inline-flex', alignItems: 'center',
                                   }}
@@ -1073,7 +1085,7 @@ export default function ClientProfilePage() {
                                   href={`tel:${nextAppointment.business_phone}`}
                                   style={{
                                     height: '34px', padding: '0 0.9rem', borderRadius: '9px',
-                                    background: 'rgba(255,255,255,0.12)', color: '#fff',
+                                    border: '1px solid #E5E5EA', background: '#fff', color: '#111827',
                                     fontSize: '0.82rem', fontWeight: 600, textDecoration: 'none',
                                     display: 'inline-flex', alignItems: 'center',
                                   }}
@@ -1084,8 +1096,8 @@ export default function ClientProfilePage() {
                               <button
                                 onClick={() => setCancelModalAppt(nextAppointment)}
                                 style={{
-                                  height: '34px', padding: '0 0.9rem', borderRadius: '9px',
-                                  background: 'transparent', border: 'none', color: '#9CA3AF',
+                                  height: '34px', padding: '0 0.6rem', borderRadius: '9px',
+                                  background: 'transparent', border: 'none', color: '#8E8E93',
                                   fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
                                   fontFamily: 'inherit', marginLeft: 'auto',
                                 }}
@@ -1219,6 +1231,30 @@ export default function ClientProfilePage() {
                                 {isCancelled && <span style={{ color: '#A83934' }}>Скасовано</span>}
                                 {isDone && <span>Завершено</span>}
                               </div>
+
+                              {/* «Повторити візит» - найчастіша дія в історії:
+                                  людина стриглася місяць тому й хоче так само.
+                                  Веде на сторінку закладу з уже обраною
+                                  послугою й тим самим майстром.
+
+                                  Лише для завершених: пропонувати повтор
+                                  скасованого візиту дивно - людина його
+                                  свідомо відмінила. */}
+                              {isDone && app.business_slug && app.service_id && (
+                                <div style={{ marginTop: '0.8rem' }}>
+                                  <Link
+                                    href={`/${app.business_slug}?service=${app.service_id}${app.master_id ? `&master=${app.master_id}` : ''}`}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', height: '32px',
+                                      padding: '0 0.85rem', borderRadius: '8px',
+                                      border: '1px solid #E5E5EA', background: '#fff', color: '#111827',
+                                      fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none',
+                                    }}
+                                  >
+                                    Повторити візит
+                                  </Link>
+                                </div>
+                              )}
 
                               {/* Дії лише для майбутніх: кнопка «Скасувати»
                                   біля минулого візиту збиває з пантелику. */}

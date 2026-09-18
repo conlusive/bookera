@@ -318,9 +318,27 @@ export default function SalonClient({
   }, [isModalOpen, selectedDate, selectedService, selectedMasterId, currentStep, fetchAvailableSlots]);
 
   useEffect(() => {
+    // «Повторити візит» із профілю: ?service=12&master=abc
+    //
+    // Відкриваємо вікно бронювання з уже обраною послугою й майстром.
+    // Людина хоче «так само, як минулого разу» - змушувати її шукати
+    // ту саму послугу в списку означає повторювати роботу, яку вона
+    // вже зробила.
+    const repeatServiceId = searchParams.get('service');
+    if (repeatServiceId && services?.length) {
+      const service = services.find((s: any) => String(s.id) === repeatServiceId);
+      if (service) {
+        const master = searchParams.get('master');
+        if (master) setSelectedMasterId(master);
+        openModal(service);
+      }
+    }
+
     const dl = searchParams.get('dl');
     if (dl) localStorage.setItem('direct_link_token', dl);
-  }, [searchParams]);
+    // services у залежностях: на першому рендері список ще порожній,
+    // і без цього «повторити візит» мовчки нічого не відкривало б.
+  }, [searchParams, services]);
 
   // Таймер бронювання
   useEffect(() => {

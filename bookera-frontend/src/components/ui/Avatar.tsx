@@ -38,8 +38,11 @@ export default function Avatar({
         flexShrink: 0,
         borderRadius: '50%',
         overflow: 'hidden',
-        background: '#ffffff',
-        border: '1px solid #E4EBE3',
+        // Світло-сірий із холодним відтінком - як у хедері профілю.
+        // Чисто білий зливався з тлом карток і кружок губився;
+        // рамка при цьому стає зайвою - форму задає сам фон.
+        background: '#EEF1F6',
+        border: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

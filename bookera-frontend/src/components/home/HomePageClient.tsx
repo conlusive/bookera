@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { isBusinessRole } from '@/lib/roles';
+import Avatar from '@/components/ui/Avatar';
 
 const categoriesData = [
   { name: 'Рекомендовані', slug: 'all' },
@@ -1412,16 +1413,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                       style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                     />
                   ) : (
-                    <div style={{
-                      width: '36px', height: '36px', borderRadius: '50%',
-                      backgroundColor: isHeaderDark ? '#f1f5f9' : '#C2D8C4',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#111827', fontWeight: '800', fontSize: '0.9rem',
-                      boxShadow: isHeaderDark ? 'none' : '0 2px 8px rgba(194, 216, 196, 0.35)',
-                      flexShrink: 0
-                    }}>
-                      {initials}
-                    </div>
+                    <Avatar name={userName} size={36} />
                   )}
 
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}>

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
+from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access, is_limited_to_own_schedule
 from app.core.rate_limit import rate_limit
 from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client
 from app.schemas.appointment import (
@@ -880,6 +880,18 @@ async def get_booked_appointments(
     db: AsyncSession = Depends(get_db),
     _current_user: CurrentUser = Depends(require_business_access),
 ):
+    # Майстер бачить ЛИШЕ свій розклад.
+    #
+    # Чужі записи, контакти чужих клієнтів і чужі візити його не
+    # стосуються. Раніше обмеження було тільки на рівні вкладок у CRM -
+    # майстер відкривав календар і бачив увесь заклад.
+    #
+    # Перевірка тут, а не на екрані: приховане на фронтенді все одно
+    # приходить у відповіді, і будь-хто побачить його у вкладці
+    # «Мережа» браузера.
+    if await is_limited_to_own_schedule(db, _current_user, business_id):
+        master_id = str(_current_user.id)
+
     # ВАЖЛИВО: цей ендпоінт віддає ім'я, телефон і email клієнтів.
     # Раніше був доступний без жодної авторизації - будь-хто, хто знав
     # business_id, міг вивантажити всі контакти клієнтів закладу.

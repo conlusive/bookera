@@ -220,3 +220,36 @@ async def require_business_access(
     """
     await assert_business_access(db, current_user, business_id)
     return current_user
+
+
+async def is_limited_to_own_schedule(db: AsyncSession, current_user: CurrentUser, business_id: int) -> bool:
+    """
+    Чи людина бачить ЛИШЕ свій розклад.
+
+    Майстер працює у своєму графіку: чужі записи, контакти чужих
+    клієнтів і чужі виплати його не стосуються. Адміністратор і
+    власник ведуть заклад цілком, тому для них обмеження немає.
+
+    Перевіряємо на БЕКЕНДІ, а не ховаємо на екрані: приховане на
+    фронтенді все одно приходить у відповіді, і будь-хто побачить
+    його у вкладці «Мережа» браузера.
+    """
+    # Локальний імпорт: app.models звертається до цього модуля,
+    # і верхньорівневе імпортування дало б цикл.
+    from app.models import Business, User
+
+    res = await db.execute(
+        select(User).where(User.id == str(current_user.id), User.business_id == business_id)
+    )
+    user = res.scalars().first()
+    if not user:
+        return False
+
+    # Власник закладу бачить усе, навіть якщо його роль записана
+    # як 'master' - таке трапляється в старих записах.
+    biz_res = await db.execute(select(Business).where(Business.id == business_id))
+    business = biz_res.scalars().first()
+    if business and str(business.owner_id) == str(current_user.id):
+        return False
+
+    return user.role not in ADMIN_ROLES

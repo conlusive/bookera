@@ -2191,7 +2191,14 @@ const formatRole = (role?: string) => {
           <div>
             <div style={{ position: 'sticky', top: '96px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-              {/* НАША КОМАНДА (Плавний свайп при великій кількості майстрів) */}
+              {/* НАША КОМАНДА
+                  showTeam перевіряється тут, а не лише в редакторі вітрини:
+                  раніше власник вимикав блок у себе, а на сторінці салону
+                  команда все одно показувалась - перевірки просто не було.
+                  Порівнюємо з false, а не через істинність: у закладів,
+                  які нічого не налаштовували, поля немає взагалі, і вони
+                  мають бачити команду за замовчуванням. */}
+              {salon?.layout_config?.showTeam !== false && (
               <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                   <h3 className="section-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
@@ -2243,8 +2250,12 @@ const formatRole = (role?: string) => {
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* КАРТА */}
+              {/* КАРТА
+                  showMap теж не перевірявся: власник вимикав карту
+                  в редакторі, а клієнт її бачив. */}
+              {salon?.layout_config?.showMap !== false && (
               <div className="section-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', borderRadius: '24px 24px 0 0', background: '#e2e8f0' }}>
                   <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
@@ -2296,6 +2307,7 @@ const formatRole = (role?: string) => {
                   </a>
                 </div>
               </div>
+              )}
 
               {/* ЗРУЧНОСТІ */}
               {salon?.layout_config?.showAmenities !== false && activeAmenities.length > 0 && (

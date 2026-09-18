@@ -876,7 +876,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                       style={{
                         width: '44px',
                         height: '24px',
-                        backgroundColor: layoutConfig.showTeam ? '#10b981' : '#cbd5e1',
+                        backgroundColor: layoutConfig.showTeam ? '#6F9273' : '#cbd5e1',
                         borderRadius: '999px',
                         position: 'relative',
                         cursor: 'pointer',
@@ -929,7 +929,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                       style={{
                         width: '44px',
                         height: '24px',
-                        backgroundColor: layoutConfig.showMap ? '#10b981' : '#cbd5e1',
+                        backgroundColor: layoutConfig.showMap ? '#6F9273' : '#cbd5e1',
                         borderRadius: '999px',
                         position: 'relative',
                         cursor: 'pointer',
@@ -952,7 +952,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                       style={{
                         width: '44px',
                         height: '24px',
-                        backgroundColor: layoutConfig.showAmenities ? '#10b981' : '#cbd5e1',
+                        backgroundColor: layoutConfig.showAmenities ? '#6F9273' : '#cbd5e1',
                         borderRadius: '999px',
                         position: 'relative',
                         cursor: 'pointer',

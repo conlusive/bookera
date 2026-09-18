@@ -552,8 +552,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
                     {orderedTeam.length > 0 ? (
                       <div className="hide-scrollbar" style={{ display: 'flex', gap: '1.25rem', overflowX: 'auto', paddingBottom: '0.25rem', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+                        {/* Прихованих показуємо приглушеними, а не ховаємо:
+                            порядок налаштовують для ВСІХ, і людина, яка
+                            зникла зі списку, виглядає як помилка. Видно
+                            і що вона в команді, і що клієнт її не побачить. */}
                         {orderedTeam.map((staff, idx) => (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
+                          <div key={idx} title={staff.show_in_storefront === false ? 'Не показується на сторінці закладу' : undefined} style={{ opacity: staff.show_in_storefront === false ? 0.45 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
                               {staff.avatar_url ? (
                                 <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
@@ -565,7 +569,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                               {staff.name}
                             </div>
                             <div style={{ fontSize: '0.74rem', color: '#86868B', marginTop: '2px', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={formatRole(staff.role)}>
-                              {formatRole(staff.role)}
+                              {staff.show_in_storefront === false ? 'Приховано' : formatRole(staff.role)}
                             </div>
                           </div>
                         ))}

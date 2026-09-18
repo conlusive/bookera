@@ -534,9 +534,18 @@ const formatRole = (role?: string) => {
 
   // Сортуємо команду згідно з налаштованим у CRM порядком
   const activeTeam = useMemo(() => {
+    // Прихованих з вітрини не показуємо.
+    //
+    // show_in_storefront ховає людину ЛИШЕ звідси - вибір майстра при
+    // бронюванні бере повний список. Майстер може приймати записи,
+    // але не хотіти своє фото на сайті.
+    //
+    // Порівнюємо з false: у тих, кого не чіпали, поля немає, і вони
+    // мають лишатись видимими.
+    const visible = (team || []).filter((m: any) => m.show_in_storefront !== false);
     const order = salon?.layout_config?.team_order;
     if (Array.isArray(order) && order.length > 0) {
-      const copy = [...team];
+      const copy = [...visible];
       return copy.sort((a, b) => {
         const idxA = order.indexOf(String(a.id));
         const idxB = order.indexOf(String(b.id));
@@ -546,12 +555,20 @@ const formatRole = (role?: string) => {
         return 0;
       });
     }
-    return team;
+    return visible;
   }, [team, salon?.layout_config?.team_order]);
 
+  /**
+   * Список майстрів для ВИБОРУ ПРИ БРОНЮВАННІ.
+   *
+   * Будується з ПОВНОГО складу (team), а не з activeTeam: майстер,
+   * прихований із блоку «Наша команда», має далі приймати записи -
+   * інакше перемикач «не показувати на сайті» позбавляв би людину
+   * роботи, а йшлося про протилежне.
+   */
   const staffers = useMemo(() => {
     const list: any[] = [{ id: 0, name: "Будь-який майстер", role: "Найближчий вільний час", photo: null }];
-    activeTeam.forEach((t) => {
+    (team || []).forEach((t: any) => {
       list.push({
         id: t.id,
         name: getStaffName(t),
@@ -562,6 +579,23 @@ const formatRole = (role?: string) => {
       });
     });
     return list;
+  }, [team]);
+
+  /**
+   * Склад для блоку «Наша команда».
+   *
+   * Той самий формат, що й staffers, але БЕЗ прихованих і без
+   * службового пункту «Будь-який майстер». Два списки потрібні саме
+   * тому, що вони відповідають на різні питання: «до кого можна
+   * записатись» і «кого показувати на сайті».
+   */
+  const storefrontTeam = useMemo(() => {
+    return activeTeam.map((t: any) => ({
+      id: t.id,
+      name: getStaffName(t),
+      role: t.specialization || t.title || formatRole(t.role),
+      photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null,
+    }));
   }, [activeTeam]);
 
   // Фільтруємо список майстрів під обрану послугу
@@ -2207,7 +2241,11 @@ const formatRole = (role?: string) => {
                     WebkitOverflowScrolling: 'touch',
                   }}
                 >
-                  {staffers.slice(1).map((staff, idx) => (
+                  {/* Блок «Наша команда» бере activeTeam - список БЕЗ
+                      прихованих. staffers тут не годиться: він для вибору
+                      майстра при бронюванні й містить повний склад плюс
+                      службовий пункт «Будь-який майстер». */}
+                  {storefrontTeam.map((staff: any, idx: number) => (
                     <div
                       key={idx}
                       style={{

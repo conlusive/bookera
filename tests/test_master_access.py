@@ -156,3 +156,36 @@ async def test_admin_is_not_limited(client, auth_headers):
                          headers=auth_headers("the-admin"))
     assert appt_id in [a["id"] for a in r.json()], \
         "адміністратор має бачити чужі записи"
+
+
+@pytest.mark.asyncio
+async def test_hidden_master_flag_reaches_client(client, auth_headers):
+    """
+    Наскрізна перевірка перемикача «Показувати на сторінці закладу».
+
+    Ланцюжок довгий - модель, схема, ендпоінт, тип, фільтр на сторінці -
+    і рветься тихо: поле зберігається, а блок команди показує всіх.
+    Саме так і сталось: усе було на місці, крім фільтра.
+    """
+    owner = auth_headers("visibility-owner")
+    business_id, _ = await _setup(client, owner)
+
+    await _make_master("visible-master", business_id, "Видимий")
+    await _make_master("hidden-master", business_id, "Прихований")
+
+    r = await client.patch("/crm/staff/hidden-master", json={
+        "show_in_storefront": False,
+    }, headers=owner)
+    assert r.status_code == 200, r.text
+
+    r = await client.get(f"/crm/businesses/{business_id}/masters")
+    assert r.status_code == 200, r.text
+    masters = {m["full_name"]: m for m in r.json()}
+
+    # Обидва в списку - бо він живить і вибір при бронюванні
+    assert "Видимий" in masters and "Прихований" in masters, \
+        "прихований майстер має лишатись доступним для запису"
+
+    # Але позначені по-різному - за цим фільтрує сторінка
+    assert masters["Видимий"]["show_in_storefront"] is not False
+    assert masters["Прихований"]["show_in_storefront"] is False

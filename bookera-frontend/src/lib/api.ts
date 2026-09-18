@@ -458,7 +458,7 @@ export const api = {
     return publicFetch(`/services/business/${businessId}`);
   },
 
-  async listPublicMasters(businessId: number): Promise<{ id: string; full_name?: string; specialization?: string; avatar_url?: string }[]> {
+  async listPublicMasters(businessId: number): Promise<{ id: string; full_name?: string; specialization?: string; avatar_url?: string ; show_in_storefront?: boolean}[]> {
     return publicFetch(`/crm/businesses/${businessId}/masters`);
   },
 

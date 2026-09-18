@@ -147,6 +147,10 @@ export interface StaffMember {
   deduct_materials?: boolean;
   auto_reset_balance?: boolean;
   is_active: boolean;
+  /** Чи показувати людину в блоці «Наша команда» на сторінці закладу.
+   *  Окремо від provides_services: майстер може приймати записи,
+   *  але не бути на вітрині. */
+  show_in_storefront?: boolean;
 }
 
 export interface BusinessStats {
@@ -458,7 +462,7 @@ export const api = {
     return publicFetch(`/services/business/${businessId}`);
   },
 
-  async listPublicMasters(businessId: number): Promise<{ id: string; full_name?: string; specialization?: string; avatar_url?: string }[]> {
+  async listPublicMasters(businessId: number): Promise<{ id: string; full_name?: string; specialization?: string; avatar_url?: string ; show_in_storefront?: boolean}[]> {
     return publicFetch(`/crm/businesses/${businessId}/masters`);
   },
 

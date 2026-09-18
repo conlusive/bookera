@@ -318,9 +318,27 @@ export default function SalonClient({
   }, [isModalOpen, selectedDate, selectedService, selectedMasterId, currentStep, fetchAvailableSlots]);
 
   useEffect(() => {
+    // «Повторити візит» із профілю: ?service=12&master=abc
+    //
+    // Відкриваємо вікно бронювання з уже обраною послугою й майстром.
+    // Людина хоче «так само, як минулого разу» - змушувати її шукати
+    // ту саму послугу в списку означає повторювати роботу, яку вона
+    // вже зробила.
+    const repeatServiceId = searchParams.get('service');
+    if (repeatServiceId && services?.length) {
+      const service = services.find((s: any) => String(s.id) === repeatServiceId);
+      if (service) {
+        const master = searchParams.get('master');
+        if (master) setSelectedMasterId(master);
+        openModal(service);
+      }
+    }
+
     const dl = searchParams.get('dl');
     if (dl) localStorage.setItem('direct_link_token', dl);
-  }, [searchParams]);
+    // services у залежностях: на першому рендері список ще порожній,
+    // і без цього «повторити візит» мовчки нічого не відкривало б.
+  }, [searchParams, services]);
 
   // Таймер бронювання
   useEffect(() => {
@@ -532,36 +550,43 @@ const formatRole = (role?: string) => {
     return role;
   };
 
+  // Сортуємо команду згідно з налаштованим у CRM порядком
+  const activeTeam = useMemo(() => {
+    // Прихованих з вітрини не показуємо.
+    //
+    // show_in_storefront ховає людину ЛИШЕ звідси - вибір майстра при
+    // бронюванні бере повний список. Майстер може приймати записи,
+    // але не хотіти своє фото на сайті.
+    //
+    // Порівнюємо з false: у тих, кого не чіпали, поля немає, і вони
+    // мають лишатись видимими.
+    const visible = (team || []).filter((m: any) => m.show_in_storefront !== false);
+    const order = salon?.layout_config?.team_order;
+    if (Array.isArray(order) && order.length > 0) {
+      const copy = [...visible];
+      return copy.sort((a, b) => {
+        const idxA = order.indexOf(String(a.id));
+        const idxB = order.indexOf(String(b.id));
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return 0;
+      });
+    }
+    return visible;
+  }, [team, salon?.layout_config?.team_order]);
+
   /**
-   * Майстри для ВИБОРУ ПРИ ЗАПИСІ.
+   * Список майстрів для ВИБОРУ ПРИ БРОНЮВАННІ.
    *
-   * Береться повний team, а НЕ activeTeam. Це критично: activeTeam
-   * відфільтрований за show_in_storefront, і якби staffers будувався
-   * з нього, прихована з вітрини людина зникала б і з бронювання -
-   * тобто переставала отримувати записи.
-   *
-   * А сенс поля саме в тому, щоб вона працювала, але не була на
-   * сторінці. Блок «Наша команда» використовує activeTeam, цей
-   * список - team.
+   * Будується з ПОВНОГО складу (team), а не з activeTeam: майстер,
+   * прихований із блоку «Наша команда», має далі приймати записи -
+   * інакше перемикач «не показувати на сайті» позбавляв би людину
+   * роботи, а йшлося про протилежне.
    */
   const staffers = useMemo(() => {
-    // Порядок із CRM. Сортуємо ТУТ, бо цей список показується і в
-    // блоці команди, і при виборі майстра - в обох місцях власник
-    // очікує свого порядку.
-    const order = salon?.layout_config?.team_order;
-    const sorted = Array.isArray(order) && order.length > 0
-      ? [...(team || [])].sort((a: any, b: any) => {
-          const idxA = order.indexOf(String(a.id));
-          const idxB = order.indexOf(String(b.id));
-          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-          if (idxA !== -1) return -1;
-          if (idxB !== -1) return 1;
-          return 0;
-        })
-      : (team || []);
-
     const list: any[] = [{ id: 0, name: "Будь-який майстер", role: "Найближчий вільний час", photo: null }];
-    sorted.forEach((t: any) => {
+    (team || []).forEach((t: any) => {
       list.push({
         id: t.id,
         name: getStaffName(t),
@@ -573,7 +598,24 @@ const formatRole = (role?: string) => {
       });
     });
     return list;
-  }, [team, salon?.layout_config?.team_order]);
+  }, [team]);
+
+  /**
+   * Склад для блоку «Наша команда».
+   *
+   * Той самий формат, що й staffers, але БЕЗ прихованих і без
+   * службового пункту «Будь-який майстер». Два списки потрібні саме
+   * тому, що вони відповідають на різні питання: «до кого можна
+   * записатись» і «кого показувати на сайті».
+   */
+  const storefrontTeam = useMemo(() => {
+    return activeTeam.map((t: any) => ({
+      id: t.id,
+      name: getStaffName(t),
+      role: t.specialization || t.title || formatRole(t.role),
+      photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null,
+    }));
+  }, [activeTeam]);
 
   // Фільтруємо список майстрів під обрану послугу
   const availableStaffersForService = useMemo(() => {
@@ -2218,11 +2260,11 @@ const formatRole = (role?: string) => {
                     WebkitOverflowScrolling: 'touch',
                   }}
                 >
-                  {/* Фільтруємо прихованих ТУТ, а не в самому staffers:
-                      той список живить вибір майстра при записі, і
-                      прибравши звідти людину, ми позбавили б її записів.
-                      Ховаємо лише з вітрини. */}
-                  {staffers.slice(1).filter((s: any) => s.show_in_storefront !== false).map((staff, idx) => (
+                  {/* Блок «Наша команда» бере activeTeam - список БЕЗ
+                      прихованих. staffers тут не годиться: він для вибору
+                      майстра при бронюванні й містить повний склад плюс
+                      службовий пункт «Будь-який майстер». */}
+                  {storefrontTeam.map((staff: any, idx: number) => (
                     <div
                       key={idx}
                       style={{

@@ -1045,12 +1045,35 @@ async def list_my_appointments(
         business = biz_res.scalars().first()
         if business:
             response.business_name = business.name
+            # Дані для картки візиту: людина має розуміти, КУДИ їй їхати
+            # і як зв'язатись, не відкриваючи сторінку закладу.
+            response.business_slug = business.slug
+            response.business_address = ", ".join(
+                x for x in [business.city, business.address] if x
+            )
+            response.business_phone = business.phone if business.show_phone_publicly is not False else None
+            response.business_photo = business.cover_photo or business.logo
 
         if appointment.service_id:
             srv_res = await db.execute(select(Service).where(Service.id == appointment.service_id))
             service = srv_res.scalars().first()
             if service:
                 response.service_name = service.name
+
+        # Майстер: перше питання після «коли» - до кого саме.
+        if appointment.master_id:
+            m_res = await db.execute(select(User).where(User.id == str(appointment.master_id)))
+            master = m_res.scalars().first()
+            if master:
+                response.master_name = master.full_name
+
+        # Додаткові послуги: вони вже в ціні й тривалості, тому людина
+        # має бачити, за що заплатила.
+        if appointment.addon_service_ids:
+            addons_res = await db.execute(
+                select(Service).where(Service.id.in_(appointment.addon_service_ids))
+            )
+            response.addon_names = [a.name for a in addons_res.scalars().all()]
 
         out.append(response)
 

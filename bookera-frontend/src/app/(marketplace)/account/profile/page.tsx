@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import Avatar from '@/components/ui/Avatar';
+import VisitsHeatmap from '@/components/profile/VisitsHeatmap';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -81,7 +82,7 @@ const compressImage = (file: File): Promise<Blob> => {
   });
 };
 
-export default function ClientProfilePage() {
+function ProfileContent() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { showToast } = useToast();
@@ -610,22 +611,109 @@ export default function ClientProfilePage() {
   const today = new Date().toISOString().split('T')[0];
   const nowIso = new Date().toISOString();
   const filteredAppointments = useMemo(() => {
-    return appointments.filter(app => {
-      const appDateIso = app.start_time || app.date || '';
-      const isUpcoming = appDateIso >= nowIso && app.status !== 'cancelled';
-      const isCompleted = appDateIso < nowIso && app.status !== 'cancelled';
-      const isCancelled = app.status === 'cancelled';
+    // Порівнюємо ДАТИ, а не рядки.
+    //
+    // Раніше тут було `appDateIso >= nowIso` - порівняння ISO-рядків.
+    // Воно працює лише поки формат у обох однаковий; варто одному
+    // прийти без мілісекунд або з іншою зоною - і візит опиняється
+    // не в тій вкладці.
+    const now = new Date();
 
-      if (appointmentFilter === 'upcoming') return isUpcoming;
-      if (appointmentFilter === 'completed') return isCompleted;
-      if (appointmentFilter === 'cancelled') return isCancelled;
-      return true;
+    return appointments.filter(app => {
+      const start = app.start_time ? new Date(app.start_time) : null;
+      if (!start) return false;
+
+      if (appointmentFilter === 'cancelled') {
+        return app.status === 'cancelled' || app.status === 'no-show';
+      }
+      if (app.status === 'cancelled' || app.status === 'no-show') return false;
+
+      // «Майбутні» - ті, що ще не почались і не позначені завершеними.
+      // Статус важливіший за час: майстер міг завершити візит достроково.
+      if (appointmentFilter === 'upcoming') {
+        return start >= now && app.status !== 'completed';
+      }
+
+      // «Минулі» - завершені АБО ті, чий час уже минув.
+      return app.status === 'completed' || start < now;
     });
-  }, [appointments, appointmentFilter, nowIso]);
+  }, [appointments, appointmentFilter]);
+
+  /**
+   * Скільки візитів показувати.
+   *
+   * Порційно, а не сторінками: люди не шукають візит на третій
+   * сторінці, вони гортають. Кнопка «Показати ще» дешевша за
+   * нумерацію і не вимагає тримати в голові, де ти зараз.
+   */
+  const PAGE_SIZE = 10;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Зміна вкладки починає показ спочатку: лишити 40 видимих записів
+  // після переходу на «Скасовані» означало б показати порожнечу
+  // з кнопкою «Показати ще».
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [appointmentFilter]);
+
+  /**
+   * Візити, згруповані за місяцями.
+   *
+   * Суцільний список із двадцяти карток читається як стрічка без
+   * орієнтирів. Місяць - природний крок, за яким людина памʼятає
+   * свої візити.
+   */
+  const groupedAppointments = useMemo(() => {
+    const visible = filteredAppointments.slice(0, visibleCount);
+    const groups: { label: string; items: any[] }[] = [];
+
+    for (const app of visible) {
+      const d = app.start_time ? new Date(app.start_time) : null;
+      const label = d
+        ? d.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' })
+        : 'Без дати';
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(app);
+      else groups.push({ label, items: [app] });
+    }
+    return groups;
+  }, [filteredAppointments, visibleCount]);
+
+  // Підсумок історії: скільки візитів і в скількох закладах.
+  const historySummary = useMemo(() => {
+    const done = appointments.filter(a => a.status === 'completed');
+    const places = new Set(done.map(a => a.business_id));
+    return { visits: done.length, places: places.size };
+  }, [appointments]);
+
+  /**
+   * Стиль кнопки дії у візиті.
+   *
+   * Усі три рівнозначні - перенести, скасувати, повторити. Раніше
+   * вони були різної ваги й стояли врозтіч: око шукало головну,
+   * хоча головної немає, вибір залежить від наміру людини.
+   */
+  const visitActionStyle: React.CSSProperties = {
+    // 34px замість 30 і світліша рамка: дрібні кнопки з темним
+    // контуром читаються як елементи форми. Тут вони - тихі дії,
+    // до яких звертаються зрідка.
+    height: '34px',
+    padding: '0 1rem',
+    borderRadius: '10px',
+    border: '1px solid #E8E8ED',
+    background: '#fff',
+    color: '#1D1D1F',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    whiteSpace: 'nowrap',
+  };
 
   const upcomingCount = appointments.filter(app => {
-    const appDateIso = app.start_time || app.date || '';
-    return appDateIso >= nowIso && app.status !== 'cancelled';
+    if (!app.start_time) return false;
+    if (app.status === 'cancelled' || app.status === 'no-show' || app.status === 'completed') return false;
+    return new Date(app.start_time) >= new Date();
   }).length;
   const displayName = fullName || profile?.full_name || 'Користувач';
   const nameParts = displayName.split(' ');
@@ -937,111 +1025,219 @@ export default function ClientProfilePage() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {filteredAppointments.map((app) => {
-                        const isUpcoming = app.date >= today && app.status !== 'cancelled';
-                        const isCancelled = app.status === 'cancelled';
-                        const dateObj = new Date(app.date);
 
-                        return (
-                          <div key={app.id} className="clean-card anim" style={{ padding: '1.25rem 1.5rem', opacity: isCancelled ? 0.6 : 1 }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1.25rem' }}>
+                      {/* Підсумок історії - маленький рядок, який дає
+                          відчуття накопиченого, без окремого екрана. */}
+                      {appointmentFilter === 'completed' && historySummary.visits > 0 && (
+                        <div style={{
+                          fontSize: '0.82rem', color: '#8E8E93', marginBottom: '0.9rem',
+                          paddingLeft: '0.2rem',
+                        }}>
+                          {historySummary.visits} візит{historySummary.visits >= 5 ? 'ів' : historySummary.visits > 1 ? 'и' : ''}
+                          {' у '}
+                          {historySummary.places} заклад{historySummary.places >= 5 ? 'ах' : historySummary.places > 1 ? 'ах' : 'і'}
+                        </div>
+                      )}
 
-                              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <img
-                                  src={app.businesses?.cover_photo || app.businesses?.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=400&q=80"}
-                                  alt={app.businesses?.name || 'Салон'}
-                                  style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover' }}
-                                />
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
-                                    <h3 style={{ fontSize: '1.05rem', fontWeight: '700', margin: 0 }}>
-                                      {app.services?.name || 'Послуга'}
-                                    </h3>
-                                    {isUpcoming && getRelativeDateBadge(app.date)}
-                                    {isCancelled && (
-                                      <span style={{ fontSize: '0.72rem', color: '#ef4444', fontWeight: '600' }}>(Скасовано)</span>
-                                    )}
-                                  </div>
-
-                                  {/* Клікабельна адреса */}
-                                  <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${app.businesses?.name || ''} ${app.businesses?.city || ''} ${app.businesses?.address || ''}`)}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#6b7280', fontSize: '0.85rem', textDecoration: 'none' }}
-                                    className="anim"
-                                    onMouseOver={e => e.currentTarget.style.color = '#111827'}
-                                    onMouseOut={e => e.currentTarget.style.color = '#6b7280'}
-                                  >
-                                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>{app.businesses?.name} • {app.businesses?.city || 'Львів'}, {app.businesses?.address || ''}</span>
-                                  </a>
-
-                                  <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.35rem', fontSize: '0.8rem', color: '#4b5563', fontWeight: '600' }}>
-                                    <span>{dateObj.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                                    <span>•</span>
-                                    <span>{app.time?.substring(0, 5)}</span>
-                                    <span>•</span>
-                                    <span style={{ color: '#111827' }}>{app.price || app.services?.price || 0} ₴</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                                {isUpcoming ? (
-                                  <>
-                                    {/* Google Calendar */}
-                                    <a
-                                      href={getGoogleCalendarUrl(app)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Google Календар"
-                                      className="btn-subtle anim"
-                                      style={{ padding: '0.5rem 0.65rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', textDecoration: 'none' }}
-                                    >
-                                      <CalendarPlus className="w-3.5 h-3.5 text-slate-600" />
-                                      <span>Google</span>
-                                    </a>
-
-                                    {/* Apple Calendar (.ics) */}
-                                    <button
-                                      onClick={() => downloadAppleIcs(app)}
-                                      title="Apple / iCal (.ics)"
-                                      className="btn-subtle anim"
-                                      style={{ padding: '0.5rem 0.65rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
-                                    >
-                                      <Download className="w-3.5 h-3.5 text-slate-600" />
-                                      <span>iCal</span>
-                                    </button>
-
-                                    <button
-                                      onClick={() => { setRescheduleModalAppt(app); setNewRescheduleDate(app.date); }}
-                                      className="btn-subtle anim"
-                                      style={{ padding: '0.5rem 0.85rem', borderRadius: '8px', fontSize: '0.82rem' }}
-                                    >
-                                      Перенести
-                                    </button>
-                                    <button
-                                      onClick={() => setCancelModalAppt(app)}
-                                      className="btn-danger-subtle anim"
-                                      style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', fontSize: '0.82rem' }}
-                                    >
-                                      Скасувати
-                                    </button>
-                                  </>
-                                ) : (
-                                  <Link href={`/${app.businesses?.slug || app.businesses?.id}`} style={{ textDecoration: 'none' }}>
-                                    <button className="btn-subtle anim" style={{ padding: '0.5rem 0.9rem', borderRadius: '8px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                      <RotateCcw className="w-3 h-3" /> Повторити
-                                    </button>
-                                  </Link>
-                                )}
-                              </div>
-
-                            </div>
+                      {groupedAppointments.map((group) => (
+                        <div key={group.label}>
+                          {/* Заголовок місяця: суцільний список із двадцяти
+                              карток читається як стрічка без орієнтирів. */}
+                          <div style={{
+                            fontSize: '0.78rem', fontWeight: 600, color: '#8E8E93',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                            // Повітря перед групою: місяць має відділяти
+                            // блоки, а не тулитись до попереднього.
+                            margin: '2.25rem 0 0.75rem 0.25rem',
+                          }}>
+                            {group.label}
                           </div>
-                        );
-                      })}
+
+                          {/* Група - ОДНА картка з рядками всередині.
+                              Раніше кожен візит був окремим прямокутником
+                              із рамкою: у списку з десяти це десять
+                              прямокутників, які око читає як стіну.
+                              Тонкі лінії між рядками спокійніші. */}
+                          <div style={{
+                            background: '#fff',
+                            // Світліша рамка й більше заокруглення: 14px на
+                            // великому блоці виглядає різко, 18 - спокійно.
+                            border: '1px solid #EDEDF0',
+                            borderRadius: '18px',
+                            padding: '0.25rem 1.75rem',
+                          }}>
+                            {group.items.map((app, itemIdx) => {
+                              const start = app.start_time ? new Date(app.start_time) : null;
+                              const end = app.end_time ? new Date(app.end_time) : null;
+                              const isCancelled = app.status === 'cancelled' || app.status === 'no-show';
+                              const isDone = app.status === 'completed';
+                              const isUpcoming = !isCancelled && !isDone && start && start >= new Date();
+
+                              const timeLabel = start
+                                ? start.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+                                : '';
+
+                              // Тривалість: людина планує свій день, а не
+                              // лише момент приходу. Додаткові послуги вже
+                              // враховані в end_time, тому рахувати окремо
+                              // не треба.
+                              const minutes = start && end
+                                ? Math.round((end.getTime() - start.getTime()) / 60000)
+                                : null;
+                              const durationLabel = !minutes ? null
+                                : minutes < 60 ? `${minutes} хв`
+                                : minutes % 60 === 0 ? `${minutes / 60} год`
+                                : `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
+
+                              const days = start ? Math.ceil((start.getTime() - Date.now()) / 86400000) : null;
+                              const countdown = !isUpcoming || days === null ? null
+                                : days <= 0 ? 'сьогодні'
+                                : days === 1 ? 'завтра'
+                                : days <= 7 ? `через ${days} дні${days >= 5 ? 'в' : ''}`
+                                : null;
+
+                              // Послуги одним рядком: основна плюс додаткові.
+                              // Розкидані по трьох рядках вони читалися як
+                              // окремі сутності, хоча це один візит.
+                              const allServices = [app.service_name, ...(app.addon_names || [])]
+                                .filter(Boolean).join(', ');
+
+                              // Заклад і майстер теж одним рядком - це
+                              // відповідь на одне питання «куди і до кого».
+                              const placeAndMaster = [app.business_name, app.master_name]
+                                .filter(Boolean).join(', ');
+
+                              const hasActions = isUpcoming || (isDone && app.business_slug && app.service_id);
+
+                              return (
+                                <div
+                                  key={app.id}
+                                  style={{
+                                    padding: hasActions ? '1.75rem 0 1.5rem' : '1.75rem 0',
+                                    borderBottom: itemIdx < group.items.length - 1 ? '1px solid #F5F5F7' : 'none',
+                                    opacity: isCancelled ? 0.45 : 1,
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                                    {/* Час і тривалість однією колонкою.
+                                        Усе, що стосується «коли», зібране
+                                        разом і вирівняне по одній лінії. */}
+                                    <div style={{ flexShrink: 0, width: '68px', paddingTop: '1px' }}>
+                                      <div style={{
+                                        fontSize: '1.0625rem', fontWeight: 500,
+                                        color: isUpcoming ? '#1D1D1F' : '#86868B',
+                                        fontVariantNumeric: 'tabular-nums',
+                                        letterSpacing: '-0.01em', lineHeight: 1.3,
+                                      }}>
+                                        {timeLabel}
+                                      </div>
+                                      {durationLabel && (
+                                        <div style={{
+                                          fontSize: '0.8125rem', color: '#AEAEB2',
+                                          marginTop: '0.25rem', fontVariantNumeric: 'tabular-nums',
+                                        }}>
+                                          {durationLabel}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{
+                                        fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
+                                        letterSpacing: '-0.01em', lineHeight: 1.4,
+                                        textDecoration: isCancelled ? 'line-through' : 'none',
+                                      }}>
+                                        {allServices || 'Візит'}
+                                      </div>
+
+                                      <div style={{
+                                        fontSize: '0.9375rem', color: '#86868B',
+                                        marginTop: '0.375rem', lineHeight: 1.45,
+                                      }}>
+                                        {placeAndMaster}
+                                      </div>
+                                    </div>
+
+                                    <div style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px' }}>
+                                      {app.price ? (
+                                        <div style={{
+                                          fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
+                                          letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums',
+                                          lineHeight: 1.3,
+                                        }}>
+                                          {Number(app.price).toLocaleString('uk-UA')} ₴
+                                        </div>
+                                      ) : null}
+                                      {countdown && (
+                                        <div style={{ fontSize: '0.8125rem', color: '#6F9273', marginTop: '0.25rem' }}>
+                                          {countdown}
+                                        </div>
+                                      )}
+                                      {isCancelled && (
+                                        <div style={{ fontSize: '0.8125rem', color: '#AEAEB2', marginTop: '0.25rem' }}>
+                                          Скасовано
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {hasActions && (
+                                    <div style={{
+                                      display: 'flex', gap: '0.5rem',
+                                      marginTop: '1.125rem', paddingLeft: '4.25rem',
+                                      flexWrap: 'wrap',
+                                    }}>
+                                      {isUpcoming && (
+                                        <>
+                                          <button onClick={() => setRescheduleModalAppt(app)} style={visitActionStyle}>
+                                            Перенести
+                                          </button>
+                                          <button onClick={() => setCancelModalAppt(app)} style={visitActionStyle}>
+                                            Скасувати
+                                          </button>
+                                        </>
+                                      )}
+                                      {app.business_slug && app.service_id && (
+                                        <Link
+                                          href={`/${app.business_slug}?service=${app.service_id}${app.master_id ? `&master=${app.master_id}` : ''}`}
+                                          style={{ ...visitActionStyle, textDecoration: 'none' }}
+                                        >
+                                          {isUpcoming ? 'Записатись ще' : 'Повторити'}
+                                        </Link>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* «Показати ще» замість нумерації сторінок: люди не
+                          шукають візит на третій сторінці, вони гортають. */}
+                      {filteredAppointments.length > visibleCount && (
+                        <button
+                          onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                          style={{
+                            width: '100%', height: '44px', marginTop: '1rem',
+                            borderRadius: '12px', border: '1px solid #E5E5EA',
+                            background: '#fff', color: '#111827',
+                            fontSize: '0.875rem', fontWeight: 600,
+                            cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Показати ще {Math.min(PAGE_SIZE, filteredAppointments.length - visibleCount)}
+                        </button>
+                      )}
+
+                      {/* Теплова карта - лише в історії візитів.
+                          У «Майбутніх» вона показувала б минуле поруч
+                          зі списком того, що попереду: два різні часи
+                          на одному екрані плутають. */}
+                      {appointmentFilter === 'completed' && (
+                        <VisitsHeatmap appointments={appointments} />
+                      )}
                     </div>
                   )}
                 </div>
@@ -1665,5 +1861,31 @@ export default function ClientProfilePage() {
       )}
 
     </div>
+  );
+}
+
+
+/**
+ * Обгортка Suspense.
+ *
+ * useSearchParams() у App Router вимагає межі Suspense: без неї
+ * збірка сторінки падає, і вона віддає 404. Саме це й сталось,
+ * коли я додав читання ?tab=settings для переходу з меню.
+ *
+ * Запасний вміст - порожнє тло тієї ж висоти, а не спінер:
+ * сторінка з'являється миттєво, і блимання індикатором лише
+ * створює відчуття повільності.
+ */
+export default function ClientProfilePage() {
+  return (
+    <Suspense fallback={
+      // Заглушка мусить збігатися з тим, що компонент малює під час
+      // завантаження. Раніше тут було інше тло - сервер віддавав одну
+      // розмітку, клієнт малював іншу, і React скаржився на розбіжність
+      // гідратації та перемальовував усе дерево.
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }} />
+    }>
+      <ProfileContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
@@ -16,7 +16,7 @@ import { api } from '@/lib/api';
  * реєстрації від людини, яка просто хоче скасувати візит, —
  * найшвидший спосіб отримати неявку замість скасування.
  */
-export default function MyBookingPage() {
+function BookingContent() {
   const params = useParams();
   const search = useSearchParams();
   const appointmentId = Number(params?.id);
@@ -166,5 +166,37 @@ export default function MyBookingPage() {
         </p>
       )}
     </>
+  );
+}
+
+
+/**
+ * Обгортка Suspense: useSearchParams() у App Router без неї валить
+ * збірку сторінки, і вона віддає 404.
+ *
+ * Для цієї сторінки наслідок найгірший: на неї ведуть УСІ листи -
+ * підтвердження, перенесення, нагадування. Клієнт натискав би
+ * «Переглянути запис» і потрапляв у нікуди.
+ */
+export default function MyBookingPage() {
+  return (
+    <Suspense fallback={
+      // Та сама розмітка, що й у стані завантаження всередині:
+      // інакше сервер віддає одне, клієнт малює інше, і React
+      // скаржиться на розбіжність гідратації.
+      <div style={{
+        minHeight: '100vh', background: '#F2F4F2', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', padding: '2rem 1.25rem',
+      }}>
+        <div style={{ width: '100%', maxWidth: '440px', background: '#fff', borderRadius: '18px', overflow: 'hidden' }}>
+          <div style={{ height: '4px', background: '#C2D8C4' }} />
+          <div style={{ padding: '1.75rem' }}>
+            <div style={{ height: '160px', borderRadius: '12px', background: '#F2F6F1' }} />
+          </div>
+        </div>
+      </div>
+    }>
+      <BookingContent />
+    </Suspense>
   );
 }

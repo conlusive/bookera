@@ -946,16 +946,30 @@ export default function BusinessCabinet() {
           transform-origin: top center;
         }
 
-        .editable-block { position: relative; border-radius: 16px; transition: all 0.2s; border: 2px dashed transparent; }
-        .editable-block:hover { border-color: #3b82f6; }
-        .edit-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(59, 130, 246, 0.05); display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.2s; z-index: 10; border-radius: 14px; cursor: pointer; }
-        .editable-block:hover .edit-overlay { opacity: 1; }
-        .edit-btn { background: #3b82f6; color: #fff; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; border: none; display: flex; gap: 0.5rem; align-items: center; box-shadow: 0 4px 12px rgba(59,130,246,0.3); font-size: 0.9rem; cursor: pointer; }
-        .edit-btn:hover { background: #2563eb; transform: scale(1.05); transition: 0.2s; }
+        /* Блоки вітрини.
+           Синій пунктир по периметру кожного блоку при наведенні
+           перетворював сторінку на конструктор: власник дивиться, як
+           заклад виглядатиме для КЛІЄНТА, а бачить обведені рамки.
 
-        .inline-input { border: 1px dashed transparent; background: transparent; font-family: inherit; transition: all 0.2s; border-radius: 6px; }
-        .inline-input:hover { border-color: #94a3b8; background: rgba(241, 245, 249, 0.5); }
-        .inline-input:focus { border-color: #3b82f6; background: #fff; outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+           Лишилась м'яка підкладка кольору матчі - її досить, щоб
+           зрозуміти, що блок редагується, і вона не сперечається
+           з самим вмістом. */
+        .editable-block { position: relative; border-radius: 16px; transition: background-color 0.18s ease; }
+        .editable-block:hover { background-color: rgba(194, 216, 196, 0.1); }
+        .edit-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(194, 216, 196, 0.12); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.18s ease; cursor: pointer; border-radius: inherit; }
+        .editable-block:hover .edit-overlay { opacity: 1; }
+        .edit-btn { background: #222222; color: #fff; padding: 0.6rem 1.2rem; border-radius: 10px; font-weight: 600; border: none; display: flex; gap: 0.5rem; align-items: center; font-size: 0.875rem; font-family: inherit; cursor: pointer; }
+        .edit-btn:hover { background: #000; }
+
+        /* Поля редагування у вітрині.
+           Пунктирна рамка при наведенні й синє кільце у фокусі
+           перетворювали сторінку на форму: людина дивиться, як заклад
+           виглядатиме для клієнта, а бачить обведені прямокутники.
+           Лишилась м'яка підкладка - її досить, щоб зрозуміти, що
+           текст редагується. */
+        .inline-input { border: none; background: transparent; font-family: inherit; transition: background-color 0.15s ease; border-radius: 8px; padding: 2px 6px; margin-left: -6px; }
+        .inline-input:hover { background: rgba(194, 216, 196, 0.16); }
+        .inline-input:focus { background: rgba(194, 216, 196, 0.24); outline: none; }
 
         .client-dark-btn { background-color: #0f172a; color: #ffffff; font-weight: 700; border: none; padding: 0.85rem 1.75rem; border-radius: 10px; cursor: pointer; transition: 0.2s; }
         .client-dark-btn:hover { background-color: #1e293b; }
@@ -977,7 +991,7 @@ export default function BusinessCabinet() {
         .action-icon-btn.delete:hover { background: #fef2f2; color: #ef4444; }
 
         .search-input { width: 100%; padding: 0.75rem 1rem 0.75rem 2.5rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; outline: none; transition: 0.2s; background: #f8fafc; color: #0f172a; font-family: inherit; }
-        .search-input:focus { background: #fff; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .search-input:focus { background: #fff; border-color: #8FAE93; box-shadow: 0 0 0 3px rgba(194,216,196,0.25); }
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; overflow-y: auto; padding: 2rem 0; }
         .modal-content { background: #fff; width: 100%; max-width: 480px; border-radius: 20px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); margin: auto; }
@@ -1745,7 +1759,7 @@ export default function BusinessCabinet() {
                                 {new Date(viewingClient.last_visit).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
                               </div>
                             </div>
-                            <div style={{ fontWeight: '700', color: isFuture ? '#3b82f6' : '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <div style={{ fontWeight: '700', color: isFuture ? '#6F9273' : '#5C7A61', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                               {isFuture ? <><Icons.Clock /> Очікується</> : <><Icons.CheckCircle /> Успішно</>}
                             </div>
                           </div>
@@ -1942,7 +1956,7 @@ export default function BusinessCabinet() {
                     type="time"
                     value={selectedBooking.start_time.substring(0, 5)}
                     onChange={(e) => handleUpdateBookingTime(e.target.value)}
-                    style={{ fontSize: '1.1rem', fontWeight: '800', color: '#3b82f6', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
+                    style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2E3A30', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
                   />
                 </div>
                 <div>
@@ -2013,7 +2027,7 @@ export default function BusinessCabinet() {
         <div className="modal-overlay" onClick={() => setDragConfirmData(null)} style={{ zIndex: 2000 }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)', maxWidth: '420px', textAlign: 'center', padding: '2.5rem' }}>
 
-            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#F4FAF5', color: '#6F9273', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 9l4-4 4 4"/><path d="M9 5v14"/><path d="M19 15l-4 4-4-4"/><path d="M15 19V5"/></svg>
             </div>
 
@@ -2034,7 +2048,7 @@ export default function BusinessCabinet() {
                 <div style={{ color: '#cbd5e1' }}><Icons.ChevronRight /></div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.7rem', color: '#3b82f6', fontWeight: '800', textTransform: 'uppercase', marginBottom: '2px' }}>Стане</span>
+                  <span style={{ fontSize: '0.7rem', color: '#6F9273', fontWeight: '800', textTransform: 'uppercase', marginBottom: '2px' }}>Стане</span>
                   <input
                     type="time"
                     value={dragConfirmData.newStart.substring(0, 5)}
@@ -2049,7 +2063,7 @@ export default function BusinessCabinet() {
                         const newEndStr = `${String(Math.floor(totalEnd / 60) % 24).padStart(2, '0')}:${String(totalEnd % 60).padStart(2, '0')}:00`;
                         setDragConfirmData({...dragConfirmData, newStart: `${newStartTime}:00`, newEnd: newEndStr});
                     }}
-                    style={{ fontSize: '1.2rem', fontWeight: '800', color: '#3b82f6', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
+                    style={{ fontSize: '1.2rem', fontWeight: '800', color: '#2E3A30', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer', padding: 0 }}
                   />
                 </div>
               </div>

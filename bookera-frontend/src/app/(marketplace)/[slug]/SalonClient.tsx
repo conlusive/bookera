@@ -9,6 +9,7 @@ import { Icons } from '@/components/shared';
 import { api, SlotStatusItem } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
 import { isBusinessRole } from '@/lib/roles';
+import { ALL_AMENITIES } from '@/lib/amenities';
 
 // === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
@@ -123,94 +124,6 @@ const getStaffName = (t: any): string => {
 };
 
 // Список усіх доступних зручностей із лапкою для тварин
-const ALL_AMENITIES = [
-  {
-    id: 'parking',
-    label: 'Паркування',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/>
-        <circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>
-      </svg>
-    )
-  },
-  {
-    id: 'card_payment',
-    label: 'Оплата карткою',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
-      </svg>
-    )
-  },
-  {
-    id: 'wifi',
-    label: 'Wi-Fi',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
-      </svg>
-    )
-  },
-  {
-    id: 'accessibility',
-    label: 'Доступність',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/>
-      </svg>
-    )
-  },
-  {
-    id: 'coffee_tea',
-    label: 'Кава та чай',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
-      </svg>
-    )
-  },
-  {
-    id: 'ac',
-    label: 'Кондиціонер',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 12h20"/><path d="M7 16l-3-4 3-4"/><path d="M17 16l3-4-3-4"/><path d="M12 2v20"/>
-      </svg>
-    )
-  },
-  {
-    id: 'pet_friendly',
-    label: 'Pet friendly',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="15" r="3.2" />
-        <circle cx="6.8" cy="11.5" r="1.8" />
-        <circle cx="17.2" cy="11.5" r="1.8" />
-        <circle cx="9.2" cy="7.2" r="1.8" />
-        <circle cx="14.8" cy="7.2" r="1.8" />
-      </svg>
-    )
-  },
-  {
-    id: 'generator',
-    label: 'Світло є завжди (генератор)',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-      </svg>
-    )
-  },
-  {
-    id: 'kids_friendly',
-    label: 'Дитяча зона',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 1 0-16 0"/>
-      </svg>
-    )
-  }
-];
 
 export default function SalonClient({
   initialSalon,
@@ -2278,7 +2191,14 @@ const formatRole = (role?: string) => {
           <div>
             <div style={{ position: 'sticky', top: '96px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-              {/* НАША КОМАНДА (Плавний свайп при великій кількості майстрів) */}
+              {/* НАША КОМАНДА
+                  showTeam перевіряється тут, а не лише в редакторі вітрини:
+                  раніше власник вимикав блок у себе, а на сторінці салону
+                  команда все одно показувалась - перевірки просто не було.
+                  Порівнюємо з false, а не через істинність: у закладів,
+                  які нічого не налаштовували, поля немає взагалі, і вони
+                  мають бачити команду за замовчуванням. */}
+              {salon?.layout_config?.showTeam !== false && (
               <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                   <h3 className="section-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
@@ -2330,8 +2250,12 @@ const formatRole = (role?: string) => {
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* КАРТА */}
+              {/* КАРТА
+                  showMap теж не перевірявся: власник вимикав карту
+                  в редакторі, а клієнт її бачив. */}
+              {salon?.layout_config?.showMap !== false && (
               <div className="section-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', borderRadius: '24px 24px 0 0', background: '#e2e8f0' }}>
                   <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
@@ -2383,6 +2307,7 @@ const formatRole = (role?: string) => {
                   </a>
                 </div>
               </div>
+              )}
 
               {/* ЗРУЧНОСТІ */}
               {salon?.layout_config?.showAmenities !== false && activeAmenities.length > 0 && (

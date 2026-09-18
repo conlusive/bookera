@@ -960,14 +960,24 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         /* СКЛЯНІ ДРОПДАУНИ */
         .search-dropdown {
-          position: absolute; top: calc(100% + 8px); left: 0; width: 100%; 
-          background: rgba(255, 255, 255, 0.9);
+          position: absolute; top: calc(100% + 8px); left: 0; width: 100%;
+          /* Майже непрозорий фон.
+             При 0.9 крізь список просвічувало відео, яке весь час
+             рухається - текст ставало важко читати саме тоді, коли
+             людина його читає. Розмиття лишаємо: воно дає відчуття
+             шару, не заважаючи вмісту. */
+          background: rgba(255, 255, 255, 0.985);
           backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
           border-radius: 18px;
-          box-shadow: 0 20px 45px -10px rgba(0,0,0,0.1), 0 0 1px 1px rgba(0,0,0,0.04);
-          border: 1px solid rgba(255, 255, 255, 0.7);
-          z-index: 50;
+          box-shadow: 0 24px 55px -12px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+          /* Рамка темна, а не біла: на світлому тлі біла рамка
+             невидима, і список зливається з тим, що під ним. */
+          border: 1px solid rgba(0, 0, 0, 0.06);
+          /* z-index вищий за пошук (50) і за плаваючі віджети (10):
+             списки залазили під сусідні блоки, бо стояли з ними
+             на одному рівні. */
+          z-index: 200;
           max-height: 280px; overflow-y: auto; padding: 0.5rem;
         }
         .search-dropdown-item {
@@ -1577,7 +1587,24 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       </header>
 
       {/* HERO БАНЕР */}
-      <section style={{ position: 'relative', width: '100%', height: '560px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
+      <section style={{
+        position: 'relative', width: '100%',
+        // Висота від пропорцій кадру, а не фіксовані 560px.
+        //
+        // Три відео стоять поруч, тож кожне займає третину ширини.
+        // При фіксованій висоті objectFit: cover обрізав би їх зверху
+        // й знизу тим сильніше, чим ширший екран - на великому
+        // моніторі від кадру лишалась би вузька смуга посередині.
+        //
+        // Вертикальні кадри (9:16) у три колонки дають висоту
+        // приблизно 59vw; обмежуємо її, щоб банер не займав два
+        // екрани, і задаємо мінімум для вузьких вікон.
+        height: 'clamp(520px, 44vw, 760px)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        // overflow: hidden ТУТ НЕ МОЖНА - воно обрізає випадні списки
+        // пошуку, які виходять за нижню межу банера. Відео обрізає
+        // власна обгортка всередині HeroVideoBackdrop.
+      }}>
         {/* Фон: три відео поруч замість одного.
             Обличчя, волосся, тіло - за секунду показують, чим тут
             займаються, і роблять це без жодного слова. */}

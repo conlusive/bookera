@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
+import Avatar from '@/components/ui/Avatar';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -856,13 +857,7 @@ export default function ClientProfilePage() {
                     style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                   />
                 ) : (
-                  <div style={{
-                    width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#C2D8C4',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                    fontWeight: '800', fontSize: '0.95rem', flexShrink: 0
-                  }}>
-                    {initials.toUpperCase()}
-                  </div>
+                  <Avatar name={fullName} size={40} />
                 )}
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

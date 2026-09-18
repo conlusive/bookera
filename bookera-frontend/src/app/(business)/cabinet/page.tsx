@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import SubscriptionExpired from '@/components/cabinet/SubscriptionExpired';
+import Avatar from '@/components/ui/Avatar';
 import type { SubscriptionState } from '@/lib/api';
 import { isOwnerRole } from '@/lib/roles';
 import { Business } from '@/types';
@@ -1344,9 +1345,7 @@ export default function BusinessCabinet() {
                  onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
                  onMouseOut={e => { if(!isProfileMenuOpen) e.currentTarget.style.backgroundColor = 'transparent' }}
             >
-              <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '0.9rem', flexShrink: 0 }}>
-                {getUserInitials(userProfile?.full_name)}
-              </div>
+              <Avatar name={userProfile?.full_name} src={userProfile?.avatar_url} size={34} />
               <div style={{
                 flex: isSidebarCollapsed ? 'none' : 1,
                 overflow: 'hidden',
@@ -1605,9 +1604,7 @@ export default function BusinessCabinet() {
 
             <div style={{ padding: '2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', backgroundColor: '#f8fafc' }}>
               <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '1.5rem', flexShrink: 0, boxShadow: '0 4px 10px rgba(15,23,42,0.15)' }}>
-                  {getUserInitials(viewingClient.name)}
-                </div>
+                <Avatar name={viewingClient.name} size={64} />
                 <div>
                   <h2 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#0f172a', margin: '0 0 0.4rem 0' }}>{viewingClient.name}</h2>
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>

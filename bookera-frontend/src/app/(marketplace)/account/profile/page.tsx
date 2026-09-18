@@ -638,6 +638,67 @@ export default function ClientProfilePage() {
     });
   }, [appointments, appointmentFilter]);
 
+  /**
+   * Найближчий візит - окремо від списку.
+   *
+   * У профіль заходять переважно щоб подивитись НАСТУПНИЙ візит;
+   * решта - історія. Тому він іде великою карткою згори, а не
+   * розчиняється серед інших.
+   */
+  const nextAppointment = useMemo(() => {
+    const now = new Date();
+    return appointments
+      .filter(a => a.start_time
+        && a.status !== 'cancelled' && a.status !== 'no-show' && a.status !== 'completed'
+        && new Date(a.start_time) >= now)
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0] || null;
+  }, [appointments]);
+
+  /**
+   * Скільки візитів показувати.
+   *
+   * Порційно, а не сторінками: люди не шукають візит на третій
+   * сторінці, вони гортають. Кнопка «Показати ще» дешевша за
+   * нумерацію і не вимагає тримати в голові, де ти зараз.
+   */
+  const PAGE_SIZE = 10;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Зміна вкладки починає показ спочатку: лишити 40 видимих записів
+  // після переходу на «Скасовані» означало б показати порожнечу
+  // з кнопкою «Показати ще».
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [appointmentFilter]);
+
+  /**
+   * Візити, згруповані за місяцями.
+   *
+   * Суцільний список із двадцяти карток читається як стрічка без
+   * орієнтирів. Місяць - природний крок, за яким людина памʼятає
+   * свої візити.
+   */
+  const groupedAppointments = useMemo(() => {
+    const visible = filteredAppointments.slice(0, visibleCount);
+    const groups: { label: string; items: any[] }[] = [];
+
+    for (const app of visible) {
+      const d = app.start_time ? new Date(app.start_time) : null;
+      const label = d
+        ? d.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' })
+        : 'Без дати';
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(app);
+      else groups.push({ label, items: [app] });
+    }
+    return groups;
+  }, [filteredAppointments, visibleCount]);
+
+  // Підсумок історії: скільки візитів і в скількох закладах.
+  const historySummary = useMemo(() => {
+    const done = appointments.filter(a => a.status === 'completed');
+    const places = new Set(done.map(a => a.business_id));
+    return { visits: done.length, places: places.size };
+  }, [appointments]);
+
   const upcomingCount = appointments.filter(app => {
     if (!app.start_time) return false;
     if (app.status === 'cancelled' || app.status === 'no-show' || app.status === 'completed') return false;
@@ -953,8 +1014,116 @@ export default function ClientProfilePage() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                      {filteredAppointments.map((app) => {
-                        // Дані приходять ПЛОСКИМИ з /appointments/my.
+                      {/* Найближчий візит - окремою карткою згори.
+                          У профіль заходять переважно щоб подивитись
+                          НАСТУПНИЙ візит; решта це історія. */}
+                      {appointmentFilter === 'upcoming' && nextAppointment && (() => {
+                        const start = new Date(nextAppointment.start_time);
+                        const days = Math.ceil((start.getTime() - Date.now()) / 86400000);
+                        const countdown = days <= 0 ? 'Сьогодні' : days === 1 ? 'Завтра' : `Через ${days} дні${days >= 5 ? 'в' : ''}`;
+
+                        return (
+                          <div style={{
+                            background: '#111827', color: '#fff', borderRadius: '18px',
+                            padding: '1.5rem 1.6rem', marginBottom: '1.25rem',
+                          }}>
+                            <div style={{
+                              fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.05em',
+                              textTransform: 'uppercase', color: '#C2D8C4', marginBottom: '0.6rem',
+                            }}>
+                              {countdown}
+                            </div>
+
+                            <div style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                              {start.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}
+                              {', '}
+                              {start.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+
+                            <div style={{ fontSize: '0.95rem', color: '#D1D5DB', marginTop: '0.35rem' }}>
+                              {nextAppointment.service_name || 'Візит'}
+                              {nextAppointment.master_name ? ` · ${nextAppointment.master_name}` : ''}
+                            </div>
+
+                            <div style={{ fontSize: '0.875rem', color: '#9CA3AF', marginTop: '0.2rem' }}>
+                              {nextAppointment.business_name}
+                              {nextAppointment.business_address ? ` · ${nextAppointment.business_address}` : ''}
+                            </div>
+
+                            {/* Дії поруч із візитом: подзвонити й побудувати
+                                маршрут - це те, що роблять перед виходом. */}
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.1rem', flexWrap: 'wrap' }}>
+                              {nextAppointment.business_address && (
+                                <a
+                                  href={`https://maps.google.com/maps?q=${encodeURIComponent(nextAppointment.business_address)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    height: '34px', padding: '0 0.9rem', borderRadius: '9px',
+                                    background: 'rgba(255,255,255,0.12)', color: '#fff',
+                                    fontSize: '0.82rem', fontWeight: 600, textDecoration: 'none',
+                                    display: 'inline-flex', alignItems: 'center',
+                                  }}
+                                >
+                                  Маршрут
+                                </a>
+                              )}
+                              {nextAppointment.business_phone && (
+                                <a
+                                  href={`tel:${nextAppointment.business_phone}`}
+                                  style={{
+                                    height: '34px', padding: '0 0.9rem', borderRadius: '9px',
+                                    background: 'rgba(255,255,255,0.12)', color: '#fff',
+                                    fontSize: '0.82rem', fontWeight: 600, textDecoration: 'none',
+                                    display: 'inline-flex', alignItems: 'center',
+                                  }}
+                                >
+                                  Подзвонити
+                                </a>
+                              )}
+                              <button
+                                onClick={() => setCancelModalAppt(nextAppointment)}
+                                style={{
+                                  height: '34px', padding: '0 0.9rem', borderRadius: '9px',
+                                  background: 'transparent', border: 'none', color: '#9CA3AF',
+                                  fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+                                  fontFamily: 'inherit', marginLeft: 'auto',
+                                }}
+                              >
+                                Скасувати
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Підсумок історії - маленький рядок, який дає
+                          відчуття накопиченого, без окремого екрана. */}
+                      {appointmentFilter === 'completed' && historySummary.visits > 0 && (
+                        <div style={{
+                          fontSize: '0.82rem', color: '#8E8E93', marginBottom: '0.9rem',
+                          paddingLeft: '0.2rem',
+                        }}>
+                          {historySummary.visits} візит{historySummary.visits >= 5 ? 'ів' : historySummary.visits > 1 ? 'и' : ''}
+                          {' у '}
+                          {historySummary.places} заклад{historySummary.places >= 5 ? 'ах' : historySummary.places > 1 ? 'ах' : 'і'}
+                        </div>
+                      )}
+
+                      {groupedAppointments.map((group) => (
+                        <div key={group.label}>
+                          {/* Заголовок місяця: суцільний список із двадцяти
+                              карток читається як стрічка без орієнтирів. */}
+                          <div style={{
+                            fontSize: '0.78rem', fontWeight: 600, color: '#8E8E93',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                            margin: '1.1rem 0 0.6rem 0.2rem',
+                          }}>
+                            {group.label}
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            {group.items.map((app) => {
                         //
                         // Раніше картка читала app.businesses?.name і
                         // app.services?.name - вкладену структуру старого
@@ -1091,8 +1260,28 @@ export default function ClientProfilePage() {
                               </Link>
                             )}
                           </div>
-                        );
-                      })}
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* «Показати ще» замість нумерації сторінок: люди не
+                          шукають візит на третій сторінці, вони гортають. */}
+                      {filteredAppointments.length > visibleCount && (
+                        <button
+                          onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                          style={{
+                            width: '100%', height: '44px', marginTop: '1rem',
+                            borderRadius: '12px', border: '1px solid #E5E5EA',
+                            background: '#fff', color: '#111827',
+                            fontSize: '0.875rem', fontWeight: 600,
+                            cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Показати ще {Math.min(PAGE_SIZE, filteredAppointments.length - visibleCount)}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

@@ -46,6 +46,13 @@ async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_d
             "full_name": u.full_name,
             "specialization": u.specialization,
             "avatar_url": u.avatar_url,
+            # Чи показувати людину в блоці «Наша команда».
+            #
+            # Фільтрувати ТУТ не можна: цей ендпоінт живить і вибір
+            # майстра при бронюванні. Прибравши людину звідси, ми
+            # позбавили б її записів - а йдеться саме про те, щоб вона
+            # працювала, але не була на вітрині.
+            "show_in_storefront": u.show_in_storefront,
             "assigned_services": u.assigned_services,
             "provides_services": u.provides_services,
         }

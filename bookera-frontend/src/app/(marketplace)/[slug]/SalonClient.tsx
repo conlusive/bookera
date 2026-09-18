@@ -529,11 +529,20 @@ const formatRole = (role?: string) => {
     return role;
   };
 
-  // Сортуємо команду згідно з налаштованим у CRM порядком
+  // Команда для блоку «Наша команда»: порядок із CRM + фільтр видимості.
+  //
+  // show_in_storefront ховає людину ЛИШЕ звідси. Вибір майстра при
+  // бронюванні бере повний список: майстер може приймати записи, але
+  // не бути на вітрині - наприклад, працює на заміні або просто не
+  // хоче своє фото на сайті.
+  //
+  // Порівнюємо з false: у тих, кого не чіпали, поля немає, і вони
+  // мають лишатись видимими.
   const activeTeam = useMemo(() => {
+    const visible = (team || []).filter((m: any) => m.show_in_storefront !== false);
     const order = salon?.layout_config?.team_order;
     if (Array.isArray(order) && order.length > 0) {
-      const copy = [...team];
+      const copy = [...visible];
       return copy.sort((a, b) => {
         const idxA = order.indexOf(String(a.id));
         const idxB = order.indexOf(String(b.id));
@@ -543,7 +552,7 @@ const formatRole = (role?: string) => {
         return 0;
       });
     }
-    return team;
+    return visible;
   }, [team, salon?.layout_config?.team_order]);
 
   const staffers = useMemo(() => {

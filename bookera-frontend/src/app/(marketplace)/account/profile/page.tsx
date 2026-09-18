@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import Avatar from '@/components/ui/Avatar';
+import VisitsHeatmap from '@/components/profile/VisitsHeatmap';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -1067,6 +1068,7 @@ function ProfileContent() {
                           }}>
                             {group.items.map((app, itemIdx) => {
                               const start = app.start_time ? new Date(app.start_time) : null;
+                              const end = app.end_time ? new Date(app.end_time) : null;
                               const isCancelled = app.status === 'cancelled' || app.status === 'no-show';
                               const isDone = app.status === 'completed';
                               const isUpcoming = !isCancelled && !isDone && start && start >= new Date();
@@ -1075,6 +1077,18 @@ function ProfileContent() {
                                 ? start.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
                                 : '';
 
+                              // Тривалість: людина планує свій день, а не
+                              // лише момент приходу. Додаткові послуги вже
+                              // враховані в end_time, тому рахувати окремо
+                              // не треба.
+                              const minutes = start && end
+                                ? Math.round((end.getTime() - start.getTime()) / 60000)
+                                : null;
+                              const durationLabel = !minutes ? null
+                                : minutes < 60 ? `${minutes} хв`
+                                : minutes % 60 === 0 ? `${minutes / 60} год`
+                                : `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
+
                               const days = start ? Math.ceil((start.getTime() - Date.now()) / 86400000) : null;
                               const countdown = !isUpcoming || days === null ? null
                                 : days <= 0 ? 'сьогодні'
@@ -1082,70 +1096,66 @@ function ProfileContent() {
                                 : days <= 7 ? `через ${days} дні${days >= 5 ? 'в' : ''}`
                                 : null;
 
+                              // Послуги одним рядком: основна плюс додаткові.
+                              // Розкидані по трьох рядках вони читалися як
+                              // окремі сутності, хоча це один візит.
+                              const allServices = [app.service_name, ...(app.addon_names || [])]
+                                .filter(Boolean).join(', ');
+
+                              // Заклад і майстер теж одним рядком - це
+                              // відповідь на одне питання «куди і до кого».
+                              const placeAndMaster = [app.business_name, app.master_name]
+                                .filter(Boolean).join(', ');
+
                               const hasActions = isUpcoming || (isDone && app.business_slug && app.service_id);
 
                               return (
                                 <div
                                   key={app.id}
                                   style={{
-                                    // Повітря: 28px згори й знизу замість 18.
-                                    // Рядок має дихати - у списку візитів їх
-                                    // небагато, і щільність тут нічого не
-                                    // виграє, лише тисне.
                                     padding: hasActions ? '1.75rem 0 1.5rem' : '1.75rem 0',
                                     borderBottom: itemIdx < group.items.length - 1 ? '1px solid #F5F5F7' : 'none',
                                     opacity: isCancelled ? 0.45 : 1,
                                   }}
                                 >
                                   <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
-                                    {/* Час: більший кегль і табличні цифри.
-                                        Це головний орієнтир у рядку, і він має
-                                        читатись першим, не змагаючись із
-                                        назвою послуги за вагою. */}
-                                    <div style={{
-                                      flexShrink: 0, width: '68px', paddingTop: '1px',
-                                      fontSize: '1.0625rem', fontWeight: 500,
-                                      color: isUpcoming ? '#1D1D1F' : '#86868B',
-                                      fontVariantNumeric: 'tabular-nums',
-                                      letterSpacing: '-0.01em',
-                                    }}>
-                                      {timeLabel}
+                                    {/* Час і тривалість однією колонкою.
+                                        Усе, що стосується «коли», зібране
+                                        разом і вирівняне по одній лінії. */}
+                                    <div style={{ flexShrink: 0, width: '68px', paddingTop: '1px' }}>
+                                      <div style={{
+                                        fontSize: '1.0625rem', fontWeight: 500,
+                                        color: isUpcoming ? '#1D1D1F' : '#86868B',
+                                        fontVariantNumeric: 'tabular-nums',
+                                        letterSpacing: '-0.01em', lineHeight: 1.3,
+                                      }}>
+                                        {timeLabel}
+                                      </div>
+                                      {durationLabel && (
+                                        <div style={{
+                                          fontSize: '0.8125rem', color: '#AEAEB2',
+                                          marginTop: '0.25rem', fontVariantNumeric: 'tabular-nums',
+                                        }}>
+                                          {durationLabel}
+                                        </div>
+                                      )}
                                     </div>
 
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{
                                         fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
-                                        letterSpacing: '-0.01em', lineHeight: 1.3,
+                                        letterSpacing: '-0.01em', lineHeight: 1.4,
                                         textDecoration: isCancelled ? 'line-through' : 'none',
                                       }}>
-                                        {app.service_name || 'Візит'}
+                                        {allServices || 'Візит'}
                                       </div>
 
-                                      {/* Заклад і майстер окремими рядками,
-                                          а не через крапку: два імені в один
-                                          рядок зливаються в кашу, коли обидва
-                                          довгі. */}
                                       <div style={{
                                         fontSize: '0.9375rem', color: '#86868B',
                                         marginTop: '0.375rem', lineHeight: 1.45,
                                       }}>
-                                        {app.business_name}
+                                        {placeAndMaster}
                                       </div>
-
-                                      {app.master_name && (
-                                        <div style={{ fontSize: '0.9375rem', color: '#86868B', lineHeight: 1.45 }}>
-                                          {app.master_name}
-                                        </div>
-                                      )}
-
-                                      {(app.addon_names?.length ?? 0) > 0 && (
-                                        <div style={{
-                                          fontSize: '0.875rem', color: '#AEAEB2',
-                                          marginTop: '0.375rem', lineHeight: 1.45,
-                                        }}>
-                                          {app.addon_names.join(' · ')}
-                                        </div>
-                                      )}
                                     </div>
 
                                     <div style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px' }}>
@@ -1153,17 +1163,18 @@ function ProfileContent() {
                                         <div style={{
                                           fontSize: '1.0625rem', fontWeight: 500, color: '#1D1D1F',
                                           letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums',
+                                          lineHeight: 1.3,
                                         }}>
                                           {Number(app.price).toLocaleString('uk-UA')} ₴
                                         </div>
                                       ) : null}
                                       {countdown && (
-                                        <div style={{ fontSize: '0.875rem', color: '#6F9273', marginTop: '0.3rem' }}>
+                                        <div style={{ fontSize: '0.8125rem', color: '#6F9273', marginTop: '0.25rem' }}>
                                           {countdown}
                                         </div>
                                       )}
                                       {isCancelled && (
-                                        <div style={{ fontSize: '0.875rem', color: '#AEAEB2', marginTop: '0.3rem' }}>
+                                        <div style={{ fontSize: '0.8125rem', color: '#AEAEB2', marginTop: '0.25rem' }}>
                                           Скасовано
                                         </div>
                                       )}
@@ -1186,7 +1197,6 @@ function ProfileContent() {
                                           </button>
                                         </>
                                       )}
-
                                       {app.business_slug && app.service_id && (
                                         <Link
                                           href={`/${app.business_slug}?service=${app.service_id}${app.master_id ? `&master=${app.master_id}` : ''}`}
@@ -1219,6 +1229,14 @@ function ProfileContent() {
                         >
                           Показати ще {Math.min(PAGE_SIZE, filteredAppointments.length - visibleCount)}
                         </button>
+                      )}
+
+                      {/* Теплова карта - лише в історії візитів.
+                          У «Майбутніх» вона показувала б минуле поруч
+                          зі списком того, що попереду: два різні часи
+                          на одному екрані плутають. */}
+                      {appointmentFilter === 'completed' && (
+                        <VisitsHeatmap appointments={appointments} />
                       )}
                     </div>
                   )}

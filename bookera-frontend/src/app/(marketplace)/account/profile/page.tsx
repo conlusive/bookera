@@ -1958,7 +1958,13 @@ function ProfileContent() {
  */
 export default function ClientProfilePage() {
   return (
-    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#FAFAFA' }} />}>
+    <Suspense fallback={
+      // Заглушка мусить збігатися з тим, що компонент малює під час
+      // завантаження. Раніше тут було інше тло - сервер віддавав одну
+      // розмітку, клієнт малював іншу, і React скаржився на розбіжність
+      // гідратації та перемальовував усе дерево.
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }} />
+    }>
       <ProfileContent />
     </Suspense>
   );

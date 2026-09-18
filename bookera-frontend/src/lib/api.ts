@@ -619,6 +619,19 @@ export const api = {
     return authFetch('/appointments/my', token);
   },
 
+  /** Збережені заклади поточного користувача. */
+  async listMyFavorites(token: string): Promise<any[]> {
+    return authFetch('/businesses/favorites/my', token);
+  },
+
+  async addFavorite(token: string, businessId: number): Promise<void> {
+    await authFetch(`/businesses/${businessId}/favorite`, token, { method: 'POST' });
+  },
+
+  async removeFavorite(token: string, businessId: number): Promise<void> {
+    await authFetch(`/businesses/${businessId}/favorite`, token, { method: 'DELETE' });
+  },
+
   // === Робота в кількох закладах ===
 
   /** Заклади, у яких людина працює. */

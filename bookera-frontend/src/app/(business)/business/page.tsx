@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole } from '@/lib/roles';
+import Avatar from '@/components/ui/Avatar';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
@@ -633,11 +634,7 @@ export default function BusinessLandingPage() {
                       }}
                     />
                   ) : (
-                    <div style={{
-                      width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                      fontWeight: '800', fontSize: '0.9rem', flexShrink: 0
-                    }}>{initials}</div>
+                    <Avatar name={userName} size={36} />
                   )}
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}>
                     <path d="M1 1L5 5L9 1" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

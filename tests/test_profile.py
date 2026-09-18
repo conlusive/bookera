@@ -131,3 +131,48 @@ async def test_profile_finds_appointments_by_phone(client, auth_headers):
     r = await client.get("/appointments/my", headers=auth_headers("phone-client"))
     assert appointment_id in [a["id"] for a in r.json()], \
         "номер у іншому форматі має знаходитись"
+
+
+@pytest.mark.asyncio
+async def test_favorites_add_list_remove(client, auth_headers):
+    """
+    Улюблені не працювали: фронтенд писав у таблицю favorites НАПРЯМУ
+    через Supabase, а в моделях її не існувало. Додавання мовчки не
+    спрацьовувало, і профіль показував порожньо.
+    """
+    owner = auth_headers("fav-owner")
+    r = await client.post("/crm/businesses", json={"name": "Fav Salon", "city": "Львів"}, headers=owner)
+    business_id = r.json()["id"]
+
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        await conn.execute(
+            "INSERT INTO users (id, email, role, is_active, created_at) "
+            "VALUES ($1, $2, 'client', true, now()) ON CONFLICT (id) DO NOTHING",
+            "fav-client", "fav@test.com",
+        )
+    finally:
+        await conn.close()
+
+    headers = auth_headers("fav-client")
+
+    r = await client.get("/businesses/favorites/my", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json() == []
+
+    r = await client.post(f"/businesses/{business_id}/favorite", headers=headers)
+    assert r.status_code == 204, r.text
+
+    r = await client.get("/businesses/favorites/my", headers=headers)
+    assert [b["id"] for b in r.json()] == [business_id]
+
+    # Повторне збереження - не помилка, а те саме
+    r = await client.post(f"/businesses/{business_id}/favorite", headers=headers)
+    assert r.status_code == 204
+    r = await client.get("/businesses/favorites/my", headers=headers)
+    assert len(r.json()) == 1, "дублікатів бути не має"
+
+    r = await client.delete(f"/businesses/{business_id}/favorite", headers=headers)
+    assert r.status_code == 204
+    r = await client.get("/businesses/favorites/my", headers=headers)
+    assert r.json() == []

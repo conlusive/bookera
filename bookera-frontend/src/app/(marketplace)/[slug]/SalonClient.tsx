@@ -10,6 +10,8 @@ import { api, SlotStatusItem } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
 import { isBusinessRole } from '@/lib/roles';
 import { ALL_AMENITIES } from '@/lib/amenities';
+import Avatar from '@/components/ui/Avatar';
+import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 
 // === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
@@ -436,22 +438,22 @@ export default function SalonClient({
   }, [searchQuery, sortOrder]);
 
   useEffect(() => {
+    // Раніше і перевірка, і збереження йшли НАПРЯМУ в таблицю favorites
+    // через Supabase. Але в моделях цієї таблиці не існувало - запис
+    // мовчки не проходив, і заклад ніколи не зʼявлявся в профілі.
     async function checkFavorite() {
       if (!salon?.id) return;
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data } = await supabase
-        .from('favorites')
-        .select('id')
-        .eq('business_id', String(salon.id))
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      setIsFavorite(!!data);
+      try {
+        const token = await getAuthTokenOrNull();
+        if (!token) return;
+        const favorites = await api.listMyFavorites(token);
+        setIsFavorite(favorites.some((b: any) => String(b.id) === String(salon.id)));
+      } catch {
+        // Не критично: кнопка просто лишиться в стані «не збережено».
+      }
     }
     void checkFavorite();
-  }, [salon?.id, supabase]);
+  }, [salon?.id]);
 
   const handleToggleFavorite = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -465,11 +467,12 @@ export default function SalonClient({
     setIsFavorite(nextState);
 
     try {
+      const token = await getAuthToken();
       if (nextState) {
-        await supabase.from('favorites').insert([{ user_id: user.id, business_id: String(salon.id) }]);
+        await api.addFavorite(token, salon.id);
         showToast('Заклад додано до улюблених', 'success');
       } else {
-        await supabase.from('favorites').delete().eq('user_id', user.id).eq('business_id', String(salon.id));
+        await api.removeFavorite(token, salon.id);
         showToast('Заклад видалено з улюблених', 'info');
       }
     } catch {
@@ -1632,23 +1635,7 @@ const formatRole = (role?: string) => {
                       }}
                     />
                   ) : (
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      backgroundColor: '#f1f5f9',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#111827',
-                      fontWeight: '800',
-                      fontSize: '0.9rem',
-                      boxShadow: 'none',
-                      transition: 'all 0.2s ease',
-                      flexShrink: 0
-                    }}>
-                      {initials}
-                    </div>
+                    <Avatar name={userName} size={36} />
                   )}
 
                   <svg

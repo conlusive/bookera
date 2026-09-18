@@ -135,3 +135,25 @@ class StaffMembership(Base):
     # посилається на майстра, і втратити звʼязок означає зіпсувати
     # звіти за минулі періоди.
     left_at = Column(DateTime, nullable=True)
+
+
+class Favorite(Base):
+    """
+    Заклад, збережений клієнтом як улюблений.
+
+    Раніше фронтенд писав у таблицю `favorites` НАПРЯМУ через Supabase,
+    а в моделях її не існувало - тобто вона або не створювалась
+    міграціями взагалі, або лишилась від старої схеми. Додавання
+    мовчки не спрацьовувало, і профіль показував порожньо.
+    """
+    __tablename__ = "favorites"
+    __table_args__ = (
+        # Двічі зберегти той самий заклад неможливо: інакше в списку
+        # зʼявляються дублікати, а кнопка «прибрати» лишає копію.
+        UniqueConstraint("user_id", "business_id", name="uq_favorite"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)

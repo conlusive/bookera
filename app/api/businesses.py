@@ -2,12 +2,13 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
+from app.core.auth import CurrentUser, get_current_user
 from app.core.time_utils import utc_now
-from app.models import Business, User, RoleEnum, Appointment, Service, RadarBoost, BusinessHours
+from app.models import Business, User, RoleEnum, Appointment, Service, RadarBoost, BusinessHours, Favorite
 from app.schemas.business import BusinessOut, WorkingDayOut
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
@@ -221,3 +222,66 @@ async def get_business_by_slug_or_id(
         for h in hours_res.scalars().all()
     ]
     return response
+
+# === Улюблені заклади клієнта ===
+
+@router.get("/favorites/my")
+async def list_my_favorites(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Збережені заклади поточного користувача.
+
+    Раніше фронтенд писав у таблицю favorites НАПРЯМУ через Supabase,
+    а в моделях її не існувало. Додавання мовчки не спрацьовувало,
+    і профіль показував порожньо.
+    """
+    res = await db.execute(
+        select(Business)
+        .join(Favorite, Favorite.business_id == Business.id)
+        .where(Favorite.user_id == str(current_user.id))
+        .options(selectinload(Business.services))
+        .order_by(Favorite.created_at.desc())
+    )
+    return [BusinessOut.model_validate(b, from_attributes=True) for b in res.scalars().all()]
+
+
+@router.post("/{business_id}/favorite", status_code=status.HTTP_204_NO_CONTENT)
+async def add_favorite(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Зберегти заклад. Повторне збереження - не помилка, а те саме."""
+    res = await db.execute(select(Business).where(Business.id == business_id))
+    if not res.scalars().first():
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    exists = await db.execute(
+        select(Favorite).where(
+            Favorite.user_id == str(current_user.id),
+            Favorite.business_id == business_id,
+        )
+    )
+    if exists.scalars().first():
+        return
+
+    db.add(Favorite(user_id=str(current_user.id), business_id=business_id))
+    await db.commit()
+
+
+@router.delete("/{business_id}/favorite", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_favorite(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Прибрати заклад зі збережених."""
+    await db.execute(
+        delete(Favorite).where(
+            Favorite.user_id == str(current_user.id),
+            Favorite.business_id == business_id,
+        )
+    )
+    await db.commit()

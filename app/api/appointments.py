@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access
+from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access, is_limited_to_own_schedule
 from app.core.rate_limit import rate_limit
 from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client
 from app.schemas.appointment import (
@@ -880,6 +880,18 @@ async def get_booked_appointments(
     db: AsyncSession = Depends(get_db),
     _current_user: CurrentUser = Depends(require_business_access),
 ):
+    # Майстер бачить ЛИШЕ свій розклад.
+    #
+    # Чужі записи, контакти чужих клієнтів і чужі візити його не
+    # стосуються. Раніше обмеження було тільки на рівні вкладок у CRM -
+    # майстер відкривав календар і бачив увесь заклад.
+    #
+    # Перевірка тут, а не на екрані: приховане на фронтенді все одно
+    # приходить у відповіді, і будь-хто побачить його у вкладці
+    # «Мережа» браузера.
+    if await is_limited_to_own_schedule(db, _current_user, business_id):
+        master_id = str(_current_user.id)
+
     # ВАЖЛИВО: цей ендпоінт віддає ім'я, телефон і email клієнтів.
     # Раніше був доступний без жодної авторизації - будь-хто, хто знав
     # business_id, міг вивантажити всі контакти клієнтів закладу.
@@ -974,3 +986,72 @@ async def update_appointment_status(
     await db.commit()
     await db.refresh(appointment)
     return appointment
+
+@router.get("/my", response_model=List[AppointmentResponse])
+async def list_my_appointments(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Записи поточного користувача - для сторінки профілю.
+
+    Раніше профіль читав базу НАПРЯМУ через Supabase і шукав записи за
+    `user_id.eq.{id}` або `client_id.eq.{id}`. Обидві умови хибні:
+    поля user_id в записах немає взагалі, а client_id посилається на
+    клієнта ЗАКЛАДУ - це інший ідентифікатор, ніж обліковий запис.
+    Тому список був порожній завжди.
+
+    Шукаємо за поштою й телефоном. Це єдине, що пов'язує обліковий
+    запис із візитом: людина записується як гість, вводить контакти,
+    і жодного зв'язку з її акаунтом при цьому не виникає.
+
+    Телефон порівнюємо за останніми 9 цифрами: той самий номер
+    зустрічається як +380671112233, 0671112233 і 380671112233.
+    """
+    res = await db.execute(select(User).where(User.id == str(current_user.id)))
+    user = res.scalars().first()
+
+    email = (user.email if user else None) or current_user.email
+    phone_digits = "".join(ch for ch in ((user.phone if user else "") or "") if ch.isdigit())
+
+    conditions = []
+    if email:
+        conditions.append(func.lower(Appointment.client_email) == email.lower())
+    if len(phone_digits) >= 9:
+        conditions.append(Appointment.client_phone.like(f"%{phone_digits[-9:]}"))
+
+    if not conditions:
+        return []
+
+    result = await db.execute(
+        select(Appointment)
+        .where(
+            or_(*conditions),
+            # Технічні замки слотів - не записи людини.
+            Appointment.status != "blocked",
+        )
+        .order_by(Appointment.start_time.desc())
+        .limit(200)
+    )
+    appointments = result.scalars().all()
+
+    # Назви закладу й послуги: без них профіль показує дати без натяку,
+    # куди саме людина ходила.
+    out = []
+    for appointment in appointments:
+        response = AppointmentResponse.model_validate(appointment, from_attributes=True)
+
+        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
+        business = biz_res.scalars().first()
+        if business:
+            response.business_name = business.name
+
+        if appointment.service_id:
+            srv_res = await db.execute(select(Service).where(Service.id == appointment.service_id))
+            service = srv_res.scalars().first()
+            if service:
+                response.service_name = service.name
+
+        out.append(response)
+
+    return out

@@ -1,9 +1,13 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
+import Avatar from '@/components/ui/Avatar';
+import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import {
   CalendarDays,
@@ -91,11 +95,18 @@ export default function ClientProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Активні вкладки ---
-  const [activeTab, setActiveTab] = useState<'appointments' | 'balance' | 'vouchers' | 'favorites' | 'settings'>('appointments');
+  // Вкладка з адреси: «Налаштування» в меню має відкривати саме їх,
+  // а не загальний профіль, де їх ще треба знайти.
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams?.get('tab');
+  const [activeTab, setActiveTab] = useState<'appointments' | 'balance' | 'vouchers' | 'favorites' | 'settings'>(
+    (tabFromUrl as any) || 'appointments'
+  );
   const [appointmentFilter, setAppointmentFilter] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
 
   // --- Дані з БД ---
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<any[]>([]);
   const [currentFavPage, setCurrentFavPage] = useState(1);
 
@@ -141,34 +152,15 @@ export default function ClientProfilePage() {
         return;
       }
 
-      const { data: favRows, error: favErr } = await supabase
-        .from('favorites')
-        .select('business_id')
-        .eq('user_id', targetUserId);
-
-      if (favErr || !favRows || favRows.length === 0) {
+      // Раніше тут був прямий запит до Supabase у таблицю favorites,
+      // якої немає в моделях: список був порожній завжди, скільки б
+      // закладів людина не зберігала.
+      try {
+        const token = await getAuthToken();
+        setFavorites(await api.listMyFavorites(token));
+      } catch (err) {
+        console.error('Помилка завантаження улюблених:', err);
         setFavorites([]);
-        return;
-      }
-
-      const rawIds = favRows.map((f: any) => f.business_id).filter(Boolean);
-      if (rawIds.length === 0) {
-        setFavorites([]);
-        return;
-      }
-
-      const formattedIds = rawIds.map((id: any) => (isNaN(Number(id)) ? id : Number(id)));
-
-      const { data: bizData, error: bizErr } = await supabase
-        .from('businesses')
-        .select('*')
-        .in('id', formattedIds);
-
-      if (bizErr) {
-        console.error("Помилка businesses:", bizErr.message || bizErr);
-        setFavorites([]);
-      } else {
-        setFavorites(bizData || []);
       }
     } catch (err) {
       console.error("Загальна помилка favorites:", err);
@@ -216,25 +208,22 @@ export default function ClientProfilePage() {
 
       // 2. Бронювання
       try {
-        const { data: apptsData } = await supabase
-          .from('appointments')
-          .select(`
-            id,
-            start_time,
-            end_time,
-            status,
-            price,
-            businesses ( id, name, address, city, cover_photo, logo, slug, rating ),
-            services ( id, name, price, duration_minutes )
-          `)
-          .or(`user_id.eq.${user.id},client_id.eq.${user.id}`)
-          .order('start_time', { ascending: false });
-
-        if (apptsData) {
-          setAppointments(apptsData);
-        }
-      } catch (err) {
+        // Раніше тут був прямий запит до Supabase із умовою
+        // `user_id.eq.{id}` або `client_id.eq.{id}`. Обидві хибні:
+        // поля user_id в записах немає взагалі, а client_id посилається
+        // на клієнта ЗАКЛАДУ - це інший ідентифікатор, ніж обліковий
+        // запис. Тому список був порожній завжди.
+        //
+        // Тепер через API: він шукає за поштою й телефоном - єдиним,
+        // що повʼязує акаунт із візитом.
+        const token = await getAuthToken();
+        const apptsData = await api.listMyAppointments(token);
+        setAppointments(apptsData || []);
+      } catch (err: any) {
         console.error("Помилка завантаження бронювань:", err);
+        // Порожній список і помилка виглядають однаково, але означають
+        // різне. Кажемо прямо, інакше людина вважатиме, що записів немає.
+        setAppointmentsError(err?.message || 'Не вдалося завантажити записи');
       }
 
       // 3. Улюблені заклади
@@ -856,13 +845,7 @@ export default function ClientProfilePage() {
                     style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                   />
                 ) : (
-                  <div style={{
-                    width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#C2D8C4',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                    fontWeight: '800', fontSize: '0.95rem', flexShrink: 0
-                  }}>
-                    {initials.toUpperCase()}
-                  </div>
+                  <Avatar name={fullName} size={40} />
                 )}
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

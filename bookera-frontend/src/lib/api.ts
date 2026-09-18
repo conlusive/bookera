@@ -609,6 +609,29 @@ export const api = {
     return authFetch(`/crm/businesses/${businessId}/direct-link`, token);
   },
 
+  /**
+   * Записи поточного користувача - для сторінки профілю.
+   *
+   * Шукаються за поштою й телефоном: людина записується як гість,
+   * і жодного звʼязку з її акаунтом при цьому не виникає.
+   */
+  async listMyAppointments(token: string): Promise<any[]> {
+    return authFetch('/appointments/my', token);
+  },
+
+  /** Збережені заклади поточного користувача. */
+  async listMyFavorites(token: string): Promise<any[]> {
+    return authFetch('/businesses/favorites/my', token);
+  },
+
+  async addFavorite(token: string, businessId: number): Promise<void> {
+    await authFetch(`/businesses/${businessId}/favorite`, token, { method: 'POST' });
+  },
+
+  async removeFavorite(token: string, businessId: number): Promise<void> {
+    await authFetch(`/businesses/${businessId}/favorite`, token, { method: 'DELETE' });
+  },
+
   // === Робота в кількох закладах ===
 
   /** Заклади, у яких людина працює. */

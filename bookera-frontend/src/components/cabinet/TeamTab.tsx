@@ -8,6 +8,7 @@ import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
 import { useToast } from '@/context/ToastContext';
 import Button from '@/components/ui/AppButton';
 import { Icons } from '@/components/shared';
+import Avatar from '@/components/ui/Avatar';
 
 // Локальні іконки
 const WalletIcon = () => (
@@ -749,21 +750,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   boxSizing: 'border-box'
                 }}
               >
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  backgroundColor: isSelected ? colors.textPrimary : colors.border,
-                  color: isSelected ? '#fff' : colors.textSecondary,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '700',
-                  fontSize: '0.9rem',
-                  flexShrink: 0
-                }}>
-                  {getUserInitials(member.name)}
-                </div>
+                <Avatar name={member.name} src={member.avatar_url} size={44} />
 
                 <div style={{ overflow: 'hidden', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
                   <div style={{
@@ -833,9 +820,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             {/* ХЕДЕР ПРОФІЛЮ */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: colors.surface, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '2rem', color: colors.textPrimary }}>
-                  {getUserInitials(currentStaff.name)}
-                </div>
+                <Avatar name={currentStaff.name} src={currentStaff.avatar_url} size={80} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: colors.textPrimary, margin: 0, letterSpacing: '-0.5px' }}>{currentStaff.name}</h1>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', fontSize: '0.85rem', fontWeight: '600' }}>

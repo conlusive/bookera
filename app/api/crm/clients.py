@@ -6,8 +6,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
-from app.models import Client, ClientLink, Business, PointsLedgerEntry
+from app.core.auth import is_limited_to_own_schedule, CurrentUser, assert_business_access, get_current_user
+from app.models import Client, ClientLink, Business, PointsLedgerEntry, Appointment
 from app.models.appointment import Appointment
 from app.services.monetization import award_points_for_new_client
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
@@ -32,7 +32,21 @@ async def list_clients(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     await assert_business_access(db, current_user, business_id)
+
     stmt = select(Client).where(Client.business_id == business_id).options(selectinload(Client.links))
+
+    # Майстер бачить лише СВОЇХ клієнтів - тих, кого справді обслуговував.
+    #
+    # База клієнтів - головний актив закладу. Майстер, який іде,
+    # не має вивантажити контакти всіх відвідувачів, зокрема тих,
+    # кого ніколи не бачив.
+    if await is_limited_to_own_schedule(db, current_user, business_id):
+        own_clients = select(Appointment.client_id).where(
+            Appointment.business_id == business_id,
+            Appointment.master_id == str(current_user.id),
+            Appointment.client_id.isnot(None),
+        )
+        stmt = stmt.where(Client.id.in_(own_clients))
     if search:
         like = f"%{search.lower()}%"
         from sqlalchemy import or_, func

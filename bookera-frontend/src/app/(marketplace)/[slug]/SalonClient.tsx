@@ -331,6 +331,17 @@ export default function SalonClient({
         const master = searchParams.get('master');
         if (master) setSelectedMasterId(master);
         openModal(service);
+
+        const dateParam = searchParams.get('date');
+        const timeParam = searchParams.get('time');
+        if (dateParam) {
+          setSelectedDate(dateParam);
+          setBookingCalendarMonth(new Date(dateParam));
+        }
+        if (timeParam) {
+          setSelectedTime(timeParam);
+          setCurrentStep(3); // Одразу переходимо на крок з підтвердженим часом
+        }
       }
     }
 

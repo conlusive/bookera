@@ -655,6 +655,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           return (parseInt(b.id) || 0) - (parseInt(a.id) || 0);
         }
 
+        if (sortBy === 'distance' && nearbyPoint) {
+          const da = distanceById[a.id] ?? Infinity;
+          const db_ = distanceById[b.id] ?? Infinity;
+          if (da !== db_) return da - db_;
+        }
+
         // За замовчуванням - за відстанню, коли вона відома.
         //
         // Бекенд уже повернув заклади відсортованими, але список тут
@@ -810,7 +816,21 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const recommendedBusinesses = useMemo(() => {
     const tier = (count: number) => (count >= 50 ? 3 : count >= 10 ? 2 : count >= 1 ? 1 : 0);
 
-    return [...businesses]
+    // Реагує на категорію, як і решта зон.
+    //
+    // Людина, яка обрала «Манікюр», хоче бачити найкращі манікюрні,
+    // а не найкращий барбершоп міста. Незалежність від категорії
+    // робила б блок марним саме тоді, коли він найпотрібніший.
+    let pool = businesses;
+    if (activeCategory !== 'all') {
+      const terms = CATEGORY_TERMS[activeCategory] || [];
+      pool = businesses.filter((b: any) => {
+        const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
+        return terms.some(t => text.includes(t));
+      });
+    }
+
+    return [...pool]
       .sort((a, b) => {
         const ta = tier(parseInt(a.reviews_count) || 0);
         const tb = tier(parseInt(b.reviews_count) || 0);
@@ -818,7 +838,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
       })
       .slice(0, 8);
-  }, [businesses]);
+  }, [businesses, activeCategory]);
   /**
    * Три зони головної, і кожна живе за своїм правилом.
    *
@@ -941,11 +961,29 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     </div>
   );
 
+  /**
+   * Варіанти сортування.
+   *
+   * «За відстанню» зʼявляється лише коли координати є: пункт, який
+   * нічого не робить, гірший за його відсутність.
+   */
   const sortOptions = [
+    ...(nearbyPoint ? [{ value: 'distance', label: 'Найближчі' }] : []),
     { value: 'popular', label: 'За популярністю' },
     { value: 'rating', label: 'За рейтингом' },
-    { value: 'newest', label: 'Спочатку нові' }
+    { value: 'newest', label: 'Спочатку нові' },
   ];
+
+  /**
+   * Коли людина дала координати, найближчі стають типовим порядком.
+   *
+   * Це головне, заради чого вона дозволила доступ до розташування:
+   * питати дозвіл і далі сортувати за популярністю означало б узяти
+   * дані й не скористатись ними.
+   */
+  useEffect(() => {
+    if (nearbyPoint && sortBy === 'popular') setSortBy('distance');
+  }, [nearbyPoint]);
 
   /**
    * Заголовок СЕРЕДНЬОЇ зони - повного списку закладів.
@@ -1229,29 +1267,39 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .view-all-text-btn:hover { color: #8fae92; }
 
         /* ОДНАКОВІ КАРТКИ В СТИЛІ APPLE */
+        /* Картка закладу - плитка, а не «картка».
+           Рамка, тінь і підйом при наведенні робили з кожного закладу
+           окремий обʼєкт, що претендує на увагу. У сітці з восьми це
+           вісім прямокутників, які змагаються між собою.
+           Лишилось фото й текст під ним: межі задає сам вміст. */
         .apple-biz-card {
-          background: #ffffff;
-          border-radius: 20px;
-          border: 1px solid rgba(0, 0, 0, 0.06);
-          overflow: hidden;
+          background: transparent;
+          border: none;
+          box-shadow: none;
           display: flex;
           flex-direction: column;
           text-decoration: none;
           position: relative;
-          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
-          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
           box-sizing: border-box;
         }
-        .apple-biz-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.08);
-          border-color: rgba(0, 0, 0, 0.1);
+        /* При наведенні рухається ЛИШЕ фото - легке наближення.
+           Підйом усієї картки зсуває сусідні рядки й ламає сітку. */
+        .apple-biz-card:hover .card-photo-img {
+          transform: scale(1.04);
+        }
+        .card-photo-img {
+          transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .card-photo-box {
           width: 100%;
-          height: 175px;
+          /* Стале співвідношення замість фіксованої висоти: плитки
+             в ряду однакові незалежно від ширини колонки. */
+          aspect-ratio: 4 / 3;
+          height: auto;
+          border-radius: 14px;
           position: relative;
           overflow: hidden;
+          background: #F5F5F7;
           background-color: #f1f5f9;
         }
         .card-photo-img {
@@ -1298,14 +1346,20 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         }
 
         .card-body {
-          padding: 1.15rem;
+          /* Без бічних полів: текст вирівняний по краю фото, як
+             у сітці альбому. Поля всередині картки мали сенс, поки
+             була рамка - тепер вони лише зсували текст від плитки. */
+          padding: 0.85rem 0.15rem 0;
           display: flex;
           flex-direction: column;
           flex: 1;
         }
         .card-heading {
-          font-size: 1.12rem;
-          font-weight: 800;
+          /* Легша вага й менший кегль: 800 на кожній назві в сітці
+             з восьми читається як вісім заголовків. */
+          font-size: 1.0625rem;
+          font-weight: 600;
+          letter-spacing: -0.015em;
           color: #111827;
           margin: 0;
           white-space: nowrap;
@@ -2004,14 +2058,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               onDecline={nearby.decline}
             />
 
+            {/* Заголовок називає КАТЕГОРІЮ, а не пояснює механіку.
+                «Найближчі заклади, які надають обрану послугу» - це
+                опис того, як працює код. Людина хоче бачити «Барбер
+                поблизу», а не читати інструкцію. */}
             <SectionHeader
-              eyebrow={`Швидкий візит · ${searchWhere || 'Львів'}`}
-              title={nearbyPoint ? 'Поблизу вас' : 'Із вільними вікнами'}
-              subtitle={
+              eyebrow={searchWhere || 'Львів'}
+              title={
                 activeCategory !== 'all'
-                  ? 'Найближчі заклади, які надають обрану послугу'
-                  : 'Заклади, до яких можна записатись сьогодні'
+                  ? `${categoryTitles[activeCategory] || 'Заклади'} поблизу`
+                  : 'Поблизу вас'
               }
+              subtitle="Найближчі до вашого розташування"
             />
 
             {/* Стан порожнечі.
@@ -2074,6 +2132,136 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       )}
 
       {/* 🟢 2. ПОТІМ: ВАМ МОЖЕ СПОДОБАТИСЯ (КОМПАКТНІ ДОБІРКИ У 2 РЯДИ ЗІ ЗМІЩЕННЯМ ТА СКРОЛОМ) */}
+      {/* РЕКОМЕНДОВАНІ - друга зона.
+          Реагує на категорію, як і решта: людина, яка обрала
+          «Манікюр», хоче бачити найкращі манікюрні, а не найкращий
+          барбершоп міста. */}
+      {showRecommended && recommendedBusinesses.length > 0 && (
+        <section className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
+          <div className="container">
+            <SectionHeader
+              eyebrow="Найвищі оцінки"
+              title={
+                activeCategory !== 'all'
+                  ? `Найкращі — ${(categoryTitles[activeCategory] || 'заклади').toLowerCase()}`
+                  : 'Рекомендовані'
+              }
+              subtitle="За рейтингом і кількістю відгуків"
+            />
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: '1.5rem',
+            }}>
+              {recommendedBusinesses.map((biz: any) =>
+                renderCard(biz, { distanceTag: formatDistance(biz.id) })
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+
+      {/* 🟢 3. І ПОТІМ: РЕКОМЕНДОВАНІ МАЙСТРИ ТА СТУДІЇ (КАТАЛОГ) */}
+      <section className="reveal-on-scroll" style={{ paddingBottom: '5rem' }} id="salons-section">
+        <div className="container">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.25rem', position: 'relative', zIndex: 50 }}>
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
+                {/* Надпис каже правду: це результати пошуку, а не
+                    рекомендації. Рекомендовані живуть окремою зоною
+                    нижче й не залежать ні від чого. */}
+                {activeCategory !== 'all' || appliedSearch ? 'Результати пошуку' : 'Усі заклади'}
+              </div>
+              <h2 style={{ fontSize: '2.4rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.04em' }}>
+                {getSectionTitle()}
+              </h2>
+              <p style={{ color: '#64748b', fontSize: '1.05rem', marginTop: '0.4rem', marginBottom: 0 }}>
+                {getSectionSubtitle()}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+              <div style={{ position: 'relative' }} ref={sortRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSortOpen(!isSortOpen)}
+                  className="sort-trigger"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                  </svg>
+                  Сортування: <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
+                </button>
+
+                {isSortOpen && (
+                  <div className="search-dropdown anim" style={{ top: '120%', right: 0, left: 'auto', width: '240px', zIndex: 100 }}>
+                    {sortOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className="search-dropdown-item"
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          border: 'none',
+                          display: 'block',
+                          backgroundColor: sortBy === opt.value ? '#f8fafc' : 'transparent',
+                          fontWeight: sortBy === opt.value ? '700' : '500'
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSortBy(opt.value);
+                          setIsSortOpen(false);
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {filteredBusinesses.length > 8 && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className={`view-all-text-btn anim ${isExpanded ? 'expanded' : ''}`}
+                >
+                  {isExpanded ? 'Згорнути' : 'Дивитись всі'}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    {isExpanded ? <polyline points="18 15 12 9 6 15"></polyline> : <polyline points="6 9 12 15 18 9"></polyline>}
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {filteredBusinesses.length === 0 ? (
+            <div className="anim" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '6rem 2rem', backgroundColor: '#f8fafc', borderRadius: '24px', border: '1px dashed #cbd5e1', margin: '2rem 0' }}>
+              <div style={{ width: '72px', height: '72px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </div>
+              <h3 style={{ color: '#111827', fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>Закладів не знайдено</h3>
+              <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '480px', margin: '0 auto', lineHeight: '1.5' }}>Спробуйте обрати інше місто або скинути фільтри.</p>
+              <button
+                onClick={() => { handleCategorySelect('all'); setAppliedSearch(''); setSearchWhat(''); }}
+                style={{ marginTop: '2rem', padding: '0.85rem 2rem', backgroundColor: '#222222', color: '#fff', border: 'none', borderRadius: '99px', cursor: 'pointer', fontWeight: '700', fontSize: '1rem', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+              >
+                Скинути фільтри
+              </button>
+            </div>
+          ) : (
+            <div className="salons-layout anim">
+              {displayedBusinesses.map((biz: any) =>
+                renderCard(biz, { distanceTag: formatDistance(biz.id) })
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
       {showCollections && (
         <section className="reveal-on-scroll" style={{ padding: '5rem 0', backgroundColor: '#FAFAFA', borderTop: '1px solid rgba(0,0,0,0.05)', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: '4.5rem' }}>
           <div className="container">
@@ -2213,130 +2401,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 </div>
 
               </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 🟢 3. І ПОТІМ: РЕКОМЕНДОВАНІ МАЙСТРИ ТА СТУДІЇ (КАТАЛОГ) */}
-      <section className="reveal-on-scroll" style={{ paddingBottom: '5rem' }} id="salons-section">
-        <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.25rem', position: 'relative', zIndex: 50 }}>
-            <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
-                {/* Надпис каже правду: це результати пошуку, а не
-                    рекомендації. Рекомендовані живуть окремою зоною
-                    нижче й не залежать ні від чого. */}
-                {activeCategory !== 'all' || appliedSearch ? 'Результати пошуку' : 'Усі заклади'}
-              </div>
-              <h2 style={{ fontSize: '2.4rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.04em' }}>
-                {getSectionTitle()}
-              </h2>
-              <p style={{ color: '#64748b', fontSize: '1.05rem', marginTop: '0.4rem', marginBottom: 0 }}>
-                {getSectionSubtitle()}
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-              <div style={{ position: 'relative' }} ref={sortRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsSortOpen(!isSortOpen)}
-                  className="sort-trigger"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                  </svg>
-                  Сортування: <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
-                </button>
-
-                {isSortOpen && (
-                  <div className="search-dropdown anim" style={{ top: '120%', right: 0, left: 'auto', width: '240px', zIndex: 100 }}>
-                    {sortOptions.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        className="search-dropdown-item"
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          border: 'none',
-                          display: 'block',
-                          backgroundColor: sortBy === opt.value ? '#f8fafc' : 'transparent',
-                          fontWeight: sortBy === opt.value ? '700' : '500'
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setSortBy(opt.value);
-                          setIsSortOpen(false);
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {filteredBusinesses.length > 8 && (
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className={`view-all-text-btn anim ${isExpanded ? 'expanded' : ''}`}
-                >
-                  {isExpanded ? 'Згорнути' : 'Дивитись всі'}
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    {isExpanded ? <polyline points="18 15 12 9 6 15"></polyline> : <polyline points="6 9 12 15 18 9"></polyline>}
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {filteredBusinesses.length === 0 ? (
-            <div className="anim" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '6rem 2rem', backgroundColor: '#f8fafc', borderRadius: '24px', border: '1px dashed #cbd5e1', margin: '2rem 0' }}>
-              <div style={{ width: '72px', height: '72px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              </div>
-              <h3 style={{ color: '#111827', fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>Закладів не знайдено</h3>
-              <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '480px', margin: '0 auto', lineHeight: '1.5' }}>Спробуйте обрати інше місто або скинути фільтри.</p>
-              <button
-                onClick={() => { handleCategorySelect('all'); setAppliedSearch(''); setSearchWhat(''); }}
-                style={{ marginTop: '2rem', padding: '0.85rem 2rem', backgroundColor: '#222222', color: '#fff', border: 'none', borderRadius: '99px', cursor: 'pointer', fontWeight: '700', fontSize: '1rem', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-              >
-                Скинути фільтри
-              </button>
-            </div>
-          ) : (
-            <div className="salons-layout anim">
-              {displayedBusinesses.map((biz: any) =>
-                renderCard(biz, { distanceTag: formatDistance(biz.id) })
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* РЕКОМЕНДОВАНІ - незалежна зона.
-          Не реагує ні на категорію, ні на пошук, ні на геолокацію:
-          це просто найкращі заклади міста. */}
-      {showRecommended && recommendedBusinesses.length > 0 && (
-        <section className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
-          <div className="container">
-            <SectionHeader
-              eyebrow="Найвищі оцінки"
-              title="Рекомендовані"
-              subtitle="Заклади з найкращими відгуками — незалежно від того, що ви шукаєте"
-            />
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: '1.5rem',
-            }}>
-              {recommendedBusinesses.map((biz: any) =>
-                renderCard(biz, { distanceTag: formatDistance(biz.id) })
-              )}
             </div>
           </div>
         </section>

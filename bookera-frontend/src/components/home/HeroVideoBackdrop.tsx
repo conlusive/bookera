@@ -58,6 +58,17 @@ export default function HeroVideoBackdrop() {
           // чорний прямокутник.
           background: `url("${POSTERS[i]}") center/cover no-repeat`,
         }}>
+          {/* Мʼяке світло, що повільно пливе по заглушці.
+              Поки відео вантажиться, людина бачить не застиглу пляму,
+              а щось живе - очікування читається як частина задуму. */}
+          {!playing[i] && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.13) 50%, transparent 70%)',
+              backgroundSize: '220% 100%',
+              animation: `heroShimmer 2.6s ease-in-out ${i * 0.25}s infinite`,
+            }} />
+          )}
           <video
             autoPlay
             loop
@@ -83,14 +94,23 @@ export default function HeroVideoBackdrop() {
             })}
             style={{
               opacity: playing[i] ? 1 : 0,
-              transition: 'opacity 0.6s ease',
+              // Довше проявлення (1.1s) і затримка по колонках:
+              // три кадри, що зʼявляються одночасно, читаються як
+              // перемикання слайда. По черзі - як розкриття.
+              transition: `opacity 1.1s ease ${i * 160}ms`,
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              // Легке наближення середнього кадру: три однакові прямокутники
-              // читаються як таблиця, невелика різниця робить із них
-              // композицію.
-              transform: i === 1 ? 'scale(1.06)' : 'scale(1)',
+              // Повільний наїзд: 20 секунд від 1.0 до 1.08 і назад.
+              //
+              // Самі ролики короткі й помітно зациклюються - око
+              // ловить точку склейки. Повільний рух поверх них має
+              // довший період, тому склейка перестає читатись.
+              //
+              // Кожна колонка починає з іншої фази (затримка -7s),
+              // інакше всі три дихають синхронно, і це виглядає
+              // механічно.
+              animation: playing[i] ? `heroKenBurns 20s ease-in-out ${i * -7}s infinite` : 'none',
             }}
           />
         </div>

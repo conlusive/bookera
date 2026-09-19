@@ -31,6 +31,15 @@ export default function RootLayout({
       lang="uk"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      {/* Раннє зʼєднання з доменом відео на головній.
+          Браузер робить DNS-запит і рукостискання TLS ще поки парсить
+          HTML, а не коли доходить до тега <video>. Це економить
+          100-300 мс до першого кадру - саме той час, коли людина
+          бачить порожні заглушки. */}
+      <head>
+        <link rel="preconnect" href="https://d8j0ntlcm91z4.cloudfront.net" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://d8j0ntlcm91z4.cloudfront.net" />
+      </head>
       <body className="min-h-full flex flex-col">
         <ToastProvider>
           {/* 🟢 Наш трекер для рефералок */}

@@ -407,3 +407,23 @@
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
 }
+
+/* Повільний наїзд на відео банера.
+   Ролики короткі й помітно зациклюються; рух із довшим періодом
+   поверх них ховає точку склейки. */
+@keyframes heroKenBurns {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* Світло, що пливе по заглушці, поки відео вантажиться. */
+@keyframes heroShimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="heroKenBurns"], [style*="heroShimmer"] {
+    animation: none !important;
+  }
+}

@@ -140,6 +140,42 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   // ми поки не виконуємо.
   const nearby = useNearbyPrompt(true);
   const nearbyPoint = nearby.point;
+
+  /**
+   * Відстані до закладів.
+   *
+   * Окремо від пошуку за датою. Раніше вони рахувались лише всередині
+   * `if (searchDate)` - тобто тільки коли людина обрала дату. На
+   * головній при відкритті дати немає, і відстані не зʼявлялись
+   * ніколи, хоча координати вже були.
+   */
+  useEffect(() => {
+    if (!nearbyPoint || businesses.length === 0) {
+      setDistanceById({});
+      return;
+    }
+
+    // Рахуємо на клієнті: координати закладів уже прийшли у списку,
+    // і зайвий запит до сервера заради арифметики не потрібен.
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const next: Record<number, number> = {};
+
+    for (const biz of businesses) {
+      const lat = biz.latitude != null ? Number(biz.latitude) : null;
+      const lng = biz.longitude != null ? Number(biz.longitude) : null;
+      if (lat == null || lng == null) continue;
+
+      const dLat = toRad(lat - nearbyPoint.lat);
+      const dLng = toRad(lng - nearbyPoint.lng);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(nearbyPoint.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+      next[biz.id] = 6371 * 2 * Math.asin(Math.sqrt(a));
+    }
+
+    setDistanceById(next);
+  }, [nearbyPoint, businesses]);
+
   const [sortBy, setSortBy] = useState<string>('popular');
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);

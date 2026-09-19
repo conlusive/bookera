@@ -47,7 +47,7 @@ export default function NearbyDebug({ point, businesses, distanceCount }: Props)
     permission === 'denied'
       ? 'Доступ заборонено в браузері. Safari → Налаштування → Вебсайти → Розташування → localhost → «Запитувати».'
       : !point && permission === 'prompt'
-        ? 'Браузер ще не питав дозволу або ви його не дали.'
+        ? 'Натисніть «Показати» у плашці над списком. Safari вимагає кліку — автоматичний запит він блокує мовчки.'
         : withCoords === 0 && businesses.length > 0
           ? 'У закладів немає координат у списку. Спробуйте: rm -rf .next && npm run dev'
           : null;

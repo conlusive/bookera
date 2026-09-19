@@ -10,7 +10,6 @@ import Avatar from '@/components/ui/Avatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
-import NearbyDebug from '@/components/home/NearbyDebug';
 
 const categoriesData = [
   // «Рекомендовані» прибрано з цього ряду.
@@ -153,9 +152,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   useEffect(() => {
     if (!nearbyPoint || businesses.length === 0) {
       setDistanceById({});
-      if (process.env.NODE_ENV === 'development' && businesses.length > 0) {
-        console.info('[Поблизу] Координати людини ще не отримані — браузер не дав дозволу або його не питали.');
-      }
       return;
     }
 
@@ -179,21 +175,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
     setDistanceById(next);
 
-    // Діагностика в консоль: ланцюжок довгий і рветься тихо.
-    if (process.env.NODE_ENV === 'development') {
-      const withCoords = businesses.filter((b: any) => b.latitude != null).length;
-      console.info(
-        `[Поблизу] ваші координати: ${nearbyPoint.lat.toFixed(4)}, ${nearbyPoint.lng.toFixed(4)}\n` +
-        `[Поблизу] закладів у списку: ${businesses.length}, з координатами: ${withCoords}\n` +
-        `[Поблизу] пораховано відстаней: ${Object.keys(next).length}`
-      );
-      if (withCoords === 0) {
-        console.warn(
-          '[Поблизу] У закладів немає координат У СПИСКУ, хоча в базі можуть бути.\n' +
-          'Найчастіша причина - кеш сторінки. Спробуйте: rm -rf .next && npm run dev'
-        );
-      }
-    }
   }, [nearbyPoint, businesses]);
 
   const [sortBy, setSortBy] = useState<string>('popular');
@@ -652,15 +633,49 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById]);
 
   // Заклади поблизу
+  /**
+   * Заклади для блоку «Поруч із вами».
+   *
+   * Три кроки, у цьому порядку:
+   *   1. лишаємо ті, що в обраному місті
+   *   2. якщо обрана категорія - лишаємо ті, що її надають
+   *   3. сортуємо за відстанню, якщо вона відома
+   *
+   * Раніше блок просто брав перші шість із загального списку: ні
+   * категорія, ні відстань на нього не впливали, хоча підпис обіцяв
+   * «поруч».
+   */
   const nearbyBusinesses = useMemo(() => {
-    if (!searchWhere || searchWhere.trim() === '') return businesses.slice(0, 6);
-    const loc = searchWhere.toLowerCase().trim();
-    const matches = businesses.filter(b =>
-      (b.city && b.city.toLowerCase().includes(loc)) ||
-      (b.address && b.address.toLowerCase().includes(loc))
-    );
-    return matches.length > 0 ? matches : businesses.slice(0, 6);
-  }, [businesses, searchWhere]);
+    let result = businesses;
+
+    if (searchWhere && searchWhere.trim() !== '') {
+      const loc = searchWhere.toLowerCase().trim();
+      const inCity = businesses.filter(b =>
+        (b.city && b.city.toLowerCase().includes(loc)) ||
+        (b.address && b.address.toLowerCase().includes(loc))
+      );
+      // Порожній список гірший за список не з того міста: людина
+      // хоча б побачить, що заклади є.
+      if (inCity.length > 0) result = inCity;
+    }
+
+    if (activeCategory !== 'all') {
+      const byCategory = result.filter(b => b.category === activeCategory);
+      if (byCategory.length > 0) result = byCategory;
+    }
+
+    if (nearbyPoint) {
+      result = [...result].sort((a, b) => {
+        // Без координат - у кінець: ми не знаємо, де заклад, і
+        // ставити його першим означало б стверджувати, що він поруч.
+        const da = distanceById[a.id] ?? Infinity;
+        const db = distanceById[b.id] ?? Infinity;
+        return da - db;
+      });
+    }
+
+    return result.slice(0, 6);
+  }, [businesses, searchWhere, activeCategory, nearbyPoint, distanceById]);
 
   // Розрахунок точної відстані від користувача до закладу
   // getSalonDistance прибрано.
@@ -1039,14 +1054,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif', color: '#222222', overflowX: 'hidden' }}>
-      {/* Видимий стан пошуку «поблизу». Лише в режимі розробки. */}
-      <NearbyDebug
-        point={nearbyPoint}
-        businesses={businesses}
-        distanceCount={Object.keys(distanceById).length}
-        deniedOnce={nearby.error === 'denied'}
-      />
-
 
       <style>{`
         html, body {

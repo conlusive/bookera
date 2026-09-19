@@ -116,7 +116,16 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const formatDistance = (bizId: number): string | undefined => {
     const km = distanceById[bizId];
     if (km == null) return undefined;
-    return km < 1 ? `${Math.round(km * 1000 / 50) * 50} м` : `${km.toFixed(1)} км`;
+    // «~» перед числом - це відстань ПО ПРЯМІЙ, а не маршрутом.
+    //
+    // Навігатор показує більше: він веде дорогами, в обхід кварталів
+    // і річок. Наші 2.4 км можуть бути 3.4 км у Картах, і без знака
+    // наближення людина вважає, що ми помилились.
+    //
+    // Рахувати справжній маршрут означало б запит до платного API
+    // на кожну картку - заради числа, яке все одно зміниться залежно
+    // від пробок і способу пересування.
+    return km < 1 ? `~${Math.round(km * 1000 / 50) * 50} м` : `~${km.toFixed(1)} км`;
   };
 
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -470,12 +479,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           near_lng: nearbyPoint?.lng,
         });
         setAvailableBizIds(availableBizs.map((b: any) => b.id));
-        // Порядок і відстані зберігаємо окремо: список закладів
-        // будується з іншого джерела, і без цього сортування
-        // бекенду просто загубилось би.
-        setDistanceById(Object.fromEntries(
-          availableBizs.filter((b: any) => b.distance_km != null).map((b: any) => [b.id, b.distance_km])
-        ));
+        // Відстані сюди НЕ пишемо.
+        //
+        // Раніше вони приходили і звідси, і з окремого розрахунку на
+        // клієнті - два джерела перезаписували одне одного, і на різних
+        // екранах виходили різні числа для того самого закладу.
+        //
+        // Лишаємо один розрахунок (нижче, з координат у списку): він
+        // працює завжди, а цей - лише коли обрана дата.
         setNearbyOrder(availableBizs.map((b: any) => b.id));
       } catch (error) {
         console.warn("Бекенд недоступний:", error);

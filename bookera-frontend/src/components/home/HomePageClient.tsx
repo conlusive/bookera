@@ -103,6 +103,22 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [distanceById, setDistanceById] = useState<Record<number, number>>({});
   const [nearbyOrder, setNearbyOrder] = useState<number[]>([]);
 
+  /**
+   * Відстань до закладу в людському вигляді.
+   *
+   * До кілометра - в метрах із округленням до пʼятдесяти: «450 м»
+   * точніше за «0.5 км» і читається швидше, а точність до метра тут
+   * і не потрібна - людина все одно піде пішки чи поїде.
+   *
+   * Немає координат - undefined, і плашка не показується. Чесна
+   * відсутність краща за «~2 км» навмання.
+   */
+  const formatDistance = (bizId: number): string | undefined => {
+    const km = distanceById[bizId];
+    if (km == null) return undefined;
+    return km < 1 ? `${Math.round(km * 1000 / 50) * 50} м` : `${km.toFixed(1)} км`;
+  };
+
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [nearbySlots, setNearbySlots] = useState<Record<number, string[]>>({});
   const [isLoadingNearbySlots, setIsLoadingNearbySlots] = useState<boolean>(true);
@@ -800,9 +816,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Студія';
 
     // Формування точної локації та відстані
-    const locationText = options?.distanceTag
-      ? `${options.distanceTag} • ${biz.address || biz.city || 'Центр'}`
-      : ([biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте');
+    // Адреса без відстані: відстань тепер окремою плашкою поверх фото.
+    //
+    // У рядку «500 м • Дорошенка 10» вона губилась серед тексту того
+    // самого кольору й розміру, хоча це найцінніше, що є в картці:
+    // адресу людина прочитає потім, а «як далеко» вирішує одразу.
+    const locationText = [biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
 
     const todayStr = new Date().toISOString().split('T')[0];
     const salonSlots = nearbySlots[biz.id] || [];
@@ -1834,12 +1853,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 //
                 // Немає координат - не показуємо нічого. Чесна
                 // відсутність краща за красиву вигадку.
-                const km = distanceById[biz.id];
-                const distance = km == null
-                  ? undefined
-                  : km < 1
-                    ? `${Math.round(km * 1000)} м`
-                    : `${km.toFixed(1)} км`;
+                const distance = formatDistance(biz.id);
                 return (
                   <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
                     {renderCard(biz, {
@@ -2087,7 +2101,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </div>
           ) : (
             <div className="salons-layout anim">
-              {displayedBusinesses.map((biz: any) => renderCard(biz))}
+              {displayedBusinesses.map((biz: any) =>
+                renderCard(biz, { distanceTag: formatDistance(biz.id) })
+              )}
             </div>
           )}
         </div>

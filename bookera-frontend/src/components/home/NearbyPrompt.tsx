@@ -34,14 +34,15 @@ export function useNearbyPrompt(isReadyToAsk: boolean) {
     // Уже відмовлялась - не питаємо знову.
     if (saved === 'declined') return;
 
-    // Уже погоджувалась - беремо координати мовчки, без вікна.
-    // Браузер не покаже свій запит удруге, бо дозвіл збережений.
-    if (saved === 'granted') {
-      void locate();
-      return;
-    }
-
-    setIsVisible(true);
+    // Питаємо БРАУЗЕР одразу, без власного вікна.
+    //
+    // Раніше ми показували свою плашку «Показати найближчі?», людина
+    // тиснула «Показати», і лише тоді зʼявлявся запит браузера. Два
+    // кліки замість одного, і другий виглядав як дубль першого.
+    //
+    // Браузер і так питає дозволу - це і є те саме питання. Своє
+    // вікно тут зайве.
+    void locate();
   }, [isReadyToAsk]);
 
   const locate = () =>
@@ -62,10 +63,15 @@ export function useNearbyPrompt(isReadyToAsk: boolean) {
           // не питаємо. Інакше вікно зʼявлятиметься щоразу, а людина
           // вже сказала «ні».
           if (err.code === err.PERMISSION_DENIED) {
+            // Відмовили - запамʼятовуємо й більше не турбуємо.
+            // Просити знову після «ні» - тиск.
             localStorage.setItem(STORAGE_KEY, 'declined');
             setIsVisible(false);
           } else {
+            // Не дозвіл, а збій: немає сигналу, вийшов час. Тут
+            // повторна спроба має сенс, тому показуємо кнопку.
             setError('Не вдалося визначити місце');
+            setIsVisible(true);
           }
           setIsLocating(false);
           resolve();
@@ -120,8 +126,12 @@ export default function NearbyPrompt({
         border: '1px solid rgba(111, 146, 115, 0.2)',
       }}
     >
+      {/* Плашка зʼявляється лише після ЗБОЮ визначення місця -
+          немає сигналу, вийшов час. Дозвіл питає сам браузер, і
+          дублювати його своїм вікном означало б два кліки замість
+          одного. */}
       <span style={{ fontSize: '0.9rem', color: '#2E3A30', flex: 1, minWidth: '220px' }}>
-        {error || 'Показати заклади, найближчі до вас?'}
+        {error || 'Не вдалося визначити ваше місце'}
       </span>
 
       <button
@@ -134,7 +144,7 @@ export default function NearbyPrompt({
           cursor: isLocating ? 'wait' : 'pointer', opacity: isLocating ? 0.6 : 1,
         }}
       >
-        {isLocating ? 'Визначаємо…' : 'Показати'}
+        {isLocating ? 'Визначаємо…' : 'Спробувати ще'}
       </button>
 
       <button
@@ -145,7 +155,7 @@ export default function NearbyPrompt({
           fontSize: '0.85rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
         }}
       >
-        Не треба
+        Пропустити
       </button>
     </div>
   );

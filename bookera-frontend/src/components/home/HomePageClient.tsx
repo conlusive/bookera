@@ -768,6 +768,34 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, [nearbyBusinesses]);
 
   const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 8);
+
+  /**
+   * Рекомендовані - НЕЗАЛЕЖНИЙ блок.
+   *
+   * Не реагує ні на категорію, ні на пошук, ні на геолокацію. Це
+   * просто найкращі заклади міста за рейтингом і кількістю відгуків.
+   *
+   * Раніше тут показувався той самий відфільтрований список, що
+   * й у результатах пошуку - тобто ніяких рекомендацій не було,
+   * лише другий екземпляр тих самих карток.
+   *
+   * Рейтинг без відгуків нічого не вартий: заклад із однією пʼятіркою
+   * стояв би вище за той, що має 4.8 із сотні оцінок. Тому спершу
+   * порівнюємо кількість відгуків у грубих сходинках, і лише
+   * всередині сходинки - за рейтингом.
+   */
+  const recommendedBusinesses = useMemo(() => {
+    const tier = (count: number) => (count >= 50 ? 3 : count >= 10 ? 2 : count >= 1 ? 1 : 0);
+
+    return [...businesses]
+      .sort((a, b) => {
+        const ta = tier(parseInt(a.reviews_count) || 0);
+        const tb = tier(parseInt(b.reviews_count) || 0);
+        if (ta !== tb) return tb - ta;
+        return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
+      })
+      .slice(0, 8);
+  }, [businesses]);
   /**
    * Три зони головної, і кожна живе за своїм правилом.
    *
@@ -2254,6 +2282,31 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           )}
         </div>
       </section>
+
+      {/* РЕКОМЕНДОВАНІ - незалежна зона.
+          Не реагує ні на категорію, ні на пошук, ні на геолокацію:
+          це просто найкращі заклади міста. */}
+      {showRecommended && recommendedBusinesses.length > 0 && (
+        <section className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
+          <div className="container">
+            <SectionHeader
+              eyebrow="Найвищі оцінки"
+              title="Рекомендовані"
+              subtitle="Заклади з найкращими відгуками — незалежно від того, що ви шукаєте"
+            />
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: '1.5rem',
+            }}>
+              {recommendedBusinesses.map((biz: any) =>
+                renderCard(biz, { distanceTag: formatDistance(biz.id) })
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ІНФОРМАЦІЙНА СІТКА */}
       <section className="info-section">

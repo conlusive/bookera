@@ -152,6 +152,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   useEffect(() => {
     if (!nearbyPoint || businesses.length === 0) {
       setDistanceById({});
+      if (process.env.NODE_ENV === 'development' && businesses.length > 0) {
+        console.info('[Поблизу] Координати людини ще не отримані — браузер не дав дозволу або його не питали.');
+      }
       return;
     }
 
@@ -175,16 +178,20 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
     setDistanceById(next);
 
-    // Підказка в консоль, коли відстані не порахувались.
-    //
-    // Ланцюжок довгий - геолокація, координати в базі, кеш сторінки -
-    // і рветься тихо. Без цього рядка причину шукають у браузері,
-    // хоча вона зазвичай у базі.
-    if (process.env.NODE_ENV === 'development' && Object.keys(next).length === 0) {
-      console.warn(
-        '[Поблизу] Координати є у вас, але в жодного закладу їх немає.\n' +
-        'Перевірте: python scripts/check_coordinates.py'
+    // Діагностика в консоль: ланцюжок довгий і рветься тихо.
+    if (process.env.NODE_ENV === 'development') {
+      const withCoords = businesses.filter((b: any) => b.latitude != null).length;
+      console.info(
+        `[Поблизу] ваші координати: ${nearbyPoint.lat.toFixed(4)}, ${nearbyPoint.lng.toFixed(4)}\n` +
+        `[Поблизу] закладів у списку: ${businesses.length}, з координатами: ${withCoords}\n` +
+        `[Поблизу] пораховано відстаней: ${Object.keys(next).length}`
       );
+      if (withCoords === 0) {
+        console.warn(
+          '[Поблизу] У закладів немає координат У СПИСКУ, хоча в базі можуть бути.\n' +
+          'Найчастіша причина - кеш сторінки. Спробуйте: rm -rf .next && npm run dev'
+        );
+      }
     }
   }, [nearbyPoint, businesses]);
 
@@ -669,7 +676,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     if (!nearbyBusinesses || nearbyBusinesses.length === 0) return;
 
     let isMounted = true;
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Локальна дата, НЕ через toISOString.
+    //
+    // toISOString повертає дату в UTC: після 21:00 за Києвом це вже
+    // завтра, і картка просила слоти не на той день - показувала
+    // завтрашні години як сьогоднішні.
+    const todayStr = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
 
     async function loadRealSlots() {
       setIsLoadingNearbySlots(true);
@@ -871,7 +886,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     // адресу людина прочитає потім, а «як далеко» вирішує одразу.
     const locationText = [biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Локальна дата, НЕ через toISOString.
+    //
+    // toISOString повертає дату в UTC: після 21:00 за Києвом це вже
+    // завтра, і картка просила слоти не на той день - показувала
+    // завтрашні години як сьогоднішні.
+    const todayStr = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
     const salonSlots = nearbySlots[biz.id] || [];
     const primaryService = biz.services?.[0];
 

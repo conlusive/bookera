@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import AppSelect from '@/components/ui/AppSelect';
+import LocationPicker from '@/components/ui/LocationPicker';
 
 interface SettingsTabProps {
   onNavigate?: (tab: string) => void;
@@ -98,6 +99,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   });
   const [contactSettings, setContactSettings] = useState({
     name: '', city: '', address: '', phone: '', email: '', show_phone_publicly: true,
+    latitude: null as number | null, longitude: null as number | null,
   });
 
   // 🟢 1. Відновлення розділу при завантаженні без перезаписування в localStorage
@@ -136,6 +138,8 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
       phone: (business as any).phone || '',
       email: (business as any).email || '',
       show_phone_publicly: (business as any).show_phone_publicly !== false,
+      latitude: (business as any).latitude != null ? Number((business as any).latitude) : null,
+      longitude: (business as any).longitude != null ? Number((business as any).longitude) : null,
     });
     setProfileSettings({
       category: (business as any).category || 'beauty',
@@ -472,6 +476,30 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                     На неї приходять сповіщення про нові записи.
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Мітка на мапі.
+                Окремою карткою, а не полем у контактах: мапа велика
+                й потребує уваги, а серед полів вона виглядала б
+                випадковим блоком. */}
+            <div className="clean-panel">
+              <h3 className="panel-title">Де вас знайти</h3>
+              <p className="panel-subtitle">
+                Точка на мапі. За нею клієнти бачать, які заклади поруч, і будують маршрут.
+              </p>
+              <div style={{ padding: '1.5rem 2rem' }}>
+                <LocationPicker
+                  city={contactSettings.city}
+                  value={
+                    contactSettings.latitude != null && contactSettings.longitude != null
+                      ? { lat: Number(contactSettings.latitude), lng: Number(contactSettings.longitude) }
+                      : null
+                  }
+                  onChange={({ lat, lng }) =>
+                    setContactSettings(prev => ({ ...prev, latitude: lat, longitude: lng }))
+                  }
+                />
               </div>
             </div>
 

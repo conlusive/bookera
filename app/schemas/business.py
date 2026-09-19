@@ -69,6 +69,11 @@ class BusinessUpdate(BaseModel):
     workplace_photos: Optional[List[str]] = None
     booking_settings: Optional[dict] = None
     show_phone_publicly: Optional[bool] = True
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    # Відстань від точки пошуку. Заповнюється лише коли клієнт передав
+    # свої координати - інакше показувати нічого.
+    distance_km: Optional[float] = None
     security_settings: Optional[dict] = None
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None
@@ -100,6 +105,11 @@ class BusinessOut(BusinessBase):
     # (безпека, платежі) не його справа.
     booking_settings: Optional[dict] = None
     show_phone_publicly: Optional[bool] = True
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    # Відстань від точки пошуку. Заповнюється лише коли клієнт передав
+    # свої координати - інакше показувати нічого.
+    distance_km: Optional[float] = None
     # Без цього поля інтерфейс не міг визначити власника: перевірка
     # userProfile.id === business.owner_id завжди давала false, і кнопки
     # для адміністратора зникали.
@@ -113,6 +123,11 @@ class BusinessOut(BusinessBase):
     workplace_photos: Optional[List[str]] = []
     booking_settings: Optional[dict] = None
     show_phone_publicly: Optional[bool] = True
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    # Відстань від точки пошуку. Заповнюється лише коли клієнт передав
+    # свої координати - інакше показувати нічого.
+    distance_km: Optional[float] = None
     security_settings: Optional[dict] = None
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None

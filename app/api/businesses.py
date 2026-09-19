@@ -69,6 +69,10 @@ async def search_available_businesses(
     time_period: Optional[str] = Query("Будь-коли", description="Ранок, Обід, Вечір або Будь-коли"),
     category: Optional[str] = Query("all", description="Категорія послуги"),
     limit: int = Query(50, ge=1, le=200),
+    # Точка, від якої рахувати відстань. Прилітає з браузера, коли
+    # людина дозволила геолокацію, або з центру обраного міста.
+    near_lat: Optional[float] = Query(None, ge=-90, le=90),
+    near_lng: Optional[float] = Query(None, ge=-180, le=180),
     db: AsyncSession = Depends(get_db),
 ):
     now = get_utc_now()
@@ -171,6 +175,35 @@ async def search_available_businesses(
 
         if has_free_slot:
             available_businesses.append(biz)
+
+    # Сортування за відстанню, якщо відома точка людини.
+    #
+    # Формула гаверсинуса - точна для сфери. Спрощені варіанти
+    # (різниця координат «навпростець») на широті України дають
+    # помилку до 40%, бо градус довготи там коротший за градус
+    # широти.
+    if near_lat is not None and near_lng is not None:
+        import math
+
+        def distance_km(biz) -> float:
+            if biz.latitude is None or biz.longitude is None:
+                # Заклади без мітки йдуть у кінець, а не на початок:
+                # показувати їх першими означало б обманювати - ми
+                # не знаємо, де вони.
+                return float("inf")
+
+            lat1, lon1 = math.radians(near_lat), math.radians(near_lng)
+            lat2 = math.radians(float(biz.latitude))
+            lon2 = math.radians(float(biz.longitude))
+
+            dlat, dlon = lat2 - lat1, lon2 - lon1
+            a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            return 6371.0 * 2 * math.asin(math.sqrt(a))
+
+        for biz in available_businesses:
+            biz.distance_km = round(distance_km(biz), 2) if distance_km(biz) != float("inf") else None
+
+        available_businesses.sort(key=distance_km)
 
     return available_businesses
 

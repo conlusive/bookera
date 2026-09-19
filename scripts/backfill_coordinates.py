@@ -22,7 +22,16 @@ from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
 from app.models import Business
-from app.services.geocoding import geocode_address
+
+try:
+    from app.services.geocoding import geocode_address
+except ModuleNotFoundError as exc:
+    # Зрозуміле повідомлення замість трасування стека: людина, яка
+    # запускає скрипт, не має розбирати, який саме імпорт упав.
+    print(f"Бракує бібліотеки: {exc.name}\n")
+    print("Встановіть залежності:")
+    print("    pip install -r requirements.txt\n")
+    sys.exit(1)
 
 
 async def main() -> None:

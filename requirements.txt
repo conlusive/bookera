@@ -25,3 +25,6 @@ python-dateutil==2.9.0.post0
 certifi==2025.11.12
 cryptography==50.0.1
 tzdata==2025.2
+# Геокодування адрес через Nominatim (app/services/geocoding.py).
+# Був лише в dev-залежностях, хоча потрібен у продакшні.
+httpx==0.27.2

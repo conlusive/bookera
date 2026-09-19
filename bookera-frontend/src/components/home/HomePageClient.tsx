@@ -118,7 +118,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [activeCategory, setActiveCategory] = useState<string>('all');
   // Геолокація питається ПІСЛЯ вибору послуги, не раніше: запит на
   // першій секунді виглядає як стеження, після вибору - як допомога.
-  const nearby = useNearbyPrompt(activeCategory !== 'all');
+  // Питаємо одразу: блок «поблизу вас» видно з першого екрана, і
+  // пропозиція поруч із ним зрозуміла без додаткових дій. Чекати на
+  // вибір категорії означало б показувати заголовок-обіцянку, якої
+  // ми поки не виконуємо.
+  const nearby = useNearbyPrompt(true);
   const nearbyPoint = nearby.point;
   const [sortBy, setSortBy] = useState<string>('popular');
   const [isSortOpen, setIsSortOpen] = useState(false);
@@ -558,9 +562,22 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         if (sortBy === 'newest') {
           return (parseInt(b.id) || 0) - (parseInt(a.id) || 0);
         }
+
+        // За замовчуванням - за відстанню, коли вона відома.
+        //
+        // Бекенд уже повернув заклади відсортованими, але список тут
+        // будується з іншого джерела, і без цього його порядок
+        // губився б. Заклади без координат ідуть у кінець: ми не
+        // знаємо, де вони, і ставити їх першими було б обманом.
+        if (nearbyPoint) {
+          const da = distanceById[a.id] ?? Infinity;
+          const db_ = distanceById[b.id] ?? Infinity;
+          if (da !== db_) return da - db_;
+        }
+
         return 0;
       });
-  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds]);
+  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById]);
 
   // Заклади поблизу
   const nearbyBusinesses = useMemo(() => {
@@ -574,39 +591,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, [businesses, searchWhere]);
 
   // Розрахунок точної відстані від користувача до закладу
-  const getSalonDistance = useCallback((biz: any) => {
-    if (!userCoords) return null;
-
-    let sLat = biz.latitude || biz.layout_config?.lat;
-    let sLng = biz.longitude || biz.layout_config?.lng;
-
-    if (!sLat || !sLng) {
-      const addr = (biz.address || '').toLowerCase();
-      if (addr.includes('дорошенка')) { sLat = 49.8407; sLng = 24.0275; }
-      else if (addr.includes('городоцька')) { sLat = 49.8390; sLng = 24.0150; }
-      else if (addr.includes('коперника')) { sLat = 49.8375; sLng = 24.0260; }
-      else if (addr.includes('франка')) { sLat = 49.8340; sLng = 24.0340; }
-      else if (addr.includes('пекарська')) { sLat = 49.8380; sLng = 24.0410; }
-      else if (addr.includes('шевченка')) { sLat = 49.8470; sLng = 24.0120; }
-      else { sLat = 49.8419; sLng = 24.0315; }
-    }
-
-    const R = 6371e3;
-    const dLat = ((sLat - userCoords.lat) * Math.PI) / 180;
-    const dLon = ((sLng - userCoords.lng) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((userCoords.lat * Math.PI) / 180) *
-      Math.cos((sLat * Math.PI) / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const meters = Math.round(R * c);
-
-    if (meters < 1000) {
-      return `${Math.round(meters / 50) * 50 || 50} м`;
-    }
-    return `${(meters / 1000).toFixed(1)} км`;
-  }, [userCoords]);
+  // getSalonDistance прибрано.
+  //
+  // Функція мала список захардкоджених координат кількох вулиць
+  // Львова: «якщо адреса містить Дорошенка - ось точка». Це працювало
+  // для п'яти вулиць одного міста й мовчки давало null для решти.
+  //
+  // Тепер координати приходять із бази для КОЖНОГО закладу, а відстань
+  // рахує бекенд за гаверсинусом.
 
   // Завантаження реальних слотів на сьогодні для закладу
   useEffect(() => {
@@ -1790,13 +1782,31 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       {isDefaultView && nearbyBusinesses.length > 0 && (
         <section className="reveal-on-scroll" style={{ paddingBottom: '4.5rem' }}>
           <div className="container">
+            {/* Пропозиція показати найближчі - ТУТ, над самим блоком
+                «поблизу», а не після вибору категорії.
+
+                Тут вона доречна: людина вже бачить список і розуміє,
+                що саме зміниться. Раніше запит чекав на вибір послуги,
+                а заголовок уже обіцяв «поблизу вас» - і не виконував. */}
+            <NearbyPrompt
+              isVisible={nearby.isVisible}
+              isLocating={nearby.isLocating}
+              error={nearby.error}
+              onAccept={() => void nearby.locate()}
+              onDecline={nearby.decline}
+            />
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem' }}>
               <div>
                 <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
                   Швидкий візит • {searchWhere || 'Львів'}
                 </div>
+                {/* Підпис каже ПРАВДУ про те, що показано.
+                    «Поблизу вас» до того, як людина дала координати, -
+                    обіцянка, якої ми не виконуємо: порядок тоді
+                    звичайний, не за відстанню. */}
                 <h2 style={{ fontSize: '2.2rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.03em' }}>
-                  Поблизу вас із вільними вікнами
+                  {nearbyPoint ? 'Поблизу вас із вільними вікнами' : 'Із вільними вікнами сьогодні'}
                 </h2>
                 <p style={{ color: '#64748b', fontSize: '1rem', marginTop: '0.35rem', marginBottom: 0 }}>
                   Забронюйте час прямо сьогодні без попередніх дзвінків
@@ -1815,7 +1825,21 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
             <div ref={nearbyScrollRef} className="nearby-carousel hide-scrollbar">
               {nearbyBusinesses.map((biz, idx) => {
-                const distance = getSalonDistance(biz) || `${250 + idx * 150} м`;
+                // Справжня відстань, а не вигадана.
+                //
+                // Раніше тут стояло `250 + idx * 150` - число з
+                // ПОРЯДКОВОГО НОМЕРА: перший заклад «250 м», другий
+                // «400 м», незалежно від того, де вони насправді.
+                // Людина вірила цифрі, за якою нічого не стояло.
+                //
+                // Немає координат - не показуємо нічого. Чесна
+                // відсутність краща за красиву вигадку.
+                const km = distanceById[biz.id];
+                const distance = km == null
+                  ? undefined
+                  : km < 1
+                    ? `${Math.round(km * 1000)} м`
+                    : `${km.toFixed(1)} км`;
                 return (
                   <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
                     {renderCard(biz, {

@@ -50,13 +50,31 @@ async def list_businesses(
             # однаково не приймуть запис, і клієнт лише марно згає час.
             Business.subscription_plan.in_(["trial", "active"]),
         )
-        .options(selectinload(Business.services))
+        # Графік потрібен у списку: картка показує, відчинено зараз
+        # чи ні, і без нього писала б «Відкрито» о третій ночі.
+        .options(selectinload(Business.services), selectinload(Business.hours))
         .order_by(Business.id.in_(select(radar_subq.c.business_id)).desc(), Business.id)
         .limit(limit)
         .offset(offset)
     )
     res = await db.execute(stmt)
-    return res.scalars().all()
+    businesses = res.scalars().all()
+
+    out = []
+    for b in businesses:
+        response = BusinessOut.model_validate(b, from_attributes=True)
+        response.working_hours = [
+            WorkingDayOut(
+                weekday=h.weekday,
+                is_open=h.is_open,
+                open_time=h.open_time.strftime("%H:%M") if h.open_time else None,
+                close_time=h.close_time.strftime("%H:%M") if h.close_time else None,
+            )
+            for h in sorted(b.hours, key=lambda x: x.weekday)
+        ]
+        out.append(response)
+
+    return out
 
 
 @router.get(

@@ -1008,10 +1008,77 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   };
 
   // 🟢 ЄДИНА КАРТКА ЗАКЛАДУ (ОДНАКОВИЙ РОЗМІР 1:1)
+  /**
+   * Статус закладу просто зараз.
+   *
+   * Раніше на кожній картці стояло «Відкрито» - незалежно від часу
+   * й графіка. О третій ночі теж.
+   *
+   * Три різні стани, і вони означають різне:
+   *   open   - працює за графіком
+   *   closed - зачинено за графіком: сьогодні вихідний або вже пізно
+   *   paused - заклад сам зупинив запис (ремонт, хвороба майстра).
+   *            Це тимчасово, і сказати «зачинено» було б неточно:
+   *            людина вирішила б, що заклад не працює взагалі.
+   */
+  const getOpenStatus = (biz: any): { state: 'open' | 'closed' | 'paused'; label: string } => {
+    if (biz.booking_settings?.is_paused_emergency) {
+      return { state: 'paused', label: 'Запис тимчасово зупинено' };
+    }
+
+    const hours = biz.working_hours;
+    if (!Array.isArray(hours) || hours.length === 0) {
+      // Графік не заповнений - не стверджуємо нічого. «Відкрито»
+      // без даних було б вигадкою, «Зачинено» - наклепом.
+      return { state: 'open', label: '' };
+    }
+
+    const now = new Date();
+    // weekday у базі: 0 = понеділок. getDay(): 0 = неділя.
+    const weekday = (now.getDay() + 6) % 7;
+    const today = hours.find((h: any) => Number(h.weekday) === weekday);
+
+    if (!today || !today.is_open) {
+      return { state: 'closed', label: 'Сьогодні зачинено' };
+    }
+
+    const toMinutes = (t?: string | null) => {
+      if (!t) return null;
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const open = toMinutes(today.open_time);
+    const close = toMinutes(today.close_time);
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    if (open == null || close == null) return { state: 'open', label: 'Відкрито' };
+
+    if (nowMinutes < open) {
+      return { state: 'closed', label: `Відчиниться о ${today.open_time}` };
+    }
+    if (nowMinutes >= close) {
+      return { state: 'closed', label: 'Зачинено' };
+    }
+
+    // Попередження за годину до закриття: людина не встигне
+    // записатись, і краще дізнатись про це зараз.
+    if (close - nowMinutes <= 60) {
+      return { state: 'open', label: `Зачиниться о ${today.close_time}` };
+    }
+
+    return { state: 'open', label: 'Відкрито' };
+  };
+
   const renderCard = (biz: any, options?: { distanceTag?: string; showTimeSlots?: boolean }) => {
     const rank = parseFloat(biz.rating);
     const hasRating = !isNaN(rank) && rank > 0;
-    const displayRank = hasRating ? rank.toFixed(1) : '5.0';
+    // Рейтингу немає - не вигадуємо.
+    //
+    // Раніше тут стояло '5.0': заклад без жодного відгуку виглядав
+    // ідеальним. Людина довіряла цифрі, за якою нічого не стояло,
+    // і це найгірший вид обману в маркетплейсі.
+    const displayRank = hasRating ? rank.toFixed(1) : null;
     const reviewCount = parseInt(biz.reviews_count) || 0;
     const bgImage = biz.cover_photo || biz.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
     const isFav = favorites.includes(biz.id);
@@ -1103,18 +1170,41 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '700' }}>
-              <span style={{ color: '#f59e0b' }}>★</span> {displayRank}
-              <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.75rem' }}>({reviewCount})</span>
-            </span>
-            <span>•</span>
+            {displayRank && reviewCount > 0 ? (
+              <>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '600' }}>
+                  <span style={{ color: '#f59e0b' }}>★</span> {displayRank}
+                  <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.75rem' }}>({reviewCount})</span>
+                </span>
+                <span>•</span>
+              </>
+            ) : (
+              /* Новий заклад - так і кажемо. Це чесно й навіть
+                 працює на нього: людина розуміє, що відгуків немає
+                 не через погану роботу. */
+              <>
+                <span style={{ color: '#94a3b8' }}>Новий заклад</span>
+                <span>•</span>
+              </>
+            )}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{category}</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
-            <span style={{ color: '#10b981', fontWeight: '600' }}>Відкрито</span>
-            <span>•</span>
+            {(() => {
+              const status = getOpenStatus(biz);
+              if (!status.label) return null;
+              const color = status.state === 'open' ? '#10b981'
+                : status.state === 'paused' ? '#d97706'
+                : '#94a3b8';
+              return (
+                <>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, display: 'inline-block' }}></span>
+                  <span style={{ color, fontWeight: '600' }}>{status.label}</span>
+                  <span>•</span>
+                </>
+              );
+            })()}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationText}</span>
           </div>
 

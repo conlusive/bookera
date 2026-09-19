@@ -174,6 +174,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
 
     setDistanceById(next);
+
+    // Підказка в консоль, коли відстані не порахувались.
+    //
+    // Ланцюжок довгий - геолокація, координати в базі, кеш сторінки -
+    // і рветься тихо. Без цього рядка причину шукають у браузері,
+    // хоча вона зазвичай у базі.
+    if (process.env.NODE_ENV === 'development' && Object.keys(next).length === 0) {
+      console.warn(
+        '[Поблизу] Координати є у вас, але в жодного закладу їх немає.\n' +
+        'Перевірте: python scripts/check_coordinates.py'
+      );
+    }
   }, [nearbyPoint, businesses]);
 
   const [sortBy, setSortBy] = useState<string>('popular');

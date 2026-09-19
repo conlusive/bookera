@@ -35,6 +35,11 @@ export interface Business {
   security_settings?: Record<string, any>;
   notification_settings?: Record<string, any>;
   payments_settings?: Record<string, any>;
+  /** Координати закладу. Заповнюються автоматично за адресою. */
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Відстань від точки пошуку - лише якщо клієнт передав координати. */
+  distance_km?: number | null;
 }
 
 export interface Service {

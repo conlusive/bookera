@@ -10,6 +10,7 @@ import Avatar from '@/components/ui/Avatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
+import SectionHeader from '@/components/home/SectionHeader';
 
 const categoriesData = [
   // «Рекомендовані» прибрано з цього ряду.
@@ -767,7 +768,24 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, [nearbyBusinesses]);
 
   const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 8);
+  /**
+   * Три зони головної, і кожна живе за своїм правилом.
+   *
+   * ПОБЛИЗУ ВАС - завжди, але РЕАГУЄ на вибір. Обрали «Манікюр» -
+   * показує найближчі манікюрні. Це головна цінність продукту, і
+   * ховати її саме тоді, коли людина щось шукає, безглуздо.
+   *
+   * КУРАТОРСЬКІ КОЛЕКЦІЇ - лише на чистому екрані. Це редакційне
+   * «подивіться, що цікавого»; коли людина шукає конкретне, підбірки
+   * стають шумом поверх результатів.
+   *
+   * РЕКОМЕНДОВАНІ - завжди. Топ за рейтингом не залежить ні від
+   * пошуку, ні від категорії: це просто найкращі заклади міста.
+   */
   const isDefaultView = activeCategory === 'all' && !appliedSearch && !searchDate;
+  const showNearby = true;
+  const showCollections = isDefaultView;
+  const showRecommended = true;
 
   const getDisplayDateTime = () => {
     if (!searchDate && !searchTime) return 'Будь-коли';
@@ -1868,7 +1886,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
 
       {/* КАТЕГОРІЇ ПОСЛУГ */}
-      <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '2.5rem', paddingBottom: '3rem', position: 'relative', zIndex: 40 }}>
+      <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '3rem', paddingBottom: '2.5rem', position: 'relative', zIndex: 40 }}>
         <div className="hide-scrollbar" style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
           {categoriesData.map((cat) => {
             const isActive = activeCategory === cat.slug && !appliedSearch;
@@ -1910,8 +1928,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       </section>
 
       {/* 🟢 1. СПЕРШУ: ПОБЛИЗУ ВАС ІЗ ВІЛЬНИМИ ВІКНАМИ (КАРУСЕЛЬ З ОДНАКОВИМ РОЗМІРОМ) */}
-      {isDefaultView && nearbyBusinesses.length > 0 && (
-        <section className="reveal-on-scroll" style={{ paddingBottom: '4.5rem' }}>
+      {showNearby && (
+        <section className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
           <div className="container">
             {/* Пропозиція показати найближчі - ТУТ, над самим блоком
                 «поблизу», а не після вибору категорії.
@@ -1927,32 +1945,48 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               onDecline={nearby.decline}
             />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem' }}>
-              <div>
-                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
-                  Швидкий візит • {searchWhere || 'Львів'}
-                </div>
-                {/* Підпис каже ПРАВДУ про те, що показано.
-                    «Поблизу вас» до того, як людина дала координати, -
-                    обіцянка, якої ми не виконуємо: порядок тоді
-                    звичайний, не за відстанню. */}
-                <h2 style={{ fontSize: '2.2rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.03em' }}>
-                  {nearbyPoint ? 'Поблизу вас із вільними вікнами' : 'Із вільними вікнами сьогодні'}
-                </h2>
-                <p style={{ color: '#64748b', fontSize: '1rem', marginTop: '0.35rem', marginBottom: 0 }}>
-                  Забронюйте час прямо сьогодні без попередніх дзвінків
-                </p>
-              </div>
+            <SectionHeader
+              eyebrow={`Швидкий візит · ${searchWhere || 'Львів'}`}
+              title={nearbyPoint ? 'Поблизу вас' : 'Із вільними вікнами'}
+              subtitle={
+                activeCategory !== 'all'
+                  ? 'Найближчі заклади, які надають обрану послугу'
+                  : 'Заклади, до яких можна записатись сьогодні'
+              }
+            />
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button onClick={() => scrollNearby('left')} className="carousel-nav-btn" aria-label="Вліво">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                </button>
-                <button onClick={() => scrollNearby('right')} className="carousel-nav-btn" aria-label="Вправо">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </button>
+            {/* Стан порожнечі.
+                Раніше блок просто зникав - людина бачила заголовок
+                і порожнечу під ним, не розуміючи, це помилка чи
+                справді нічого немає. */}
+            {nearbyBusinesses.length === 0 && (
+              <div style={{
+                padding: '3rem 2rem', textAlign: 'center',
+                background: '#FAFAFA', borderRadius: '18px',
+                border: '1px solid #EDEDF0',
+              }}>
+                <div style={{ fontSize: '1rem', fontWeight: 500, color: '#1D1D1F', marginBottom: '0.4rem' }}>
+                  {activeCategory !== 'all'
+                    ? 'Поруч немає закладів цієї категорії'
+                    : 'Поруч поки немає вільних вікон'}
+                </div>
+                <p style={{ fontSize: '0.9375rem', color: '#86868B', margin: '0 0 1.25rem', lineHeight: 1.5 }}>
+                  Спробуйте іншу категорію або подивіться всі заклади міста
+                </p>
+                {activeCategory !== 'all' && (
+                  <button
+                    onClick={() => handleCategorySelect('all')}
+                    style={{
+                      height: '38px', padding: '0 1.25rem', borderRadius: '10px',
+                      border: '1px solid #E8E8ED', background: '#fff', color: '#1D1D1F',
+                      fontSize: '0.875rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+                    }}
+                  >
+                    Показати всі
+                  </button>
+                )}
               </div>
-            </div>
+            )}
 
             <div ref={nearbyScrollRef} className="nearby-carousel hide-scrollbar">
               {nearbyBusinesses.map((biz, idx) => {
@@ -1981,8 +2015,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       )}
 
       {/* 🟢 2. ПОТІМ: ВАМ МОЖЕ СПОДОБАТИСЯ (КОМПАКТНІ ДОБІРКИ У 2 РЯДИ ЗІ ЗМІЩЕННЯМ ТА СКРОЛОМ) */}
-      {isDefaultView && (
-        <section className="reveal-on-scroll" style={{ padding: '3.5rem 0 4rem 0', backgroundColor: '#fbfbfd', borderTop: '1px solid rgba(0,0,0,0.05)', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: '4.5rem' }}>
+      {showCollections && (
+        <section className="reveal-on-scroll" style={{ padding: '5rem 0', backgroundColor: '#FAFAFA', borderTop: '1px solid rgba(0,0,0,0.05)', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: '4.5rem' }}>
           <div className="container">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem' }}>
               <div>

@@ -18,9 +18,11 @@ interface Props {
   point: { lat: number; lng: number } | null;
   businesses: any[];
   distanceCount: number;
+  /** Чи повертав браузер відмову хоч раз - для розрізнення причин. */
+  deniedOnce?: boolean;
 }
 
-export default function NearbyDebug({ point, businesses, distanceCount }: Props) {
+export default function NearbyDebug({ point, businesses, distanceCount, deniedOnce }: Props) {
   const [permission, setPermission] = useState<string>('перевіряємо…');
 
   useEffect(() => {
@@ -43,11 +45,18 @@ export default function NearbyDebug({ point, businesses, distanceCount }: Props)
 
   const withCoords = businesses.filter(b => b.latitude != null).length;
 
+  // Дозвіл сайту «prompt», але запит повернув відмову - це не сайт.
+  // Так поводиться macOS, коли геолокація вимкнена для САМОГО Safari:
+  // сайт навіть не доходить до свого дозволу.
+  const systemBlocked = permission === 'prompt' && deniedOnce;
+
   const problem =
-    permission === 'denied'
-      ? 'Доступ заборонено в браузері. Safari → Налаштування → Вебсайти → Розташування → localhost → «Запитувати».'
-      : !point && permission === 'prompt'
-        ? 'Натисніть «Показати» у плашці над списком. Safari вимагає кліку — автоматичний запит він блокує мовчки.'
+    systemBlocked
+      ? 'macOS блокує геолокацію для Safari. Системні налаштування → Конфіденційність і безпека → Служби геолокації → увімкніть Safari.'
+      : permission === 'denied'
+        ? 'Доступ заборонено для сайту. Safari → Налаштування → Вебсайти → Розташування → localhost → «Запитувати».'
+        : !point && permission === 'prompt'
+          ? 'Натисніть «Показати» у плашці над списком — Safari вимагає кліку.'
         : withCoords === 0 && businesses.length > 0
           ? 'У закладів немає координат у списку. Спробуйте: rm -rf .next && npm run dev'
           : null;

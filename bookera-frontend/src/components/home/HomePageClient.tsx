@@ -1044,6 +1044,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         point={nearbyPoint}
         businesses={businesses}
         distanceCount={Object.keys(distanceById).length}
+        deniedOnce={nearby.error === 'denied'}
       />
 
 

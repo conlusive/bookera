@@ -125,7 +125,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     // Рахувати справжній маршрут означало б запит до платного API
     // на кожну картку - заради числа, яке все одно зміниться залежно
     // від пробок і способу пересування.
-    return km < 1 ? `~${Math.round(km * 1000 / 50) * 50} м` : `~${km.toFixed(1)} км`;
+    // «~» лише для прямої відстані: маршрутна точна, і знак
+    // наближення поруч із нею збивав би з пантелику.
+    const prefix = isRoadDistance[bizId] ? '' : '~';
+    return km < 1 ? `${prefix}${Math.round(km * 1000 / 50) * 50} м` : `${prefix}${km.toFixed(1)} км`;
   };
 
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -151,39 +154,50 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const nearbyPoint = nearby.point;
 
   /**
-   * Відстані до закладів.
+   * Відстані до закладів - ПО ДОРОГАХ.
    *
-   * Окремо від пошуку за датою. Раніше вони рахувались лише всередині
-   * `if (searchDate)` - тобто тільки коли людина обрала дату. На
-   * головній при відкритті дати немає, і відстані не зʼявлялись
-   * ніколи, хоча координати вже були.
+   * Раніше рахували по прямій на клієнті. Помилка до 40%: дорога йде
+   * в обхід кварталів, річок і залізниць, і заклад за 800 метрів по
+   * прямій може бути за два кілометри пішки.
+   *
+   * Тепер питаємо бекенд: він звертається до маршрутизатора одним
+   * запитом на всі заклади. Якщо маршрут не знайшовся - повертає
+   * пряму з позначкою, і ми покажемо її зі знаком «~».
    */
+  const [isRoadDistance, setIsRoadDistance] = useState<Record<number, boolean>>({});
+
   useEffect(() => {
     if (!nearbyPoint || businesses.length === 0) {
       setDistanceById({});
+      setIsRoadDistance({});
       return;
     }
 
-    // Рахуємо на клієнті: координати закладів уже прийшли у списку,
-    // і зайвий запит до сервера заради арифметики не потрібен.
-    const toRad = (deg: number) => (deg * Math.PI) / 180;
-    const next: Record<number, number> = {};
+    let cancelled = false;
 
-    for (const biz of businesses) {
-      const lat = biz.latitude != null ? Number(biz.latitude) : null;
-      const lng = biz.longitude != null ? Number(biz.longitude) : null;
-      if (lat == null || lng == null) continue;
+    void (async () => {
+      const ids = businesses.filter((b: any) => b.latitude != null).map((b: any) => b.id);
+      if (ids.length === 0) return;
 
-      const dLat = toRad(lat - nearbyPoint.lat);
-      const dLng = toRad(lng - nearbyPoint.lng);
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(nearbyPoint.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
-      next[biz.id] = 6371 * 2 * Math.asin(Math.sqrt(a));
-    }
+      try {
+        const data = await api.getDistances(nearbyPoint.lat, nearbyPoint.lng, ids);
+        if (cancelled) return;
 
-    setDistanceById(next);
+        const km: Record<number, number> = {};
+        const isRoad: Record<number, boolean> = {};
+        for (const [id, value] of Object.entries(data)) {
+          km[Number(id)] = value.km;
+          isRoad[Number(id)] = value.is_road;
+        }
+        setDistanceById(km);
+        setIsRoadDistance(isRoad);
+      } catch {
+        // Маршрутизатор недоступний - лишаємо список без відстаней.
+        // Показати вигадане число гірше, ніж не показати жодного.
+      }
+    })();
 
+    return () => { cancelled = true; };
   }, [nearbyPoint, businesses]);
 
   const [sortBy, setSortBy] = useState<string>('popular');

@@ -2193,7 +2193,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.25rem', position: 'relative', zIndex: 50 }}>
             <div>
               <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
-                Топ вибір користувачів
+                {/* Надпис каже правду: це результати пошуку, а не
+                    рекомендації. Рекомендовані живуть окремою зоною
+                    нижче й не залежать ні від чого. */}
+                {activeCategory !== 'all' || appliedSearch ? 'Результати пошуку' : 'Усі заклади'}
               </div>
               <h2 style={{ fontSize: '2.4rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.04em' }}>
                 {getSectionTitle()}

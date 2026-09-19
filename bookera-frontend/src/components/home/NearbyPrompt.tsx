@@ -63,10 +63,14 @@ export function useNearbyPrompt(isReadyToAsk: boolean) {
           // не питаємо. Інакше вікно зʼявлятиметься щоразу, а людина
           // вже сказала «ні».
           if (err.code === err.PERMISSION_DENIED) {
-            // Відмовили - запамʼятовуємо й більше не турбуємо.
-            // Просити знову після «ні» - тиск.
+            // Відмовили - запамʼятовуємо й більше не питаємо
+            // автоматично. Просити знову після «ні» - тиск.
             localStorage.setItem(STORAGE_KEY, 'declined');
-            setIsVisible(false);
+            // Але показуємо тихий рядок із поясненням: заборона
+            // зберігається в браузері, і людина, яка передумала,
+            // сама її не зніме - вона просто не знає, де шукати.
+            setError('denied');
+            setIsVisible(true);
           } else {
             // Не дозвіл, а збій: немає сигналу, вийшов час. Тут
             // повторна спроба має сенс, тому показуємо кнопку.
@@ -131,9 +135,12 @@ export default function NearbyPrompt({
           дублювати його своїм вікном означало б два кліки замість
           одного. */}
       <span style={{ fontSize: '0.9rem', color: '#2E3A30', flex: 1, minWidth: '220px' }}>
-        {error || 'Не вдалося визначити ваше місце'}
+        {error === 'denied'
+          ? 'Доступ до місця заборонено в налаштуваннях браузера — увімкніть його, щоб бачити найближчі заклади'
+          : (error || 'Не вдалося визначити ваше місце')}
       </span>
 
+      {error !== 'denied' && (
       <button
         onClick={onAccept}
         disabled={isLocating}
@@ -146,6 +153,7 @@ export default function NearbyPrompt({
       >
         {isLocating ? 'Визначаємо…' : 'Спробувати ще'}
       </button>
+      )}
 
       <button
         onClick={onDecline}

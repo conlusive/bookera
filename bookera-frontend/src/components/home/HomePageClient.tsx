@@ -10,6 +10,7 @@ import Avatar from '@/components/ui/Avatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
+import NearbyDebug from '@/components/home/NearbyDebug';
 
 const categoriesData = [
   // «Рекомендовані» прибрано з цього ряду.
@@ -1038,6 +1039,13 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif', color: '#222222', overflowX: 'hidden' }}>
+      {/* Видимий стан пошуку «поблизу». Лише в режимі розробки. */}
+      <NearbyDebug
+        point={nearbyPoint}
+        businesses={businesses}
+        distanceCount={Object.keys(distanceById).length}
+      />
+
 
       <style>{`
         html, body {

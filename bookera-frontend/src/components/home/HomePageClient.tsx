@@ -12,6 +12,38 @@ import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
 
+/**
+ * Ключові слова категорій.
+ *
+ * Категорія закладу в базі записана людською мовою («Барбер»,
+ * «Салон краси»), а в інтерфейсі ми оперуємо ключами («barber»).
+ * Пряме порівняння biz.category === activeCategory ніколи не
+ * збігається - саме через це блок «Поблизу вас» не реагував на
+ * вибір категорії.
+ *
+ * Словник спільний для всіх списків: дві копії розійшлися б після
+ * першої ж правки, і один блок фільтрував би інакше за інший.
+ */
+const CATEGORY_TERMS: Record<string, string[]> = {
+            'barber': ['барбер', 'barber', 'чоловічі', 'men', 'fades'],
+            'hair': ['волосся', 'перукар', 'hair', 'стрижк', 'salon', 'зачіск'],
+            'nails': ['нігті', 'манікюр', 'педикюр', 'nail', 'маникюр'],
+            'massage': ['масаж', 'massage'],
+            'spa': ['spa', 'спа', 'wellness', 'релакс'],
+            'skincare': ['шкір', 'косметолог', 'skin', 'догляд'],
+            'brows': ['бров', 'вій', 'brows', 'lashes', 'брови', 'вії'],
+            'makeup': ['макіяж', 'makeup', 'мейкап', 'візаж'],
+            'aesthetic-medicine': ['медицина', 'естетика', 'ін\'єкції', 'лікар'],
+            'hair-removal': ['лазер', 'епіляція', 'депіляція', 'шугаринг'],
+            'home-services': ['дому', 'виїзд'],
+            'piercing': ['пірсинг', 'прокол'],
+            'pets': ['тварини', 'грумінг', 'собак', 'котів'],
+            'dentistry': ['стоматолог', 'зуби', 'відбілювання'],
+            'health': ['здоров', 'остеопат', 'терапія'],
+            'professional': ['консультація', 'стиліст', 'імідж'],
+            'other': ['інше']
+};
+
 const categoriesData = [
   // «Рекомендовані» прибрано з цього ряду.
   //
@@ -594,26 +626,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         let matchesCategory = true;
         if (activeCategory !== 'all' && !appliedSearch) {
-          const searchTerms: Record<string, string[]> = {
-            'barber': ['барбер', 'barber', 'чоловічі', 'men', 'fades'],
-            'hair': ['волосся', 'перукар', 'hair', 'стрижк', 'salon', 'зачіск'],
-            'nails': ['нігті', 'манікюр', 'педикюр', 'nail', 'маникюр'],
-            'massage': ['масаж', 'massage'],
-            'spa': ['spa', 'спа', 'wellness', 'релакс'],
-            'skincare': ['шкір', 'косметолог', 'skin', 'догляд'],
-            'brows': ['бров', 'вій', 'brows', 'lashes', 'брови', 'вії'],
-            'makeup': ['макіяж', 'makeup', 'мейкап', 'візаж'],
-            'aesthetic-medicine': ['медицина', 'естетика', 'ін\'єкції', 'лікар'],
-            'hair-removal': ['лазер', 'епіляція', 'депіляція', 'шугаринг'],
-            'home-services': ['дому', 'виїзд'],
-            'piercing': ['пірсинг', 'прокол'],
-            'pets': ['тварини', 'грумінг', 'собак', 'котів'],
-            'dentistry': ['стоматолог', 'зуби', 'відбілювання'],
-            'health': ['здоров', 'остеопат', 'терапія'],
-            'professional': ['консультація', 'стиліст', 'імідж'],
-            'other': ['інше']
-          };
-          const terms = searchTerms[activeCategory] || [];
+          const terms = CATEGORY_TERMS[activeCategory] || [];
           const searchableText = `${biz.category || ''} ${biz.name || ''} ${biz.description || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
           matchesCategory = terms.some(term => searchableText.includes(term));
         }
@@ -686,8 +699,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
 
     if (activeCategory !== 'all') {
-      const byCategory = result.filter(b => b.category === activeCategory);
-      if (byCategory.length > 0) result = byCategory;
+      // Той самий пошук за ключовими словами, що й в основному списку.
+      // Пряме порівняння з ключем не працює: у базі категорія
+      // українською, а ключ латиницею.
+      const terms = CATEGORY_TERMS[activeCategory] || [];
+      const byCategory = result.filter(b => {
+        const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
+        return terms.some(t => text.includes(t));
+      });
+      // Порожній результат лишаємо порожнім: раніше ми показували
+      // повний список, і блок «найближчі манікюрні» показував
+      // барбершопи.
+      result = byCategory;
     }
 
     if (nearbyPoint) {
@@ -924,18 +947,26 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     { value: 'newest', label: 'Спочатку нові' }
   ];
 
+  /**
+   * Заголовок СЕРЕДНЬОЇ зони - повного списку закладів.
+   *
+   * «Найближчі до вас» звідси прибрано: так називається перша зона,
+   * і два однакові заголовки на одному екрані читаються як дубль.
+   *
+   * Ця зона відповідає на питання «що взагалі є», а не «що поруч».
+   */
   const getSectionTitle = () => {
     if (appliedSearch) return `Результати пошуку: «${appliedSearch}»`;
-    if (activeCategory === 'all') {
-      return nearbyPoint ? 'Найближчі до вас' : 'Майстри та студії поруч';
-    }
+    if (activeCategory === 'all') return 'Усі заклади';
     return categoryTitles[activeCategory] || 'Заклади';
   };
 
   const getSectionSubtitle = () => {
     if (appliedSearch) return `Знайдено закладів: ${filteredBusinesses.length}`;
-    if (activeCategory === 'all') return 'Найкращі фахівці за відгуками клієнтів';
-    return 'Найкращі майстри та студії у цій категорії';
+    // «за відгуками» звідси прибрано - так описана третя зона,
+    // «Рекомендовані». Ця просто показує повний список.
+    if (activeCategory === 'all') return `Усього закладів у місті: ${filteredBusinesses.length}`;
+    return `Закладів у цій категорії: ${filteredBusinesses.length}`;
   };
 
   // 🟢 ЄДИНА КАРТКА ЗАКЛАДУ (ОДНАКОВИЙ РОЗМІР 1:1)

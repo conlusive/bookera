@@ -9,9 +9,14 @@ import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
+import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 
 const categoriesData = [
-  { name: 'Рекомендовані', slug: 'all' },
+  // «Рекомендовані» прибрано з цього ряду.
+  //
+  // Решта пунктів - це ЩО шукати. «Рекомендовані» - це ЯК показувати,
+  // інша природа, і серед категорій воно читалось як ще одна послуга.
+  // Початковий стан тепер не має кнопки: він і так початковий.
   { name: 'Волосся', slug: 'hair' },
   { name: 'Барбер', slug: 'barber' },
   { name: 'Нігті', slug: 'nails' },
@@ -95,6 +100,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [searchTime, setSearchTime] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [availableBizIds, setAvailableBizIds] = useState<number[] | null>(null);
+  const [distanceById, setDistanceById] = useState<Record<number, number>>({});
+  const [nearbyOrder, setNearbyOrder] = useState<number[]>([]);
+
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [nearbySlots, setNearbySlots] = useState<Record<number, string[]>>({});
   const [isLoadingNearbySlots, setIsLoadingNearbySlots] = useState<boolean>(true);
@@ -108,6 +116,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  // Геолокація питається ПІСЛЯ вибору послуги, не раніше: запит на
+  // першій секунді виглядає як стеження, після вибору - як допомога.
+  const nearby = useNearbyPrompt(activeCategory !== 'all');
+  const nearbyPoint = nearby.point;
   const [sortBy, setSortBy] = useState<string>('popular');
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -395,8 +407,19 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           target_date: searchDate,
           time_period: searchTime && searchTime !== 'Будь-коли' ? searchTime : undefined,
           category: activeCategory !== 'all' ? activeCategory : undefined,
+          // Точка людини: бекенд поверне заклади відсортованими за
+          // відстанню й порахує її для кожного.
+          near_lat: nearbyPoint?.lat,
+          near_lng: nearbyPoint?.lng,
         });
         setAvailableBizIds(availableBizs.map((b: any) => b.id));
+        // Порядок і відстані зберігаємо окремо: список закладів
+        // будується з іншого джерела, і без цього сортування
+        // бекенду просто загубилось би.
+        setDistanceById(Object.fromEntries(
+          availableBizs.filter((b: any) => b.distance_km != null).map((b: any) => [b.id, b.distance_km])
+        ));
+        setNearbyOrder(availableBizs.map((b: any) => b.id));
       } catch (error) {
         console.warn("Бекенд недоступний:", error);
         setAvailableBizIds(null);
@@ -745,7 +768,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   const getSectionTitle = () => {
     if (appliedSearch) return `Результати пошуку: «${appliedSearch}»`;
-    if (activeCategory === 'all') return 'Рекомендовані майстри та студії';
+    if (activeCategory === 'all') {
+      return nearbyPoint ? 'Найближчі до вас' : 'Майстри та студії поруч';
+    }
     return categoryTitles[activeCategory] || 'Заклади';
   };
 

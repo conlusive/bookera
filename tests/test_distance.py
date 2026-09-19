@@ -126,3 +126,36 @@ async def test_without_point_order_unchanged(client, auth_headers):
 
     for b in r.json():
         assert b["distance_km"] is None, "без точки відстань не рахується"
+
+
+@pytest.mark.asyncio
+async def test_manual_coords_not_overwritten_by_geocoding(client, auth_headers):
+    """
+    Ручна мітка НЕ перетирається геокодуванням.
+
+    Власник міг поставити точку на вході з двору, а геокодер вказує
+    на фасад. Перезаписувати його роботу автоматикою - неповага до
+    зусиль, які він уже доклав.
+    """
+    headers = auth_headers("geo-manual-owner")
+    r = await client.post("/crm/businesses", json={"name": "Ручна мітка", "city": "Львів"}, headers=headers)
+    business_id = r.json()["id"]
+
+    # Власник ставить мітку сам і одночасно міняє адресу
+    r = await client.patch(f"/crm/businesses/{business_id}", json={
+        "address": "Личаківська 45",
+        "latitude": HIGH_CASTLE[0],
+        "longitude": HIGH_CASTLE[1],
+    }, headers=headers)
+    assert r.status_code == 200, r.text
+
+    conn = await asyncpg.connect(DB_URL_RAW)
+    try:
+        row = await conn.fetchrow(
+            "SELECT latitude, longitude FROM businesses WHERE id = $1", business_id
+        )
+    finally:
+        await conn.close()
+
+    assert abs(float(row["latitude"]) - HIGH_CASTLE[0]) < 0.0001, \
+        "ручна мітка має лишитись недоторканою"

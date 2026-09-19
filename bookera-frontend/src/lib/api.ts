@@ -282,13 +282,22 @@ export const api = {
     target_date: string;
     time_period?: string;
     category?: string;
-  }): Promise<Business[]> {
+      near_lat?: number;
+    near_lng?: number;
+}): Promise<Business[]> {
     const query = new URLSearchParams({
       city: params.city || 'Львів',
       target_date: params.target_date,
       time_period: params.time_period || 'Будь-коли',
       category: params.category || 'all',
     });
+    // Координати лише якщо людина їх дала: порожні параметри
+    // бекенд би відкинув, але зайвий шум у запиті ускладнює
+    // читання логів.
+    if (params.near_lat != null && params.near_lng != null) {
+      query.set('near_lat', String(params.near_lat));
+      query.set('near_lng', String(params.near_lng));
+    }
     return publicFetch(`/businesses/search-available?${query}`);
   },
 

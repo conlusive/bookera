@@ -97,6 +97,10 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   const [profileSettings, setProfileSettings] = useState({
     category: 'beauty', business_type: 'company', workspace_type: 'my_place',
   });
+  // Мапа згорнута, поки координати знайшлись самі: розгорнута мапа
+  // на весь блок каже «зроби щось», хоча робити нічого не треба.
+  const [isMapOpen, setIsMapOpen] = useState(false);
+
   const [contactSettings, setContactSettings] = useState({
     name: '', city: '', address: '', phone: '', email: '', show_phone_publicly: true,
     latitude: null as number | null, longitude: null as number | null,
@@ -128,6 +132,8 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   }, [settingsView, isReady]);
 
   // 🟢 3. Завантаження даних бізнесу (залежить лише від business?.id, щоб не скидати змінені поля)
+  const hasCoords = contactSettings.latitude != null && contactSettings.longitude != null;
+
   const canAutoSave = useRef(false);
   useEffect(() => {
     if (!business) return;
@@ -483,11 +489,34 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                 Окремою карткою, а не полем у контактах: мапа велика
                 й потребує уваги, а серед полів вона виглядала б
                 випадковим блоком. */}
+            {/* Мапа - СТРАХОВКА, а не обовʼязок.
+                Координати шукаються автоматично за адресою. Мапа
+                зʼявляється розгорнутою лише коли не знайшлось, або
+                коли власник сам захотів уточнити вхід. */}
             <div className="clean-panel">
-              <h3 className="panel-title">Де вас знайти</h3>
+              <h3 className="panel-title">
+                {hasCoords ? 'Точка на мапі' : 'Не вдалося знайти адресу на мапі'}
+              </h3>
               <p className="panel-subtitle">
-                Точка на мапі. За нею клієнти бачать, які заклади поруч, і будують маршрут.
+                {hasCoords
+                  ? 'Знайдено за адресою. Відкрийте мапу, якщо вхід не з фасаду.'
+                  : 'Поставте мітку вручну — без неї заклад не потрапляє в пошук «поруч зі мною».'}
               </p>
+
+              {hasCoords && !isMapOpen ? (
+                <div style={{ padding: '1.25rem 2rem' }}>
+                  <button
+                    onClick={() => setIsMapOpen(true)}
+                    style={{
+                      height: '36px', padding: '0 1rem', borderRadius: '10px',
+                      border: '1px solid #E8E8ED', background: '#fff', color: '#1D1D1F',
+                      fontSize: '0.875rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+                    }}
+                  >
+                    Уточнити на мапі
+                  </button>
+                </div>
+              ) : (
               <div style={{ padding: '1.5rem 2rem' }}>
                 <LocationPicker
                   city={contactSettings.city}
@@ -501,6 +530,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                   }
                 />
               </div>
+              )}
             </div>
 
             <div className="clean-panel">

@@ -7,9 +7,16 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
+import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
+import TypingHeadline from '@/components/home/TypingHeadline';
+import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 
 const categoriesData = [
-  { name: 'Рекомендовані', slug: 'all' },
+  // «Рекомендовані» прибрано з цього ряду.
+  //
+  // Решта пунктів - це ЩО шукати. «Рекомендовані» - це ЯК показувати,
+  // інша природа, і серед категорій воно читалось як ще одна послуга.
+  // Початковий стан тепер не має кнопки: він і так початковий.
   { name: 'Волосся', slug: 'hair' },
   { name: 'Барбер', slug: 'barber' },
   { name: 'Нігті', slug: 'nails' },
@@ -93,6 +100,25 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [searchTime, setSearchTime] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [availableBizIds, setAvailableBizIds] = useState<number[] | null>(null);
+  const [distanceById, setDistanceById] = useState<Record<number, number>>({});
+  const [nearbyOrder, setNearbyOrder] = useState<number[]>([]);
+
+  /**
+   * Відстань до закладу в людському вигляді.
+   *
+   * До кілометра - в метрах із округленням до пʼятдесяти: «450 м»
+   * точніше за «0.5 км» і читається швидше, а точність до метра тут
+   * і не потрібна - людина все одно піде пішки чи поїде.
+   *
+   * Немає координат - undefined, і плашка не показується. Чесна
+   * відсутність краща за «~2 км» навмання.
+   */
+  const formatDistance = (bizId: number): string | undefined => {
+    const km = distanceById[bizId];
+    if (km == null) return undefined;
+    return km < 1 ? `${Math.round(km * 1000 / 50) * 50} м` : `${km.toFixed(1)} км`;
+  };
+
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [nearbySlots, setNearbySlots] = useState<Record<number, string[]>>({});
   const [isLoadingNearbySlots, setIsLoadingNearbySlots] = useState<boolean>(true);
@@ -106,6 +132,50 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  // Геолокація питається ПІСЛЯ вибору послуги, не раніше: запит на
+  // першій секунді виглядає як стеження, після вибору - як допомога.
+  // Питаємо одразу: блок «поблизу вас» видно з першого екрана, і
+  // пропозиція поруч із ним зрозуміла без додаткових дій. Чекати на
+  // вибір категорії означало б показувати заголовок-обіцянку, якої
+  // ми поки не виконуємо.
+  const nearby = useNearbyPrompt(true);
+  const nearbyPoint = nearby.point;
+
+  /**
+   * Відстані до закладів.
+   *
+   * Окремо від пошуку за датою. Раніше вони рахувались лише всередині
+   * `if (searchDate)` - тобто тільки коли людина обрала дату. На
+   * головній при відкритті дати немає, і відстані не зʼявлялись
+   * ніколи, хоча координати вже були.
+   */
+  useEffect(() => {
+    if (!nearbyPoint || businesses.length === 0) {
+      setDistanceById({});
+      return;
+    }
+
+    // Рахуємо на клієнті: координати закладів уже прийшли у списку,
+    // і зайвий запит до сервера заради арифметики не потрібен.
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const next: Record<number, number> = {};
+
+    for (const biz of businesses) {
+      const lat = biz.latitude != null ? Number(biz.latitude) : null;
+      const lng = biz.longitude != null ? Number(biz.longitude) : null;
+      if (lat == null || lng == null) continue;
+
+      const dLat = toRad(lat - nearbyPoint.lat);
+      const dLng = toRad(lng - nearbyPoint.lng);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(nearbyPoint.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+      next[biz.id] = 6371 * 2 * Math.asin(Math.sqrt(a));
+    }
+
+    setDistanceById(next);
+  }, [nearbyPoint, businesses]);
+
   const [sortBy, setSortBy] = useState<string>('popular');
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -393,8 +463,19 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           target_date: searchDate,
           time_period: searchTime && searchTime !== 'Будь-коли' ? searchTime : undefined,
           category: activeCategory !== 'all' ? activeCategory : undefined,
+          // Точка людини: бекенд поверне заклади відсортованими за
+          // відстанню й порахує її для кожного.
+          near_lat: nearbyPoint?.lat,
+          near_lng: nearbyPoint?.lng,
         });
         setAvailableBizIds(availableBizs.map((b: any) => b.id));
+        // Порядок і відстані зберігаємо окремо: список закладів
+        // будується з іншого джерела, і без цього сортування
+        // бекенду просто загубилось би.
+        setDistanceById(Object.fromEntries(
+          availableBizs.filter((b: any) => b.distance_km != null).map((b: any) => [b.id, b.distance_km])
+        ));
+        setNearbyOrder(availableBizs.map((b: any) => b.id));
       } catch (error) {
         console.warn("Бекенд недоступний:", error);
         setAvailableBizIds(null);
@@ -533,9 +614,22 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         if (sortBy === 'newest') {
           return (parseInt(b.id) || 0) - (parseInt(a.id) || 0);
         }
+
+        // За замовчуванням - за відстанню, коли вона відома.
+        //
+        // Бекенд уже повернув заклади відсортованими, але список тут
+        // будується з іншого джерела, і без цього його порядок
+        // губився б. Заклади без координат ідуть у кінець: ми не
+        // знаємо, де вони, і ставити їх першими було б обманом.
+        if (nearbyPoint) {
+          const da = distanceById[a.id] ?? Infinity;
+          const db_ = distanceById[b.id] ?? Infinity;
+          if (da !== db_) return da - db_;
+        }
+
         return 0;
       });
-  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds]);
+  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById]);
 
   // Заклади поблизу
   const nearbyBusinesses = useMemo(() => {
@@ -549,39 +643,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, [businesses, searchWhere]);
 
   // Розрахунок точної відстані від користувача до закладу
-  const getSalonDistance = useCallback((biz: any) => {
-    if (!userCoords) return null;
-
-    let sLat = biz.latitude || biz.layout_config?.lat;
-    let sLng = biz.longitude || biz.layout_config?.lng;
-
-    if (!sLat || !sLng) {
-      const addr = (biz.address || '').toLowerCase();
-      if (addr.includes('дорошенка')) { sLat = 49.8407; sLng = 24.0275; }
-      else if (addr.includes('городоцька')) { sLat = 49.8390; sLng = 24.0150; }
-      else if (addr.includes('коперника')) { sLat = 49.8375; sLng = 24.0260; }
-      else if (addr.includes('франка')) { sLat = 49.8340; sLng = 24.0340; }
-      else if (addr.includes('пекарська')) { sLat = 49.8380; sLng = 24.0410; }
-      else if (addr.includes('шевченка')) { sLat = 49.8470; sLng = 24.0120; }
-      else { sLat = 49.8419; sLng = 24.0315; }
-    }
-
-    const R = 6371e3;
-    const dLat = ((sLat - userCoords.lat) * Math.PI) / 180;
-    const dLon = ((sLng - userCoords.lng) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((userCoords.lat * Math.PI) / 180) *
-      Math.cos((sLat * Math.PI) / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const meters = Math.round(R * c);
-
-    if (meters < 1000) {
-      return `${Math.round(meters / 50) * 50 || 50} м`;
-    }
-    return `${(meters / 1000).toFixed(1)} км`;
-  }, [userCoords]);
+  // getSalonDistance прибрано.
+  //
+  // Функція мала список захардкоджених координат кількох вулиць
+  // Львова: «якщо адреса містить Дорошенка - ось точка». Це працювало
+  // для п'яти вулиць одного міста й мовчки давало null для решти.
+  //
+  // Тепер координати приходять із бази для КОЖНОГО закладу, а відстань
+  // рахує бекенд за гаверсинусом.
 
   // Завантаження реальних слотів на сьогодні для закладу
   useEffect(() => {
@@ -743,7 +812,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   const getSectionTitle = () => {
     if (appliedSearch) return `Результати пошуку: «${appliedSearch}»`;
-    if (activeCategory === 'all') return 'Рекомендовані майстри та студії';
+    if (activeCategory === 'all') {
+      return nearbyPoint ? 'Найближчі до вас' : 'Майстри та студії поруч';
+    }
     return categoryTitles[activeCategory] || 'Заклади';
   };
 
@@ -781,9 +852,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Студія';
 
     // Формування точної локації та відстані
-    const locationText = options?.distanceTag
-      ? `${options.distanceTag} • ${biz.address || biz.city || 'Центр'}`
-      : ([biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте');
+    // Адреса без відстані: відстань тепер окремою плашкою поверх фото.
+    //
+    // У рядку «500 м • Дорошенка 10» вона губилась серед тексту того
+    // самого кольору й розміру, хоча це найцінніше, що є в картці:
+    // адресу людина прочитає потім, а «як далеко» вирішує одразу.
+    const locationText = [biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
 
     const todayStr = new Date().toISOString().split('T')[0];
     const salonSlots = nearbySlots[biz.id] || [];
@@ -959,14 +1033,24 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         /* СКЛЯНІ ДРОПДАУНИ */
         .search-dropdown {
-          position: absolute; top: calc(100% + 8px); left: 0; width: 100%; 
-          background: rgba(255, 255, 255, 0.9);
+          position: absolute; top: calc(100% + 8px); left: 0; width: 100%;
+          /* Майже непрозорий фон.
+             При 0.9 крізь список просвічувало відео, яке весь час
+             рухається - текст ставало важко читати саме тоді, коли
+             людина його читає. Розмиття лишаємо: воно дає відчуття
+             шару, не заважаючи вмісту. */
+          background: rgba(255, 255, 255, 0.985);
           backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
           border-radius: 18px;
-          box-shadow: 0 20px 45px -10px rgba(0,0,0,0.1), 0 0 1px 1px rgba(0,0,0,0.04);
-          border: 1px solid rgba(255, 255, 255, 0.7);
-          z-index: 50;
+          box-shadow: 0 24px 55px -12px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+          /* Рамка темна, а не біла: на світлому тлі біла рамка
+             невидима, і список зливається з тим, що під ним. */
+          border: 1px solid rgba(0, 0, 0, 0.06);
+          /* z-index вищий за пошук (50) і за плаваючі віджети (10):
+             списки залазили під сусідні блоки, бо стояли з ними
+             на одному рівні. */
+          z-index: 200;
           max-height: 280px; overflow-y: auto; padding: 0.5rem;
         }
         .search-dropdown-item {
@@ -1576,24 +1660,54 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       </header>
 
       {/* HERO БАНЕР */}
-      <section style={{ position: 'relative', width: '100%', height: '540px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(34, 34, 34, 0.75)', zIndex: 2 }}></div>
-          <video playsInline autoPlay muted loop crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }}>
-            <source src="https://booksy-public.s3.amazonaws.com/horizontal_.webm" type="video/webm" />
-          </video>
-        </div>
+      <section style={{
+        position: 'relative', width: '100%',
+        // Висота від пропорцій кадру, а не фіксовані 560px.
+        //
+        // Три відео стоять поруч, тож кожне займає третину ширини.
+        // При фіксованій висоті objectFit: cover обрізав би їх зверху
+        // й знизу тим сильніше, чим ширший екран - на великому
+        // моніторі від кадру лишалась би вузька смуга посередині.
+        //
+        // Вертикальні кадри (9:16) у три колонки дають висоту
+        // приблизно 59vw; обмежуємо її, щоб банер не займав два
+        // екрани, і задаємо мінімум для вузьких вікон.
+        height: 'clamp(520px, 44vw, 760px)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        // overflow: hidden ТУТ НЕ МОЖНА - воно обрізає випадні списки
+        // пошуку, які виходять за нижню межу банера. Відео обрізає
+        // власна обгортка всередині HeroVideoBackdrop.
+      }}>
+        {/* Фон: три відео поруч замість одного.
+            Обличчя, волосся, тіло - за секунду показують, чим тут
+            займаються, і роблять це без жодного слова. */}
+        <HeroVideoBackdrop />
 
-        <div className="reveal-on-scroll" style={{ position: 'relative', zIndex: 50, maxWidth: '1340px', width: '100%', margin: '0 auto', padding: '4rem 4rem 0 4rem', boxSizing: 'border-box', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '3.2rem', fontWeight: '800', color: '#ffffff', maxWidth: '800px', margin: '0 auto 1rem auto', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
-            Догляд за собою в один клік
-          </h1>
-          <p style={{ fontSize: '1.15rem', color: '#ffffff', maxWidth: '600px', margin: '0 auto 2.5rem auto', lineHeight: '1.5', fontWeight: '500' }}>
+        {/* Той самий контейнер, що й у решти сторінки.
+            Раніше банер мав maxWidth без бічних полів, а секції нижче -
+            .container із полями 4rem. Через це пошук і ряд категорій
+            починались із різних вертикалей, і око це ловило. */}
+        <div className="container reveal-on-scroll" style={{ position: 'relative', zIndex: 50, textAlign: 'center' }}>
+          <TypingHeadline />
+
+
+          {/* Підзаголовок виринає після заголовка - коли фраза вже
+              прочитана. Одночасна поява робить із них один блок,
+              а це два різні повідомлення. */}
+          <p style={{
+            fontSize: '1.15rem', color: 'rgba(255,255,255,0.92)', maxWidth: '600px',
+            margin: '0 auto 2.5rem auto', lineHeight: 1.5, fontWeight: 400,
+            animation: 'heroWordIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 620ms both',
+          }}>
             Знаходьте перевірених фахівців поблизу та миттєво бронюйте візити онлайн без зайвих дзвінків.
           </p>
 
-          {/* ПОШУК (HERO) */}
+          {/* ПОШУК (HERO)
+              Зʼявляється останнім: спершу людина читає, чим корисний
+              сайт, і лише потім бачить, де це зробити. Одночасна поява
+              змусила б обирати, куди дивитись. */}
           <div style={{
+            animation: 'heroWordIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 820ms both',
             backgroundColor: 'rgba(255, 255, 255, 0.96)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
@@ -1676,6 +1790,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
+
       {/* КАТЕГОРІЇ ПОСЛУГ */}
       <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '2.5rem', paddingBottom: '3rem', position: 'relative', zIndex: 40 }}>
         <div className="hide-scrollbar" style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
@@ -1722,13 +1837,31 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       {isDefaultView && nearbyBusinesses.length > 0 && (
         <section className="reveal-on-scroll" style={{ paddingBottom: '4.5rem' }}>
           <div className="container">
+            {/* Пропозиція показати найближчі - ТУТ, над самим блоком
+                «поблизу», а не після вибору категорії.
+
+                Тут вона доречна: людина вже бачить список і розуміє,
+                що саме зміниться. Раніше запит чекав на вибір послуги,
+                а заголовок уже обіцяв «поблизу вас» - і не виконував. */}
+            <NearbyPrompt
+              isVisible={nearby.isVisible}
+              isLocating={nearby.isLocating}
+              error={nearby.error}
+              onAccept={() => void nearby.locate()}
+              onDecline={nearby.decline}
+            />
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem' }}>
               <div>
                 <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.35rem' }}>
                   Швидкий візит • {searchWhere || 'Львів'}
                 </div>
+                {/* Підпис каже ПРАВДУ про те, що показано.
+                    «Поблизу вас» до того, як людина дала координати, -
+                    обіцянка, якої ми не виконуємо: порядок тоді
+                    звичайний, не за відстанню. */}
                 <h2 style={{ fontSize: '2.2rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.03em' }}>
-                  Поблизу вас із вільними вікнами
+                  {nearbyPoint ? 'Поблизу вас із вільними вікнами' : 'Із вільними вікнами сьогодні'}
                 </h2>
                 <p style={{ color: '#64748b', fontSize: '1rem', marginTop: '0.35rem', marginBottom: 0 }}>
                   Забронюйте час прямо сьогодні без попередніх дзвінків
@@ -1747,7 +1880,16 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
             <div ref={nearbyScrollRef} className="nearby-carousel hide-scrollbar">
               {nearbyBusinesses.map((biz, idx) => {
-                const distance = getSalonDistance(biz) || `${250 + idx * 150} м`;
+                // Справжня відстань, а не вигадана.
+                //
+                // Раніше тут стояло `250 + idx * 150` - число з
+                // ПОРЯДКОВОГО НОМЕРА: перший заклад «250 м», другий
+                // «400 м», незалежно від того, де вони насправді.
+                // Людина вірила цифрі, за якою нічого не стояло.
+                //
+                // Немає координат - не показуємо нічого. Чесна
+                // відсутність краща за красиву вигадку.
+                const distance = formatDistance(biz.id);
                 return (
                   <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
                     {renderCard(biz, {
@@ -1995,7 +2137,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </div>
           ) : (
             <div className="salons-layout anim">
-              {displayedBusinesses.map((biz: any) => renderCard(biz))}
+              {displayedBusinesses.map((biz: any) =>
+                renderCard(biz, { distanceTag: formatDistance(biz.id) })
+              )}
             </div>
           )}
         </div>

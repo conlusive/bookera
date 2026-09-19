@@ -343,3 +343,87 @@
   background: #b3d4fc;
   color: inherit;
 }
+
+/* Кнопка на картці категорії.
+   Блиск пробігає зліва направо при наведенні - на відео-тлі звичайна
+   зміна кольору непомітна, бо фон під кнопкою весь час рухається. */
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(0, 0, 0, 0.05) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+.btn-primary:hover::before {
+  transform: translateX(100%);
+}
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Поява слів у заголовку банера.
+   Слово виринає знизу з легким розмиттям - так рух читається як
+   проявлення, а не як стрибок. Зсув малий (14px): великий виглядає
+   як падіння, і око встигає простежити траєкторію замість слова. */
+@keyframes heroWordIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* Поважаємо системне налаштування: людям із вестибулярними розладами
+   рух на весь екран буває нестерпним, і браузер уже знає про це. */
+@media (prefers-reduced-motion: reduce) {
+  [style*="heroWordIn"] {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+}
+
+/* Курсор друку в заголовку банера.
+   steps(1) замість плавного згасання: справжній текстовий курсор
+   перемикається різко, плавний виглядає як підсвітка. */
+@keyframes heroCaret {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Повільний наїзд на відео банера.
+   Ролики короткі й помітно зациклюються; рух із довшим періодом
+   поверх них ховає точку склейки. */
+@keyframes heroKenBurns {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* Світло, що пливе по заглушці, поки відео вантажиться. */
+@keyframes heroShimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="heroKenBurns"], [style*="heroShimmer"] {
+    animation: none !important;
+  }
+}

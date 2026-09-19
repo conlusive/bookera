@@ -216,6 +216,19 @@ async def register_business(
         slug=slugify(payload.name),
         direct_link_token=secrets.token_urlsafe(12),
     )
+    # Координати одразу при створенні.
+    #
+    # Раніше геокодування спрацьовувало лише при ЗМІНІ адреси, тому
+    # новий заклад лишався без координат і не потрапляв у пошук
+    # «поруч зі мною», поки власник не зайшов би й не перезберіг
+    # адресу - про що він, звісно, не здогадався б.
+    if business.address or business.city:
+        from app.services.geocoding import geocode_address
+
+        found = await geocode_address(business.city, business.address)
+        if found:
+            business.latitude, business.longitude = found
+
     db.add(business)
     await db.flush()
 
@@ -245,8 +258,38 @@ async def update_business(
     result = await db.execute(select(Business).where(Business.id == business_id))
     business = result.scalars().first()
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    address_changed = (
+        ("address" in data and data["address"] != business.address)
+        or ("city" in data and data["city"] != business.city)
+    )
+
+    for field, value in data.items():
         setattr(business, field, value)
+
+    # Координати оновлюємо самі, коли змінилась адреса.
+    #
+    # Власник вводить адресу - ми знаходимо точку. Просити його ще
+    # й ставити мітку на мапі означало б питати те саме двічі.
+    #
+    # Але лише якщо він НЕ передав координати явно: ручна мітка
+    # точніша за геокодування (вхід із двору, довгий будинок),
+    # і перетирати її автоматичною було б неповагою до його роботи.
+    coords_set_manually = "latitude" in data and data["latitude"] is not None
+
+    if address_changed and not coords_set_manually:
+        from app.services.geocoding import geocode_address
+
+        found = await geocode_address(business.city, business.address)
+        if found:
+            business.latitude, business.longitude = found
+        else:
+            # Не знайшли - чесно лишаємо порожнім. Стара точка від
+            # попередньої адреси гірша за відсутність: заклад
+            # показувався б у пошуку не там, де він є.
+            business.latitude = None
+            business.longitude = None
+
     await db.commit()
 
     # Так само явно підвантажуємо services через окремий запит замість

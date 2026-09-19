@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * Відео-фон банера: три кадри поруч.
@@ -16,110 +16,77 @@ import { useState } from 'react';
  */
 
 /**
- * Заглушки під час завантаження.
+ * Набори кадрів, що змінюють один одного.
  *
- * Вбудовані SVG, а не файли: вони не роблять жодного запиту й
- * зʼявляються в тому ж кадрі, що й сторінка. Кольори взяті з самих
- * відео, тому перехід до першого кадру непомітний.
+ * Один набір - три відео поруч, обʼєднані настроєм. Награвшись,
+ * набір поступається наступному: теплі процедури змінюються
+ * холодними й далі по колу.
+ *
+ * Чому не просто три вічні ролики: короткий цикл ловиться оком
+ * за кілька секунд, і фон перетворюється на шпалери. Зміна сцени
+ * дає підставу подивитись ще раз.
  */
-const POSTERS = [
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='16'%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23c9b8a8'/%3E%3Cstop offset='1' stop-color='%238f7a68'/%3E%3C/linearGradient%3E%3Crect width='9' height='16' fill='url(%23a)'/%3E%3C/svg%3E",
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='16'%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23a8b5c9'/%3E%3Cstop offset='1' stop-color='%235f6f85'/%3E%3C/linearGradient%3E%3Crect width='9' height='16' fill='url(%23a)'/%3E%3C/svg%3E",
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='16'%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23c2c9b8'/%3E%3Cstop offset='1' stop-color='%2378856a'/%3E%3C/linearGradient%3E%3Crect width='9' height='16' fill='url(%23a)'/%3E%3C/svg%3E",
+const CDN = 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P';
+
+/** Заглушка - вбудований SVG у кольорах самого кадру, без запиту в мережу. */
+const gradient = (from: string, to: string) =>
+  `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='16'%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23${from}'/%3E%3Cstop offset='1' stop-color='%23${to}'/%3E%3C/linearGradient%3E%3Crect width='9' height='16' fill='url(%23a)'/%3E%3C/svg%3E`;
+
+interface VideoSet {
+  /** Для чого набір - лише для читання коду, в інтерфейсі не видно. */
+  mood: string;
+  videos: string[];
+  posters: string[];
+}
+
+/**
+ * ЩОБ ДОДАТИ ЧОЛОВІЧИЙ НАБІР: допишіть другий обʼєкт із трьома
+ * посиланнями й кольорами заглушок. Решта коду не знає, скільки
+ * наборів, і працюватиме з будь-якою кількістю.
+ */
+const SETS: VideoSet[] = [
+  {
+    mood: 'теплі процедури',
+    videos: [
+      `${CDN}/hf_20260518_203023_87a26602-2898-4acc-a396-c7a2b5ad84fd.mp4`,
+      `${CDN}/hf_20260518_203415_b86e3f19-2aec-46cd-9a86-b64c40118e38.mp4`,
+      `${CDN}/hf_20260518_203051_85fee398-ea01-4aa0-972b-137a74213be5.mp4`,
+    ],
+    posters: [gradient('c9b8a8', '8f7a68'), gradient('a8b5c9', '5f6f85'), gradient('c2c9b8', '78856a')],
+  },
+  // {
+  //   mood: 'барбершоп, холодна гама',
+  //   videos: [`${CDN}/...`, `${CDN}/...`, `${CDN}/...`],
+  //   posters: [gradient('2a3340', '141a23'), gradient('34404f', '1b2430'), gradient('222c38', '11161d')],
+  // },
 ];
 
-const VIDEOS = [
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260518_203023_87a26602-2898-4acc-a396-c7a2b5ad84fd.mp4',
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260518_203415_b86e3f19-2aec-46cd-9a86-b64c40118e38.mp4',
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260518_203051_85fee398-ea01-4aa0-972b-137a74213be5.mp4',
-];
+/** Скільки набір тримається на екрані. */
+const SET_DURATION_MS = 7000;
 
 export default function HeroVideoBackdrop() {
-  // Які відео вже грають. Поки ні - показуємо постер, і перехід
-  // робимо плавним: різка підміна заглушки кадром смикає око.
-  const [playing, setPlaying] = useState<boolean[]>([false, false, false]);
+  const [setIndex, setSetIndex] = useState(0);
+
+  // Один набір - чергувати нічого, і таймер лише грів би процесор.
+  const hasMultipleSets = SETS.length > 1;
+
+  useEffect(() => {
+    if (!hasMultipleSets) return;
+    const timer = setInterval(() => setSetIndex(i => (i + 1) % SETS.length), SET_DURATION_MS);
+    return () => clearInterval(timer);
+  }, [hasMultipleSets]);
+
   return (
-    <div
-      aria-hidden
-      style={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 1,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        overflow: 'hidden',
-      }}
-    >
-      {VIDEOS.map((src, i) => (
-        <div key={src} style={{
-          position: 'relative', overflow: 'hidden',
-          // Заглушка ФОНОМ контейнера, а не лише атрибутом poster:
-          // поки відео прозоре, poster теж не видно, і лишався б
-          // чорний прямокутник.
-          background: `url("${POSTERS[i]}") center/cover no-repeat`,
-        }}>
-          {/* Мʼяке світло, що повільно пливе по заглушці.
-              Поки відео вантажиться, людина бачить не застиглу пляму,
-              а щось живе - очікування читається як частина задуму. */}
-          {!playing[i] && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.13) 50%, transparent 70%)',
-              backgroundSize: '220% 100%',
-              animation: `heroShimmer 2.6s ease-in-out ${i * 0.25}s infinite`,
-            }} />
-          )}
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            // preload="metadata" замість повного завантаження.
-            //
-            // Браузер бере лише заголовок файлу й починає грати, коли
-            // накопичить перші кадри, а не коли скачає все. Три відео
-            // в паралель при повному preload забивають канал, і перший
-            // кадр зʼявляється через кілька секунд.
-            preload="metadata"
-            // Постер: кольорова заглушка тієї ж гами, що й кадр.
-            // Порожній чорний прямокутник до старту відео виглядає як
-            // поломка, а мʼяка пляма - як фото, що ще вантажиться.
-            poster={POSTERS[i]}
-            src={src}
-            onPlaying={() => setPlaying(prev => {
-              if (prev[i]) return prev;
-              const next = [...prev];
-              next[i] = true;
-              return next;
-            })}
-            style={{
-              opacity: playing[i] ? 1 : 0,
-              // Довше проявлення (1.1s) і затримка по колонках:
-              // три кадри, що зʼявляються одночасно, читаються як
-              // перемикання слайда. По черзі - як розкриття.
-              transition: `opacity 1.1s ease ${i * 160}ms`,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              // Повільний наїзд: 20 секунд від 1.0 до 1.08 і назад.
-              //
-              // Самі ролики короткі й помітно зациклюються - око
-              // ловить точку склейки. Повільний рух поверх них має
-              // довший період, тому склейка перестає читатись.
-              //
-              // Кожна колонка починає з іншої фази (затримка -7s),
-              // інакше всі три дихають синхронно, і це виглядає
-              // механічно.
-              animation: playing[i] ? `heroKenBurns 20s ease-in-out ${i * -7}s infinite` : 'none',
-            }}
-          />
-        </div>
+    <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 1, overflow: 'hidden' }}>
+      {/* Усі набори лежать один на одному; видно той, чия черга.
+          Так наступний уже завантажений до моменту появи - інакше
+          зміна сцени щоразу починалася б із порожніх заглушок. */}
+      {SETS.map((set, si) => (
+        <VideoRow key={si} set={set} isActive={si === setIndex} />
       ))}
 
-      {/* Затемнення поверх усіх трьох.
-          Градієнт, а не суцільний колір: угорі темніше під заголовок,
-          посередині світліше - там пошук на білому тлі, і надто темний
-          фон під ним створював би зайвий контраст. */}
+      {/* Затемнення: градієнт, а не суцільний колір - угорі темніше
+          під заголовок, посередині світліше під пошук. */}
       <div
         style={{
           position: 'absolute',
@@ -129,13 +96,75 @@ export default function HeroVideoBackdrop() {
         }}
       />
 
-      {/* Тонкі розділювачі між кадрами - щоб стик читався як задум,
-          а не як склейка. */}
       <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', pointerEvents: 'none' }}>
         <div />
         <div style={{ borderLeft: '1px solid rgba(255,255,255,0.09)', borderRight: '1px solid rgba(255,255,255,0.09)' }} />
         <div />
       </div>
+    </div>
+  );
+}
+
+function VideoRow({ set, isActive }: { set: VideoSet; isActive: boolean }) {
+  const [playing, setPlaying] = useState<boolean[]>([false, false, false]);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        opacity: isActive ? 1 : 0,
+        // Довге перехрещення: набори різні за кольором, і різка зміна
+        // читається як перемикання каналу.
+        transition: 'opacity 1.4s ease',
+        pointerEvents: 'none',
+      }}
+    >
+      {set.videos.map((src, i) => (
+        <div
+          key={src}
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            background: `url("${set.posters[i]}") center/cover no-repeat`,
+          }}
+        >
+          {!playing[i] && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.13) 50%, transparent 70%)',
+              backgroundSize: '220% 100%',
+              animation: `heroShimmer 2.6s ease-in-out ${i * 0.25}s infinite`,
+            }} />
+          )}
+
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            poster={set.posters[i]}
+            src={src}
+            onPlaying={() => setPlaying(prev => {
+              if (prev[i]) return prev;
+              const next = [...prev];
+              next[i] = true;
+              return next;
+            })}
+            style={{
+              opacity: playing[i] ? 1 : 0,
+              transition: `opacity 1.1s ease ${i * 160}ms`,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              animation: playing[i] ? `heroKenBurns 20s ease-in-out ${i * -7}s infinite` : 'none',
+            }}
+          />
+        </div>
+      ))}
     </div>
   );
 }

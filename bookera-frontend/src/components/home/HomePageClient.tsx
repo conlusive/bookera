@@ -1636,7 +1636,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             займаються, і роблять це без жодного слова. */}
         <HeroVideoBackdrop />
 
-        <div className="reveal-on-scroll" style={{ position: 'relative', zIndex: 50, maxWidth: '1340px', width: '100%', margin: '0 auto', padding: '4rem 4rem 0 4rem', boxSizing: 'border-box', textAlign: 'center' }}>
+        {/* Той самий контейнер, що й у решти сторінки.
+            Раніше банер мав maxWidth без бічних полів, а секції нижче -
+            .container із полями 4rem. Через це пошук і ряд категорій
+            починались із різних вертикалей, і око це ловило. */}
+        <div className="container reveal-on-scroll" style={{ position: 'relative', zIndex: 50, textAlign: 'center' }}>
           <TypingHeadline />
 
 

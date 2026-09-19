@@ -216,6 +216,19 @@ async def register_business(
         slug=slugify(payload.name),
         direct_link_token=secrets.token_urlsafe(12),
     )
+    # Координати одразу при створенні.
+    #
+    # Раніше геокодування спрацьовувало лише при ЗМІНІ адреси, тому
+    # новий заклад лишався без координат і не потрапляв у пошук
+    # «поруч зі мною», поки власник не зайшов би й не перезберіг
+    # адресу - про що він, звісно, не здогадався б.
+    if business.address or business.city:
+        from app.services.geocoding import geocode_address
+
+        found = await geocode_address(business.city, business.address)
+        if found:
+            business.latitude, business.longitude = found
+
     db.add(business)
     await db.flush()
 

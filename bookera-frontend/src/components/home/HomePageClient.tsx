@@ -799,47 +799,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 8);
 
   /**
-   * Рекомендовані - НЕЗАЛЕЖНИЙ блок.
-   *
-   * Не реагує ні на категорію, ні на пошук, ні на геолокацію. Це
-   * просто найкращі заклади міста за рейтингом і кількістю відгуків.
-   *
-   * Раніше тут показувався той самий відфільтрований список, що
-   * й у результатах пошуку - тобто ніяких рекомендацій не було,
-   * лише другий екземпляр тих самих карток.
-   *
-   * Рейтинг без відгуків нічого не вартий: заклад із однією пʼятіркою
-   * стояв би вище за той, що має 4.8 із сотні оцінок. Тому спершу
-   * порівнюємо кількість відгуків у грубих сходинках, і лише
-   * всередині сходинки - за рейтингом.
-   */
-  const recommendedBusinesses = useMemo(() => {
-    const tier = (count: number) => (count >= 50 ? 3 : count >= 10 ? 2 : count >= 1 ? 1 : 0);
-
-    // Реагує на категорію, як і решта зон.
-    //
-    // Людина, яка обрала «Манікюр», хоче бачити найкращі манікюрні,
-    // а не найкращий барбершоп міста. Незалежність від категорії
-    // робила б блок марним саме тоді, коли він найпотрібніший.
-    let pool = businesses;
-    if (activeCategory !== 'all') {
-      const terms = CATEGORY_TERMS[activeCategory] || [];
-      pool = businesses.filter((b: any) => {
-        const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
-        return terms.some(t => text.includes(t));
-      });
-    }
-
-    return [...pool]
-      .sort((a, b) => {
-        const ta = tier(parseInt(a.reviews_count) || 0);
-        const tb = tier(parseInt(b.reviews_count) || 0);
-        if (ta !== tb) return tb - ta;
-        return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
-      })
-      .slice(0, 8);
-  }, [businesses, activeCategory]);
-  /**
    * Три зони головної, і кожна живе за своїм правилом.
    *
    * ПОБЛИЗУ ВАС - завжди, але РЕАГУЄ на вибір. Обрали «Манікюр» -
@@ -969,10 +928,102 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
    */
   const sortOptions = [
     ...(nearbyPoint ? [{ value: 'distance', label: 'Найближчі' }] : []),
-    { value: 'popular', label: 'За популярністю' },
+    { value: 'price', label: 'Найдешевші' },
     { value: 'rating', label: 'За рейтингом' },
+    { value: 'popular', label: 'За популярністю' },
     { value: 'newest', label: 'Спочатку нові' },
   ];
+
+  /**
+   * Спільне сортування для всіх зон - але кожна має СВОЮ базу.
+   *
+   * Зона лишається собою: «Поблизу вас» сортує найближчі, «Рекомендовані»
+   * найкращі. Обране сортування уточнює порядок ВСЕРЕДИНІ цієї бази,
+   * а не скасовує її.
+   *
+   * Інакше «Поблизу вас» за рейтингом показало б заклад із іншого
+   * кінця міста - і перестало б бути «поблизу».
+   */
+  const applySort = useCallback((list: any[], base: 'distance' | 'rating' | 'none') => {
+    const minPrice = (b: any) => {
+      const prices = (b.services || [])
+        .map((s: any) => parseFloat(s.price))
+        .filter((n: number) => !isNaN(n) && n > 0);
+      return prices.length > 0 ? Math.min(...prices) : Infinity;
+    };
+    const dist = (b: any) => distanceById[b.id] ?? Infinity;
+    const rate = (b: any) => parseFloat(b.rating) || 0;
+    const reviews = (b: any) => parseInt(b.reviews_count) || 0;
+
+    // Обране сортування - головне.
+    const chosen = (a: any, b: any): number => {
+      if (sortBy === 'distance' && nearbyPoint) return dist(a) - dist(b);
+      if (sortBy === 'price') return minPrice(a) - minPrice(b);
+      if (sortBy === 'rating') return rate(b) - rate(a);
+      if (sortBy === 'popular') return reviews(b) - reviews(a);
+      if (sortBy === 'newest') return (parseInt(b.id) || 0) - (parseInt(a.id) || 0);
+      return 0;
+    };
+
+    // База зони - коли обране сортування дало нічию. Саме вона
+    // й тримає зону собою.
+    const fallback = (a: any, b: any): number => {
+      if (base === 'distance') return dist(a) - dist(b);
+      if (base === 'rating') return rate(b) - rate(a);
+      return 0;
+    };
+
+    return [...list].sort((a, b) => chosen(a, b) || fallback(a, b));
+  }, [sortBy, nearbyPoint, distanceById]);
+
+  /**
+   * Рекомендовані - НЕЗАЛЕЖНИЙ блок.
+   *
+   * Не реагує ні на категорію, ні на пошук, ні на геолокацію. Це
+   * просто найкращі заклади міста за рейтингом і кількістю відгуків.
+   *
+   * Раніше тут показувався той самий відфільтрований список, що
+   * й у результатах пошуку - тобто ніяких рекомендацій не було,
+   * лише другий екземпляр тих самих карток.
+   *
+   * Рейтинг без відгуків нічого не вартий: заклад із однією пʼятіркою
+   * стояв би вище за той, що має 4.8 із сотні оцінок. Тому спершу
+   * порівнюємо кількість відгуків у грубих сходинках, і лише
+   * всередині сходинки - за рейтингом.
+   */
+  const recommendedBusinesses = useMemo(() => {
+    const tier = (count: number) => (count >= 50 ? 3 : count >= 10 ? 2 : count >= 1 ? 1 : 0);
+
+    // Реагує на категорію, як і решта зон.
+    //
+    // Людина, яка обрала «Манікюр», хоче бачити найкращі манікюрні,
+    // а не найкращий барбершоп міста. Незалежність від категорії
+    // робила б блок марним саме тоді, коли він найпотрібніший.
+    let pool = businesses;
+    if (activeCategory !== 'all') {
+      const terms = CATEGORY_TERMS[activeCategory] || [];
+      pool = businesses.filter((b: any) => {
+        const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
+        return terms.some(t => text.includes(t));
+      });
+    }
+
+    // База зони - якість: сходинка за кількістю відгуків, потім
+    // рейтинг. Заклад із сотнею оцінок не має програвати випадковій
+    // пʼятірці.
+    const byQuality = [...pool].sort((a, b) => {
+      const ta = tier(parseInt(a.reviews_count) || 0);
+      const tb = tier(parseInt(b.reviews_count) || 0);
+      if (ta !== tb) return tb - ta;
+      return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
+    });
+
+    // Обране сортування уточнює порядок усередині бази. Обрали
+    // «найдешевші» - побачите найдешевші СЕРЕД найкращих, а не
+    // найдешевші взагалі.
+    return applySort(byQuality, 'rating').slice(0, 8);
+  }, [businesses, activeCategory, applySort]);
+
 
   /**
    * Коли людина дала координати, найближчі стають типовим порядком.
@@ -1070,6 +1121,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return { state: 'open', label: 'Відкрито' };
   };
 
+  /**
+   * Картка закладу.
+   *
+   * Вигляд трохи різний у кожній зоні - показуємо те, що там важить:
+   *
+   *   Поблизу вас   - відстань і вільні слоти на сьогодні
+   *   Усі заклади   - без відстані: зона не про близькість
+   *   Рекомендовані - без відстані: тут важить якість, а не дорога
+   *
+   * Відстань на кожній картці знецінює саму себе: якщо вона всюди,
+   * око перестає її помічати саме там, де вона вирішує.
+   */
   const renderCard = (biz: any, options?: { distanceTag?: string; showTimeSlots?: boolean }) => {
     const rank = parseFloat(biz.rating);
     const hasRating = !isNaN(rank) && rank > 0;
@@ -2245,7 +2308,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               gap: '1.5rem',
             }}>
               {recommendedBusinesses.map((biz: any) =>
-                renderCard(biz, { distanceTag: formatDistance(biz.id) })
+                renderCard(biz)
               )}
             </div>
           </div>
@@ -2345,7 +2408,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           ) : (
             <div className="salons-layout anim">
               {displayedBusinesses.map((biz: any) =>
-                renderCard(biz, { distanceTag: formatDistance(biz.id) })
+                renderCard(biz)
               )}
             </div>
           )}

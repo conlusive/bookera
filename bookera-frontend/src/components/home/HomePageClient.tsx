@@ -234,19 +234,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, [nearbyPoint, businesses]);
 
   const [sortBy, setSortBy] = useState<string>('rating');
-
-  /**
-   * Швидкі фільтри.
-   *
-   * Лише ті, що справді змінюють вибір. «Відчинено зараз» відсіює
-   * заклади, куди сьогодні вже не потрапити; «вільно сьогодні» -
-   * ті, де немає жодного вікна.
-   *
-   * Фільтра «найближчі» тут немає навмисно: для цього є ціла зона
-   * «Поблизу вас», і дублювати її кнопкою означало б плутати людину.
-   */
-  const [onlyOpen, setOnlyOpen] = useState(false);
-  const [onlyWithSlots, setOnlyWithSlots] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -637,8 +624,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           return false;
         }
 
-        if (onlyOpen && getOpenStatus(biz).state !== 'open') return false;
-        if (onlyWithSlots && (nearbySlots[biz.id]?.length ?? 0) === 0) return false;
 
         let matchesCategory = true;
         if (activeCategory !== 'all' && !appliedSearch) {
@@ -691,7 +676,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         return 0;
       });
-  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById, onlyOpen, onlyWithSlots, nearbySlots]);
+  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById, nearbySlots]);
 
   // Заклади поблизу
   /**
@@ -995,6 +980,27 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       return 0;
     };
 
+    /**
+     * Доступність - найголовніше, вище за будь-яке сортування.
+     *
+     * Заклад, куди сьогодні не записатись, не має стояти першим,
+     * навіть якщо він найближчий чи найдешевший. Людина прийшла
+     * записатись, а не подивитись на карточки.
+     *
+     * Три сходинки:
+     *   2 - відчинено і є вільні вікна сьогодні
+     *   1 - відчинено, але вікон немає (можна записатись на інший день)
+     *   0 - зачинено або запис зупинено
+     *
+     * Усередині сходинки працює обране сортування. Тобто «найдешевші»
+     * покаже найдешевший СЕРЕД доступних, а не найдешевший взагалі.
+     */
+    const availability = (b: any): number => {
+      const status = getOpenStatus(b);
+      if (status.state !== 'open') return 0;
+      return (nearbySlots[b.id]?.length ?? 0) > 0 ? 2 : 1;
+    };
+
     // База зони - коли обране сортування дало нічию. Саме вона
     // й тримає зону собою.
     const fallback = (a: any, b: any): number => {
@@ -1003,8 +1009,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       return 0;
     };
 
-    return [...list].sort((a, b) => chosen(a, b) || fallback(a, b));
-  }, [sortBy, nearbyPoint, distanceById]);
+    return [...list].sort((a, b) => {
+      // Доступність завжди перша: вона відповідає на питання «чи
+      // можу я сюди потрапити», а решта - лише «який із них кращий».
+      const av = availability(b) - availability(a);
+      if (av !== 0) return av;
+
+      return chosen(a, b) || fallback(a, b);
+    });
+  }, [sortBy, nearbyPoint, distanceById, nearbySlots]);
 
   /**
    * Рекомендовані - НЕЗАЛЕЖНИЙ блок.
@@ -1228,14 +1241,13 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 </svg>
                 <span>{options.distanceTag}</span>
               </div>
-            ) : (
-              (!hasRating || rank >= 4.8) && (
-                <div className="glass-pill">
-                  <span style={{ color: '#f59e0b' }}>★</span>
-                  <span>Топ вибір</span>
-                </div>
-              )
-            )}
+            ) : null}
+            {/* Плашку «Топ вибір» прибрано.
+                Умова була `!hasRating || rank >= 4.8` - тобто заклад
+                БЕЗ ЖОДНОГО рейтингу теж отримував «Топ вибір».
+                Плашка, яку має майже кожен, нічого не означає, а тут
+                вона ще й брехала.
+                Для найкращих є ціла зона «Рекомендовані». */}
           </div>
 
           <button
@@ -2232,37 +2244,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           display: 'flex', alignItems: 'center', gap: '0.6rem',
           flexWrap: 'wrap', marginTop: '1.25rem',
         }}>
-          {/* Швидкі фільтри. Лише ті, що справді змінюють вибір:
-              «відчинено зараз» відсіює заклади, куди не записатись
-              сьогодні; «вільно сьогодні» - ті, де немає вікон. */}
-          <button
-            type="button"
-            onClick={() => setOnlyOpen(v => !v)}
-            style={{
-              height: '36px', padding: '0 0.9rem', borderRadius: '10px',
-              border: `1px solid ${onlyOpen ? '#8FAE93' : '#E8E8ED'}`,
-              background: onlyOpen ? '#F4FAF5' : '#fff',
-              color: onlyOpen ? '#2E3A30' : '#1D1D1F',
-              fontSize: '0.875rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
-            }}
-          >
-            Відчинено зараз
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setOnlyWithSlots(v => !v)}
-            style={{
-              height: '36px', padding: '0 0.9rem', borderRadius: '10px',
-              border: `1px solid ${onlyWithSlots ? '#8FAE93' : '#E8E8ED'}`,
-              background: onlyWithSlots ? '#F4FAF5' : '#fff',
-              color: onlyWithSlots ? '#2E3A30' : '#1D1D1F',
-              fontSize: '0.875rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
-            }}
-          >
-            Вільно сьогодні
-          </button>
-
           <div style={{ marginLeft: 'auto' }}>
               <div style={{ position: 'relative' }} ref={sortRef}>
                 <button

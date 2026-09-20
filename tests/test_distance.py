@@ -159,3 +159,42 @@ async def test_manual_coords_not_overwritten_by_geocoding(client, auth_headers):
 
     assert abs(float(row["latitude"]) - HIGH_CASTLE[0]) < 0.0001, \
         "ручна мітка має лишитись недоторканою"
+
+
+@pytest.mark.asyncio
+async def test_distances_endpoint_falls_back_to_straight_line(client, auth_headers):
+    """
+    Маршрутизатор недоступний - віддаємо пряму відстань із позначкою.
+
+    Показати приблизне краще, ніж нічого: людина все одно розуміє
+    порядок «поруч чи далеко», а знак «~» у картці каже, наскільки
+    числу можна вірити.
+    """
+    headers = auth_headers("dist-endpoint-owner")
+    business_id = await _salon_at(client, headers, "Endpoint Salon", HIGH_CASTLE)
+
+    r = await client.post("/businesses/distances", json={
+        "lat": OPERA[0], "lng": OPERA[1], "business_ids": [business_id],
+    })
+    assert r.status_code == 200, r.text
+
+    data = r.json()
+    entry = data[str(business_id)]
+
+    # У тестах мережі до маршрутизатора немає, тож очікуємо пряму
+    assert entry["km"] > 0
+    assert 0.9 < entry["km"] < 1.6, f"пряма опера-замок ~1.2 км, отримали {entry['km']}"
+    assert "is_road" in entry, "клієнт має знати, чи це маршрут"
+
+
+@pytest.mark.asyncio
+async def test_distances_endpoint_skips_business_without_coords(client, auth_headers):
+    """Заклад без координат просто не потрапляє у відповідь."""
+    headers = auth_headers("dist-endpoint-none")
+    business_id = await _salon_at(client, headers, "No Coords Salon")
+
+    r = await client.post("/businesses/distances", json={
+        "lat": OPERA[0], "lng": OPERA[1], "business_ids": [business_id],
+    })
+    assert r.status_code == 200, r.text
+    assert str(business_id) not in r.json()

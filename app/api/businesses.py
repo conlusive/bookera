@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, delete
 from sqlalchemy.orm import selectinload
@@ -49,13 +50,31 @@ async def list_businesses(
             # однаково не приймуть запис, і клієнт лише марно згає час.
             Business.subscription_plan.in_(["trial", "active"]),
         )
-        .options(selectinload(Business.services))
+        # Графік потрібен у списку: картка показує, відчинено зараз
+        # чи ні, і без нього писала б «Відкрито» о третій ночі.
+        .options(selectinload(Business.services), selectinload(Business.hours))
         .order_by(Business.id.in_(select(radar_subq.c.business_id)).desc(), Business.id)
         .limit(limit)
         .offset(offset)
     )
     res = await db.execute(stmt)
-    return res.scalars().all()
+    businesses = res.scalars().all()
+
+    out = []
+    for b in businesses:
+        response = BusinessOut.model_validate(b, from_attributes=True)
+        response.working_hours = [
+            WorkingDayOut(
+                weekday=h.weekday,
+                is_open=h.is_open,
+                open_time=h.open_time.strftime("%H:%M") if h.open_time else None,
+                close_time=h.close_time.strftime("%H:%M") if h.close_time else None,
+            )
+            for h in sorted(b.hours, key=lambda x: x.weekday)
+        ]
+        out.append(response)
+
+    return out
 
 
 @router.get(
@@ -185,6 +204,23 @@ async def search_available_businesses(
     if near_lat is not None and near_lng is not None:
         import math
 
+        # Спершу питаємо маршрутизатор: відстань по дорогах чесніша.
+        #
+        # Пряма дає помилку до 40% - дорога йде в обхід кварталів,
+        # річок і залізниць. Заклад за 800 метрів по прямій може бути
+        # за два кілометри пішки, якщо між вами колія.
+        #
+        # Одним запитом на всі заклади, не по одному: інакше сторінка
+        # з двадцятьма картками зробила б двадцять запитів.
+        from app.services.routing import road_distances_km
+
+        with_coords = [
+            (b.id, float(b.latitude), float(b.longitude))
+            for b in available_businesses
+            if b.latitude is not None and b.longitude is not None
+        ]
+        road_km = await road_distances_km(near_lat, near_lng, with_coords)
+
         def distance_km(biz) -> float:
             if biz.latitude is None or biz.longitude is None:
                 # Заклади без мітки йдуть у кінець, а не на початок:
@@ -192,6 +228,13 @@ async def search_available_businesses(
                 # не знаємо, де вони.
                 return float("inf")
 
+            # Маршрутна відстань, якщо знайшлась.
+            road = road_km.get(biz.id)
+            if road is not None:
+                return road
+
+            # Інакше - пряма. Маршрутизатор міг бути недоступний або
+            # не знайти шлях; показати приблизне краще, ніж нічого.
             lat1, lon1 = math.radians(near_lat), math.radians(near_lng)
             lat2 = math.radians(float(biz.latitude))
             lon2 = math.radians(float(biz.longitude))
@@ -201,7 +244,11 @@ async def search_available_businesses(
             return 6371.0 * 2 * math.asin(math.sqrt(a))
 
         for biz in available_businesses:
-            biz.distance_km = round(distance_km(biz), 2) if distance_km(biz) != float("inf") else None
+            d = distance_km(biz)
+            biz.distance_km = round(d, 2) if d != float("inf") else None
+            # Фронтенд показує маршрутну відстань без «~», пряму - з ним:
+            # людина має розуміти, наскільки числу можна вірити.
+            biz.distance_is_road = biz.id in road_km
 
         available_businesses.sort(key=distance_km)
 
@@ -318,3 +365,59 @@ async def remove_favorite(
         )
     )
     await db.commit()
+
+
+class DistancesRequest(BaseModel):
+    lat: float
+    lng: float
+    business_ids: List[int]
+
+
+@router.post("/distances")
+async def get_distances(
+    payload: DistancesRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Відстані по дорогах від точки людини до вказаних закладів.
+
+    Окремо від пошуку, бо головна сторінка показує список без обраної
+    дати - а там відстані теж потрібні.
+
+    POST, а не GET: список id буває довгим, і в адресному рядку він
+    упреться в обмеження довжини.
+    """
+    if not payload.business_ids:
+        return {}
+
+    # Обмеження: без нього один запит зі списком у тисячу id змусив би
+    # маршрутизатор рахувати двадцять таблиць поспіль.
+    ids = payload.business_ids[:100]
+
+    res = await db.execute(
+        select(Business).where(
+            Business.id.in_(ids),
+            Business.latitude.isnot(None),
+            Business.longitude.isnot(None),
+        )
+    )
+    destinations = [
+        (b.id, float(b.latitude), float(b.longitude)) for b in res.scalars().all()
+    ]
+
+    from app.services.routing import haversine_km, road_distances_km
+
+    road = await road_distances_km(payload.lat, payload.lng, destinations)
+
+    out = {}
+    for biz_id, lat, lng in destinations:
+        if biz_id in road:
+            out[str(biz_id)] = {"km": round(road[biz_id], 2), "is_road": True}
+        else:
+            # Маршрут не знайшовся - віддаємо пряму з позначкою.
+            out[str(biz_id)] = {
+                "km": round(haversine_km(payload.lat, payload.lng, lat, lng), 2),
+                "is_road": False,
+            }
+
+    return out

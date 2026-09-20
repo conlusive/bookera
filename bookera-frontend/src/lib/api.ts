@@ -35,6 +35,11 @@ export interface Business {
   security_settings?: Record<string, any>;
   notification_settings?: Record<string, any>;
   payments_settings?: Record<string, any>;
+  /** Координати закладу. Заповнюються автоматично за адресою. */
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Відстань від точки пошуку - лише якщо клієнт передав координати. */
+  distance_km?: number | null;
 }
 
 export interface Service {
@@ -643,6 +648,23 @@ export const api = {
 
   async removeFavorite(token: string, businessId: number): Promise<void> {
     await authFetch(`/businesses/${businessId}/favorite`, token, { method: 'DELETE' });
+  },
+
+  /**
+   * Відстані по дорогах від точки людини до закладів.
+   *
+   * POST, бо список id буває довгим і в адресному рядку впреться
+   * в обмеження довжини.
+   */
+  async getDistances(lat: number, lng: number, businessIds: number[]): Promise<
+    Record<string, { km: number; is_road: boolean }>
+  > {
+    const res = await fetch(`${API_URL}/businesses/distances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng, business_ids: businessIds }),
+    });
+    return handle(res);
   },
 
   // === Робота в кількох закладах ===

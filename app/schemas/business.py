@@ -74,6 +74,8 @@ class BusinessUpdate(BaseModel):
     # Відстань від точки пошуку. Заповнюється лише коли клієнт передав
     # свої координати - інакше показувати нічого.
     distance_km: Optional[float] = None
+    # Чи це відстань по дорогах. False - по прямій, приблизна.
+    distance_is_road: Optional[bool] = None
     security_settings: Optional[dict] = None
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None
@@ -110,6 +112,8 @@ class BusinessOut(BusinessBase):
     # Відстань від точки пошуку. Заповнюється лише коли клієнт передав
     # свої координати - інакше показувати нічого.
     distance_km: Optional[float] = None
+    # Чи це відстань по дорогах. False - по прямій, приблизна.
+    distance_is_road: Optional[bool] = None
     # Без цього поля інтерфейс не міг визначити власника: перевірка
     # userProfile.id === business.owner_id завжди давала false, і кнопки
     # для адміністратора зникали.
@@ -128,6 +132,8 @@ class BusinessOut(BusinessBase):
     # Відстань від точки пошуку. Заповнюється лише коли клієнт передав
     # свої координати - інакше показувати нічого.
     distance_km: Optional[float] = None
+    # Чи це відстань по дорогах. False - по прямій, приблизна.
+    distance_is_road: Optional[bool] = None
     security_settings: Optional[dict] = None
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None

@@ -39,6 +39,33 @@ export function useNearbyPrompt(isEnabled: boolean) {
   const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Останнє відоме місце.
+   *
+   * Визначення координат іноді просто не встигає: macOS звертається
+   * до Wi-Fi-мережі й це буває повільно. Людина бачить «не вдалося»,
+   * хоча хвилину тому все працювало.
+   *
+   * Памʼятаємо останню вдалу відповідь: місто за годину людина не
+   * змінить, а показати заклади поруч важливіше за точність до
+   * метра. Свіжість перевіряємо - тижневі координати могли б
+   * показати заклади в іншому місті.
+   */
+  const LAST_POINT_KEY = 'bookera_last_point';
+  const LAST_POINT_TTL = 12 * 60 * 60 * 1000;
+
+  const readLastPoint = (): GeoPoint | null => {
+    try {
+      const raw = localStorage.getItem(LAST_POINT_KEY);
+      if (!raw) return null;
+      const saved = JSON.parse(raw);
+      if (Date.now() - saved.at > LAST_POINT_TTL) return null;
+      return { lat: saved.lat, lng: saved.lng };
+    } catch {
+      return null;
+    }
+  };
+
   const locate = () =>
     new Promise<void>(resolve => {
       setIsLocating(true);
@@ -46,7 +73,14 @@ export function useNearbyPrompt(isEnabled: boolean) {
 
       navigator.geolocation.getCurrentPosition(
         pos => {
-          setPoint({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setPoint(next);
+          try {
+            localStorage.setItem(LAST_POINT_KEY, JSON.stringify({ ...next, at: Date.now() }));
+          } catch {
+            // Приватний режим не дає писати - не біда, просто
+            // наступного разу визначимо заново.
+          }
           setIsVisible(false);
           setIsLocating(false);
           resolve();
@@ -54,8 +88,21 @@ export function useNearbyPrompt(isEnabled: boolean) {
         err => {
           // Заборона - показуємо, де її зняти: людина сама не здогадається
           // шукати це в налаштуваннях сайту.
-          setError(err.code === err.PERMISSION_DENIED ? 'denied' : 'failed');
-          setIsVisible(true);
+          if (err.code === err.PERMISSION_DENIED) {
+            setError('denied');
+            setIsVisible(true);
+          } else {
+            // Не відмова, а збій: не встигли, немає сигналу.
+            // Беремо останнє відоме місце - воно краще за нічого.
+            const last = readLastPoint();
+            if (last) {
+              setPoint(last);
+              setIsVisible(false);
+            } else {
+              setError('failed');
+              setIsVisible(true);
+            }
+          }
           setIsLocating(false);
           resolve();
         },
@@ -64,7 +111,10 @@ export function useNearbyPrompt(isEnabled: boolean) {
           // людину в очікуванні кілька секунд заради метрів, які тут
           // нічого не змінюють.
           enableHighAccuracy: false,
-          timeout: 10000,
+          // 20 секунд: macOS звертається до Wi-Fi-мережі, і 10 секунд
+          // не завжди вистачає. Краще зачекати довше, ніж показати
+          // «не вдалося» там, де все працює.
+          timeout: 20000,
           // Місце пʼятихвилинної давності годиться: людина не могла
           // перетнути місто за цей час.
           maximumAge: 300000,
@@ -97,7 +147,12 @@ export function useNearbyPrompt(isEnabled: boolean) {
         }
 
         if (status.state === 'granted') {
-          // Дозвіл уже є - беремо координати мовчки, без вікон.
+          // Показуємо останнє відоме місце ОДРАЗУ, не чекаючи на
+          // визначення: список поруч зʼявляється в першому кадрі,
+          // а свіжі координати підмінять його за секунду-дві.
+          const last = readLastPoint();
+          if (last) setPoint(last);
+
           void locate();
           return;
         }

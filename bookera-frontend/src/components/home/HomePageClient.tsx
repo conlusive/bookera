@@ -233,7 +233,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return () => { cancelled = true; };
   }, [nearbyPoint, businesses]);
 
-  const [sortBy, setSortBy] = useState<string>('popular');
+  const [sortBy, setSortBy] = useState<string>('rating');
 
   /**
    * Швидкі фільтри.
@@ -945,9 +945,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const sortOptions = [
     ...(nearbyPoint ? [{ value: 'distance', label: 'Найближчі' }] : []),
     { value: 'price', label: 'Найдешевші' },
-    { value: 'rating', label: 'За рейтингом' },
-    { value: 'popular', label: 'За популярністю' },
-    { value: 'newest', label: 'Спочатку нові' },
+    // «За рейтингом» і «За популярністю» прибрано як окремі пункти:
+    // обидва сортували за тим самим - якістю закладу. Різниця була
+    // лише в тому, що один дивився на оцінку, другий на кількість
+    // відгуків, і людина не могла зрозуміти, чим вони відрізняються.
+    //
+    // Тепер один пункт, який враховує обидва: заклад із сотнею
+    // оцінок 4.8 стоїть вище за той, що має одну пʼятірку.
+    { value: 'rating', label: 'Найкращі оцінки' },
+    { value: 'newest', label: 'Нові заклади' },
   ];
 
   /**
@@ -975,8 +981,16 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     const chosen = (a: any, b: any): number => {
       if (sortBy === 'distance' && nearbyPoint) return dist(a) - dist(b);
       if (sortBy === 'price') return minPrice(a) - minPrice(b);
-      if (sortBy === 'rating') return rate(b) - rate(a);
-      if (sortBy === 'popular') return reviews(b) - reviews(a);
+      if (sortBy === 'rating') {
+        // Сходинка за кількістю відгуків, потім оцінка: рейтинг без
+        // відгуків нічого не вартий, а сама лише кількість не каже
+        // про якість.
+        const tier = (n: number) => (n >= 50 ? 3 : n >= 10 ? 2 : n >= 1 ? 1 : 0);
+        const ta = tier(reviews(a));
+        const tb = tier(reviews(b));
+        if (ta !== tb) return tb - ta;
+        return rate(b) - rate(a);
+      }
       if (sortBy === 'newest') return (parseInt(b.id) || 0) - (parseInt(a.id) || 0);
       return 0;
     };
@@ -1049,7 +1063,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
    * дані й не скористатись ними.
    */
   useEffect(() => {
-    if (nearbyPoint && sortBy === 'popular') setSortBy('distance');
+    if (nearbyPoint && sortBy === 'rating') setSortBy('distance');
   }, [nearbyPoint]);
 
   /**

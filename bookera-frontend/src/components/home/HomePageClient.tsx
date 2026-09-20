@@ -234,6 +234,19 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, [nearbyPoint, businesses]);
 
   const [sortBy, setSortBy] = useState<string>('popular');
+
+  /**
+   * Швидкі фільтри.
+   *
+   * Лише ті, що справді змінюють вибір. «Відчинено зараз» відсіює
+   * заклади, куди сьогодні вже не потрапити; «вільно сьогодні» -
+   * ті, де немає жодного вікна.
+   *
+   * Фільтра «найближчі» тут немає навмисно: для цього є ціла зона
+   * «Поблизу вас», і дублювати її кнопкою означало б плутати людину.
+   */
+  const [onlyOpen, setOnlyOpen] = useState(false);
+  const [onlyWithSlots, setOnlyWithSlots] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -624,6 +637,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           return false;
         }
 
+        if (onlyOpen && getOpenStatus(biz).state !== 'open') return false;
+        if (onlyWithSlots && (nearbySlots[biz.id]?.length ?? 0) === 0) return false;
+
         let matchesCategory = true;
         if (activeCategory !== 'all' && !appliedSearch) {
           const terms = CATEGORY_TERMS[activeCategory] || [];
@@ -675,7 +691,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         return 0;
       });
-  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById]);
+  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById, onlyOpen, onlyWithSlots, nearbySlots]);
 
   // Заклади поблизу
   /**
@@ -2191,6 +2207,92 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             )}
           </div>
         </div>
+
+        {/* Фільтри й сортування - ПІД КАТЕГОРІЯМИ, вгорі сторінки.
+            Раніше сортування стояло біля «Усі заклади» внизу: людина
+            гортала півсторінки, щоб знайти те, що керує всім списком.
+
+            Тут воно поруч із вибором категорії - двома рухами людина
+            задає і що шукає, і як показати. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.6rem',
+          flexWrap: 'wrap', marginTop: '1.25rem',
+        }}>
+          {/* Швидкі фільтри. Лише ті, що справді змінюють вибір:
+              «відчинено зараз» відсіює заклади, куди не записатись
+              сьогодні; «вільно сьогодні» - ті, де немає вікон. */}
+          <button
+            type="button"
+            onClick={() => setOnlyOpen(v => !v)}
+            style={{
+              height: '36px', padding: '0 0.9rem', borderRadius: '10px',
+              border: `1px solid ${onlyOpen ? '#8FAE93' : '#E8E8ED'}`,
+              background: onlyOpen ? '#F4FAF5' : '#fff',
+              color: onlyOpen ? '#2E3A30' : '#1D1D1F',
+              fontSize: '0.875rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+            }}
+          >
+            Відчинено зараз
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOnlyWithSlots(v => !v)}
+            style={{
+              height: '36px', padding: '0 0.9rem', borderRadius: '10px',
+              border: `1px solid ${onlyWithSlots ? '#8FAE93' : '#E8E8ED'}`,
+              background: onlyWithSlots ? '#F4FAF5' : '#fff',
+              color: onlyWithSlots ? '#2E3A30' : '#1D1D1F',
+              fontSize: '0.875rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+            }}
+          >
+            Вільно сьогодні
+          </button>
+
+          <div style={{ marginLeft: 'auto' }}>
+              <div style={{ position: 'relative' }} ref={sortRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSortOpen(!isSortOpen)}
+                  className="sort-trigger"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                  </svg>
+                  Сортування: <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
+                </button>
+
+                {isSortOpen && (
+                  <div className="search-dropdown anim" style={{ top: '120%', right: 0, left: 'auto', width: '240px', zIndex: 100 }}>
+                    {sortOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className="search-dropdown-item"
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          border: 'none',
+                          display: 'block',
+                          backgroundColor: sortBy === opt.value ? '#f8fafc' : 'transparent',
+                          fontWeight: sortBy === opt.value ? '700' : '500'
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSortBy(opt.value);
+                          setIsSortOpen(false);
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+          </div>
+        </div>
+
       </section>
 
       {/* 🟢 1. СПЕРШУ: ПОБЛИЗУ ВАС ІЗ ВІЛЬНИМИ ВІКНАМИ (КАРУСЕЛЬ З ОДНАКОВИМ РОЗМІРОМ) */}
@@ -2336,47 +2438,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-              <div style={{ position: 'relative' }} ref={sortRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsSortOpen(!isSortOpen)}
-                  className="sort-trigger"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                  </svg>
-                  Сортування: <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
-                </button>
-
-                {isSortOpen && (
-                  <div className="search-dropdown anim" style={{ top: '120%', right: 0, left: 'auto', width: '240px', zIndex: 100 }}>
-                    {sortOptions.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        className="search-dropdown-item"
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          border: 'none',
-                          display: 'block',
-                          backgroundColor: sortBy === opt.value ? '#f8fafc' : 'transparent',
-                          fontWeight: sortBy === opt.value ? '700' : '500'
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setSortBy(opt.value);
-                          setIsSortOpen(false);
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               {filteredBusinesses.length > 8 && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}

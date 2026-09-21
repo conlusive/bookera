@@ -11,6 +11,7 @@ import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
+import Slideshow, { type Slide } from '@/components/ui/slideshow';
 
 /**
  * Ключові слова категорій.
@@ -1094,6 +1095,66 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
     return { state: 'open', label: 'Відкрито' };
   };
+
+  /**
+   * Кураторські колекції для слайд-шоу.
+   *
+   * Лічильник рахується з РЕАЛЬНИХ закладів. Раніше стояли вигадані
+   * числа - «14 студій», «12 салонів» - незалежно від того, скільки
+   * закладів насправді. Людина клікала на «14 студій» і бачила одну.
+   *
+   * Колекція без жодного закладу не показується: кадр, який веде
+   * в порожній список, гірший за його відсутність.
+   */
+  const collectionSlides: Slide[] = useMemo(() => {
+    const COLLECTIONS: { slug: string; text: string[]; img: string; noun: [string, string, string] }[] = [
+      { slug: 'barber', text: ['Чоловіча', 'класика'], noun: ['барбершоп', 'барбершопи', 'барбершопів'],
+        img: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=2000&q=80' },
+      { slug: 'nails', text: ['Естетика', 'манікюру'], noun: ['студія', 'студії', 'студій'],
+        img: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=2000&q=80' },
+      { slug: 'hair', text: ['Авторський', 'колір'], noun: ['салон', 'салони', 'салонів'],
+        img: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=2000&q=80' },
+      { slug: 'spa', text: ['Спа', 'і релакс'], noun: ['простір', 'простори', 'просторів'],
+        img: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=2000&q=80' },
+      { slug: 'makeup', text: ['Вечірній', 'образ'], noun: ['майстер', 'майстри', 'майстрів'],
+        img: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=2000&q=80' },
+      { slug: 'skincare', text: ['Догляд', 'за шкірою'], noun: ['центр', 'центри', 'центрів'],
+        img: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=2000&q=80' },
+      { slug: 'brows', text: ['Брови', 'і вії'], noun: ['студія', 'студії', 'студій'],
+        img: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=2000&q=80' },
+      { slug: 'massage', text: ['Масажні', 'техніки'], noun: ['фахівець', 'фахівці', 'фахівців'],
+        img: 'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?auto=format&fit=crop&w=2000&q=80' },
+    ];
+
+    // Українське узгодження: 1 студія, 2 студії, 5 студій, 11 студій.
+    const plural = (n: number, forms: [string, string, string]) => {
+      const mod10 = n % 10, mod100 = n % 100;
+      if (mod10 === 1 && mod100 !== 11) return forms[0];
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
+      return forms[2];
+    };
+
+    return COLLECTIONS
+      .map(col => {
+        const terms = CATEGORY_TERMS[col.slug] || [];
+        const count = businesses.filter((b: any) => {
+          const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
+          return terms.some(t => text.includes(t));
+        }).length;
+
+        return {
+          count,
+          slide: {
+            img: col.img,
+            text: col.text,
+            caption: `${count} ${plural(count, col.noun)}`,
+            onClick: () => handleCategorySelect(col.slug),
+          } as Slide,
+        };
+      })
+      .filter(x => x.count > 0)
+      .map(x => x.slide);
+  }, [businesses]);
 
   /**
    * Картка закладу.
@@ -2384,147 +2445,25 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {showCollections && (
-        <section className="reveal-on-scroll" style={{ padding: '5rem 0', backgroundColor: '#FAFAFA', borderTop: '1px solid rgba(0,0,0,0.05)', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: '4.5rem' }}>
+      {/* КУРАТОРСЬКІ КОЛЕКЦІЇ - слайд-шоу на всю ширину.
+          Замість двох рядів дрібних карток: один кадр за раз, великий
+          заголовок. Колекція - це настрій, а не перелік, і вісім
+          дрібних прямокутників поруч читались як меню, а не як добірка. */}
+      {/* Немає жодної колекції із закладами - секцію не показуємо
+          зовсім, а не заголовок над порожнечею. */}
+      {showCollections && collectionSlides.length > 0 && (
+        <section className="reveal-on-scroll" style={{ padding: '5rem 0' }}>
           <div className="container">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.75rem' }}>
-              <div>
-                <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8fae92', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>
-                  Вам може сподобатися
-                </div>
-                <h2 style={{ fontSize: '2.1rem', fontWeight: '900', color: '#111827', margin: 0, letterSpacing: '-0.03em' }}>
-                  Кураторські колекції
-                </h2>
-              </div>
-
-              {/* Навігація скролу колекцій */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button onClick={() => scrollCollections('left')} className="carousel-nav-btn" aria-label="Вліво">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                </button>
-                <button onClick={() => scrollCollections('right')} className="carousel-nav-btn" aria-label="Вправо">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </button>
-              </div>
-            </div>
-
-            {/* КОМПАКТНИЙ СКРОЛ-ТРЕК З ДВОМА ЗМІЩЕНИМИ РЯДАМИ */}
-            <div ref={collectionsScrollRef} className="editorial-scroll-wrapper hide-scrollbar">
-              <div className="editorial-staggered-track">
-
-                {/* РЯД 1 */}
-                <div className="editorial-stream-row">
-
-                  <div onClick={() => handleCategorySelect('barber')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=600&q=80" alt="Барбершопи" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">8 закладів</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Чоловіча класика & Fades</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('nails')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=600&q=80" alt="Манікюр" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">14 студій</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Естетика манікюру</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('spa')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=600&q=80" alt="Spa" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">6 просторів</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Wellness, спа & релакс</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('hair')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80" alt="Волосся" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">12 салонів</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Стрижки & авторський колір</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('makeup')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=600&q=80" alt="Макіяж" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">7 майстрів</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Вечірній образ & візаж</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* РЯД 2 (ЗМІЩЕНИЙ ВПРАВО НА 55PX) */}
-                <div className="editorial-stream-row offset-row">
-
-                  <div onClick={() => handleCategorySelect('skincare')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=600&q=80" alt="Догляд за шкірою" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">9 центрів</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Догляд за шкірою & Glow</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('brows')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=80" alt="Брови та вії" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">11 студій</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Ламінування брів & вій</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('massage')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1519823551278-64ac92734fb1?auto=format&fit=crop&w=600&q=80" alt="Масаж" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">8 фахівців</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Масажні техніки & тонус</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('aesthetic-medicine')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=600&q=80" alt="Естетика" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">5 клінік</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Естетична медицина</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                  <div onClick={() => handleCategorySelect('hair-removal')} className="compact-editorial-card anim">
-                    <img src="https://images.unsplash.com/photo-1512290900672-1f5be1c66f54?auto=format&fit=crop&w=600&q=80" alt="Епіляція" className="compact-editorial-bg" />
-                    <div className="compact-editorial-overlay"></div>
-                    <span className="compact-tag">6 студій</span>
-                    <div className="compact-footer">
-                      <h3 className="compact-title">Лазерна епіляція</h3>
-                      <div className="compact-chevron"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-                    </div>
-                  </div>
-
-                </div>
-
-              </div>
-            </div>
+            <SectionHeader
+              eyebrow="Вам може сподобатися"
+              title="Кураторські колекції"
+              subtitle="Добірки закладів за настроєм і напрямом"
+            />
           </div>
+
+          {/* На всю ширину, поза контейнером: кадр має бути
+              відчутним, а не ще однією карткою серед інших. */}
+          <Slideshow slides={collectionSlides} />
         </section>
       )}
 

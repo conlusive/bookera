@@ -119,8 +119,8 @@ export default function Slideshow({ slides, autoplayMs = 6000 }: SlideshowProps)
               />
             </div>
             <div className="arrows">
-              <button onClick={() => go(-1)} aria-label="Попередній кадр"><ArrowLeft size={18} strokeWidth={1.6} /></button>
-              <button onClick={() => go(1)} aria-label="Наступний кадр"><ArrowRight size={18} strokeWidth={1.6} /></button>
+              <button onClick={() => go(-1)} aria-label="Попередній кадр"><ArrowLeft size={16} strokeWidth={1.6} /></button>
+              <button onClick={() => go(1)} aria-label="Наступний кадр"><ArrowRight size={16} strokeWidth={1.6} /></button>
             </div>
           </div>
         )}
@@ -129,14 +129,14 @@ export default function Slideshow({ slides, autoplayMs = 6000 }: SlideshowProps)
       <style jsx>{`
         .spread {
           display: grid;
-          grid-template-columns: 1.35fr 1fr;
-          min-height: clamp(460px, 42vw, 600px);
-          border-radius: 24px;
+          grid-template-columns: 1.2fr 1fr;
+          min-height: clamp(360px, 32vw, 440px);
+          border-radius: 20px;
           overflow: hidden;
           /* Тепле тло, а не біле: біле злилось би зі сторінкою, і
              розворот читався б як фото з підписом, а не як сторінка
              журналу. */
-          background: #F4F1EC;
+          background: #FAF8F5;
           outline: none;
           user-select: none;
         }
@@ -186,10 +186,10 @@ export default function Slideshow({ slides, autoplayMs = 6000 }: SlideshowProps)
           margin-bottom: 1rem;
         }
         .line-strong {
-          font-size: clamp(2.25rem, 4.6vw, 4rem);
-          font-weight: 700;
-          line-height: 1;
-          letter-spacing: -0.035em;
+          font-size: clamp(1.9rem, 3.4vw, 3rem);
+          font-weight: 600;
+          line-height: 1.05;
+          letter-spacing: -0.03em;
           animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
         /* Другий рядок - антиквою й курсивом. Системний шрифт, без
@@ -198,9 +198,9 @@ export default function Slideshow({ slides, autoplayMs = 6000 }: SlideshowProps)
           font-family: Georgia, 'Times New Roman', serif;
           font-style: italic;
           font-weight: 400;
-          font-size: clamp(2.25rem, 4.6vw, 4rem);
-          line-height: 1.05;
-          letter-spacing: -0.02em;
+          font-size: clamp(1.9rem, 3.4vw, 3rem);
+          line-height: 1.1;
+          letter-spacing: -0.015em;
           color: #5C5650;
           animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
         }
@@ -230,10 +230,10 @@ export default function Slideshow({ slides, autoplayMs = 6000 }: SlideshowProps)
 
         .arrows { display: flex; gap: 0.5rem; }
         .arrows button {
-          width: 44px;
-          height: 44px;
+          width: 38px;
+          height: 38px;
           border-radius: 50%;
-          border: 1px solid #CFC8BE;
+          border: 1px solid #E2DDD5;
           background: transparent;
           color: #1D1D1F;
           display: flex;

@@ -2406,24 +2406,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* КУРАТОРСЬКІ КОЛЕКЦІЇ - слайд-шоу на всю ширину.
-          Замість двох рядів дрібних карток: один кадр за раз, великий
-          заголовок. Колекція - це настрій, а не перелік, і вісім
-          дрібних прямокутників поруч читались як меню, а не як добірка. */}
-      {/* Модний блок - настрій, а не перелік закладів.
-          Без заголовка секції: кадр із власним заголовком і є
-          повідомленням, а надпис «Кураторські колекції» над ним
-          лише пояснював би те, що й так видно. */}
-      {showCollections && (
-        <section className="reveal-on-scroll" style={{ padding: '5rem 0' }}>
-          {/* У контейнері, як і решта сторінки: розворот вирізняється
-              композицією, а не тим, що вилазить за межі. */}
-          <div className="container">
-            <Slideshow slides={moodSlides} />
-          </div>
-        </section>
-      )}
-
       {/* ІНФОРМАЦІЙНА СІТКА */}
       <section className="info-section">
         <div className="container">
@@ -2490,6 +2472,26 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           </div>
         </div>
       </section>
+
+      
+      {/* Модний блок - настрій, а не перелік закладів.
+          Без заголовка секції: кадр із власним заголовком і є
+          повідомленням, а надпис «Кураторські колекції» над ним
+          лише пояснював би те, що й так видно.
+
+          Показується ЗАВЖДИ, незалежно від пошуку: тепер це частина
+          розповіді про бренд унизу сторінки, а не редакційний блок
+          посеред результатів. Ховати його при виборі послуги немає
+          причини - він не заважає шукати. */}
+      {(
+        <section className="reveal-on-scroll" style={{ padding: '5rem 0' }}>
+          {/* У контейнері, як і решта сторінки: розворот вирізняється
+              композицією, а не тим, що вилазить за межі. */}
+          <div className="container">
+            <Slideshow slides={moodSlides} />
+          </div>
+        </section>
+      )}
 
       {/* ТЕМНА СЕКЦІЯ (ДЛЯ БІЗНЕСУ - DASHBOARD) */}
       <section className="info-section" style={{ backgroundColor: '#111827', color: '#fff', padding: '10rem 0', position: 'relative', zIndex: 20, overflow: 'hidden' }}>

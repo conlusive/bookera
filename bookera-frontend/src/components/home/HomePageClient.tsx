@@ -753,6 +753,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   // рахує бекенд за гаверсинусом.
 
   // Завантаження реальних слотів на сьогодні для закладу
+  // Сортований рядок id: не змінюється від пересортування, лише коли
+  // заклад додався або зник.
+  const nearbyIdsKey = nearbyBusinesses.map((b: any) => b.id).sort((a: number, b: number) => a - b).join(',');
+
   useEffect(() => {
     if (!nearbyBusinesses || nearbyBusinesses.length === 0) return;
 
@@ -804,7 +808,17 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
     void loadRealSlots();
     return () => { isMounted = false; };
-  }, [nearbyBusinesses]);
+    // Залежність - СКЛАД закладів (рядок з id), а не сам масив.
+    //
+    // Раніше тут стояв nearbyBusinesses, і виходив нескінченний цикл:
+    // ефект завантажує слоти → nearbySlots змінюється → nearbyBusinesses
+    // пересортовується за доступністю (новий масив) → ефект запускається
+    // знову. Сотні запитів за секунду, навіть коли вони падають.
+    //
+    // Порядок закладів нас тут не цікавить - лише те, ЯКІ вони. Рядок
+    // id однаковий, поки склад той самий, і React не бачить змін.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearbyIdsKey]);
 
   const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 8);
 

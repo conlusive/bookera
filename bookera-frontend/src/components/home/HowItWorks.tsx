@@ -396,10 +396,20 @@ export default function HowItWorks() {
         /* Корпус: тонкий обідок із ледь помітним градієнтом, як
            у металевої рамки. Чисто чорний читається як заглушка. */
         .how .device {
+          /* Екран позиціонується абсолютно всередині корпусу.
+             Раніше він мав height: 100%, а висоту корпусу задавав
+             aspect-ratio - і Safari не вважає таку висоту визначеною:
+             100% у нього ставало «скільки треба вмісту», і екран
+             вилазив за рамку. Chrome рахує це правильно, тому помилку
+             видно лише в Safari. */
+          position: relative;
+          box-sizing: border-box;
           width: 100%;
           max-width: 300px;
           aspect-ratio: 9 / 19;
-          padding: 11px;
+          /* min-height: 0 не дає вмісту розтягнути корпус понад
+             пропорцію - без нього aspect-ratio поступається вмісту. */
+          min-height: 0;
           border-radius: 52px;
           background: linear-gradient(145deg, #3A3A3C 0%, #1C1C1E 45%, #2C2C2E 100%);
           box-shadow:
@@ -417,9 +427,10 @@ export default function HowItWorks() {
         /* Шпалери - у фірмових кольорах матчі. Беж був випадковим
            і не мав стосунку до продукту. */
         .how .screen {
-          position: relative;
-          width: 100%;
-          height: 100%;
+          /* Відступ 11px від корпусу - це товщина рамки. */
+          position: absolute;
+          inset: 11px;
+          box-sizing: border-box;
           border-radius: 42px;
           overflow: hidden;
           padding: 3.4rem 0.75rem 0.75rem;

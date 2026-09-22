@@ -1097,64 +1097,25 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   };
 
   /**
-   * Кураторські колекції для слайд-шоу.
+   * Кадри модного блоку.
    *
-   * Лічильник рахується з РЕАЛЬНИХ закладів. Раніше стояли вигадані
-   * числа - «14 студій», «12 салонів» - незалежно від того, скільки
-   * закладів насправді. Людина клікала на «14 студій» і бачила одну.
+   * Лише фото й заголовок - без лічильників і без переходу в
+   * категорію. Це не добірка закладів, а настрій: він продає ідею
+   * догляду за собою, а не конкретну послугу.
    *
-   * Колекція без жодного закладу не показується: кадр, який веде
-   * в порожній список, гірший за його відсутність.
+   * Тому й поза залежністю від бази: кадри однакові, скільки б
+   * закладів не було.
    */
-  const collectionSlides: Slide[] = useMemo(() => {
-    const COLLECTIONS: { slug: string; text: string[]; img: string; noun: [string, string, string] }[] = [
-      { slug: 'barber', text: ['Чоловіча', 'класика'], noun: ['барбершоп', 'барбершопи', 'барбершопів'],
-        img: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=2000&q=80' },
-      { slug: 'nails', text: ['Естетика', 'манікюру'], noun: ['студія', 'студії', 'студій'],
-        img: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=2000&q=80' },
-      { slug: 'hair', text: ['Авторський', 'колір'], noun: ['салон', 'салони', 'салонів'],
-        img: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=2000&q=80' },
-      { slug: 'spa', text: ['Спа', 'і релакс'], noun: ['простір', 'простори', 'просторів'],
-        img: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=2000&q=80' },
-      { slug: 'makeup', text: ['Вечірній', 'образ'], noun: ['майстер', 'майстри', 'майстрів'],
-        img: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=2000&q=80' },
-      { slug: 'skincare', text: ['Догляд', 'за шкірою'], noun: ['центр', 'центри', 'центрів'],
-        img: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=2000&q=80' },
-      { slug: 'brows', text: ['Брови', 'і вії'], noun: ['студія', 'студії', 'студій'],
-        img: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=2000&q=80' },
-      { slug: 'massage', text: ['Масажні', 'техніки'], noun: ['фахівець', 'фахівці', 'фахівців'],
-        img: 'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?auto=format&fit=crop&w=2000&q=80' },
-    ];
-
-    // Українське узгодження: 1 студія, 2 студії, 5 студій, 11 студій.
-    const plural = (n: number, forms: [string, string, string]) => {
-      const mod10 = n % 10, mod100 = n % 100;
-      if (mod10 === 1 && mod100 !== 11) return forms[0];
-      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
-      return forms[2];
-    };
-
-    return COLLECTIONS
-      .map(col => {
-        const terms = CATEGORY_TERMS[col.slug] || [];
-        const count = businesses.filter((b: any) => {
-          const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
-          return terms.some(t => text.includes(t));
-        }).length;
-
-        return {
-          count,
-          slide: {
-            img: col.img,
-            text: col.text,
-            caption: `${count} ${plural(count, col.noun)}`,
-            onClick: () => handleCategorySelect(col.slug),
-          } as Slide,
-        };
-      })
-      .filter(x => x.count > 0)
-      .map(x => x.slide);
-  }, [businesses]);
+  const moodSlides: Slide[] = [
+    { text: ['Час', 'для себе'],
+      img: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=2000&q=80' },
+    { text: ['Впевненість', 'у деталях'],
+      img: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=2000&q=80' },
+    { text: ['Колір', 'твого настрою'],
+      img: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=2000&q=80' },
+    { text: ['Тиша', 'і дотик'],
+      img: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=2000&q=80' },
+  ];
 
   /**
    * Картка закладу.
@@ -2449,21 +2410,13 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           Замість двох рядів дрібних карток: один кадр за раз, великий
           заголовок. Колекція - це настрій, а не перелік, і вісім
           дрібних прямокутників поруч читались як меню, а не як добірка. */}
-      {/* Немає жодної колекції із закладами - секцію не показуємо
-          зовсім, а не заголовок над порожнечею. */}
-      {showCollections && collectionSlides.length > 0 && (
+      {/* Модний блок - настрій, а не перелік закладів.
+          Без заголовка секції: кадр із власним заголовком і є
+          повідомленням, а надпис «Кураторські колекції» над ним
+          лише пояснював би те, що й так видно. */}
+      {showCollections && (
         <section className="reveal-on-scroll" style={{ padding: '5rem 0' }}>
-          <div className="container">
-            <SectionHeader
-              eyebrow="Вам може сподобатися"
-              title="Кураторські колекції"
-              subtitle="Добірки закладів за настроєм і напрямом"
-            />
-          </div>
-
-          {/* На всю ширину, поза контейнером: кадр має бути
-              відчутним, а не ще однією карткою серед інших. */}
-          <Slideshow slides={collectionSlides} />
+          <Slideshow slides={moodSlides} />
         </section>
       )}
 

@@ -106,9 +106,11 @@ export default function Slideshow({
         <div
           key={i}
           className={`slide ${i === current ? 'active' : ''}`}
-          style={{ backgroundImage: `url(${slide.img})` }}
           onClick={slide.onClick}
           role={slide.onClick ? 'button' : undefined}
+          // Курсор-«рука» лише для клікабельних кадрів: над фото, яке
+          // нікуди не веде, він обіцяв би перехід, якого немає.
+          style={{ backgroundImage: `url(${slide.img})`, cursor: slide.onClick ? 'pointer' : 'default' }}
           aria-hidden={i !== current}
         >
           <div className="slide-text">
@@ -161,7 +163,6 @@ export default function Slideshow({
           opacity: 0;
           transform: scale(1.06);
           transition: opacity 1.1s ease, transform 7s ease-out;
-          cursor: pointer;
         }
         .slide.active {
           opacity: 1;

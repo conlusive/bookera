@@ -2416,7 +2416,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           лише пояснював би те, що й так видно. */}
       {showCollections && (
         <section className="reveal-on-scroll" style={{ padding: '5rem 0' }}>
-          <Slideshow slides={moodSlides} />
+          {/* У контейнері, як і решта сторінки: розворот вирізняється
+              композицією, а не тим, що вилазить за межі. */}
+          <div className="container">
+            <Slideshow slides={moodSlides} />
+          </div>
         </section>
       )}
 

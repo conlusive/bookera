@@ -4,267 +4,258 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 /**
- * Слайд-шоу на всю ширину: один кадр за раз, текст великими рядками.
+ * Журнальний розворот: фото ліворуч, заголовок праворуч.
  *
- * Взято за основу готовий компонент, але з доробками, без яких він
- * не працював би в продукті:
+ * Раніше кадр ішов на всю ширину екрана, і блоки вище починали
+ * виглядати «в коробці»: сторінка тримає один контейнер, а цей
+ * виривався з нього. Розворот живе в тих самих межах, що й решта,
+ * і все одно відчувається окремим - за рахунок композиції, а не
+ * розміру.
  *
- *   - у оригіналі НЕ БУЛО СТИЛІВ: класи .slide, .active тощо ніде
- *     не визначені, і всі кадри просто стояли б стовпчиком
- *   - дані приходять пропсами, а не зашиті всередину: той самий
- *     компонент можна поставити де завгодно
- *   - лічильник рахувався як `0{n}` - на десятому кадрі виходило
- *     «010». Тепер padStart
- *   - кадр клікабельний: колекція має вести до закладів, а не бути
- *     картинкою
- *   - гортання свайпом на телефоні й стрілками на клавіатурі
- *   - автоперемикання, яке зупиняється, коли людина дивиться
+ * Друга половина - спокійне тепле тло з великим заголовком. Перший
+ * рядок жирним, другий - тонким курсивним антиквенним шрифтом: так
+ * верстають модні журнали, і саме цей контраст робить блок
+ * впізнаваним, а не ще однією каруселлю.
  */
 
 export interface Slide {
   img: string;
-  /** Рядки заголовка - кожен з нового рядка, великими літерами. */
+  /** Два рядки: перший жирним, другий курсивом. */
   text: string[];
-  /** Дрібний надпис над заголовком: «8 закладів». */
   caption?: string;
   onClick?: () => void;
 }
 
 interface SlideshowProps {
   slides: Slide[];
-  /** Мілісекунд між кадрами. 0 - без автоперемикання. */
   autoplayMs?: number;
-  /** Висота. За замовчуванням - пропорційно ширині, з межами. */
-  height?: string;
 }
 
-export default function Slideshow({
-  slides,
-  autoplayMs = 6000,
-  height = 'clamp(420px, 62vw, 720px)',
-}: SlideshowProps) {
+export default function Slideshow({ slides, autoplayMs = 6000 }: SlideshowProps) {
   const [current, setCurrent] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  // Лічильник для перезапуску смужки прогресу: змінюється з кожним
+  // кадром, і React перемальовує смужку з нуля.
+  const [cycle, setCycle] = useState(0);
   const touchStartX = useRef<number | null>(null);
 
   const total = slides.length;
 
-  const next = useCallback(() => setCurrent(i => (i + 1) % total), [total]);
-  const prev = useCallback(() => setCurrent(i => (i - 1 + total) % total), [total]);
+  const go = useCallback((dir: 1 | -1) => {
+    setCurrent(i => (i + dir + total) % total);
+    setCycle(c => c + 1);
+  }, [total]);
 
-  // Автоперемикання.
-  //
-  // Пауза, поки людина тримає курсор над кадром: вона читає або
-  // збирається клікнути, і кадр, що зникає з-під курсора, дратує.
-  //
-  // Також поважаємо системне налаштування руху - людям із
-  // вестибулярними розладами постійна зміна кадрів буває нестерпною.
   useEffect(() => {
     if (!autoplayMs || isPaused || total < 2) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = setTimeout(() => go(1), autoplayMs);
+    return () => clearTimeout(timer);
+  }, [autoplayMs, isPaused, total, go, cycle]);
 
-    const timer = setInterval(next, autoplayMs);
-    return () => clearInterval(timer);
-  }, [autoplayMs, isPaused, total, next]);
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowRight') next();
-    if (e.key === 'ArrowLeft') prev();
-  };
-
-  // Свайп: поріг 40 пікселів, щоб випадковий дотик при прокрутці
-  // сторінки не перемикав кадр.
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
+  const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
   const onTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
     const dx = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(dx) > 40) (dx < 0 ? next : prev)();
+    if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
     touchStartX.current = null;
   };
 
   if (total === 0) return null;
-
   const pad = (n: number) => String(n).padStart(2, '0');
+  const slide = slides[current];
 
   return (
     <div
-      className="slideshow"
-      style={{ height }}
+      className="spread"
       role="region"
       aria-roledescription="слайд-шоу"
-      aria-label="Кураторські колекції"
       tabIndex={0}
-      onKeyDown={onKeyDown}
+      onKeyDown={e => { if (e.key === 'ArrowRight') go(1); if (e.key === 'ArrowLeft') go(-1); }}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
-      {slides.map((slide, i) => (
-        <div
-          key={i}
-          className={`slide ${i === current ? 'active' : ''}`}
-          onClick={slide.onClick}
-          role={slide.onClick ? 'button' : undefined}
-          // Курсор-«рука» лише для клікабельних кадрів: над фото, яке
-          // нікуди не веде, він обіцяв би перехід, якого немає.
-          style={{ backgroundImage: `url(${slide.img})`, cursor: slide.onClick ? 'pointer' : 'default' }}
-          aria-hidden={i !== current}
-        >
-          <div className="slide-text">
-            {slide.caption && <small>{slide.caption}</small>}
-            {slide.text.map((t, j) => (
-              <span key={j} style={{ transitionDelay: `${0.25 + j * 0.1}s` }}>
-                {t}
-              </span>
-            ))}
-          </div>
+      {/* Фото: усі кадри лежать один на одному, видно активний. */}
+      <div className="photo">
+        {slides.map((s, i) => (
+          <div
+            key={i}
+            className={`frame ${i === current ? 'active' : ''}`}
+            style={{ backgroundImage: `url(${s.img})`, cursor: s.onClick ? 'pointer' : 'default' }}
+            onClick={s.onClick}
+            aria-hidden={i !== current}
+          />
+        ))}
+      </div>
+
+      <div className="panel">
+        <div className="counter">
+          <span className="now">{pad(current + 1)}</span>
+          <span className="rule" />
+          <span>{pad(total)}</span>
         </div>
-      ))}
 
-      {/* З одним кадром гортати нікуди: стрілки й лічильник «01 / 01»
-          лише обіцяли б більше, ніж є. */}
-      {total > 1 && (
-        <>
-          <button className="nav left" onClick={prev} aria-label="Попередня колекція">
-            <ArrowLeft size={20} strokeWidth={1.75} />
-          </button>
-          <button className="nav right" onClick={next} aria-label="Наступна колекція">
-            <ArrowRight size={20} strokeWidth={1.75} />
-          </button>
+        {/* key={current} - заголовок перемальовується з кожним кадром,
+            і анімація появи відпрацьовує знову. */}
+        <h3 key={current} className="headline">
+          {slide.caption && <small>{slide.caption}</small>}
+          <span className="line-strong">{slide.text[0]}</span>
+          {slide.text[1] && <span className="line-soft">{slide.text[1]}</span>}
+        </h3>
 
-          <div className="counter" aria-live="polite">
-            {pad(current + 1)} / {pad(total)}
+        {total > 1 && (
+          <div className="controls">
+            {/* Смужка прогресу: показує, коли зміниться кадр. Без неї
+                автоперемикання застає зненацька посеред читання. */}
+            <div className="progress">
+              <span
+                key={cycle}
+                style={{
+                  animationDuration: `${autoplayMs}ms`,
+                  animationPlayState: isPaused ? 'paused' : 'running',
+                }}
+              />
+            </div>
+            <div className="arrows">
+              <button onClick={() => go(-1)} aria-label="Попередній кадр"><ArrowLeft size={18} strokeWidth={1.6} /></button>
+              <button onClick={() => go(1)} aria-label="Наступний кадр"><ArrowRight size={18} strokeWidth={1.6} /></button>
+            </div>
           </div>
-        </>
-      )}
+        )}
+      </div>
 
       <style jsx>{`
-        .slideshow {
-          position: relative;
-          width: 100%;
+        .spread {
+          display: grid;
+          grid-template-columns: 1.35fr 1fr;
+          min-height: clamp(460px, 42vw, 600px);
+          border-radius: 24px;
           overflow: hidden;
-          background: #111;
+          /* Тепле тло, а не біле: біле злилось би зі сторінкою, і
+             розворот читався б як фото з підписом, а не як сторінка
+             журналу. */
+          background: #F4F1EC;
           outline: none;
           user-select: none;
         }
 
-        /* Кадри лежать один на одному; видно активний.
-           Перехрещення прозорістю, а не зсув: зсув на весь екран
-           читається як перегортання сторінки й відволікає від
-           самого кадру. */
-        .slide {
+        .photo { position: relative; overflow: hidden; background: #E8E3DC; }
+        .frame {
           position: absolute;
           inset: 0;
           background-size: cover;
           background-position: center;
           opacity: 0;
-          transform: scale(1.06);
-          transition: opacity 1.1s ease, transform 7s ease-out;
+          transform: scale(1.05);
+          transition: opacity 1s ease, transform 8s ease-out;
         }
-        .slide.active {
-          opacity: 1;
-          /* Повільний наїзд, поки кадр на екрані: статичне фото на всю
-             ширину виглядає як шпалери, ледь помітний рух - як кадр. */
-          transform: scale(1);
-          z-index: 1;
-        }
+        .frame.active { opacity: 1; transform: scale(1); }
 
-        /* Затемнення знизу - під текст. Без нього білі літери губляться
-           на світлих ділянках фото. */
-        .slide::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.15) 45%, rgba(0,0,0,0) 70%);
-        }
-
-        .slide-text {
-          position: absolute;
-          left: clamp(1.5rem, 5vw, 4.5rem);
-          bottom: clamp(2rem, 6vw, 5rem);
-          z-index: 2;
+        .panel {
           display: flex;
           flex-direction: column;
-          color: #fff;
-        }
-        .slide-text small {
-          font-size: 0.8125rem;
-          font-weight: 500;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          opacity: 0.8;
-          margin-bottom: 0.9rem;
-        }
-        .slide-text span {
-          font-size: clamp(2rem, 6.5vw, 5.25rem);
-          font-weight: 700;
-          line-height: 0.98;
-          letter-spacing: -0.035em;
-          text-transform: uppercase;
-          /* Рядки виринають знизу по черзі, коли кадр стає активним. */
-          opacity: 0;
-          transform: translateY(22px);
-          transition: opacity 0.7s ease, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .slide.active .slide-text span {
-          opacity: 1;
-          transform: translateY(0);
+          justify-content: space-between;
+          padding: clamp(2rem, 4vw, 3.5rem);
         }
 
-        .nav {
-          position: absolute;
-          bottom: clamp(2rem, 6vw, 5rem);
-          z-index: 3;
-          width: 48px;
-          height: 48px;
+        .counter {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          font-size: 0.8125rem;
+          letter-spacing: 0.08em;
+          color: #8A847C;
+          font-variant-numeric: tabular-nums;
+        }
+        .counter .now { color: #1D1D1F; font-weight: 600; }
+        .counter .rule { width: 32px; height: 1px; background: #CFC8BE; }
+
+        .headline {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          color: #1D1D1F;
+        }
+        .headline small {
+          font-size: 0.75rem;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: #8A847C;
+          margin-bottom: 1rem;
+        }
+        .line-strong {
+          font-size: clamp(2.25rem, 4.6vw, 4rem);
+          font-weight: 700;
+          line-height: 1;
+          letter-spacing: -0.035em;
+          animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        /* Другий рядок - антиквою й курсивом. Системний шрифт, без
+           завантаження: Georgia є на кожній машині. */
+        .line-soft {
+          font-family: Georgia, 'Times New Roman', serif;
+          font-style: italic;
+          font-weight: 400;
+          font-size: clamp(2.25rem, 4.6vw, 4rem);
+          line-height: 1.05;
+          letter-spacing: -0.02em;
+          color: #5C5650;
+          animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+        }
+        @keyframes rise {
+          from { opacity: 0; transform: translateY(18px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .controls { display: flex; align-items: center; gap: 1.5rem; }
+        .progress {
+          flex: 1;
+          height: 2px;
+          background: #DDD6CC;
+          border-radius: 2px;
+          overflow: hidden;
+        }
+        .progress span {
+          display: block;
+          height: 100%;
+          background: #1D1D1F;
+          transform-origin: left;
+          animation-name: fill;
+          animation-timing-function: linear;
+          animation-fill-mode: forwards;
+        }
+        @keyframes fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+        .arrows { display: flex; gap: 0.5rem; }
+        .arrows button {
+          width: 44px;
+          height: 44px;
           border-radius: 50%;
-          border: 1px solid rgba(255,255,255,0.35);
-          background: rgba(255,255,255,0.08);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          color: #fff;
+          border: 1px solid #CFC8BE;
+          background: transparent;
+          color: #1D1D1F;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           transition: background-color 0.2s ease, border-color 0.2s ease;
         }
-        .nav:hover {
-          background: rgba(255,255,255,0.2);
-          border-color: rgba(255,255,255,0.6);
-        }
-        /* Обидві стрілки праворуч, поруч: розкидані по краях вони
-           змагаються з текстом ліворуч. */
-        .nav.left { right: calc(clamp(1.5rem, 5vw, 4.5rem) + 58px); }
-        .nav.right { right: clamp(1.5rem, 5vw, 4.5rem); }
+        .arrows button:hover { background: #1D1D1F; border-color: #1D1D1F; color: #fff; }
 
-        .counter {
-          position: absolute;
-          top: clamp(1.25rem, 3vw, 2rem);
-          right: clamp(1.5rem, 5vw, 4.5rem);
-          z-index: 3;
-          color: #fff;
-          font-size: 0.8125rem;
-          font-weight: 500;
-          letter-spacing: 0.08em;
-          font-variant-numeric: tabular-nums;
-          opacity: 0.85;
-        }
-
-        @media (max-width: 640px) {
-          /* На телефоні стрілки ховаємо - там гортають свайпом, а дві
-             кнопки на вузькому екрані накривали б заголовок. */
-          .nav { display: none; }
+        /* На телефоні - фото зверху, текст під ним. Поруч на вузькому
+           екрані обидві половини стали б надто тісними. */
+        @media (max-width: 760px) {
+          .spread { grid-template-columns: 1fr; }
+          .photo { aspect-ratio: 4 / 5; }
+          .arrows { display: none; }
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .slide, .slide-text span {
-            transition: opacity 0.3s ease;
-            transform: none !important;
-          }
+          .frame { transition: opacity 0.3s ease; transform: none !important; }
+          .line-strong, .line-soft { animation: none; }
+          .progress { display: none; }
         }
       `}</style>
     </div>

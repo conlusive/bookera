@@ -12,6 +12,7 @@ import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
 import HowItWorks from '@/components/home/HowItWorks';
+import BusinessShowcase from '@/components/home/BusinessShowcase';
 
 /**
  * Ключові слова категорій.
@@ -2405,80 +2406,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           Тексти збережено дослівно - змінилась лише подача. */}
       <HowItWorks />
 
-      {/* ТЕМНА СЕКЦІЯ (ДЛЯ БІЗНЕСУ - DASHBOARD) */}
-      <section className="info-section" style={{ backgroundColor: '#111827', color: '#fff', padding: '10rem 0', position: 'relative', zIndex: 20, overflow: 'hidden' }}>
-        <div className="massive-blob-bg"></div>
-        <div className="massive-blob"></div>
-
-        <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6rem', alignItems: 'center' }}>
-
-            <div className="reveal-on-scroll" style={{ position: 'relative', zIndex: 10 }}>
-              <h2 style={{ fontSize: '3.5rem', fontWeight: '900', color: '#fff', lineHeight: '1.1', marginBottom: '1.5rem', letterSpacing: '-0.03em' }}>
-                Сучасне <span style={{ display: 'inline-block', background: '#C2D8C4', padding: '0 1rem', borderRadius: '16px', color: '#222222', transform: 'rotate(-2deg)' }}>рішення</span> <br/>для вашого бізнесу
-              </h2>
-              <p style={{ color: '#cbd5e1', fontSize: '1.15rem', lineHeight: '1.6', marginBottom: '1.5rem', fontWeight: '400', maxWidth: '450px' }}>
-                BookEra Business — це повноцінна екосистема для власників салонів та приватних майстрів. Залучайте нових клієнтів, керуйте розкладом та ведіть фінансову аналітику в одній програмі.
-              </p>
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '2.5rem' }}>
-                <Link href="/business" style={{ textDecoration: 'none' }}>
-                  <button className="btn-theme anim" style={{ padding: '1rem 2.5rem', borderRadius: '30px', fontSize: '1rem' }}>Створити профіль</button>
-                </Link>
-              </div>
-            </div>
-
-            <div className="reveal-on-scroll delay-100" style={{ position: 'relative', height: '450px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <div style={{ width: '100%', position: 'absolute' }}>
-                <svg viewBox="0 0 600 400" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: 'auto', filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.5))' }}>
-                  <rect x="20" y="20" width="560" height="360" rx="20" fill="#ffffff" stroke="#e2e8f0" strokeWidth="4"/>
-                  <rect x="20" y="20" width="120" height="360" rx="20" fill="#f8fafc" />
-                  <rect x="40" y="60" width="80" height="12" rx="6" fill="#cbd5e1" />
-                  <rect x="40" y="90" width="60" height="10" rx="5" fill="#e2e8f0" />
-                  <rect x="40" y="115" width="70" height="10" rx="5" fill="#e2e8f0" />
-                  <rect x="40" y="140" width="50" height="10" rx="5" fill="#e2e8f0" />
-                  <rect x="160" y="40" width="400" height="40" rx="10" fill="#f8fafc" />
-                  <circle cx="530" cy="60" r="10" fill="#cbd5e1" />
-                  <rect x="160" y="100" width="380" height="140" rx="12" fill="#f1f5f9" />
-                  <path d="M 180 200 L 230 150 L 280 180 L 350 120 L 420 160 L 520 130" stroke="#8fae92" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-                  <circle cx="350" cy="120" r="6" fill="#8fae92" />
-                  <circle cx="520" cy="130" r="6" fill="#8fae92" />
-                  <path d="M 180 220 L 520 220" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="6 6" />
-                  <path d="M 180 180 L 520 180" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="6 6" />
-                  <rect x="160" y="260" width="180" height="100" rx="12" fill="#f8fafc" />
-                  <rect x="180" y="280" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="210" y="280" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="240" y="280" width="20" height="20" rx="4" fill="#C2D8C4" />
-                  <rect x="270" y="280" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="300" y="280" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="180" y="310" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="210" y="310" width="20" height="20" rx="4" fill="#fde047" />
-                  <rect x="240" y="310" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="270" y="310" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="300" y="310" width="20" height="20" rx="4" fill="#e2e8f0" />
-                  <rect x="360" y="260" width="180" height="100" rx="12" fill="#C2D8C4" />
-                  <circle cx="400" cy="310" r="20" fill="#ffffff" fillOpacity="0.5" />
-                  <path d="M 400 300 L 400 320 M 390 310 L 410 310" stroke="#111827" strokeWidth="4" strokeLinecap="round" />
-                  <rect x="440" y="295" width="60" height="10" rx="5" fill="#111827" />
-                  <rect x="440" y="315" width="40" height="8" rx="4" fill="#111827" fillOpacity="0.5" />
-                </svg>
-              </div>
-              <div className="floating-widget" style={{ left: '-10px', bottom: '15%' }}>
-                <div style={{ width: '40px', height: '40px', background: '#C2D8C4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#222', flexShrink: 0 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '1rem', fontWeight: '800', color: '#111827', lineHeight: '1.2' }}>+40% клієнтів</span>
-                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Завдяки системі</span>
-                </div>
-              </div>
-              <div className="floating-widget" style={{ top: '8%', right: '-20px', padding: '0.8rem 1.2rem' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8fae92" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#111827' }}>Аналітика</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ДЛЯ БІЗНЕСУ
+          Світле вікно кабінету, яке оживає, замість темної секції
+          на всю ширину. Тексти збережено; прибрано лише «+40%
+          клієнтів» - число без джерела. */}
+      <BusinessShowcase />
 
       {/* БЛОК МІСТ */}
       <section className="reveal-on-scroll" style={{ padding: '5rem 0', backgroundColor: '#111827', borderTop: '1px solid rgba(255, 255, 255, 0.08)', position: 'relative', zIndex: 20 }}>

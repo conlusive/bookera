@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -95,6 +96,338 @@ const topCities = [
   'Ужгород', 'Хмельницький', 'Чернівці', 'Рівне',
   'Полтава', 'Черкаси', 'Луцьк', 'Житомир'
 ];
+
+/* ------------------------------------------------------------------ */
+/* ПОРАДИ СТИЛЮ - карусель із мініатюрами                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Поради стилю.
+ *
+ * Фото - ті, що вже працюють на сайті: нових посилань я перевірити не
+ * можу, а бита картинка в каруселі гірша за знайому. Для справжнього
+ * фешн-настрою їх варто замінити власною зйомкою - кожне фото тут
+ * одне посилання.
+ *
+ * Поради написані як сказав би майстер клієнтові, а не як пишуть
+ * рекламні банери.
+ */
+const STYLE_TIPS = [
+  {
+    img: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Волосся',
+    title: 'Колір, що не потребує щотижневої уваги',
+    text: 'Попросіть м’який перехід від коріння замість різкої межі - відросле волосся тоді виглядає задумом, і до майстра можна приходити раз на два місяці.',
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Барбер',
+    title: 'Стрижка тримає форму довше, ніж здається',
+    text: 'Корекція раз на три-чотири тижні дешевша за нову стрижку щомісяця: контур лишається чистим, а довжина росте так, як задумав майстер.',
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Нігті',
+    title: 'Нюд, який пасує до всього',
+    text: 'Відтінок на тон темніший за шкіру нігтьового ложа подовжує пальці й не вимагає добирати колір під одяг.',
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Шкіра',
+    title: 'Догляд починається з очищення',
+    text: 'Навіть найкращий крем не спрацює на неочищеній шкірі. Мʼякий засіб увечері важить більше, ніж третій серум у полиці.',
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Макіяж',
+    title: 'Вечірній образ без важкості',
+    text: 'Виберіть один акцент - очі або губи. Два яскраві акценти змагаються між собою, і обличчя губиться за макіяжем.',
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Брови',
+    title: 'Природна форма замість модної',
+    text: 'Брови, що повторюють лінію кістки, пасують до обличчя роками. Модний вигин за рік виглядатиме датованим.',
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Спа',
+    title: 'Відпочинок теж частина догляду',
+    text: 'Година спа раз на місяць знімає напругу, яку не прибере жоден крем: розслаблені мʼязи обличчя - це вже інший вираз.',
+  },
+  {
+    img: 'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?auto=format&fit=crop&w=1800&q=80',
+    tag: 'Масаж',
+    title: 'Масаж шиї для тих, хто за компʼютером',
+    text: 'Скутість шиї й плечей видно по поставі. Кілька сеансів повертають легкість, яку не дасть жодна вправа вдома.',
+  },
+];
+
+/* Розміри мініатюр - як у вихідному компоненті. */
+const THUMB_FULL = 120;
+const THUMB_COLLAPSED = 35;
+const THUMB_GAP = 4;
+
+/**
+ * Карусель із мініатюрами.
+ *
+ * Поведінка вихідного компонента на motion/react, але без цієї
+ * бібліотеки: пакет заради одного блоку сторінки додав би вагу
+ * кожному відвідувачу. Перетягування, пружне гортання й розкриття
+ * мініатюр зроблено на подіях вказівника й CSS-переходах.
+ */
+function StyleTipsCarousel() {
+  const [index, setIndex] = useState(0);
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ startX: number; startTime: number; id: number } | null>(null);
+
+  const total = STYLE_TIPS.length;
+  const go = (i: number) => setIndex(Math.max(0, Math.min(total - 1, i)));
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    // Натискання на стрілку - не перетягування.
+    //
+    // Без цієї перевірки setPointerCapture нижче перехоплював би
+    // вказівник на карусель, і подія click діставалась би їй, а не
+    // кнопці: стрілки просто не спрацьовували б.
+    if ((e.target as HTMLElement).closest('button')) return;
+    drag.current = { startX: e.clientX, startTime: performance.now(), id: e.pointerId };
+    setIsDragging(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    let dx = e.clientX - drag.current.startX;
+    // Опір на краях: за першим і останнім кадром тягнеться втричі
+    // важче - як dragElastic у вихідному компоненті.
+    if ((index === 0 && dx > 0) || (index === total - 1 && dx < 0)) dx *= 0.3;
+    setDragX(dx);
+  };
+
+  const onPointerUp = () => {
+    if (!drag.current) return;
+    const width = trackRef.current?.offsetWidth || 1;
+    const elapsed = Math.max(1, performance.now() - drag.current.startTime);
+    const velocity = (dragX / elapsed) * 1000; // пікселів за секунду
+
+    // Швидкий свайп - за швидкістю; повільний - якщо протягли 30%
+    // ширини. Ті самі пороги, що у вихідному компоненті.
+    if (Math.abs(velocity) > 500) go(velocity > 0 ? index - 1 : index + 1);
+    else if (Math.abs(dragX) > width * 0.3) go(dragX > 0 ? index - 1 : index + 1);
+
+    drag.current = null;
+    setDragX(0);
+    setIsDragging(false);
+  };
+
+  // Активна мініатюра - по центру стрічки.
+  useEffect(() => {
+    const el = thumbsRef.current;
+    if (!el) return;
+    const position = index * (THUMB_COLLAPSED + THUMB_GAP) - (el.offsetWidth / 2 - THUMB_FULL / 2);
+    el.scrollTo({ left: position, behavior: 'smooth' });
+  }, [index]);
+
+  const tip = STYLE_TIPS[index];
+
+  return (
+    <div
+      className="stc"
+      tabIndex={0}
+      role="region"
+      aria-roledescription="карусель"
+      aria-label="Поради стилю"
+      onKeyDown={e => {
+        if (e.key === 'ArrowRight') go(index + 1);
+        if (e.key === 'ArrowLeft') go(index - 1);
+      }}
+    >
+      <div
+        ref={trackRef}
+        className="stc-main"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <div
+          className="stc-track"
+          style={{
+            transform: `translateX(calc(${-index * 100}% + ${dragX}px))`,
+            // Під час перетягування - без переходу, кадр іде за пальцем.
+            // Після - пружна крива, що трохи перелітає й повертається.
+            transition: isDragging ? 'none' : 'transform 0.6s cubic-bezier(0.22, 1.2, 0.36, 1)',
+          }}
+        >
+          {STYLE_TIPS.map((t, i) => (
+            <div key={i} className="stc-slide" aria-hidden={i !== index}>
+              <img src={t.img} alt={t.title} draggable={false} loading={i < 2 ? 'eager' : 'lazy'} />
+            </div>
+          ))}
+        </div>
+
+        {/* Порада поверх фото. key={index} - текст перемальовується
+            з кожним кадром, і поява відпрацьовує знову. */}
+        <div className="stc-caption" key={index}>
+          <span className="stc-tag">{tip.tag}</span>
+          <h3>{tip.title}</h3>
+          <p>{tip.text}</p>
+        </div>
+
+        <button className="stc-nav left" onClick={() => go(index - 1)} disabled={index === 0} aria-label="Попередня порада">
+          <ChevronLeft size={22} />
+        </button>
+        <button className="stc-nav right" onClick={() => go(index + 1)} disabled={index === total - 1} aria-label="Наступна порада">
+          <ChevronRight size={22} />
+        </button>
+      </div>
+
+      <div ref={thumbsRef} className="stc-thumbs">
+        <div className="stc-thumbs-row">
+          {STYLE_TIPS.map((t, i) => (
+            <button
+              key={i}
+              className={`stc-thumb ${i === index ? 'on' : ''}`}
+              style={{ width: i === index ? THUMB_FULL : THUMB_COLLAPSED }}
+              onClick={() => go(i)}
+              aria-label={t.title}
+            >
+              <img src={t.img.replace('w=1800', 'w=300')} alt="" draggable={false} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <style jsx>{`
+        .stc { outline: none; }
+        .stc-main {
+          position: relative;
+          overflow: hidden;
+          border-radius: 24px;
+          height: clamp(420px, 50vw, 600px);
+          background: #F5F5F7;
+          touch-action: pan-y;
+          cursor: grab;
+          user-select: none;
+        }
+        .stc-main:active { cursor: grabbing; }
+        .stc-track { display: flex; height: 100%; }
+        .stc-slide { flex-shrink: 0; width: 100%; height: 100%; }
+        .stc-slide img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+
+        /* Затемнення знизу під текст поради. */
+        .stc-main::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.18) 45%, rgba(0,0,0,0) 70%);
+          pointer-events: none;
+        }
+
+        .stc-caption {
+          position: absolute;
+          left: clamp(1.25rem, 4vw, 3rem);
+          right: clamp(1.25rem, 4vw, 3rem);
+          bottom: clamp(1.5rem, 4vw, 2.75rem);
+          z-index: 2;
+          max-width: 560px;
+          color: #fff;
+          pointer-events: none;
+          animation: stcIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes stcIn {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: none; }
+        }
+        .stc-tag {
+          display: inline-block;
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          padding: 0.3rem 0.7rem;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.18);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          margin-bottom: 0.9rem;
+        }
+        .stc-caption h3 {
+          font-size: clamp(1.5rem, 3vw, 2.25rem);
+          font-weight: 600;
+          line-height: 1.12;
+          letter-spacing: -0.025em;
+          margin: 0 0 0.6rem;
+        }
+        .stc-caption p {
+          font-size: clamp(0.9375rem, 1.3vw, 1.0625rem);
+          line-height: 1.55;
+          color: rgba(255,255,255,0.82);
+          margin: 0;
+        }
+
+        .stc-nav {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 3;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          border: none;
+          background: rgba(255,255,255,0.9);
+          color: #1D1D1F;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+          transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+        .stc-nav:hover:not(:disabled) { transform: translateY(-50%) scale(1.08); }
+        .stc-nav:disabled { opacity: 0.35; cursor: default; }
+        .stc-nav.left { left: 1rem; }
+        .stc-nav.right { right: 1rem; }
+
+        .stc-thumbs {
+          overflow-x: auto;
+          scrollbar-width: none;
+          margin-top: 0.75rem;
+        }
+        .stc-thumbs::-webkit-scrollbar { display: none; }
+        .stc-thumbs-row { display: flex; gap: ${THUMB_GAP}px; height: 72px; width: fit-content; }
+        .stc-thumb {
+          flex-shrink: 0;
+          height: 100%;
+          padding: 0;
+          border: none;
+          border-radius: 10px;
+          overflow: hidden;
+          cursor: pointer;
+          opacity: 0.55;
+          /* Розкриття мініатюри - та сама тривалість, що й у вихідному. */
+          transition: width 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        .stc-thumb.on { opacity: 1; }
+        .stc-thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+
+        /* На телефоні стрілки ховаємо: гортають свайпом, а кнопки
+           накривали б текст поради. */
+        @media (max-width: 640px) {
+          .stc-nav { display: none; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .stc-track { transition: none !important; }
+          .stc-caption { animation: none; }
+        }
+      `}</style>
+    </div>
+  );
+}
 
 export default function HomePageClient({ initialBusinesses }: { initialBusinesses: any[] }) {
   const router = useRouter();
@@ -2409,11 +2742,17 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       {/* ДЛЯ БІЗНЕСУ - на весь екран, відео-тло, текст рядками. */}
       <BusinessShowcase />
 
-      {/* ПОРОЖНЄ ПОЛОТНО - місце під майбутній блок.
-          Тут був «Шукайте свого спеціаліста за містом». Прибрано на
-          ваше прохання; вміст придумаємо окремо. Висота задана, щоб
-          футер не прилипав одразу до бізнес-блоку. */}
-      <section aria-hidden style={{ background: '#ffffff', minHeight: '60vh' }} />
+      {/* ПОРАДИ СТИЛЮ - на місці колишнього блоку міст. */}
+      <section className="reveal-on-scroll" style={{ padding: '6rem 0 5rem', background: '#ffffff' }}>
+        <div className="container">
+          <SectionHeader
+            eyebrow="Натхнення"
+            title="Поради стилю"
+            subtitle="Маленькі рішення, які майстри радять своїм клієнтам"
+          />
+          <StyleTipsCarousel />
+        </div>
+      </section>
 
       {/* ЧОРНИЙ ФУТЕР ІЗ КОТИКОМ */}
       <footer className="clean-dark-footer" style={{ marginTop: 'auto', position: 'relative', overflow: 'hidden' }}>

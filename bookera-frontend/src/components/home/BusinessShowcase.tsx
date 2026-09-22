@@ -21,19 +21,22 @@ import { ArrowRight } from 'lucide-react';
  */
 
 /**
- * Відео тла.
+ * Точки на орбітах - клієнти навколо закладу.
  *
- * Спершу стояло відео з промту - про риб, яке не мало стосунку до
- * послуг. Тепер «beauty tools» з банера нагорі: інструменти майстра,
- * тобто саме робота - те, що цікавить власника закладу.
- *
- * Бонус: браузер уже завантажив його для банера, тож тут воно
- * зʼявляється миттєво, без очікування.
- *
- * Щоб замінити - вставте сюди посилання на інше відео.
+ * Кут у градусах і номер орбіти. Розкидані нерівно навмисно: рівні
+ * інтервали читаються як креслення, нерівні - як живе середовище.
  */
-const VIDEO =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260518_203415_b86e3f19-2aec-46cd-9a86-b64c40118e38.mp4';
+const ORBIT_DOTS = [
+  { ring: 1, angle: 200, size: 7 },
+  { ring: 1, angle: 320, size: 5 },
+  { ring: 2, angle: 150, size: 6 },
+  { ring: 2, angle: 255, size: 8 },
+  { ring: 2, angle: 20, size: 5 },
+  { ring: 3, angle: 185, size: 5 },
+  { ring: 3, angle: 230, size: 7 },
+  { ring: 3, angle: 300, size: 4 },
+];
+const RINGS = [180, 290, 410, 540];
 
 export default function BusinessShowcase() {
   const ref = useRef<HTMLElement>(null);
@@ -55,21 +58,43 @@ export default function BusinessShowcase() {
 
   return (
     <section ref={ref} className={`bh ${inView ? 'in' : ''}`}>
-      <video
-        className="bh-video"
-        src={VIDEO}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        aria-hidden
-      />
-
-      {/* Затемнення: без нього білий текст губиться на світлих кадрах.
-          Сильніше зліва й знизу - там, де стоїть текст, - і майже
-          прозоре праворуч, щоб відео лишалось видимим. */}
-      <div className="bh-shade" aria-hidden />
+      {/* Статична композиція замість відео: заклад у центрі світіння,
+          клієнти на орбітах навколо. Жодного фото, яке могло б не
+          підійти до теми, - лише форма й колір бренду. */}
+      <div className="bh-art" aria-hidden>
+        <svg className="bh-orbits" viewBox="-600 -600 1200 1200">
+          {RINGS.map((r, i) => (
+            <circle
+              key={r}
+              r={r}
+              fill="none"
+              stroke="rgba(194, 216, 196, 1)"
+              // Зовнішні кола тонші й прозоріші: так вони розчиняються
+              // в темряві, а не обриваються різко.
+              strokeOpacity={0.16 - i * 0.03}
+              strokeWidth={1}
+            />
+          ))}
+          {ORBIT_DOTS.map((d, i) => {
+            const r = RINGS[d.ring];
+            const a = (d.angle * Math.PI) / 180;
+            return (
+              <circle
+                key={i}
+                cx={Math.cos(a) * r}
+                cy={Math.sin(a) * r}
+                r={d.size}
+                fill="#C2D8C4"
+                fillOpacity={0.55 + (i % 3) * 0.15}
+              />
+            );
+          })}
+          {/* Центр - сам заклад. */}
+          <circle r={34} fill="#C2D8C4" fillOpacity={0.9} />
+          <circle r={34} fill="none" stroke="#C2D8C4" strokeOpacity={0.25} strokeWidth={14} />
+        </svg>
+        <div className="bh-grain" />
+      </div>
 
       <div className="bh-content">
         <div className="bh-top">
@@ -114,21 +139,46 @@ export default function BusinessShowcase() {
           color: #fff;
         }
 
-        .bh-video {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          object-position: center;
-        }
-
-        .bh-shade {
+        /* Тло: глибокий зелено-чорний і мʼяке світіння матчі
+           праворуч, звідки розходяться орбіти. Ліворуч - темніше,
+           там стоїть текст. */
+        .bh-art {
           position: absolute;
           inset: 0;
           background:
-            linear-gradient(to right, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 45%, rgba(0,0,0,0) 75%),
-            linear-gradient(to top, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 40%);
+            radial-gradient(55% 70% at 74% 50%, rgba(111, 146, 115, 0.55) 0%, rgba(111, 146, 115, 0) 70%),
+            radial-gradient(30% 40% at 80% 38%, rgba(194, 216, 196, 0.35) 0%, rgba(194, 216, 196, 0) 70%),
+            radial-gradient(60% 80% at 10% 100%, rgba(30, 44, 34, 0.9) 0%, rgba(30, 44, 34, 0) 70%),
+            #0B0F0C;
+        }
+
+        /* Орбіти: квадрат, прив'язаний до правої частини, щоб центр
+           завжди стояв у світінні незалежно від ширини екрана. */
+        .bh-orbits {
+          position: absolute;
+          top: 50%;
+          left: 74%;
+          width: min(1200px, 130vh);
+          height: min(1200px, 130vh);
+          transform: translate(-50%, -50%);
+          overflow: visible;
+        }
+
+        /* Зерно: прибирає смуги на градієнтах (на великих екранах
+           плавний перехід розпадається на сходинки) і дає тлу фактуру
+           друкованого матеріалу. */
+        .bh-grain {
+          position: absolute;
+          inset: 0;
+          opacity: 0.09;
+          mix-blend-mode: overlay;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+
+        /* На телефоні орбіти відсуваються нижче й праворуч, щоб не
+           лягати під заголовок. */
+        @media (max-width: 760px) {
+          .bh-orbits { left: 85%; top: 72%; width: 130vw; height: 130vw; }
         }
 
         .bh-content {

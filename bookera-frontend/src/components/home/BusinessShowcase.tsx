@@ -267,11 +267,11 @@ export default function BusinessShowcase() {
           position: absolute;
           border-radius: 20px;
           padding: 1rem 1.1rem;
-          background: linear-gradient(160deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.05) 100%);
+          background: linear-gradient(160deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.14) 100%);
           backdrop-filter: blur(22px) saturate(1.3);
           -webkit-backdrop-filter: blur(22px) saturate(1.3);
-          border: 1px solid rgba(255,255,255,0.16);
-          box-shadow: 0 30px 60px -30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12);
+          border: 1px solid rgba(255,255,255,0.3);
+          box-shadow: 0 30px 60px -30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.28);
           color: #fff;
           opacity: 0;
         }
@@ -318,10 +318,10 @@ export default function BusinessShowcase() {
           padding: 0.35rem 0;
           opacity: 0;
         }
-        .gn-row + .gn-row { border-top: 1px solid rgba(255,255,255,0.08); margin-top: 0.35rem; padding-top: 0.7rem; }
+        .gn-row + .gn-row { border-top: 1px solid rgba(255,255,255,0.16); margin-top: 0.35rem; padding-top: 0.7rem; }
         .bh.in .gn-row { animation: bhFadeSlideUp 0.6s ease both; }
         .gn-t { font-size: 0.8125rem; font-weight: 600; }
-        .gn-s { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
+        .gn-s { font-size: 0.72rem; color: rgba(255,255,255,0.72); }
 
         .pulse {
           position: relative;
@@ -358,15 +358,15 @@ export default function BusinessShowcase() {
           from { opacity: 0; transform: translateX(-12px); }
           to { opacity: 1; transform: none; }
         }
-        .gd-time { color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums; }
+        .gd-time { color: rgba(255,255,255,0.7); font-variant-numeric: tabular-nums; }
         .gd-bar { height: 18px; border-radius: 2px; background: #8FAE93; }
         .gd-what { font-weight: 500; }
-        .gd-who { color: rgba(255,255,255,0.55); }
+        .gd-who { color: rgba(255,255,255,0.7); }
 
         /* Тиждень */
         .gw-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.4rem; height: 96px; }
         .gw-col { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
-        .gw-col span { font-size: 0.62rem; color: rgba(255,255,255,0.5); }
+        .gw-col span { font-size: 0.62rem; color: rgba(255,255,255,0.68); }
         .gw-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
         .gw-bar {
           width: 100%;

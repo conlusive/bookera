@@ -253,11 +253,19 @@ export default function BusinessShowcase() {
           top: 50%;
           right: clamp(1.5rem, 6vw, 6rem);
           transform: translateY(-50%);
-          /* Ширина рахована так, щоб картки не лягали на заголовок:
-             на 1100px найдовший рядок закінчується на ~658px, картки
-             починаються з ~660px. */
-          width: min(420px, 34vw);
-          height: min(520px, 70vh);
+          /* Ширина росте з екраном і займає вільне місце по центру.
+             Раніше картки були фіксовані 420px, і на широких екранах між
+             ними й текстом лишалась порожнеча.
+
+             94vw - 700px: від правого краю до кінця заголовка (~658px)
+             мінус 40px проміжку. Перевірено розрахунком на 1100-1920px -
+             на жодній ширині картки не лягають на заголовок. */
+          width: min(680px, calc(94vw - 700px));
+          height: min(620px, 78vh);
+          /* Вміст карток у em від цього розміру: картки ростуть - росте
+             й текст у них. Без цього на широкому екрані дрібний текст
+             плавав би у великих порожніх картках. */
+          font-size: clamp(14px, 1.3vw, 20px);
         }
 
         /* Скло на темному градієнті: напівпрозоре тло, розмиття того,
@@ -265,8 +273,8 @@ export default function BusinessShowcase() {
            скло склом, без нього це просто сірий прямокутник. */
         .glass {
           position: absolute;
-          border-radius: 20px;
-          padding: 1rem 1.1rem;
+          border-radius: 1.3em;
+          padding: 1.15em 1.25em;
           background: linear-gradient(160deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.14) 100%);
           backdrop-filter: blur(22px) saturate(1.3);
           -webkit-backdrop-filter: blur(22px) saturate(1.3);
@@ -303,10 +311,10 @@ export default function BusinessShowcase() {
         .g-head {
           display: flex;
           justify-content: space-between;
-          font-size: 0.75rem;
+          font-size: 0.75em;
           font-weight: 600;
           color: rgba(255,255,255,0.85);
-          margin-bottom: 0.7rem;
+          margin-bottom: 0.7em;
         }
         .g-count { color: #C2D8C4; font-weight: 500; }
 
@@ -314,19 +322,19 @@ export default function BusinessShowcase() {
         .gn-row {
           display: flex;
           align-items: center;
-          gap: 0.7rem;
-          padding: 0.35rem 0;
+          gap: 0.7em;
+          padding: 0.35em 0;
           opacity: 0;
         }
-        .gn-row + .gn-row { border-top: 1px solid rgba(255,255,255,0.16); margin-top: 0.35rem; padding-top: 0.7rem; }
+        .gn-row + .gn-row { border-top: 1px solid rgba(255,255,255,0.16); margin-top: 0.35em; padding-top: 0.7em; }
         .bh.in .gn-row { animation: bhFadeSlideUp 0.6s ease both; }
-        .gn-t { font-size: 0.8125rem; font-weight: 600; }
-        .gn-s { font-size: 0.72rem; color: rgba(255,255,255,0.72); }
+        .gn-t { font-size: 0.8125em; font-weight: 600; }
+        .gn-s { font-size: 0.72em; color: rgba(255,255,255,0.72); }
 
         .pulse {
           position: relative;
-          width: 10px;
-          height: 10px;
+          width: 0.62em;
+          height: 0.62em;
           flex-shrink: 0;
           border-radius: 50%;
           background: #C2D8C4;
@@ -346,11 +354,11 @@ export default function BusinessShowcase() {
         /* Розклад */
         .gd-row {
           display: grid;
-          grid-template-columns: 38px 3px 1fr auto;
-          gap: 0.6rem;
+          grid-template-columns: 2.6em 3px 1fr auto;
+          gap: 0.6em;
           align-items: center;
-          padding: 0.4rem 0;
-          font-size: 0.75rem;
+          padding: 0.4em 0;
+          font-size: 0.75em;
           opacity: 0;
         }
         .bh.in .gd-row { animation: bhSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
@@ -359,14 +367,14 @@ export default function BusinessShowcase() {
           to { opacity: 1; transform: none; }
         }
         .gd-time { color: rgba(255,255,255,0.7); font-variant-numeric: tabular-nums; }
-        .gd-bar { height: 18px; border-radius: 2px; background: #8FAE93; }
+        .gd-bar { height: 1.15em; border-radius: 2px; background: #8FAE93; }
         .gd-what { font-weight: 500; }
         .gd-who { color: rgba(255,255,255,0.7); }
 
         /* Тиждень */
-        .gw-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.4rem; height: 96px; }
-        .gw-col { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
-        .gw-col span { font-size: 0.62rem; color: rgba(255,255,255,0.68); }
+        .gw-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.4em; height: 6em; }
+        .gw-col { display: flex; flex-direction: column; align-items: center; gap: 0.35em; }
+        .gw-col span { font-size: 0.62em; color: rgba(255,255,255,0.68); }
         .gw-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
         .gw-bar {
           width: 100%;
@@ -395,6 +403,7 @@ export default function BusinessShowcase() {
             transform: translate(50%, -50%);
             width: min(340px, 86vw);
             height: auto;
+            font-size: 15px;
           }
           .g-notif { position: relative; left: 0; width: 100%; }
           .g-day, .g-week { display: none; }

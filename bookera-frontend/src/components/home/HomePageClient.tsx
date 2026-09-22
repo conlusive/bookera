@@ -2409,22 +2409,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       {/* ДЛЯ БІЗНЕСУ - на весь екран, відео-тло, текст рядками. */}
       <BusinessShowcase />
 
-      {/* БЛОК МІСТ */}
-      <section className="reveal-on-scroll" style={{ padding: '5rem 0', backgroundColor: '#111827', borderTop: '1px solid rgba(255, 255, 255, 0.08)', position: 'relative', zIndex: 20 }}>
-        <div className="container">
-          <h2 style={{ fontSize: '2rem', fontWeight: '800', color: '#ffffff', textAlign: 'center', marginBottom: '3rem', letterSpacing: '-0.02em' }}>
-            Шукайте свого спеціаліста за містом
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem 2rem' }}>
-            {topCities.map(city => (
-              <Link key={city} href={`/s/${searchWhat}?location=${city}`} className="city-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                {city}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ПОРОЖНЄ ПОЛОТНО - місце під майбутній блок.
+          Тут був «Шукайте свого спеціаліста за містом». Прибрано на
+          ваше прохання; вміст придумаємо окремо. Висота задана, щоб
+          футер не прилипав одразу до бізнес-блоку. */}
+      <section aria-hidden style={{ background: '#ffffff', minHeight: '60vh' }} />
 
       {/* ЧОРНИЙ ФУТЕР ІЗ КОТИКОМ */}
       <footer className="clean-dark-footer" style={{ marginTop: 'auto', position: 'relative', overflow: 'hidden' }}>

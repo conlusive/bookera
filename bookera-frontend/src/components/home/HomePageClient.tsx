@@ -11,7 +11,7 @@ import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
-import Slideshow, { type Slide } from '@/components/ui/slideshow';
+import HowItWorks from '@/components/home/HowItWorks';
 
 /**
  * Ключові слова категорій.
@@ -1096,26 +1096,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return { state: 'open', label: 'Відкрито' };
   };
 
-  /**
-   * Кадри модного блоку.
-   *
-   * Лише фото й заголовок - без лічильників і без переходу в
-   * категорію. Це не добірка закладів, а настрій: він продає ідею
-   * догляду за собою, а не конкретну послугу.
-   *
-   * Тому й поза залежністю від бази: кадри однакові, скільки б
-   * закладів не було.
-   */
-  const moodSlides: Slide[] = [
-    { text: ['Час', 'для себе'],
-      img: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=2000&q=80' },
-    { text: ['Впевненість', 'у деталях'],
-      img: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=2000&q=80' },
-    { text: ['Колір', 'твого настрою'],
-      img: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=2000&q=80' },
-    { text: ['Тиша', 'і дотик'],
-      img: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=2000&q=80' },
-  ];
 
   /**
    * Картка закладу.
@@ -2406,92 +2386,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         </div>
       </section>
 
-      {/* ІНФОРМАЦІЙНА СІТКА */}
-      <section className="info-section">
-        <div className="container">
-          <div className="compact-features-grid">
-            <div className="reveal-on-scroll">
-              <div style={{ width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#f0fdf4', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-              </div>
-              <h2 className="info-title">
-                Зручно бронюйте візити <br/>
-                <span style={{ position: 'relative', display: 'inline-block', zIndex: 1, color: '#111827' }}>
-                  онлайн
-                  <svg style={{ position: 'absolute', bottom: '0', left: '-5%', width: '110%', height: '12px', zIndex: -1 }} viewBox="0 0 100 12" preserveAspectRatio="none">
-                    <path d="M2 10 Q 50 2 98 10" stroke="#C2D8C4" strokeWidth="4" fill="none" strokeLinecap="round" />
-                  </svg>
-                </span>
-              </h2>
-              <p className="info-desc">
-                Хочете записатися до перукаря, барбера, на манікюр чи в масажний салон у вашому районі? Шукаєте місце, де найкращі спеціалісти подбають про вашу красу?
-              </p>
-              <p className="info-desc">
-                BookEra — це сервіс миттєвого бронювання, де можна легко й швидко знаходити вільні дати та записуватися. Більше жодних телефонних дзвінків.
-              </p>
-            </div>
-            <div className="reveal-on-scroll delay-100">
-              <div style={{ width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#eff6ff', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-              </div>
-              <h2 className="info-title">
-                Щось змінилося? <br/>Не переймайтеся — <br/>
-                <span style={{ position: 'relative', display: 'inline-block', zIndex: 1, color: '#111827' }}>
-                  ми нагадаємо
-                  <svg style={{ position: 'absolute', bottom: '-2px', left: '-2%', width: '104%', height: '10px', zIndex: -1 }} viewBox="0 0 100 10" preserveAspectRatio="none">
-                    <path d="M0 5 Q 25 10 50 5 T 100 5" stroke="#bfdbfe" strokeWidth="4" fill="none" strokeLinecap="round" />
-                  </svg>
-                </span>
-              </h2>
-              <p className="info-desc">
-                Керуйте своїми візитами звідусіль. Переносьте записи або скасовуйте бронювання без незручних телефонних дзвінків та пояснень.
-              </p>
-              <p className="info-desc">
-                Ми знаємо, що у вас щодня безліч справ! Тому BookEra надсилатиме вам автоматичні нагадування про майбутні візити, аби ви нічого не пропустили.
-              </p>
-            </div>
-            <div className="reveal-on-scroll delay-200">
-              <div style={{ width: '52px', height: '52px', borderRadius: '16px', backgroundColor: '#fefce8', color: '#a16207', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-              </div>
-              <h2 className="info-title">
-                Бронюйте в <span style={{ position: 'relative', display: 'inline-block', zIndex: 1 }}>
-                  найкращих
-                  <svg style={{ position: 'absolute', bottom: '-4px', left: '0', width: '100%', height: '10px', zIndex: -1 }} viewBox="0 0 100 10" preserveAspectRatio="none">
-                    <path d="M0 5 Q 50 15 100 5" stroke="#facc15" strokeWidth="4" fill="none" strokeLinecap="round" />
-                  </svg>
-                </span> спеціалістів
-              </h2>
-              <p className="info-desc">
-                У BookEra ви знайдете найкращі заклади для здоров'я та салони краси у вашому регіоні.
-              </p>
-              <p className="info-desc">
-                Дізнайтеся більше про них — переглядайте профілі, читайте реальні відгуки інших клієнтів та ознайомлюйтеся з їхніми роботами перед тим, як записатись.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      
-      {/* Модний блок - настрій, а не перелік закладів.
-          Без заголовка секції: кадр із власним заголовком і є
-          повідомленням, а надпис «Кураторські колекції» над ним
-          лише пояснював би те, що й так видно.
-
-          Показується ЗАВЖДИ, незалежно від пошуку: тепер це частина
-          розповіді про бренд унизу сторінки, а не редакційний блок
-          посеред результатів. Ховати його при виборі послуги немає
-          причини - він не заважає шукати. */}
-      {(
-        <section className="reveal-on-scroll" style={{ padding: '5rem 0' }}>
-          {/* У контейнері, як і решта сторінки: розворот вирізняється
-              композицією, а не тим, що вилазить за межі. */}
-          <div className="container">
-            <Slideshow slides={moodSlides} />
-          </div>
-        </section>
-      )}
+      {/* ЯК ЦЕ ПРАЦЮЄ
+          Три тези, і кожна ПОКАЗАНА живою мініатюрою поруч із текстом.
+          Тексти збережено дослівно - змінилась лише подача. */}
+      <HowItWorks />
 
       {/* ТЕМНА СЕКЦІЯ (ДЛЯ БІЗНЕСУ - DASHBOARD) */}
       <section className="info-section" style={{ backgroundColor: '#111827', color: '#fff', padding: '10rem 0', position: 'relative', zIndex: 20, overflow: 'hidden' }}>

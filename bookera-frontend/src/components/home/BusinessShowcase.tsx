@@ -20,23 +20,23 @@ import { ArrowRight } from 'lucide-react';
  *     ще нагорі, і вона побачила б уже готовий блок
  */
 
-/**
- * Точки на орбітах - клієнти навколо закладу.
- *
- * Кут у градусах і номер орбіти. Розкидані нерівно навмисно: рівні
- * інтервали читаються як креслення, нерівні - як живе середовище.
- */
-const ORBIT_DOTS = [
-  { ring: 1, angle: 200, size: 7 },
-  { ring: 1, angle: 320, size: 5 },
-  { ring: 2, angle: 150, size: 6 },
-  { ring: 2, angle: 255, size: 8 },
-  { ring: 2, angle: 20, size: 5 },
-  { ring: 3, angle: 185, size: 5 },
-  { ring: 3, angle: 230, size: 7 },
-  { ring: 3, angle: 300, size: 4 },
+/** Сповіщення про онлайн-записи. */
+const NOTIFS = [
+  { who: 'Дарина', what: 'Манікюр · завтра о 11:00' },
+  { who: 'Андрій', what: 'Стрижка · сьогодні о 17:30' },
 ];
-const RINGS = [180, 290, 410, 540];
+
+/** Розклад дня - записи виїжджають по черзі. */
+const DAY = [
+  { time: '09:30', what: 'Стрижка', who: 'Максим' },
+  { time: '11:00', what: 'Фарбування', who: 'Ірина' },
+  { time: '13:00', what: 'Манікюр', who: 'Олена' },
+  { time: '15:30', what: 'Борода', who: 'Андрій' },
+];
+
+/** Завантаженість тижня, у відсотках. */
+const WEEK = [42, 58, 50, 72, 86, 100, 64];
+const WEEK_DAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'нд'];
 
 export default function BusinessShowcase() {
   const ref = useRef<HTMLElement>(null);
@@ -62,38 +62,58 @@ export default function BusinessShowcase() {
           клієнти на орбітах навколо. Жодного фото, яке могло б не
           підійти до теми, - лише форма й колір бренду. */}
       <div className="bh-art" aria-hidden>
-        <svg className="bh-orbits" viewBox="-600 -600 1200 1200">
-          {RINGS.map((r, i) => (
-            <circle
-              key={r}
-              r={r}
-              fill="none"
-              stroke="rgba(194, 216, 196, 1)"
-              // Зовнішні кола тонші й прозоріші: так вони розчиняються
-              // в темряві, а не обриваються різко.
-              strokeOpacity={0.16 - i * 0.03}
-              strokeWidth={1}
-            />
-          ))}
-          {ORBIT_DOTS.map((d, i) => {
-            const r = RINGS[d.ring];
-            const a = (d.angle * Math.PI) / 180;
-            return (
-              <circle
-                key={i}
-                cx={Math.cos(a) * r}
-                cy={Math.sin(a) * r}
-                r={d.size}
-                fill="#C2D8C4"
-                fillOpacity={0.55 + (i % 3) * 0.15}
-              />
-            );
-          })}
-          {/* Центр - сам заклад. */}
-          <circle r={34} fill="#C2D8C4" fillOpacity={0.9} />
-          <circle r={34} fill="none" stroke="#C2D8C4" strokeOpacity={0.25} strokeWidth={14} />
-        </svg>
         <div className="bh-grain" />
+      </div>
+
+      {/* Скляні картки праворуч - три живі моменти роботи закладу.
+          Кожна пливе у власному ритмі: однакові коливання виглядали
+          б як один рухомий шар, а не як три окремі речі. */}
+      <div className="bh-cards" aria-hidden>
+        <div className="glass g-notif">
+          {NOTIFS.map((n, i) => (
+            <div key={n.who} className="gn-row" style={{ animationDelay: `${1.1 + i * 0.5}s` }}>
+              {/* Пульсуюче коло: хвиля розходиться від точки, як
+                  сигнал, що щойно прийшов. */}
+              <span className="pulse"><span /></span>
+              <div>
+                <div className="gn-t">Новий запис · {n.who}</div>
+                <div className="gn-s">{n.what}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="glass g-day">
+          <div className="g-head">
+            <span>Сьогодні</span>
+            <span className="g-count">{DAY.length} записи</span>
+          </div>
+          {DAY.map((d, i) => (
+            <div key={d.time} className="gd-row" style={{ animationDelay: `${1.3 + i * 0.18}s` }}>
+              <span className="gd-time">{d.time}</span>
+              <span className="gd-bar" />
+              <span className="gd-what">{d.what}</span>
+              <span className="gd-who">{d.who}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="glass g-week">
+          <div className="g-head"><span>Тиждень</span></div>
+          <div className="gw-bars">
+            {WEEK.map((v, i) => (
+              <div key={i} className="gw-col">
+                <div className="gw-track">
+                  <div
+                    className={`gw-bar ${i === 5 ? 'peak' : ''}`}
+                    style={{ ['--h' as string]: v / 100, animationDelay: `${1.5 + i * 0.07}s` }}
+                  />
+                </div>
+                <span>{WEEK_DAYS[i]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="bh-content">
@@ -152,18 +172,6 @@ export default function BusinessShowcase() {
             #0B0F0C;
         }
 
-        /* Орбіти: квадрат, прив'язаний до правої частини, щоб центр
-           завжди стояв у світінні незалежно від ширини екрана. */
-        .bh-orbits {
-          position: absolute;
-          top: 50%;
-          left: 74%;
-          width: min(1200px, 130vh);
-          height: min(1200px, 130vh);
-          transform: translate(-50%, -50%);
-          overflow: visible;
-        }
-
         /* Зерно: прибирає смуги на градієнтах (на великих екранах
            плавний перехід розпадається на сходинки) і дає тлу фактуру
            друкованого матеріалу. */
@@ -173,12 +181,6 @@ export default function BusinessShowcase() {
           opacity: 0.09;
           mix-blend-mode: overlay;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-        }
-
-        /* На телефоні орбіти відсуваються нижче й праворуч, щоб не
-           лягати під заголовок. */
-        @media (max-width: 760px) {
-          .bh-orbits { left: 85%; top: 72%; width: 130vw; height: 130vw; }
         }
 
         .bh-content {
@@ -244,6 +246,160 @@ export default function BusinessShowcase() {
         .bh-link { font-size: 0.875rem; color: rgba(255,255,255,0.8); text-decoration: none; transition: color 0.2s; }
         .bh-link:hover { color: #fff; }
 
+        /* --- Скляні картки --- */
+        .bh-cards {
+          position: absolute;
+          z-index: 5;
+          top: 50%;
+          right: clamp(1.5rem, 6vw, 6rem);
+          transform: translateY(-50%);
+          /* Ширина рахована так, щоб картки не лягали на заголовок:
+             на 1100px найдовший рядок закінчується на ~658px, картки
+             починаються з ~660px. */
+          width: min(420px, 34vw);
+          height: min(520px, 70vh);
+        }
+
+        /* Скло на темному градієнті: напівпрозоре тло, розмиття того,
+           що під ним, і тонкий світлий край - саме край робить
+           скло склом, без нього це просто сірий прямокутник. */
+        .glass {
+          position: absolute;
+          border-radius: 20px;
+          padding: 1rem 1.1rem;
+          background: linear-gradient(160deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.05) 100%);
+          backdrop-filter: blur(22px) saturate(1.3);
+          -webkit-backdrop-filter: blur(22px) saturate(1.3);
+          border: 1px solid rgba(255,255,255,0.16);
+          box-shadow: 0 30px 60px -30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12);
+          color: #fff;
+          opacity: 0;
+        }
+        .bh.in .glass {
+          animation:
+            bhCardIn 1s cubic-bezier(0.16, 1, 0.3, 1) both,
+            bhFloat 7s ease-in-out infinite;
+        }
+        /* Картки стоять уступами й трохи накладаються: композиція, а не
+           стовпчик. */
+        .g-notif { top: 0; left: 8%; width: 76%; }
+        .g-day   { top: 30%; left: 0; width: 72%; }
+        .g-week  { top: 58%; right: 0; width: 56%; }
+        .bh.in .g-notif { animation-delay: 0.5s, 1.5s; }
+        .bh.in .g-day   { animation-delay: 0.7s, 2.6s; animation-duration: 1s, 8s; }
+        .bh.in .g-week  { animation-delay: 0.9s, 3.4s; animation-duration: 1s, 9s; }
+
+        @keyframes bhCardIn {
+          from { opacity: 0; transform: translateY(40px) scale(0.96); }
+          to { opacity: 1; transform: none; }
+        }
+        /* Повільне коливання: 6 пікселів за 7-9 секунд. Помітне, лише
+           якщо придивитись, - але сцена перестає бути картинкою. */
+        @keyframes bhFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+
+        .g-head {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: rgba(255,255,255,0.85);
+          margin-bottom: 0.7rem;
+        }
+        .g-count { color: #C2D8C4; font-weight: 500; }
+
+        /* Сповіщення */
+        .gn-row {
+          display: flex;
+          align-items: center;
+          gap: 0.7rem;
+          padding: 0.35rem 0;
+          opacity: 0;
+        }
+        .gn-row + .gn-row { border-top: 1px solid rgba(255,255,255,0.08); margin-top: 0.35rem; padding-top: 0.7rem; }
+        .bh.in .gn-row { animation: bhFadeSlideUp 0.6s ease both; }
+        .gn-t { font-size: 0.8125rem; font-weight: 600; }
+        .gn-s { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
+
+        .pulse {
+          position: relative;
+          width: 10px;
+          height: 10px;
+          flex-shrink: 0;
+          border-radius: 50%;
+          background: #C2D8C4;
+        }
+        .pulse span {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          border: 1.5px solid #C2D8C4;
+          animation: bhPulse 2.4s ease-out infinite;
+        }
+        @keyframes bhPulse {
+          from { transform: scale(1); opacity: 0.8; }
+          to { transform: scale(3.2); opacity: 0; }
+        }
+
+        /* Розклад */
+        .gd-row {
+          display: grid;
+          grid-template-columns: 38px 3px 1fr auto;
+          gap: 0.6rem;
+          align-items: center;
+          padding: 0.4rem 0;
+          font-size: 0.75rem;
+          opacity: 0;
+        }
+        .bh.in .gd-row { animation: bhSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        @keyframes bhSlideIn {
+          from { opacity: 0; transform: translateX(-12px); }
+          to { opacity: 1; transform: none; }
+        }
+        .gd-time { color: rgba(255,255,255,0.55); font-variant-numeric: tabular-nums; }
+        .gd-bar { height: 18px; border-radius: 2px; background: #8FAE93; }
+        .gd-what { font-weight: 500; }
+        .gd-who { color: rgba(255,255,255,0.55); }
+
+        /* Тиждень */
+        .gw-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.4rem; height: 96px; }
+        .gw-col { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+        .gw-col span { font-size: 0.62rem; color: rgba(255,255,255,0.5); }
+        .gw-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+        .gw-bar {
+          width: 100%;
+          height: 100%;
+          border-radius: 5px;
+          background: rgba(194, 216, 196, 0.45);
+          transform-origin: bottom;
+          transform: scaleY(0);
+        }
+        /* Найзавантаженіший день яскравіший: саме цю відповідь людина
+           й шукає, дивлячись на тиждень. */
+        .gw-bar.peak { background: #C2D8C4; }
+        .bh.in .gw-bar { animation: bhGrow 1s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        @keyframes bhGrow {
+          from { transform: scaleY(0); }
+          to { transform: scaleY(var(--h)); }
+        }
+
+        /* До 1100px - одна картка сповіщень посередині, між заголовком
+           угорі й текстом унизу, де якраз порожньо. Три картки поруч
+           із великим заголовком на 1024px на нього наклалися б -
+           перевірено розрахунком ширини рядка. */
+        @media (max-width: 1100px) {
+          .bh-cards {
+            right: 50%;
+            transform: translate(50%, -50%);
+            width: min(340px, 86vw);
+            height: auto;
+          }
+          .g-notif { position: relative; left: 0; width: 100%; }
+          .g-day, .g-week { display: none; }
+        }
+
         /* Рядки чекають, поки блок зʼявиться в полі зору. */
         .bh .anim { opacity: 0; }
         .bh.in .anim { animation: bhFadeSlideUp 0.8s ease both; }
@@ -255,6 +411,9 @@ export default function BusinessShowcase() {
 
         @media (prefers-reduced-motion: reduce) {
           .bh .anim, .bh.in .anim { opacity: 1; animation: none; }
+          .glass, .gn-row, .gd-row { opacity: 1 !important; animation: none !important; }
+          .gw-bar { animation: none !important; transform: scaleY(var(--h)); }
+          .pulse span { animation: none; }
         }
       `}</style>
     </section>

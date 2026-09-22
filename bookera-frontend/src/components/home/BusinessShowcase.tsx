@@ -20,8 +20,20 @@ import { ArrowRight } from 'lucide-react';
  *     ще нагорі, і вона побачила б уже готовий блок
  */
 
+/**
+ * Відео тла.
+ *
+ * Спершу стояло відео з промту - про риб, яке не мало стосунку до
+ * послуг. Тепер «beauty tools» з банера нагорі: інструменти майстра,
+ * тобто саме робота - те, що цікавить власника закладу.
+ *
+ * Бонус: браузер уже завантажив його для банера, тож тут воно
+ * зʼявляється миттєво, без очікування.
+ *
+ * Щоб замінити - вставте сюди посилання на інше відео.
+ */
 const VIDEO =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260622_204221_5339e40b-e73d-4ab0-9c65-79c18c66fd50.mp4';
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260518_203415_b86e3f19-2aec-46cd-9a86-b64c40118e38.mp4';
 
 export default function BusinessShowcase() {
   const ref = useRef<HTMLElement>(null);
@@ -108,7 +120,7 @@ export default function BusinessShowcase() {
           width: 100%;
           height: 100%;
           object-fit: cover;
-          object-position: 70% center;
+          object-position: center;
         }
 
         .bh-shade {

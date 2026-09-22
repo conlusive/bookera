@@ -101,22 +101,41 @@ function BookingDemo({ play }: { play: boolean }) {
 
 function ReminderDemo({ play }: { play: boolean }) {
   return (
-    <div className="demo-phone">
-      <div className="phone-time">9:41</div>
+    <div className="device">
+      {/* Корпус і екран - два шари, як у справжнього пристрою.
+          Раніше рамку малювала внутрішня тінь: плоска чорна смуга,
+          яка виглядала намальованою, а не зробленою. */}
+      <div className="screen">
+        <div className="island" />
 
-      {/* Два сповіщення з'являються одне за одним, як на справжньому
-          екрані блокування: спершу нагадування, потім пропозиція
-          перенести - саме в такому порядку людина їх і отримує. */}
-      <div className={`notif ${play ? 'in' : ''}`} style={{ transitionDelay: '0.3s' }}>
-        <div className="notif-app">BookEra · зараз</div>
-        <div className="notif-title">Завтра о 14:00</div>
-        <div className="notif-body">Стрижка в Top Barber. Чекаємо на вас!</div>
-      </div>
+        <div className="lock-date">Середа, 24 вересня</div>
+        <div className="lock-time">9:41</div>
 
-      <div className={`notif ${play ? 'in' : ''}`} style={{ transitionDelay: '1.1s' }}>
-        <div className="notif-app">BookEra · 1 хв тому</div>
-        <div className="notif-title">Щось змінилося?</div>
-        <div className="notif-body">Перенесіть запис в один дотик</div>
+        <div className="stack">
+          <div className={`notif ${play ? 'in' : ''}`} style={{ transitionDelay: '0.35s' }}>
+            <div className="app-icon">B</div>
+            <div className="notif-content">
+              <div className="notif-row">
+                <span className="notif-title">Завтра о 14:00</span>
+                <span className="notif-when">зараз</span>
+              </div>
+              <div className="notif-body">Стрижка в Top Barber. Чекаємо на вас!</div>
+            </div>
+          </div>
+
+          <div className={`notif ${play ? 'in' : ''}`} style={{ transitionDelay: '1.15s' }}>
+            <div className="app-icon">B</div>
+            <div className="notif-content">
+              <div className="notif-row">
+                <span className="notif-title">Щось змінилося?</span>
+                <span className="notif-when">1 хв</span>
+              </div>
+              <div className="notif-body">Перенесіть запис в один дотик</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="home-bar" />
       </div>
     </div>
   );
@@ -298,7 +317,21 @@ export default function HowItWorks() {
           max-width: 480px;
         }
 
-        .how .visual { display: flex; justify-content: center; }
+        /* Сцена під кожною мініатюрою.
+           Без неї картка, телефон і рейтинг висіли б на білому кожен
+           сам по собі - три різні обʼєкти. Однакове мʼяке тло робить
+           із них одну систему, а тінт матчі привʼязує до бренду. */
+        .how .visual {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: clamp(2rem, 4vw, 3.5rem) clamp(1.25rem, 3vw, 2.5rem);
+          border-radius: 32px;
+          background:
+            radial-gradient(80% 60% at 50% 0%, #F4FAF5 0%, transparent 70%),
+            linear-gradient(180deg, #F7F9F6 0%, #EEF3ED 100%);
+          min-height: 420px;
+        }
 
         /* --- Спільна картка мініатюри --- */
         .how .demo-card {
@@ -358,47 +391,123 @@ export default function HowItWorks() {
         .how .confirm-title { font-size: 0.9375rem; font-weight: 600; color: #1D1D1F; }
         .how .confirm-sub { font-size: 0.8125rem; color: #5C6B5E; }
 
-        /* --- Телефон зі сповіщеннями --- */
-        .how .demo-phone {
+        /* --- Телефон --- */
+
+        /* Корпус: тонкий обідок із ледь помітним градієнтом, як
+           у металевої рамки. Чисто чорний читається як заглушка. */
+        .how .device {
           width: 100%;
-          max-width: 330px;
-          aspect-ratio: 9 / 13;
-          border-radius: 38px;
-          padding: 2.5rem 1rem 1rem;
-          /* Тепле тло, як шпалери екрана блокування: сповіщення на
-             білому губились би. */
-          background: linear-gradient(160deg, #E9E4DC 0%, #D6CFC4 100%);
+          max-width: 300px;
+          aspect-ratio: 9 / 19;
+          padding: 11px;
+          border-radius: 52px;
+          background: linear-gradient(145deg, #3A3A3C 0%, #1C1C1E 45%, #2C2C2E 100%);
+          box-shadow:
+            0 40px 80px -30px rgba(46, 58, 48, 0.45),
+            0 0 0 1px rgba(255,255,255,0.06) inset,
+            0 0 0 1.5px #0A0A0A;
+          opacity: 0;
+          transform: translateY(34px) rotate(-1.5deg);
+          transition: opacity 0.9s ease 0.15s, transform 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+        }
+        /* Легкий нахил, що випрямляється при появі: пристрій ніби
+           кладуть на стіл перед людиною. */
+        .how .row.in .device { opacity: 1; transform: rotate(0deg); }
+
+        /* Шпалери - у фірмових кольорах матчі. Беж був випадковим
+           і не мав стосунку до продукту. */
+        .how .screen {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          border-radius: 42px;
+          overflow: hidden;
+          padding: 3.4rem 0.75rem 0.75rem;
           display: flex;
           flex-direction: column;
-          gap: 0.6rem;
-          box-shadow: 0 24px 60px -24px rgba(0,0,0,0.25), inset 0 0 0 8px #1D1D1F;
-          opacity: 0;
-          transform: translateY(30px);
-          transition: opacity 0.9s ease 0.15s, transform 1s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+          background:
+            radial-gradient(120% 70% at 20% 0%, #E4EEE3 0%, transparent 60%),
+            radial-gradient(90% 60% at 100% 100%, #8FAE93 0%, transparent 65%),
+            linear-gradient(170deg, #C2D8C4 0%, #A9C4AC 55%, #7E9E83 100%);
         }
-        .how .row.in .demo-phone { opacity: 1; transform: none; }
-        .how .phone-time {
+
+        .how .island {
+          position: absolute;
+          top: 11px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 92px;
+          height: 27px;
+          border-radius: 20px;
+          background: #0A0A0A;
+        }
+
+        .how .lock-date {
           text-align: center;
-          font-size: 3rem;
-          font-weight: 600;
-          color: rgba(29,29,31,0.8);
-          letter-spacing: -0.03em;
-          margin-bottom: 1rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: rgba(24, 38, 26, 0.72);
         }
+        /* Тонкий і великий, як справжній годинник екрана блокування.
+           Напівжирний час читається як заголовок сайту, а не як екран. */
+        .how .lock-time {
+          text-align: center;
+          font-size: 4.25rem;
+          font-weight: 300;
+          line-height: 1;
+          letter-spacing: -0.04em;
+          color: rgba(24, 38, 26, 0.85);
+          margin: 0.15rem 0 auto;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .how .stack { display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 1.1rem; }
+
         .how .notif {
-          background: rgba(255,255,255,0.78);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border-radius: 18px;
-          padding: 0.8rem 0.95rem;
+          display: flex;
+          gap: 0.6rem;
+          align-items: flex-start;
+          padding: 0.7rem 0.75rem;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.62);
+          backdrop-filter: blur(20px) saturate(1.4);
+          -webkit-backdrop-filter: blur(20px) saturate(1.4);
+          box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset;
           opacity: 0;
-          transform: translateY(-14px) scale(0.97);
-          transition: opacity 0.6s ease, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+          transform: translateY(-14px) scale(0.96);
+          transition: opacity 0.6s ease, transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .how .notif.in { opacity: 1; transform: none; }
-        .how .notif-app { font-size: 0.7rem; color: #86868B; margin-bottom: 0.2rem; }
-        .how .notif-title { font-size: 0.875rem; font-weight: 600; color: #1D1D1F; }
-        .how .notif-body { font-size: 0.8125rem; color: #3A3A3C; }
+
+        /* Іконка застосунку - фірмова: без неї сповіщення безіменне,
+           і незрозуміло, від кого воно. */
+        .how .app-icon {
+          flex-shrink: 0;
+          width: 34px;
+          height: 34px;
+          border-radius: 9px;
+          background: linear-gradient(145deg, #2E3A30 0%, #1D1D1F 100%);
+          color: #C2D8C4;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.05rem;
+          font-weight: 800;
+          letter-spacing: -0.04em;
+        }
+        .how .notif-content { flex: 1; min-width: 0; }
+        .how .notif-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+        .how .notif-title { font-size: 0.8125rem; font-weight: 600; color: #1D1D1F; }
+        .how .notif-when { font-size: 0.6875rem; color: rgba(29,29,31,0.5); flex-shrink: 0; }
+        .how .notif-body { font-size: 0.78rem; color: rgba(29,29,31,0.78); line-height: 1.35; margin-top: 1px; }
+
+        .how .home-bar {
+          width: 118px;
+          height: 5px;
+          border-radius: 3px;
+          background: rgba(24, 38, 26, 0.55);
+          margin: 0 auto;
+        }
 
         /* --- Рейтинг --- */
         .how .rating-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
@@ -413,7 +522,7 @@ export default function HowItWorks() {
         .how .bar { flex: 1; height: 6px; border-radius: 3px; background: #F2F2F5; overflow: hidden; }
         .how .bar-fill {
           height: 100%;
-          background: #1D1D1F;
+          background: #6F9273;
           transform-origin: left;
           transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1);
         }
@@ -440,7 +549,7 @@ export default function HowItWorks() {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .how .text, .how .demo-card, .how .demo-phone, .how .notif,
+          .how .text, .how .demo-card, .how .device, .how .notif,
           .how .confirm, .how .quote, .how .slot, .how .bar-fill {
             transition: none !important;
           }

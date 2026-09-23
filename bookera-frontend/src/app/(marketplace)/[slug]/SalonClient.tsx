@@ -292,6 +292,31 @@ export default function SalonClient({
     }
   }, [salon?.id]);
 
+  /**
+   * Година, обрана ще на картці закладу на головній.
+   *
+   * Раніше клік по годині на картці підставляв ПЕРШУ послугу закладу
+   * й одразу кидав на вибір часу - людина не обирала ні послугу, ні
+   * майстра. А година рахувалась для тієї першої послуги й будь-якого
+   * майстра, тож для іншої послуги чи конкретного майстра могла
+   * виявитись зайнятою.
+   *
+   * Тепер людина проходить звичайний шлях - послуга, майстер, час, -
+   * а обрана година чекає на кроці часу. Там її перевіряємо проти
+   * справжніх вільних слотів саме цієї послуги й майстра: вільна -
+   * підставляємо, зайнята - чесно кажемо й даємо обрати іншу.
+   *
+   * Слот НЕ утримується, поки людина обирає: утримання на 10 хвилин
+   * починається лише коли вона натискає «Далі» на кроці часу.
+   */
+  const [preferredTime, setPreferredTime] = useState<{ date: string; time: string } | null>(null);
+  const [preferredMissed, setPreferredMissed] = useState<string | null>(null);
+  // Для якої послуги, майстра й дати завантажені поточні слоти.
+  // Без цього перевірка години могла спрацювати на СТАРИХ слотах -
+  // у тому самому кадрі, коли людина дійшла до кроку часу, а свіжі
+  // ще не прийшли, - і вільна година виявилася б «зайнятою».
+  const [slotsKey, setSlotsKey] = useState('');
+
   const fetchAvailableSlots = useCallback(async () => {
     if (!salon?.id || !selectedService?.id || !selectedDate) return;
     setIsLoadingSlots(true);
@@ -304,12 +329,37 @@ export default function SalonClient({
         duration_minutes: totalCalculatedDuration,
       });
       setSlotItems(data.slots || []);
+      setSlotsKey(`${selectedService.id}|${selectedMasterId || '0'}|${selectedDate}`);
     } catch {
       setSlotItems([]);
+      setSlotsKey(`${selectedService.id}|${selectedMasterId || '0'}|${selectedDate}`);
     } finally {
       setIsLoadingSlots(false);
     }
   }, [salon?.id, selectedService?.id, selectedDate, selectedMasterId, totalCalculatedDuration]);
+
+  // Слоти кроку часу прийшли - перевіряємо обрану на картці годину.
+  useEffect(() => {
+    if (!preferredTime || currentStep !== 3 || isLoadingSlots) return;
+    // Чекаємо на слоти саме для поточного вибору.
+    if (slotsKey !== `${selectedService?.id}|${selectedMasterId || '0'}|${selectedDate}`) return;
+    // Людина сама змінила дату - обрана на картці година вже не про неї.
+    if (selectedDate !== preferredTime.date) { setPreferredTime(null); return; }
+
+    const free = slotItems.some((s: any) =>
+      String(s.time).slice(0, 5) === preferredTime.time && s.status === 'available'
+    );
+    if (free) {
+      setSelectedTime(preferredTime.time);
+      setPreferredMissed(null);
+    } else {
+      setPreferredMissed(preferredTime.time);
+    }
+    setPreferredTime(null);
+  }, [preferredTime, currentStep, isLoadingSlots, slotItems, selectedDate, slotsKey, selectedService?.id, selectedMasterId]);
+
+  // Людина обрала інший час - попередження про зайняту годину зайве.
+  useEffect(() => { if (selectedTime) setPreferredMissed(null); }, [selectedTime]);
 
   useEffect(() => {
     if (isModalOpen && selectedDate && selectedService && currentStep === 3) {
@@ -338,11 +388,22 @@ export default function SalonClient({
           setSelectedDate(dateParam);
           setBookingCalendarMonth(new Date(dateParam));
         }
-        if (timeParam) {
-          setSelectedTime(timeParam);
-          setCurrentStep(3); // Одразу переходимо на крок з підтвердженим часом
+        if (timeParam && dateParam) {
+          // Не стрибаємо на крок часу - година дочекається там.
+          setPreferredTime({ date: dateParam, time: timeParam.slice(0, 5) });
         }
       }
+    }
+
+    // Швидкий запис із картки на головній: година є, послуги ще немає.
+    // Відкриваємо запис із першого кроку - вибору послуги.
+    const quickDate = searchParams.get('date');
+    const quickTime = searchParams.get('time');
+    if (!repeatServiceId && quickDate && quickTime && services?.length) {
+      openModal();
+      setSelectedDate(quickDate);
+      setBookingCalendarMonth(new Date(quickDate));
+      setPreferredTime({ date: quickDate, time: quickTime.slice(0, 5) });
     }
 
     const dl = searchParams.get('dl');
@@ -789,6 +850,8 @@ const formatRole = (role?: string) => {
   };
 
   const closeModal = async () => {
+    setPreferredTime(null);
+    setPreferredMissed(null);
     setIsModalOpen(false);
     if (pendingBookingId && !bookingSuccess) {
       try {

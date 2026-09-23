@@ -1630,7 +1630,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                           date: todayStr,
                           time: time,
                         });
-                        if (primaryService?.id) query.set('service', String(primaryService.id));
+                        // Послугу НЕ підставляємо: раніше тут ставилась перша
+                        // послуга закладу, і людина потрапляла одразу на
+                        // вибір часу, не обравши ні послуги, ні майстра.
+                        // Тепер вона обирає їх сама, а година чекає.
                         router.push(`/${biz.slug || biz.id}?${query.toString()}`);
                       }}
                       className="interactive-time-chip anim"

@@ -57,23 +57,29 @@ export default function BusinessLandingPage() {
       desc: "Отримайте власну сторінку для запису, яка виглядає ідеально на будь-якому пристрої. Додайте послуги, ціни та портфоліо в пару кліків.",
       btn: "Переглянути приклад",
       mockup: (
-        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '0', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', overflow: 'hidden', transform: 'translateZ(0)' }}>
-          <div style={{ height: '120px', background: 'linear-gradient(135deg, #111827 0%, #334155 100%)', position: 'relative' }}>
-             <div style={{ position: 'absolute', bottom: '-20px', left: '20px', width: '60px', height: '60px', borderRadius: '50%', background: '#EEF1F6', border: '4px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: 800, color: '#1D1D1F', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>FB</div>
+        /* Вітрина - як сторінка закладу для клієнта: логотип-ініціали,
+           рейтинг, адреса, зручності, послуги з тривалістю й ціною,
+           кнопка запису. Обкладинка - мʼякий градієнт матчі замість
+           фото: легше вантажиться й не старіє. */
+        <div style={{ width: '300px', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 50px -24px rgba(46,58,48,0.22), 0 0 0 1px rgba(0,0,0,0.04)', overflow: 'hidden', color: '#1D1D1F' }}>
+          <div style={{ height: '88px', position: 'relative', background: 'radial-gradient(120% 100% at 0% 0%, #E4EEE3 0%, transparent 60%), linear-gradient(135deg, #DCE8DB 0%, #C2D8C4 100%)' }}>
+            <div style={{ position: 'absolute', left: '18px', bottom: '-20px', width: '46px', height: '46px', borderRadius: '50%', background: '#EEF1F6', border: '3px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 800 }}>TB</div>
           </div>
-          <div style={{ padding: '30px 20px 20px 20px' }}>
-             <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827' }}>The First Barber</div>
-             <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.2rem' }}>Київ, вул. Хрещатик, 1</div>
-
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: '12px', marginBottom: '8px' }}>
-                <div>
-                   <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827' }}>Стрижка + Борода</div>
-                   <div style={{ fontSize: '0.75rem', color: '#64748b' }}>60 хв</div>
-                </div>
-                <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#111827' }}>800 ₴</div>
-             </div>
-
-             <button style={{ width: '100%', padding: '12px', background: '#C2D8C4', borderRadius: '12px', border: 'none', fontWeight: '800', color: '#111827', marginTop: '10px' }}>Записатись</button>
+          <div style={{ padding: '28px 18px 18px' }}>
+            <div style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Top Barber</div>
+            <div style={{ fontSize: '0.75rem', color: '#86868B', marginTop: '2px' }}><span style={{ color: '#1D1D1F', fontWeight: 600 }}>★ 4.9</span> · 128 відгуків · Дорошенка 1</div>
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', margin: '12px 0' }}>
+              {['Wi-Fi', 'Паркування', 'Pet friendly'].map(a => (
+                <span key={a} style={{ fontSize: '0.68rem', fontWeight: 500, padding: '3px 8px', borderRadius: '999px', background: '#F4FAF5', color: '#2E3A30' }}>{a}</span>
+              ))}
+            </div>
+            {[['Чоловіча стрижка', '45 хв', '450 ₴'], ['Стрижка + борода', '60 хв', '650 ₴']].map(([n, d, pr]) => (
+              <div key={n} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderTop: '1px solid #F0F0F2', fontSize: '0.8rem' }}>
+                <div><div style={{ fontWeight: 600 }}>{n}</div><div style={{ fontSize: '0.7rem', color: '#86868B' }}>{d}</div></div>
+                <div style={{ fontWeight: 600 }}>{pr}</div>
+              </div>
+            ))}
+            <div style={{ marginTop: '10px', textAlign: 'center', padding: '10px', borderRadius: '12px', background: '#1D1D1F', color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>Записатися</div>
           </div>
         </div>
       )
@@ -83,23 +89,24 @@ export default function BusinessLandingPage() {
       desc: "Повертайте клієнтів частіше. Створюйте персоналізовані розсилки зі знижками для тих, хто давно не був у вас.",
       btn: "Інструменти маркетингу",
       mockup: (
-        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', transform: 'translateZ(0)' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827', marginBottom: '1.2rem' }}>Кампанії</div>
-          <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.2rem' }}>
-             <div style={{ width: '40px', height: '40px', background: '#eff6ff', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6F9273', marginBottom: '1rem' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg></div>
-             <div style={{ fontSize: '1.05rem', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>Знижка -20%</div>
-             <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.4' }}>Для клієнтів, яких не було більше 2-х місяців.</div>
-             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
-                <div>
-                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Отримувачі</div>
-                   <div style={{ fontSize: '0.9rem', color: '#111827', fontWeight: '800' }}>142</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Канал</div>
-                   <div style={{ fontSize: '0.9rem', color: '#16a34a', fontWeight: '800' }}>Email</div>
-                </div>
-             </div>
+        /* Розсилка - як у кабінеті: сегмент клієнтів, тема листа,
+           промокод. Розсилки справді надсилаються листами. */
+        <div style={{ width: '300px', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 50px -24px rgba(46,58,48,0.22), 0 0 0 1px rgba(0,0,0,0.04)', padding: '18px', color: '#1D1D1F' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+            <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: '#F4FAF5', color: '#6F9273', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+            </div>
+            <div><div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Нова розсилка</div><div style={{ fontSize: '0.72rem', color: '#86868B' }}>Лист клієнтам</div></div>
           </div>
+          <div style={{ display: 'inline-block', fontSize: '0.7rem', fontWeight: 600, padding: '4px 9px', borderRadius: '999px', background: '#F5F5F7', color: '#3A3A3C', marginBottom: '10px' }}>Не приходили 60+ днів · 142</div>
+          <div style={{ padding: '12px', borderRadius: '14px', background: '#F7F9F6' }}>
+            <div style={{ fontSize: '0.68rem', color: '#86868B' }}>Тема</div>
+            <div style={{ fontSize: '0.82rem', fontWeight: 600, margin: '2px 0 8px', lineHeight: 1.35 }}>Сумуємо за вами - знижка на наступний візит</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', fontWeight: 600, color: '#2E3A30' }}>
+              <span style={{ padding: '3px 8px', borderRadius: '7px', border: '1px dashed #8FAE93', background: '#fff', letterSpacing: '0.04em' }}>BACK20</span>−20%
+            </div>
+          </div>
+          <div style={{ marginTop: '12px', textAlign: 'center', padding: '10px', borderRadius: '12px', background: '#1D1D1F', color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>Надіслати 142 клієнтам</div>
         </div>
       )
     },
@@ -108,21 +115,26 @@ export default function BusinessLandingPage() {
       desc: "Тримайте руку на пульсі бізнесу. Відстежуйте доходи, найпопулярніші послуги та завантаженість по днях тижня.",
       btn: "Аналітика доходів",
       mockup: (
-        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', transform: 'translateZ(0)' }}>
-          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Дохід за Липень</div>
-          <div style={{ fontSize: '2rem', fontWeight: '900', color: '#111827', marginBottom: '1.5rem' }}>84,500 ₴</div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '100px', marginBottom: '1rem', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9' }}>
-             <div style={{ flex: 1, background: '#e2e8f0', height: '40%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#e2e8f0', height: '60%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#e2e8f0', height: '50%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#C2D8C4', height: '80%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#111827', height: '100%', borderRadius: '4px 4px 0 0' }}></div>
+        /* Аналітика - ті самі чотири показники, що у вкладці
+           «Аналітика» кабінету, і дохід за тижнями. */
+        <div style={{ width: '310px', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 50px -24px rgba(46,58,48,0.22), 0 0 0 1px rgba(0,0,0,0.04)', padding: '18px', color: '#1D1D1F' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Вересень</div>
+            <div style={{ fontSize: '0.7rem', color: '#86868B' }}>порівняно з серпнем</div>
           </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>
-             <span>Тиждень 1</span>
-             <span>Тиждень 4</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+            {[['Дохід', '84 500 ₴', '+12%', true], ['Нові клієнти', '38', '+9', true], ['Середній чек', '620 ₴', '+4%', true], ['Скасування', '4%', '−2%', true]].map(([l, v, d, good]) => (
+              <div key={l as string} style={{ padding: '10px 11px', borderRadius: '12px', background: '#F5F5F7' }}>
+                <div style={{ fontSize: '0.68rem', color: '#86868B' }}>{l}</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em', margin: '1px 0' }}>{v}</div>
+                <div style={{ fontSize: '0.66rem', fontWeight: 600, color: good ? '#5C7A61' : '#B42318' }}>{d}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '7px', height: '64px' }}>
+            {[48, 62, 55, 80, 100].map((h, i) => (
+              <div key={i} style={{ flex: 1, height: `${h}%`, borderRadius: '6px 6px 3px 3px', background: i === 4 ? '#6F9273' : '#DCE8DB' }} />
+            ))}
           </div>
         </div>
       )

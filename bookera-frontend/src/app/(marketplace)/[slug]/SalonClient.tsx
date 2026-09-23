@@ -18,11 +18,13 @@ const SERVICES_PER_PAGE = 5;
 const REVIEWS_PER_PAGE = 5;
 const REVIEW_MAX_LENGTH = 500;
 
+// Назви - короткі, у тон фільтру на головній. Пояснення під кожною
+// каже, ЯК саме впорядковано: «За замовчуванням» нічого не пояснювало.
 const sortOptionsList = [
-  { value: 'default', label: 'За замовчуванням' },
-  { value: 'price_asc', label: 'Найдешевші' },
-  { value: 'price_desc', label: 'Найдорожчі' },
-  { value: 'duration', label: 'Швидкі послуги' }
+  { value: 'default', label: 'Рекомендовані', hint: 'Як упорядкував заклад' },
+  { value: 'price_asc', label: 'Дешевші', hint: 'Від найдешевшої послуги' },
+  { value: 'price_desc', label: 'Дорожчі', hint: 'Від найдорожчої послуги' },
+  { value: 'duration', label: 'Швидші', hint: 'Від найкоротшої за часом' },
 ];
 
 const fmtDate = (d: Date) => {
@@ -1290,6 +1292,39 @@ const formatRole = (role?: string) => {
         }
         .review-textarea:focus { border-color: #111827; box-shadow: 0 0 0 3px rgba(17,24,39,0.06); }
         
+        /* --- Порядок послуг: як фільтр на головній --- */
+        .sort-dd { position: relative; flex-shrink: 0; }
+        .sort-dd-trigger {
+          display: inline-flex; align-items: center; gap: 0.45rem;
+          height: 36px; padding: 0 0.6rem; border-radius: 10px;
+          border: none; background: transparent; color: #3A3A3C;
+          font-family: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer;
+          transition: background-color .2s ease, color .2s ease;
+        }
+        .sort-dd-trigger:hover, .sort-dd-trigger.open { background: #F5F5F7; color: #1D1D1F; }
+        .sort-dd-ico { color: #86868B; }
+        .sort-dd-chev { color: #AEAEB2; transition: transform .25s cubic-bezier(.16,1,.3,1); }
+        .sort-dd-trigger.open .sort-dd-chev { transform: rotate(180deg); }
+        .sort-dd-menu {
+          position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+          width: 256px; padding: 6px; border-radius: 12px; background: #fff;
+          box-shadow: 0 18px 40px -12px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.05);
+          transform-origin: top right;
+          opacity: 0; transform: translateY(-4px) scale(.97); pointer-events: none;
+          transition: opacity .18s ease, transform .22s cubic-bezier(.16,1,.3,1);
+        }
+        .sort-dd-menu.open { opacity: 1; transform: none; pointer-events: auto; }
+        .sort-dd-opt {
+          width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+          padding: 0.6rem 0.75rem; border: none; border-radius: 8px; background: transparent;
+          font-family: inherit; text-align: left; cursor: pointer; transition: background-color .15s ease;
+        }
+        .sort-dd-opt:hover { background: #F5F5F7; }
+        .sort-dd-text { display: flex; flex-direction: column; gap: 1px; }
+        .sort-dd-label { font-size: 0.9rem; font-weight: 500; color: #1D1D1F; }
+        .sort-dd-opt.on .sort-dd-label { font-weight: 600; }
+        .sort-dd-hint { font-size: 0.76rem; color: #86868B; }
+        .sort-dd-check { color: #6F9273; flex-shrink: 0; }
         .sort-trigger { display: flex; align-items: center; gap: 0.4rem; background: transparent; border: none; font-size: 0.95rem; color: #64748b; cursor: pointer; padding: 0.5rem 0; font-family: inherit; font-weight: 500; }
         .search-dropdown { position: absolute; top: calc(100% + 8px); right: 0; width: 220px; background: #ffffff; border-radius: 16px; box-shadow: 0 16px 40px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; z-index: 50; max-height: 280px; overflow-y: auto; padding: 0.5rem; }
         .search-dropdown-item { padding: 0.6rem 0.75rem; cursor: pointer; border-radius: 8px; font-size: 0.9rem; color: #334155; display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%; border: none; background: transparent; }
@@ -1953,20 +1988,40 @@ const formatRole = (role?: string) => {
                     <input type="text" placeholder="Пошук послуги..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 'none', outline: 'none', fontSize: '0.95rem', padding: '0.4rem 0 0.4rem 1.8rem', width: '200px', backgroundColor: 'transparent' }} />
                   </div>
                 </div>
-                <div style={{ position: 'relative' }} ref={sortRef}>
-                  <button type="button" onClick={() => setIsSortOpen(!isSortOpen)} className="sort-trigger">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                    Сортування: <span>{sortOptionsList.find(o => o.value === sortOrder)?.label}</span>
+                {/* Порядок послуг - та сама кнопка зі списком, що й на головній:
+    ледь помітна в спокої, з поясненням під кожним варіантом. */}
+                <div className="sort-dd" ref={sortRef} onKeyDown={e => { if (e.key === 'Escape') setIsSortOpen(false); }}>
+                  <button
+                    type="button"
+                    className={`sort-dd-trigger ${isSortOpen ? 'open' : ''}`}
+                    aria-haspopup="listbox"
+                    aria-expanded={isSortOpen}
+                    onClick={() => setIsSortOpen(o => !o)}
+                  >
+                    <svg className="sort-dd-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5" /></svg>
+                    <span>{sortOptionsList.find(o => o.value === sortOrder)?.label}</span>
+                    <svg className="sort-dd-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
                   </button>
-                  {isSortOpen && (
-                    <div className="search-dropdown anim">
-                      {sortOptionsList.map(opt => (
-                        <button key={opt.value} type="button" className="search-dropdown-item" style={{ fontWeight: sortOrder === opt.value ? '700' : '500', backgroundColor: sortOrder === opt.value ? '#f8fafc' : 'transparent' }} onClick={(e) => { e.preventDefault(); setSortOrder(opt.value); setIsSortOpen(false); }}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <div className={`sort-dd-menu ${isSortOpen ? 'open' : ''}`} role="listbox" aria-label="Порядок послуг">
+                    {sortOptionsList.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        role="option"
+                        aria-selected={sortOrder === opt.value}
+                        className={`sort-dd-opt ${sortOrder === opt.value ? 'on' : ''}`}
+                        onClick={() => { setSortOrder(opt.value); setIsSortOpen(false); }}
+                      >
+                        <span className="sort-dd-text">
+                          <span className="sort-dd-label">{opt.label}</span>
+                          <span className="sort-dd-hint">{opt.hint}</span>
+                        </span>
+                        {sortOrder === opt.value && (
+                          <svg className="sort-dd-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

@@ -491,7 +491,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     // «~» лише для прямої відстані: маршрутна точна, і знак
     // наближення поруч із нею збивав би з пантелику.
     const prefix = isRoadDistance[bizId] ? '' : '~';
-    return km < 1 ? `${prefix}${Math.round(km * 1000 / 50) * 50} м` : `${prefix}${km.toFixed(1)} км`;
+    // До кілометра - з точністю 10 м, далі - 100 м (один знак).
+    // Точніше показувати немає сенсу: геолокація сама має похибку
+    // в кілька метрів, і «1 237 м» була б удаваною точністю.
+    return km < 1 ? `${prefix}${Math.round(km * 100) * 10} м` : `${prefix}${km.toFixed(1)} км`;
   };
 
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -957,35 +960,54 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return prices.length > 0 ? Math.min(...prices) : Infinity;
   };
 
+  /**
+   * Порівняння для сортування списку.
+   *
+   * Чотири варіанти, і кожен робить рівно те, що каже назва.
+   * Нічия в будь-якому - за відстанню: з двох однаково дешевих
+   * вище той, що ближче.
+   */
   const sortComparator = useCallback((a: any, b: any): number => {
+    const dist = (x: any) => distanceById[x.id] ?? Infinity;
+    const reviews = (x: any) => parseInt(x.reviews_count) || 0;
+    const rating = (x: any) => parseFloat(x.rating) || 0;
+    // Сходинки за кількістю відгуків: 50+, 10+, 1+, жодного.
+    // Рейтинг без відгуків нічого не вартий - раніше заклад з однією
+    // пʼятіркою стояв вище за 4.8 зі ста відгуків.
+    const tier = (x: any) => { const n = reviews(x); return n >= 50 ? 3 : n >= 10 ? 2 : n >= 1 ? 1 : 0; };
+    const byDistance = dist(a) - dist(b);
+
+    if (sortBy === 'distance') {
+      return byDistance;
+    }
+
     if (sortBy === 'price') {
       const pa = getMinPrice(a);
       const pb = getMinPrice(b);
       if (pa !== pb) return pa - pb;
+      return byDistance;
     }
+
     if (sortBy === 'rating') {
-      const ra = parseFloat(a.rating) || 0;
-      const rb = parseFloat(b.rating) || 0;
-      if (ra !== rb) return rb - ra;
-      const revA = parseInt(a.reviews_count) || 0;
-      const revB = parseInt(b.reviews_count) || 0;
-      if (revA !== revB) return revB - revA;
+      if (tier(a) !== tier(b)) return tier(b) - tier(a);
+      if (rating(a) !== rating(b)) return rating(b) - rating(a);
+      return byDistance;
     }
-    if (sortBy === 'available') {
-      const sa = nearbySlots[a.id]?.length ?? 0;
-      const sb = nearbySlots[b.id]?.length ?? 0;
-      if (sa !== sb) return sb - sa;
-    }
-    if (sortBy === 'distance' && nearbyPoint) {
-      const da = distanceById[a.id] ?? Infinity;
-      const db = distanceById[b.id] ?? Infinity;
-      if (da !== db) return da - db;
-    }
-    if (sortBy === 'newest') {
-      return (parseInt(b.id) || 0) - (parseInt(a.id) || 0);
-    }
-    return 0;
-  }, [sortBy, nearbyPoint, distanceById, nearbySlots]);
+
+    // Рекомендовані - розумне поєднання, у такому порядку:
+    //   1. є вільні вікна сьогодні - людина прийшла записатись
+    //   2. якість: сходинка відгуків, потім рейтинг
+    //   3. відстань
+    // Вільні вікна беруться лише зі слотів: статус «відчинено»
+    // тут недоступний - функцію оголошено нижче, і виклик із цього
+    // місця впав би під час рендера.
+    const freeA = (nearbySlots[a.id]?.length ?? 0) > 0 ? 1 : 0;
+    const freeB = (nearbySlots[b.id]?.length ?? 0) > 0 ? 1 : 0;
+    if (freeA !== freeB) return freeB - freeA;
+    if (tier(a) !== tier(b)) return tier(b) - tier(a);
+    if (rating(a) !== rating(b)) return rating(b) - rating(a);
+    return byDistance;
+  }, [sortBy, distanceById, nearbySlots, getMinPrice]);
 
   // Фільтрація каталогу
 
@@ -1094,20 +1116,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const [nearbyVisible, setNearbyVisible] = useState(NEARBY_STEP);
   useEffect(() => { setNearbyVisible(NEARBY_STEP); }, [activeCategory, sortBy, appliedSearch]);
 
-  // Скільки найближчих бере участь в обраному сортуванні. «Найдешевші»
-  // серед 12 найближчих, а не найдешевші в місті: інакше сортування
-  // вивело б наперед заклад з іншого кінця міста, і «поблизу»
-  // перестало б бути поблизу.
+  // Для скількох найближчих закладів одразу вантажити вільні слоти.
+  // Далі - стільки, скільки показано: слоти потрібні лише видимим
+  // карткам, а запит на кожен заклад міста був би марним.
   const NEARBY_POOL = 12;
 
-  const nearbyBusinesses = useMemo(() => {
-    if (sortBy !== 'recommended' && sortBy !== 'distance') {
-      return nearbyBase
-        .slice(0, NEARBY_POOL)
-        .sort((a: any, b: any) => sortComparator(a, b) || ((distanceById[a.id] ?? Infinity) - (distanceById[b.id] ?? Infinity)));
-    }
-    return nearbyBase;
-  }, [nearbyBase, sortBy, sortComparator, distanceById]);
+  // Сортування - на ВЕСЬ список. Раніше варіанти, крім типового,
+  // працювали лише серед 12 найближчих, і «Показати ще» зникало після
+  // дванадцятого закладу. Фільтр, який тихо обрізає список, - не фільтр.
+  const nearbyBusinesses = useMemo(
+    () => [...nearbyBase].sort(sortComparator),
+    [nearbyBase, sortComparator],
+  );
 
   // Розрахунок точної відстані від користувача до закладу
   // getSalonDistance прибрано.
@@ -1321,10 +1341,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
    */
     const sortOptions = [
       { value: 'recommended', label: 'Рекомендовані' },
-      { value: 'price', label: 'Найдешевші' },
-      { value: 'rating', label: 'Найкращі оцінки' },
-      { value: 'available', label: 'Вільні сьогодні' },
-      { value: 'newest', label: 'Нові заклади' },
+    { value: 'distance', label: 'Спочатку найближчі' },
+    { value: 'price', label: 'Спочатку дешевші' },
+    { value: 'rating', label: 'Найкращі оцінки' },
     ];
 
   /**
@@ -2572,6 +2591,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               e.stopPropagation();
               setSortBy(opt.value);
               setIsSortOpen(false);
+              // «Спочатку найближчі» без місця людини нічого не змінить -
+              // просимо його саме зараз, коли стало зрозуміло, навіщо.
+              if (opt.value === 'distance' && !nearbyPoint) void nearby.locate();
             }}
           >
             {opt.label}

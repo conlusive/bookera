@@ -18,299 +18,312 @@ const faqs = [
   { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам та всім, хто працює за попереднім записом." }
 ];
 
-/* ------------------------------------------------------------------ */
-/* БАЗОВИЙ АРСЕНАЛ МАЙСТРА                                             */
-/* ------------------------------------------------------------------ */
-
 /**
- * Чотири можливості - і кожна показує те, що система справді робить.
+ * Число, що рахується від нуля, коли зʼявляється на екрані.
  *
- * Попередня версія обіцяла зайве:
- *   - нагадування малювалось як пуш на телефоні, а надсилається листом
- *   - «беріть передоплату» - сума лише записується в запис, з клієнта
- *     нічого не списується й він її навіть не бачить. Власник увімкнув
- *     би її заради захисту від скасувань і не отримав би нічого
+ * Раніше лічильник жив у стані ВСІЄЇ сторінки: setPercent кожні 25 мс,
+ * 50 разів поспіль. Кожен виклик перемальовував увесь бізнес-лендінг,
+ * разом із важкими макетами «Можливостей для росту» - звідси ривки
+ * саме тоді, коли людина гортає до цього блоку.
  *
- * Замість передоплати - зарплати: вони рахуються по-справжньому
- * (відсоток, ставка, чайові, матеріали), і це реальна економія годин
- * для власника.
+ * Тут число пишеться прямо в елемент через requestAnimationFrame:
+ * React не перемальовує нічого, хоч скільки кадрів.
  */
-function useArsenalInView() {
-  const ref = useRef<HTMLElement>(null);
-  const [inView, setInView] = useState(false);
+function CountUp({ to, suffix = '', duration = 1200 }: { to: number; suffix?: string; duration?: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setInView(true); return; }
-    const o = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) { setInView(true); o.disconnect(); }
-    }, { threshold: 0.2 });
-    o.observe(el);
-    return () => o.disconnect();
-  }, []);
-  return { ref, inView };
-}
-
-function ArsenalCalendar(_: { play?: boolean }) {
-  // Дві колонки майстрів, записи виїжджають по черзі - як у справжньому
-  // календарі кабінету.
-  const cols = [
-    { name: 'Макс', items: [{ top: 6, h: 26, t: '10:00 Стрижка' }, { top: 42, h: 34, t: '12:00 Стрижка + борода' }] },
-    { name: 'Олена', items: [{ top: 16, h: 38, t: '10:30 Фарбування' }, { top: 64, h: 24, t: '14:00 Укладка' }] },
-  ];
-  return (
-    <div className="ar-cal">
-      {cols.map((col, ci) => (
-        <div key={col.name} className="ar-cal-col">
-          <div className="ar-cal-name">{col.name}</div>
-          <div className="ar-cal-lane">
-            {col.items.map((it, i) => (
-              <div key={i} className="ar-cal-item" style={{ top: `${it.top}%`, height: `${it.h}%`, transitionDelay: `${0.3 + (ci * 2 + i) * 0.15}s` }}>
-                {it.t}
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ArsenalClient(_: { play?: boolean }) {
-  return (
-    <div className="ar-client">
-      <div className="ar-client-head">
-        <div className="ar-ava">МВ</div>
-        <div>
-          <div className="ar-client-name">Марія В.</div>
-          <div className="ar-client-meta">7 візитів · останній 2 тижні тому</div>
-        </div>
-      </div>
-      {/* Поля, які справді є в картці клієнта: формула фарбування,
-          день народження, Instagram. */}
-      <div className="ar-field" style={{ transitionDelay: '0.35s' }}>
-        <span>Формула</span><b>7.1 + 6% · 1:1.5</b>
-      </div>
-      <div className="ar-field" style={{ transitionDelay: '0.5s' }}>
-        <span>День народження</span><b>14 жовтня</b>
-      </div>
-      <div className="ar-field" style={{ transitionDelay: '0.65s' }}>
-        <span>Instagram</span><b>@maria.v</b>
-      </div>
-    </div>
-  );
-}
-
-function ArsenalReminder(_: { play?: boolean }) {
-  // Лист, а не пуш: нагадування надсилається саме листом, за добу.
-  return (
-    <div className="ar-mail">
-      <div className="ar-mail-bar"><i /><i /><i /></div>
-      <div className="ar-mail-body">
-        <div className="ar-mail-from">BookEra · вхідні</div>
-        <div className="ar-mail-subject">Нагадування: завтра о 14:00</div>
-        <div className="ar-mail-text">Стрижка в Top Barber, вул. Дорошенка 1. Змінилися плани? Перенесіть запис у листі.</div>
-        <div className="ar-mail-btn">Керувати записом</div>
-      </div>
-    </div>
-  );
-}
-
-function ArsenalPayroll({ play = false }: { play?: boolean }) {
-  // Розрахунок виплати: ті самі складові, що в кабінеті.
-  const rows = [
-    { label: 'Виручка за місяць', value: '18 400 ₴' },
-    { label: 'Відсоток майстра, 40%', value: '7 360 ₴' },
-    { label: 'Чайові', value: '+ 600 ₴' },
-    { label: 'Матеріали', value: '− 450 ₴' },
-  ];
-  const [total, setTotal] = useState(0);
-  const target = 7510;
-  useEffect(() => {
-    if (!play) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      el.textContent = `${to}${suffix}`;
+      return;
+    }
     let raf = 0;
-    const delay = setTimeout(() => {
-      const t0 = performance.now();
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      observer.disconnect();
+      const start = performance.now();
       const tick = (now: number) => {
-        const k = Math.min(1, (now - t0) / 1200);
-        setTotal(Math.round(target * (1 - Math.pow(1 - k, 3))));
+        const k = Math.min(1, (now - start) / duration);
+        el.textContent = `${Math.round(to * (1 - Math.pow(1 - k, 3)))}${suffix}`;
         if (k < 1) raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
-    }, 900);
-    return () => { clearTimeout(delay); cancelAnimationFrame(raf); };
-  }, [play]);
+    }, { threshold: 0.4 });
+    observer.observe(el);
+    return () => { observer.disconnect(); cancelAnimationFrame(raf); };
+  }, [to, suffix, duration]);
 
+  return <span ref={ref}>0{suffix}</span>;
+}
+
+/* ------------------------------------------------------------------ */
+/* МОЖЛИВОСТІ ДЛЯ РОСТУ                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Три можливості: список ліворуч, живий макет праворуч.
+ *
+ * Раніше - слайдер на 480px зі стрілками поверх картинки, і стан
+ * слайдера жив у ВСІЙ сторінці: кожне автоперемикання раз на 5 секунд
+ * перемальовувало весь бізнес-лендінг. Тепер стан усередині цього
+ * компонента, і перемикання торкається лише його.
+ *
+ * Компонування як на сторінках Apple: активний пункт розгорнутий
+ * і має смужку прогресу, решта - лише заголовок. Усі три теми видно
+ * одразу, без гортання, і блок удвічі нижчий.
+ *
+ * Макети - про те, що система справді робить:
+ *   вітрина   - обкладинка, зручності, послуга, запис
+ *   розсилки  - лист із промокодом (POST /crm/campaigns)
+ *   аналітика - дохід за тижнями
+ * Без емодзі: у кожній системі вони малюються по-різному й виглядають
+ * чужими в дизайні.
+ */
+
+const GROWTH_MS = 6000;
+
+function GrowthStorefront() {
   return (
-    <div className="ar-pay">
-      <div className="ar-pay-who">
-        <div className="ar-ava">МБ</div>
-        <div><div className="ar-client-name">Макс Бар</div><div className="ar-client-meta">Вересень</div></div>
+    <div className="gm gm-store">
+      <div className="gm-cover">
+        <img src="https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=700&q=75" alt="" loading="lazy" />
+        <div className="gm-logo">TB</div>
       </div>
-      {rows.map((r, i) => (
-        <div key={r.label} className="ar-pay-row" style={{ transitionDelay: `${0.25 + i * 0.12}s` }}>
-          <span>{r.label}</span><b>{r.value}</b>
+      <div className="gm-pad">
+        <div className="gm-name">Top Barber</div>
+        <div className="gm-sub">Львів, вул. Дорошенка 1</div>
+        {/* Зручності - ті самі, що власник обирає у вітрині */}
+        <div className="gm-chips"><span>Wi-Fi</span><span>Паркування</span><span>Pet friendly</span></div>
+        <div className="gm-service">
+          <div><b>Стрижка + борода</b><small>60 хв</small></div>
+          <b>800 ₴</b>
         </div>
-      ))}
-      <div className="ar-pay-total">
-        <span>До виплати</span>
-        <b>{total.toLocaleString('uk-UA')} ₴</b>
+        <div className="gm-btn">Записатися</div>
       </div>
     </div>
   );
 }
 
-function Arsenal() {
-  const { ref, inView } = useArsenalInView();
+function GrowthCampaign() {
+  return (
+    <div className="gm gm-pad">
+      <div className="gm-head">
+        <div className="gm-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+        </div>
+        <div><div className="gm-name">Розсилка листом</div><div className="gm-sub">Клієнти, що не приходили 2 місяці</div></div>
+      </div>
+      <div className="gm-mail">
+        <div className="gm-sub">Тема</div>
+        <div className="gm-mail-subj">Сумуємо за вами - знижка на наступний візит</div>
+        <div className="gm-code"><span>BACK20</span>−20%</div>
+      </div>
+      <div className="gm-stats">
+        <div><small>Отримувачі</small><b>142</b></div>
+        <div><small>Канал</small><b>Email</b></div>
+      </div>
+    </div>
+  );
+}
 
-  const cards = [
-    { size: 'lg', tag: 'Календар', title: 'Розклад усієї команди', text: 'Записи, перерви й майстри в одному календарі - день, тиждень чи місяць. Перенести візит - перетягнути його.', Visual: ArsenalCalendar },
-    { size: 'sm', tag: 'Клієнти', title: 'Кожен клієнт на виду', text: 'Історія візитів, формули фарбування й дні народження - у картці клієнта.', Visual: ArsenalClient },
-    { size: 'sm', tag: 'Нагадування', title: 'Менше забутих записів', text: 'Клієнт отримує лист за добу до візиту - з кнопкою, щоб перенести сам.', Visual: ArsenalReminder },
-    { size: 'lg', tag: 'Зарплати', title: 'Виплати рахуються самі', text: 'Відсоток чи ставка, чайові й матеріали - сума для кожного майстра без таблиць і калькулятора.', Visual: ArsenalPayroll },
-  ];
+function GrowthAnalytics() {
+  const weeks = [48, 62, 55, 80, 100];
+  return (
+    <div className="gm gm-pad">
+      <div className="gm-sub">Дохід за місяць</div>
+      <div className="gm-big">84 500 ₴</div>
+      <div className="gm-bars">
+        {weeks.map((h, i) => (
+          <div key={i} className={`gm-bar ${i === weeks.length - 1 ? 'now' : ''}`} style={{ ['--h' as string]: `${h}%`, animationDelay: `${i * 0.07}s` }} />
+        ))}
+      </div>
+      <div className="gm-axis"><span>Тиждень 1</span><span>Цей тиждень</span></div>
+    </div>
+  );
+}
+
+const GROWTH_FEATURES = [
+  {
+    title: 'Ваша онлайн-вітрина',
+    desc: 'Власна сторінка для запису: обкладинка, послуги з цінами, зручності й команда. Клієнт записується сам, без дзвінків.',
+    Mockup: GrowthStorefront,
+  },
+  {
+    title: 'Розсилки й промокоди',
+    desc: 'Повертайте клієнтів, які давно не приходили: лист із промокодом тим, кому він справді потрібен.',
+    Mockup: GrowthCampaign,
+  },
+  {
+    title: 'Аналітика доходу',
+    desc: 'Дохід, завантаженість і найпопулярніші послуги - видно, що працює, а що варто змінити.',
+    Mockup: GrowthAnalytics,
+  },
+];
+
+function GrowthFeatures() {
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  // Перезапуск смужки прогресу з кожним перемиканням.
+  const [cycle, setCycle] = useState(0);
+
+  const select = (i: number) => { setActive(i); setCycle(n => n + 1); };
+
+  useEffect(() => {
+    if (paused) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const t = setTimeout(() => select((active + 1) % GROWTH_FEATURES.length), GROWTH_MS);
+    return () => clearTimeout(t);
+  }, [active, paused, cycle]);
+
+  const { Mockup } = GROWTH_FEATURES[active];
 
   return (
-    <section ref={ref} className={`arsenal ${inView ? 'in' : ''}`}>
+    <section className="growth">
       <div className="container">
-        <h2 className="ar-heading">
-          Базовий арсенал майстра.
-          <span> Усе, що потрібно щодня.</span>
-        </h2>
+        <div className="gr-head">
+          <h2>Можливості для росту.</h2>
+          <p>Аналітика, розсилки та власна онлайн-вітрина. Усе для того, щоб ви заробляли більше.</p>
+        </div>
 
-        <div className="ar-grid">
-          {cards.map(({ size, tag, title, text, Visual }, i) => (
-            <div key={tag} className={`ar-card ${size}`} style={{ transitionDelay: `${i * 0.08}s` }}>
-              <div className="ar-copy">
-                <div className="ar-tag">{tag}</div>
-                <h3>{title}</h3>
-                <p>{text}</p>
-              </div>
-              <div className="ar-stage">
-                <Visual play={inView} />
-              </div>
-            </div>
-          ))}
+        <div className="gr-body" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          <div className="gr-list" role="tablist">
+            {GROWTH_FEATURES.map((f, i) => (
+              <button
+                key={f.title}
+                role="tab"
+                aria-selected={i === active}
+                className={`gr-item ${i === active ? 'on' : ''}`}
+                onClick={() => select(i)}
+              >
+                <span className="gr-title">{f.title}</span>
+                {/* Опис видно лише в активного пункту: усі три теми
+                    читаються одразу, а деталі - там, куди дивишся. */}
+                <span className="gr-desc"><span>{f.desc}</span></span>
+                <span className="gr-track">
+                  {i === active && (
+                    <span
+                      key={cycle}
+                      className="gr-fill"
+                      style={{ animationDuration: `${GROWTH_MS}ms`, animationPlayState: paused ? 'paused' : 'running' }}
+                    />
+                  )}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="gr-stage">
+            {/* key - макет перемальовується й відпрацьовує появу знову. */}
+            <div key={active} className="gr-mock"><Mockup /></div>
+          </div>
         </div>
       </div>
 
       <style jsx global>{`
-        .arsenal { padding: 6rem 0; background: #fff; }
-        .ar-heading {
-          font-size: clamp(2rem, 4.4vw, 3.25rem);
-          font-weight: 700;
-          letter-spacing: -0.035em;
-          line-height: 1.08;
+        .growth { padding: 6rem 0; background: #fff; }
+        .gr-head { max-width: 640px; margin-bottom: 3rem; }
+        .gr-head h2 {
+          font-size: clamp(2rem, 4.2vw, 3rem);
+          font-weight: 700; letter-spacing: -0.035em; line-height: 1.06;
+          color: #1D1D1F; margin: 0 0 0.9rem;
+        }
+        .gr-head p { font-size: 1.125rem; line-height: 1.55; color: #6E6E73; margin: 0; }
+
+        .gr-body { display: grid; grid-template-columns: 1fr 1.1fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: center; }
+
+        .gr-list { display: flex; flex-direction: column; }
+        .gr-item {
+          display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+          padding: 1.25rem 0; border: none; background: none; cursor: pointer; font-family: inherit;
+          border-top: 1px solid #EDEDF0;
+        }
+        .gr-item:last-child { border-bottom: 1px solid #EDEDF0; }
+        .gr-title {
+          font-size: 1.3rem; font-weight: 600; letter-spacing: -0.02em;
+          color: #AEAEB2; transition: color 0.3s ease;
+        }
+        .gr-item.on .gr-title, .gr-item:hover .gr-title { color: #1D1D1F; }
+        /* Опис розгортається плавно через grid-rows, без стрибка висоти. */
+        .gr-desc {
+          display: grid; grid-template-rows: 0fr; overflow: hidden;
+          font-size: 1rem; line-height: 1.55; color: #6E6E73;
+          transition: grid-template-rows 0.45s cubic-bezier(0.16, 1, 0.3, 1), margin 0.45s ease, opacity 0.3s ease;
+          opacity: 0; margin-top: 0;
+        }
+        .gr-item.on .gr-desc { grid-template-rows: 1fr; opacity: 1; margin-top: 0.5rem; }
+        /* Без внутрішньої обгортки з min-height: 0 рядок сітки 0fr не
+           згортається - текст лишався б видимим у неактивних пунктах. */
+        .gr-desc > span { min-height: 0; overflow: hidden; }
+        .gr-track { display: block; width: 100%; height: 2px; margin-top: 1rem; background: transparent; border-radius: 2px; overflow: hidden; }
+        .gr-item.on .gr-track { background: #EDEDF0; }
+        .gr-fill {
+          display: block; height: 100%; background: #6F9273; transform-origin: left;
+          animation-name: grFill; animation-timing-function: linear; animation-fill-mode: forwards;
+        }
+        @keyframes grFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+        .gr-stage {
+          height: 440px; border-radius: 32px;
+          background: radial-gradient(80% 60% at 50% 0%, #F4FAF5 0%, transparent 70%), #F5F5F7;
+          display: flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+        .gr-mock { animation: grIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        @keyframes grIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+        /* --- Макети --- */
+        .gm {
+          width: 290px; background: #fff; border-radius: 22px; overflow: hidden;
+          box-shadow: 0 24px 50px -24px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04);
           color: #1D1D1F;
-          margin: 0 0 3rem;
-          max-width: 820px;
         }
-        .ar-heading span { color: #86868B; }
+        .gm-pad { padding: 1.25rem; }
+        .gm-name { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+        .gm-sub { font-size: 0.78rem; color: #86868B; }
 
-        .ar-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1.25rem; }
-        .ar-card {
-          grid-column: span 5;
-          border-radius: 28px;
-          background: #F5F5F7;
-          padding: 2rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1.75rem;
-          overflow: hidden;
-          opacity: 0;
-          transform: translateY(24px);
-          transition: opacity 0.8s ease, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+        .gm-cover { position: relative; height: 110px; }
+        .gm-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .gm-logo {
+          position: absolute; left: 1.25rem; bottom: -22px; width: 48px; height: 48px; border-radius: 50%;
+          background: #EEF1F6; border: 3px solid #fff; display: flex; align-items: center; justify-content: center;
+          font-size: 0.8rem; font-weight: 700; color: #222;
         }
-        .ar-card.lg { grid-column: span 7; }
-        .arsenal.in .ar-card { opacity: 1; transform: none; }
+        .gm-store .gm-pad { padding-top: 1.9rem; }
+        .gm-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; margin: 0.75rem 0; }
+        .gm-chips span { font-size: 0.68rem; font-weight: 500; padding: 0.25rem 0.55rem; border-radius: 999px; background: #F4FAF5; color: #2E3A30; }
+        .gm-service { display: flex; justify-content: space-between; align-items: center; padding: 0.7rem 0.8rem; border-radius: 12px; background: #F5F5F7; margin-bottom: 0.75rem; font-size: 0.85rem; }
+        .gm-service small { display: block; font-size: 0.72rem; color: #86868B; }
+        .gm-btn { text-align: center; padding: 0.7rem; border-radius: 12px; background: #1D1D1F; color: #fff; font-size: 0.85rem; font-weight: 600; }
 
-        .ar-tag { font-size: 0.8125rem; font-weight: 600; color: #6F9273; margin-bottom: 0.6rem; }
-        .ar-copy h3 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; color: #1D1D1F; margin: 0 0 0.5rem; }
-        .ar-copy p { font-size: 1rem; line-height: 1.55; color: #6E6E73; margin: 0; max-width: 460px; }
+        .gm-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
+        .gm-icon { width: 38px; height: 38px; border-radius: 11px; background: #F4FAF5; color: #6F9273; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .gm-mail { padding: 0.85rem; border-radius: 14px; background: #F5F5F7; margin-bottom: 0.9rem; }
+        .gm-mail-subj { font-size: 0.85rem; font-weight: 600; margin: 0.2rem 0 0.7rem; line-height: 1.35; }
+        .gm-code { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 600; color: #2E3A30; }
+        .gm-code span { padding: 0.25rem 0.55rem; border-radius: 7px; border: 1px dashed #8FAE93; background: #fff; letter-spacing: 0.04em; }
+        .gm-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .gm-stats small { display: block; font-size: 0.7rem; color: #86868B; }
+        .gm-stats b { font-size: 1rem; font-weight: 600; }
 
-        .ar-stage { margin-top: auto; }
-
-        /* Спільні шматки */
-        .ar-ava {
-          width: 36px; height: 36px; border-radius: 50%; background: #EEF1F6;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 0.75rem; font-weight: 700; color: #222; flex-shrink: 0;
+        .gm-big { font-size: 2rem; font-weight: 700; letter-spacing: -0.035em; margin: 0.15rem 0 1.1rem; font-variant-numeric: tabular-nums; }
+        .gm-bars { display: flex; align-items: flex-end; gap: 0.5rem; height: 110px; padding-bottom: 0.6rem; border-bottom: 1px solid #F0F0F2; }
+        .gm-bar {
+          flex: 1; height: var(--h); border-radius: 6px 6px 3px 3px; background: #DCE8DB;
+          transform-origin: bottom; animation: grGrow 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
-        .ar-client-name { font-size: 0.9375rem; font-weight: 600; color: #1D1D1F; }
-        .ar-client-meta { font-size: 0.8125rem; color: #86868B; }
-
-        /* Календар */
-        .ar-cal { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; background: #fff; border-radius: 18px; padding: 1rem; }
-        .ar-cal-name { font-size: 0.8125rem; font-weight: 600; color: #3A3A3C; margin-bottom: 0.5rem; }
-        .ar-cal-lane {
-          position: relative; height: 190px; border-radius: 10px;
-          background: repeating-linear-gradient(to bottom, #fff 0, #fff calc(20% - 1px), #F0F0F2 calc(20% - 1px), #F0F0F2 20%);
-        }
-        .ar-cal-item {
-          position: absolute; left: 0; right: 0; border-radius: 8px;
-          background: #E4EEE3; border-left: 3px solid #6F9273;
-          padding: 0.3rem 0.55rem; font-size: 0.75rem; font-weight: 500; color: #2E3A30;
-          overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-          opacity: 0; transform: translateX(-10px);
-          transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .arsenal.in .ar-cal-item { opacity: 1; transform: none; }
-
-        /* Клієнт */
-        .ar-client { background: #fff; border-radius: 18px; padding: 1.1rem; }
-        .ar-client-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; }
-        .ar-field {
-          display: flex; justify-content: space-between; gap: 1rem;
-          padding: 0.6rem 0; border-top: 1px solid #F0F0F2; font-size: 0.8125rem;
-          opacity: 0; transform: translateY(6px);
-          transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .arsenal.in .ar-field { opacity: 1; transform: none; }
-        .ar-field span { color: #86868B; }
-        .ar-field b { color: #1D1D1F; font-weight: 600; }
-
-        /* Лист */
-        .ar-mail { background: #fff; border-radius: 18px; overflow: hidden; }
-        .ar-mail-bar { display: flex; gap: 5px; padding: 0.65rem 0.9rem; border-bottom: 1px solid #F0F0F2; }
-        .ar-mail-bar i { width: 9px; height: 9px; border-radius: 50%; background: #E5E5EA; }
-        .ar-mail-body {
-          padding: 1rem 1.1rem 1.2rem;
-          opacity: 0; transform: translateY(10px);
-          transition: opacity 0.6s ease 0.3s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s;
-        }
-        .arsenal.in .ar-mail-body { opacity: 1; transform: none; }
-        .ar-mail-from { font-size: 0.72rem; color: #86868B; margin-bottom: 0.35rem; }
-        .ar-mail-subject { font-size: 0.9375rem; font-weight: 600; color: #1D1D1F; margin-bottom: 0.4rem; }
-        .ar-mail-text { font-size: 0.8125rem; line-height: 1.5; color: #6E6E73; margin-bottom: 0.9rem; }
-        .ar-mail-btn {
-          display: inline-block; font-size: 0.8125rem; font-weight: 600;
-          padding: 0.45rem 0.9rem; border-radius: 8px; background: #1D1D1F; color: #fff;
-        }
-
-        /* Зарплата */
-        .ar-pay { background: #fff; border-radius: 18px; padding: 1.1rem 1.25rem; }
-        .ar-pay-who { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.6rem; }
-        .ar-pay-row {
-          display: flex; justify-content: space-between; padding: 0.55rem 0;
-          border-top: 1px solid #F0F0F2; font-size: 0.875rem;
-          opacity: 0; transform: translateY(6px);
-          transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .arsenal.in .ar-pay-row { opacity: 1; transform: none; }
-        .ar-pay-row span { color: #6E6E73; }
-        .ar-pay-row b { color: #1D1D1F; font-weight: 600; font-variant-numeric: tabular-nums; }
-        .ar-pay-total {
-          display: flex; justify-content: space-between; align-items: baseline;
-          margin-top: 0.4rem; padding: 0.85rem 1rem; border-radius: 12px; background: #F4FAF5;
-        }
-        .ar-pay-total span { font-size: 0.875rem; font-weight: 600; color: #2E3A30; }
-        .ar-pay-total b { font-size: 1.5rem; font-weight: 700; color: #2E3A30; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+        .gm-bar.now { background: #6F9273; }
+        @keyframes grGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+        .gm-axis { display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.7rem; color: #86868B; }
 
         @media (max-width: 900px) {
-          .ar-card, .ar-card.lg { grid-column: span 12; }
+          .gr-body { grid-template-columns: 1fr; }
+          .gr-stage { height: 400px; order: -1; }
         }
         @media (prefers-reduced-motion: reduce) {
-          .ar-card, .ar-cal-item, .ar-field, .ar-mail-body, .ar-pay-row { transition: none !important; }
+          .gr-mock, .gm-bar { animation: none; }
+          .gr-desc { transition: none; }
+          .gr-fill { display: none; }
         }
       `}</style>
     </section>
@@ -342,106 +355,10 @@ export default function BusinessLandingPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  const [percent, setPercent] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [activeFeature, setActiveFeature] = useState(0);
 
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // 3. ОПТИМІЗАЦІЯ: Мемоїзація важкого JSX.
-  // Масив перераховується ЛИШЕ коли змінюється `percent`, а не при кожному скролі.
-  const exploreFeatures = useMemo(() => [
-    {
-      title: "Ваша онлайн-вітрина",
-      desc: "Отримайте власну сторінку для запису, яка виглядає ідеально на будь-якому пристрої. Додайте послуги, ціни та портфоліо в пару кліків.",
-      btn: "Переглянути приклад",
-      mockup: (
-        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '0', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', overflow: 'hidden', transform: 'translateZ(0)' }}>
-          <div style={{ height: '120px', background: 'linear-gradient(135deg, #111827 0%, #334155 100%)', position: 'relative' }}>
-             <div style={{ position: 'absolute', bottom: '-20px', left: '20px', width: '60px', height: '60px', borderRadius: '50%', background: '#fff', border: '4px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>✂️</div>
-          </div>
-          <div style={{ padding: '30px 20px 20px 20px' }}>
-             <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827' }}>The First Barber</div>
-             <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.2rem' }}>Київ, вул. Хрещатик, 1</div>
-
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: '12px', marginBottom: '8px' }}>
-                <div>
-                   <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827' }}>Стрижка + Борода</div>
-                   <div style={{ fontSize: '0.75rem', color: '#64748b' }}>60 хв</div>
-                </div>
-                <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#111827' }}>800 ₴</div>
-             </div>
-
-             <button style={{ width: '100%', padding: '12px', background: '#C2D8C4', borderRadius: '12px', border: 'none', fontWeight: '800', color: '#111827', marginTop: '10px' }}>Записатись</button>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: "Маркетинг та розсилки",
-      desc: "Повертайте клієнтів частіше. Створюйте персоналізовані розсилки зі знижками для тих, хто давно не був у вас.",
-      btn: "Інструменти маркетингу",
-      mockup: (
-        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', transform: 'translateZ(0)' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827', marginBottom: '1.2rem' }}>Кампанії</div>
-          <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.2rem' }}>
-             <div style={{ width: '40px', height: '40px', background: '#eff6ff', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', marginBottom: '1rem' }}>🎁</div>
-             <div style={{ fontSize: '1.05rem', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>Знижка -20%</div>
-             <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.4' }}>Для клієнтів, яких не було більше 2-х місяців.</div>
-             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
-                <div>
-                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Отримувачі</div>
-                   <div style={{ fontSize: '0.9rem', color: '#111827', fontWeight: '800' }}>142</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Нові записи</div>
-                   <div style={{ fontSize: '0.9rem', color: '#16a34a', fontWeight: '800' }}>+18</div>
-                </div>
-             </div>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: "Глибока аналітика",
-      desc: "Тримайте руку на пульсі бізнесу. Відстежуйте доходи, найпопулярніші послуги та завантаженість по днях тижня.",
-      btn: "Аналітика доходів",
-      mockup: (
-        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', transform: 'translateZ(0)' }}>
-          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Дохід за Липень</div>
-          <div style={{ fontSize: '2rem', fontWeight: '900', color: '#111827', marginBottom: '1.5rem' }}>84,500 ₴</div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '100px', marginBottom: '1rem', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9' }}>
-             <div style={{ flex: 1, background: '#e2e8f0', height: '40%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#e2e8f0', height: '60%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#e2e8f0', height: '50%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#C2D8C4', height: '80%', borderRadius: '4px 4px 0 0' }}></div>
-             <div style={{ flex: 1, background: '#111827', height: '100%', borderRadius: '4px 4px 0 0' }}></div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>
-             <span>Тиждень 1</span>
-             <span>Тиждень 4</span>
-          </div>
-        </div>
-      )
-    }
-  ], [percent]);
-
-  const handleNextFeature = () => {
-    setActiveFeature((prev) => (prev + 1) % exploreFeatures.length);
-  };
-
-  const handlePrevFeature = () => {
-    setActiveFeature((prev) => (prev - 1 + exploreFeatures.length) % exploreFeatures.length);
-  };
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % exploreFeatures.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [exploreFeatures.length]);
 
   useEffect(() => {
     setMounted(true);
@@ -518,24 +435,7 @@ export default function BusinessLandingPage() {
         if (entry.isIntersecting) {
           entry.target.classList.add('is-visible');
 
-          if (!entry.target.classList.contains('finance-card-trigger')) {
-             observer.unobserve(entry.target);
-          }
-
-          if (entry.target.classList.contains('finance-card-trigger')) {
-            if (entry.target.getAttribute('data-counted') !== 'true') {
-              entry.target.setAttribute('data-counted', 'true');
-              let start = 0;
-              const interval = setInterval(() => {
-                start += 1;
-                setPercent(start);
-                if (start >= 50) {
-                  clearInterval(interval);
-                }
-              }, 25);
-              observer.unobserve(entry.target);
-            }
-          }
+          observer.unobserve(entry.target);
         }
       });
     }, { threshold: 0.15 });
@@ -1010,51 +910,91 @@ export default function BusinessLandingPage() {
       </section>
 
       {/* BENTO GRID SECTION */}
-      {/* БАЗОВИЙ АРСЕНАЛ - чотири можливості, що відповідають системі. */}
-      <Arsenal />
-
-      {/* EXPLORE FEATURES */}
-      <section className="reveal-on-scroll" style={{ padding: '6rem 0 8rem 0', textAlign: 'center', backgroundColor: '#ffffff' }}>
+      <section id="bento" style={{ paddingBottom: '40px' }}>
         <div className="container">
-          <h2 style={{ fontSize: 'clamp(2.5rem, 4vw, 3.2rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', marginBottom: '0.5rem' }}>Можливості для росту</h2>
-          <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '600px', margin: '0 auto 1rem auto', lineHeight: '1.5' }}>
-            Аналітика, розсилки та власна онлайн-вітрина. Усе для того, щоб ви заробляли більше.
-          </p>
+          <div className="reveal-on-scroll">
+            <h2 style={{ fontSize: '3rem', fontWeight: '900', textAlign: 'center', letterSpacing: '-0.03em', color: '#111827', marginBottom: '1rem' }}>Базовий арсенал майстра.</h2>
+          </div>
 
-          <div className="explore-slider-container">
+          <div className="bento-grid">
+            <div className="bento-card bento-large reveal-on-scroll">
+              <div className="text-content">
+                <span className="bento-tag">Календар</span>
+                <h3 className="bento-title">Ідеальний розклад.</h3>
+                <p className="bento-desc">Забудьте про блокноти. Керуйте часом зручно з телефону.</p>
+              </div>
 
-            <div className="slider-text-area" style={{ textAlign: 'left' }}>
-              <div style={{ minHeight: '180px' }}>
-                 <h3 style={{ fontSize: '2rem', fontWeight: '900', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.03em', lineHeight: '1.1' }}>
-                   {exploreFeatures[activeFeature].title}
-                 </h3>
-                 <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: '1.6', marginBottom: '2rem' }}>
-                   {exploreFeatures[activeFeature].desc}
-                 </p>
-                 <button style={{ background: '#111827', color: '#fff', padding: '1rem 2rem', borderRadius: '999px', fontWeight: '700', fontSize: '0.95rem', border: 'none', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
-                   {exploreFeatures[activeFeature].btn}
-                 </button>
+              <div className="ui-mockup-calendar">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#111827' }}>Сьогодні</div>
+                  <div style={{ background: '#f1f5f9', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600', color: '#64748b' }}>Вересень</div>
+                </div>
+                <div className="ui-appointment anim-slide-1">
+                  <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginBottom: '4px' }}>10:00 - 11:30</div>
+                  <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '700' }}>Стрижка</div>
+                </div>
+                <div className="ui-appointment blue anim-slide-2">
+                  <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '700', marginBottom: '4px' }}>12:00 - 14:00</div>
+                  <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '700' }}>Фарбування</div>
+                </div>
               </div>
             </div>
 
-            <div className="slider-image-area">
-               {exploreFeatures.map((f, i) => (
-                  <div key={i} style={{ position: 'absolute', opacity: activeFeature === i ? 1 : 0, transition: 'opacity 0.4s ease', transform: activeFeature === i ? 'scale(1)' : 'scale(0.95)', pointerEvents: activeFeature === i ? 'auto' : 'none', willChange: 'opacity, transform' }}>
-                    {f.mockup}
-                  </div>
-               ))}
-               <button onClick={handleNextFeature} className="slider-nav-btn" style={{ position: 'absolute', right: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>→</button>
-               <button onClick={handlePrevFeature} className="slider-nav-btn" style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>←</button>
+            <div className="bento-card bento-small reveal-on-scroll delay-100" style={{ background: '#111827' }}>
+              <span className="bento-tag" style={{ background: 'rgba(255,255,255,0.1)', color: '#C2D8C4', border: 'none' }}>База клієнтів</span>
+              <h3 className="bento-title" style={{ color: '#ffffff' }}>Всі клієнти<br/>як на долоні.</h3>
+              <div className="anim-slide-1" style={{ marginTop: 'auto', display: 'flex', gap: '1rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                 <div style={{ width: '36px', height: '36px', background: '#C2D8C4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827', fontWeight: '800' }}>М</div>
+                 <div>
+                    <div style={{ color: '#fff', fontWeight: '700', fontSize: '0.9rem' }}>Михайло В.</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Останній візит: 14 днів тому</div>
+                 </div>
+              </div>
             </div>
 
-          </div>
+            <div className="bento-card bento-small reveal-on-scroll">
+              <span className="bento-tag">Сповіщення</span>
+              <h3 className="bento-title">Автоматичні <br/>нагадування.</h3>
+              <div className="anim-pop" style={{ marginTop: 'auto', background: '#ffffff', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', gap: '0.8rem', boxShadow: '0 10px 20px rgba(0,0,0,0.02)' }}>
+                 {/* Фірмова іконка застосунку замість емодзі: емодзі в
+                     кожній системі малюється по-різному й виглядає як
+                     чужий елемент у дизайні. */}
+                 <div style={{ width: '32px', height: '32px', flexShrink: 0, borderRadius: '9px', background: 'linear-gradient(145deg, #2E3A30, #1D1D1F)', color: '#C2D8C4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem', fontWeight: 800 }}>B</div>
+                 <div>
+                    <div style={{ color: '#111827', fontWeight: '700', fontSize: '0.85rem', marginBottom: '2px' }}>BookEra</div>
+                    <div style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: '1.4' }}>Нагадуємо про запис завтра о 14:00!</div>
+                 </div>
+              </div>
+            </div>
 
-          <div className="slider-progress-track">
-             <div className="slider-progress-fill" style={{ width: `${((activeFeature + 1) / exploreFeatures.length) * 100}%` }}></div>
-          </div>
+            <div className="bento-card bento-large reveal-on-scroll delay-100 finance-card-trigger" style={{ background: '#f0fdf4', borderColor: '#dcfce7' }}>
+              <div className="text-content">
+                <span className="bento-tag" style={{ background: '#ffffff', color: '#166534', borderColor: '#bbf7d0' }}>Фінанси</span>
+                <h3 className="bento-title" style={{ color: '#14532d' }}>Захистіть дохід.</h3>
+                <p className="bento-desc" style={{ color: '#166534' }}>Беріть передоплату та захистіть себе від скасувань.</p>
+              </div>
 
+              <div className="ui-mockup-calendar" style={{ right: '-20px', bottom: '-20px', width: '50%', height: '80%', padding: '1.5rem' }}>
+                 <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase' }}>Налаштування</div>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ fontWeight: '700', color: '#111827', fontSize: '0.9rem' }}>Передоплата</div>
+                    <div className="anim-toggle-bg" style={{ width: '40px', height: '22px', borderRadius: '11px', position: 'relative' }}>
+                       <div className="anim-toggle-circle" style={{ position: 'absolute', left: '2px', top: '2px', width: '18px', height: '18px', background: '#fff', borderRadius: '50%' }}></div>
+                    </div>
+                 </div>
+                 <div className="anim-slide-1" style={{ marginTop: '1.5rem' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Сума передоплати</div>
+                    <div style={{ fontSize: '1.8rem', color: '#111827', fontWeight: '900' }}><CountUp to={50} suffix="%" /></div>
+                 </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
+
+      {/* EXPLORE FEATURES */}
+      {/* МОЖЛИВОСТІ ДЛЯ РОСТУ - власний компонент зі своїм станом. */}
+      <GrowthFeatures />
 
       {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>

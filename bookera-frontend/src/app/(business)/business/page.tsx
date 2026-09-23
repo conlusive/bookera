@@ -18,318 +18,6 @@ const faqs = [
   { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам та всім, хто працює за попереднім записом." }
 ];
 
-/**
- * Число, що рахується від нуля, коли зʼявляється на екрані.
- *
- * Раніше лічильник жив у стані ВСІЄЇ сторінки: setPercent кожні 25 мс,
- * 50 разів поспіль. Кожен виклик перемальовував увесь бізнес-лендінг,
- * разом із важкими макетами «Можливостей для росту» - звідси ривки
- * саме тоді, коли людина гортає до цього блоку.
- *
- * Тут число пишеться прямо в елемент через requestAnimationFrame:
- * React не перемальовує нічого, хоч скільки кадрів.
- */
-function CountUp({ to, suffix = '', duration = 1200 }: { to: number; suffix?: string; duration?: number }) {
-  const ref = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      el.textContent = `${to}${suffix}`;
-      return;
-    }
-    let raf = 0;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return;
-      observer.disconnect();
-      const start = performance.now();
-      const tick = (now: number) => {
-        const k = Math.min(1, (now - start) / duration);
-        el.textContent = `${Math.round(to * (1 - Math.pow(1 - k, 3)))}${suffix}`;
-        if (k < 1) raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-    }, { threshold: 0.4 });
-    observer.observe(el);
-    return () => { observer.disconnect(); cancelAnimationFrame(raf); };
-  }, [to, suffix, duration]);
-
-  return <span ref={ref}>0{suffix}</span>;
-}
-
-/* ------------------------------------------------------------------ */
-/* МОЖЛИВОСТІ ДЛЯ РОСТУ                                                */
-/* ------------------------------------------------------------------ */
-
-/**
- * Три можливості: список ліворуч, живий макет праворуч.
- *
- * Раніше - слайдер на 480px зі стрілками поверх картинки, і стан
- * слайдера жив у ВСІЙ сторінці: кожне автоперемикання раз на 5 секунд
- * перемальовувало весь бізнес-лендінг. Тепер стан усередині цього
- * компонента, і перемикання торкається лише його.
- *
- * Компонування як на сторінках Apple: активний пункт розгорнутий
- * і має смужку прогресу, решта - лише заголовок. Усі три теми видно
- * одразу, без гортання, і блок удвічі нижчий.
- *
- * Макети - про те, що система справді робить:
- *   вітрина   - обкладинка, зручності, послуга, запис
- *   розсилки  - лист із промокодом (POST /crm/campaigns)
- *   аналітика - дохід за тижнями
- * Без емодзі: у кожній системі вони малюються по-різному й виглядають
- * чужими в дизайні.
- */
-
-const GROWTH_MS = 6000;
-
-function GrowthStorefront() {
-  return (
-    <div className="gm gm-store">
-      <div className="gm-cover">
-        <img src="https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=700&q=75" alt="" loading="lazy" />
-        <div className="gm-logo">TB</div>
-      </div>
-      <div className="gm-pad">
-        <div className="gm-name">Top Barber</div>
-        <div className="gm-sub">Львів, вул. Дорошенка 1</div>
-        {/* Зручності - ті самі, що власник обирає у вітрині */}
-        <div className="gm-chips"><span>Wi-Fi</span><span>Паркування</span><span>Pet friendly</span></div>
-        <div className="gm-service">
-          <div><b>Стрижка + борода</b><small>60 хв</small></div>
-          <b>800 ₴</b>
-        </div>
-        <div className="gm-btn">Записатися</div>
-      </div>
-    </div>
-  );
-}
-
-function GrowthCampaign() {
-  return (
-    <div className="gm gm-pad">
-      <div className="gm-head">
-        <div className="gm-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
-        </div>
-        <div><div className="gm-name">Розсилка листом</div><div className="gm-sub">Клієнти, що не приходили 2 місяці</div></div>
-      </div>
-      <div className="gm-mail">
-        <div className="gm-sub">Тема</div>
-        <div className="gm-mail-subj">Сумуємо за вами - знижка на наступний візит</div>
-        <div className="gm-code"><span>BACK20</span>−20%</div>
-      </div>
-      <div className="gm-stats">
-        <div><small>Отримувачі</small><b>142</b></div>
-        <div><small>Канал</small><b>Email</b></div>
-      </div>
-    </div>
-  );
-}
-
-function GrowthAnalytics() {
-  const weeks = [48, 62, 55, 80, 100];
-  return (
-    <div className="gm gm-pad">
-      <div className="gm-sub">Дохід за місяць</div>
-      <div className="gm-big">84 500 ₴</div>
-      <div className="gm-bars">
-        {weeks.map((h, i) => (
-          <div key={i} className={`gm-bar ${i === weeks.length - 1 ? 'now' : ''}`} style={{ ['--h' as string]: `${h}%`, animationDelay: `${i * 0.07}s` }} />
-        ))}
-      </div>
-      <div className="gm-axis"><span>Тиждень 1</span><span>Цей тиждень</span></div>
-    </div>
-  );
-}
-
-const GROWTH_FEATURES = [
-  {
-    title: 'Ваша онлайн-вітрина',
-    desc: 'Власна сторінка для запису: обкладинка, послуги з цінами, зручності й команда. Клієнт записується сам, без дзвінків.',
-    Mockup: GrowthStorefront,
-  },
-  {
-    title: 'Розсилки й промокоди',
-    desc: 'Повертайте клієнтів, які давно не приходили: лист із промокодом тим, кому він справді потрібен.',
-    Mockup: GrowthCampaign,
-  },
-  {
-    title: 'Аналітика доходу',
-    desc: 'Дохід, завантаженість і найпопулярніші послуги - видно, що працює, а що варто змінити.',
-    Mockup: GrowthAnalytics,
-  },
-];
-
-function GrowthFeatures() {
-  const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
-  // Перезапуск смужки прогресу з кожним перемиканням.
-  const [cycle, setCycle] = useState(0);
-
-  const select = (i: number) => { setActive(i); setCycle(n => n + 1); };
-
-  useEffect(() => {
-    if (paused) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const t = setTimeout(() => select((active + 1) % GROWTH_FEATURES.length), GROWTH_MS);
-    return () => clearTimeout(t);
-  }, [active, paused, cycle]);
-
-  const { Mockup } = GROWTH_FEATURES[active];
-
-  return (
-    <section className="growth">
-      <div className="container">
-        <div className="gr-head">
-          <h2>Можливості для росту.</h2>
-          <p>Аналітика, розсилки та власна онлайн-вітрина. Усе для того, щоб ви заробляли більше.</p>
-        </div>
-
-        <div className="gr-body" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-          <div className="gr-list" role="tablist">
-            {GROWTH_FEATURES.map((f, i) => (
-              <button
-                key={f.title}
-                role="tab"
-                aria-selected={i === active}
-                className={`gr-item ${i === active ? 'on' : ''}`}
-                onClick={() => select(i)}
-              >
-                <span className="gr-title">{f.title}</span>
-                {/* Опис видно лише в активного пункту: усі три теми
-                    читаються одразу, а деталі - там, куди дивишся. */}
-                <span className="gr-desc"><span>{f.desc}</span></span>
-                <span className="gr-track">
-                  {i === active && (
-                    <span
-                      key={cycle}
-                      className="gr-fill"
-                      style={{ animationDuration: `${GROWTH_MS}ms`, animationPlayState: paused ? 'paused' : 'running' }}
-                    />
-                  )}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="gr-stage">
-            {/* key - макет перемальовується й відпрацьовує появу знову. */}
-            <div key={active} className="gr-mock"><Mockup /></div>
-          </div>
-        </div>
-      </div>
-
-      <style jsx global>{`
-        .growth { padding: 6rem 0; background: #fff; }
-        .gr-head { max-width: 640px; margin-bottom: 3rem; }
-        .gr-head h2 {
-          font-size: clamp(2rem, 4.2vw, 3rem);
-          font-weight: 700; letter-spacing: -0.035em; line-height: 1.06;
-          color: #1D1D1F; margin: 0 0 0.9rem;
-        }
-        .gr-head p { font-size: 1.125rem; line-height: 1.55; color: #6E6E73; margin: 0; }
-
-        .gr-body { display: grid; grid-template-columns: 1fr 1.1fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: center; }
-
-        .gr-list { display: flex; flex-direction: column; }
-        .gr-item {
-          display: flex; flex-direction: column; align-items: flex-start; text-align: left;
-          padding: 1.25rem 0; border: none; background: none; cursor: pointer; font-family: inherit;
-          border-top: 1px solid #EDEDF0;
-        }
-        .gr-item:last-child { border-bottom: 1px solid #EDEDF0; }
-        .gr-title {
-          font-size: 1.3rem; font-weight: 600; letter-spacing: -0.02em;
-          color: #AEAEB2; transition: color 0.3s ease;
-        }
-        .gr-item.on .gr-title, .gr-item:hover .gr-title { color: #1D1D1F; }
-        /* Опис розгортається плавно через grid-rows, без стрибка висоти. */
-        .gr-desc {
-          display: grid; grid-template-rows: 0fr; overflow: hidden;
-          font-size: 1rem; line-height: 1.55; color: #6E6E73;
-          transition: grid-template-rows 0.45s cubic-bezier(0.16, 1, 0.3, 1), margin 0.45s ease, opacity 0.3s ease;
-          opacity: 0; margin-top: 0;
-        }
-        .gr-item.on .gr-desc { grid-template-rows: 1fr; opacity: 1; margin-top: 0.5rem; }
-        /* Без внутрішньої обгортки з min-height: 0 рядок сітки 0fr не
-           згортається - текст лишався б видимим у неактивних пунктах. */
-        .gr-desc > span { min-height: 0; overflow: hidden; }
-        .gr-track { display: block; width: 100%; height: 2px; margin-top: 1rem; background: transparent; border-radius: 2px; overflow: hidden; }
-        .gr-item.on .gr-track { background: #EDEDF0; }
-        .gr-fill {
-          display: block; height: 100%; background: #6F9273; transform-origin: left;
-          animation-name: grFill; animation-timing-function: linear; animation-fill-mode: forwards;
-        }
-        @keyframes grFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-
-        .gr-stage {
-          height: 440px; border-radius: 32px;
-          background: radial-gradient(80% 60% at 50% 0%, #F4FAF5 0%, transparent 70%), #F5F5F7;
-          display: flex; align-items: center; justify-content: center; overflow: hidden;
-        }
-        .gr-mock { animation: grIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
-        @keyframes grIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
-
-        /* --- Макети --- */
-        .gm {
-          width: 290px; background: #fff; border-radius: 22px; overflow: hidden;
-          box-shadow: 0 24px 50px -24px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04);
-          color: #1D1D1F;
-        }
-        .gm-pad { padding: 1.25rem; }
-        .gm-name { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
-        .gm-sub { font-size: 0.78rem; color: #86868B; }
-
-        .gm-cover { position: relative; height: 110px; }
-        .gm-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .gm-logo {
-          position: absolute; left: 1.25rem; bottom: -22px; width: 48px; height: 48px; border-radius: 50%;
-          background: #EEF1F6; border: 3px solid #fff; display: flex; align-items: center; justify-content: center;
-          font-size: 0.8rem; font-weight: 700; color: #222;
-        }
-        .gm-store .gm-pad { padding-top: 1.9rem; }
-        .gm-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; margin: 0.75rem 0; }
-        .gm-chips span { font-size: 0.68rem; font-weight: 500; padding: 0.25rem 0.55rem; border-radius: 999px; background: #F4FAF5; color: #2E3A30; }
-        .gm-service { display: flex; justify-content: space-between; align-items: center; padding: 0.7rem 0.8rem; border-radius: 12px; background: #F5F5F7; margin-bottom: 0.75rem; font-size: 0.85rem; }
-        .gm-service small { display: block; font-size: 0.72rem; color: #86868B; }
-        .gm-btn { text-align: center; padding: 0.7rem; border-radius: 12px; background: #1D1D1F; color: #fff; font-size: 0.85rem; font-weight: 600; }
-
-        .gm-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
-        .gm-icon { width: 38px; height: 38px; border-radius: 11px; background: #F4FAF5; color: #6F9273; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .gm-mail { padding: 0.85rem; border-radius: 14px; background: #F5F5F7; margin-bottom: 0.9rem; }
-        .gm-mail-subj { font-size: 0.85rem; font-weight: 600; margin: 0.2rem 0 0.7rem; line-height: 1.35; }
-        .gm-code { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 600; color: #2E3A30; }
-        .gm-code span { padding: 0.25rem 0.55rem; border-radius: 7px; border: 1px dashed #8FAE93; background: #fff; letter-spacing: 0.04em; }
-        .gm-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-        .gm-stats small { display: block; font-size: 0.7rem; color: #86868B; }
-        .gm-stats b { font-size: 1rem; font-weight: 600; }
-
-        .gm-big { font-size: 2rem; font-weight: 700; letter-spacing: -0.035em; margin: 0.15rem 0 1.1rem; font-variant-numeric: tabular-nums; }
-        .gm-bars { display: flex; align-items: flex-end; gap: 0.5rem; height: 110px; padding-bottom: 0.6rem; border-bottom: 1px solid #F0F0F2; }
-        .gm-bar {
-          flex: 1; height: var(--h); border-radius: 6px 6px 3px 3px; background: #DCE8DB;
-          transform-origin: bottom; animation: grGrow 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
-        .gm-bar.now { background: #6F9273; }
-        @keyframes grGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-        .gm-axis { display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.7rem; color: #86868B; }
-
-        @media (max-width: 900px) {
-          .gr-body { grid-template-columns: 1fr; }
-          .gr-stage { height: 400px; order: -1; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .gr-mock, .gm-bar { animation: none; }
-          .gr-desc { transition: none; }
-          .gr-fill { display: none; }
-        }
-      `}</style>
-    </section>
-  );
-}
-
 export default function BusinessLandingPage() {
   const router = useRouter();
 
@@ -355,10 +43,106 @@ export default function BusinessLandingPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
+  const [percent, setPercent] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [activeFeature, setActiveFeature] = useState(0);
 
   const profileRef = useRef<HTMLDivElement>(null);
 
+  // 3. ОПТИМІЗАЦІЯ: Мемоїзація важкого JSX.
+  // Масив перераховується ЛИШЕ коли змінюється `percent`, а не при кожному скролі.
+  const exploreFeatures = useMemo(() => [
+    {
+      title: "Ваша онлайн-вітрина",
+      desc: "Отримайте власну сторінку для запису, яка виглядає ідеально на будь-якому пристрої. Додайте послуги, ціни та портфоліо в пару кліків.",
+      btn: "Переглянути приклад",
+      mockup: (
+        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '0', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', overflow: 'hidden', transform: 'translateZ(0)' }}>
+          <div style={{ height: '120px', background: 'linear-gradient(135deg, #111827 0%, #334155 100%)', position: 'relative' }}>
+             <div style={{ position: 'absolute', bottom: '-20px', left: '20px', width: '60px', height: '60px', borderRadius: '50%', background: '#EEF1F6', border: '4px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: 800, color: '#1D1D1F', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>FB</div>
+          </div>
+          <div style={{ padding: '30px 20px 20px 20px' }}>
+             <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827' }}>The First Barber</div>
+             <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.2rem' }}>Київ, вул. Хрещатик, 1</div>
+
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: '12px', marginBottom: '8px' }}>
+                <div>
+                   <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827' }}>Стрижка + Борода</div>
+                   <div style={{ fontSize: '0.75rem', color: '#64748b' }}>60 хв</div>
+                </div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#111827' }}>800 ₴</div>
+             </div>
+
+             <button style={{ width: '100%', padding: '12px', background: '#C2D8C4', borderRadius: '12px', border: 'none', fontWeight: '800', color: '#111827', marginTop: '10px' }}>Записатись</button>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Маркетинг та розсилки",
+      desc: "Повертайте клієнтів частіше. Створюйте персоналізовані розсилки зі знижками для тих, хто давно не був у вас.",
+      btn: "Інструменти маркетингу",
+      mockup: (
+        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', transform: 'translateZ(0)' }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827', marginBottom: '1.2rem' }}>Кампанії</div>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.2rem' }}>
+             <div style={{ width: '40px', height: '40px', background: '#eff6ff', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6F9273', marginBottom: '1rem' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg></div>
+             <div style={{ fontSize: '1.05rem', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>Знижка -20%</div>
+             <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.4' }}>Для клієнтів, яких не було більше 2-х місяців.</div>
+             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
+                <div>
+                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Отримувачі</div>
+                   <div style={{ fontSize: '0.9rem', color: '#111827', fontWeight: '800' }}>142</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Канал</div>
+                   <div style={{ fontSize: '0.9rem', color: '#16a34a', fontWeight: '800' }}>Email</div>
+                </div>
+             </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Глибока аналітика",
+      desc: "Тримайте руку на пульсі бізнесу. Відстежуйте доходи, найпопулярніші послуги та завантаженість по днях тижня.",
+      btn: "Аналітика доходів",
+      mockup: (
+        <div style={{ background: '#ffffff', width: '280px', borderRadius: '24px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', transform: 'translateZ(0)' }}>
+          <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Дохід за Липень</div>
+          <div style={{ fontSize: '2rem', fontWeight: '900', color: '#111827', marginBottom: '1.5rem' }}>84,500 ₴</div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '100px', marginBottom: '1rem', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9' }}>
+             <div style={{ flex: 1, background: '#e2e8f0', height: '40%', borderRadius: '4px 4px 0 0' }}></div>
+             <div style={{ flex: 1, background: '#e2e8f0', height: '60%', borderRadius: '4px 4px 0 0' }}></div>
+             <div style={{ flex: 1, background: '#e2e8f0', height: '50%', borderRadius: '4px 4px 0 0' }}></div>
+             <div style={{ flex: 1, background: '#C2D8C4', height: '80%', borderRadius: '4px 4px 0 0' }}></div>
+             <div style={{ flex: 1, background: '#111827', height: '100%', borderRadius: '4px 4px 0 0' }}></div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>
+             <span>Тиждень 1</span>
+             <span>Тиждень 4</span>
+          </div>
+        </div>
+      )
+    }
+  ], [percent]);
+
+  const handleNextFeature = () => {
+    setActiveFeature((prev) => (prev + 1) % exploreFeatures.length);
+  };
+
+  const handlePrevFeature = () => {
+    setActiveFeature((prev) => (prev - 1 + exploreFeatures.length) % exploreFeatures.length);
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveFeature((prev) => (prev + 1) % exploreFeatures.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [exploreFeatures.length]);
 
   useEffect(() => {
     setMounted(true);
@@ -435,7 +219,24 @@ export default function BusinessLandingPage() {
         if (entry.isIntersecting) {
           entry.target.classList.add('is-visible');
 
-          observer.unobserve(entry.target);
+          if (!entry.target.classList.contains('finance-card-trigger')) {
+             observer.unobserve(entry.target);
+          }
+
+          if (entry.target.classList.contains('finance-card-trigger')) {
+            if (entry.target.getAttribute('data-counted') !== 'true') {
+              entry.target.setAttribute('data-counted', 'true');
+              let start = 0;
+              const interval = setInterval(() => {
+                start += 1;
+                setPercent(start);
+                if (start >= 50) {
+                  clearInterval(interval);
+                }
+              }, 25);
+              observer.unobserve(entry.target);
+            }
+          }
         }
       });
     }, { threshold: 0.15 });
@@ -956,13 +757,10 @@ export default function BusinessLandingPage() {
               <span className="bento-tag">Сповіщення</span>
               <h3 className="bento-title">Автоматичні <br/>нагадування.</h3>
               <div className="anim-pop" style={{ marginTop: 'auto', background: '#ffffff', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', gap: '0.8rem', boxShadow: '0 10px 20px rgba(0,0,0,0.02)' }}>
-                 {/* Фірмова іконка застосунку замість емодзі: емодзі в
-                     кожній системі малюється по-різному й виглядає як
-                     чужий елемент у дизайні. */}
-                 <div style={{ width: '32px', height: '32px', flexShrink: 0, borderRadius: '9px', background: 'linear-gradient(145deg, #2E3A30, #1D1D1F)', color: '#C2D8C4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem', fontWeight: 800 }}>B</div>
+                 <div style={{ color: '#6F9273', display: 'flex' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg></div>
                  <div>
-                    <div style={{ color: '#111827', fontWeight: '700', fontSize: '0.85rem', marginBottom: '2px' }}>BookEra</div>
-                    <div style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: '1.4' }}>Нагадуємо про запис завтра о 14:00!</div>
+                    <div style={{ color: '#111827', fontWeight: '700', fontSize: '0.85rem', marginBottom: '2px' }}>BookEra · лист</div>
+                    <div style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: '1.4' }}>Нагадування: завтра о 14:00</div>
                  </div>
               </div>
             </div>
@@ -977,14 +775,14 @@ export default function BusinessLandingPage() {
               <div className="ui-mockup-calendar" style={{ right: '-20px', bottom: '-20px', width: '50%', height: '80%', padding: '1.5rem' }}>
                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase' }}>Налаштування</div>
                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ fontWeight: '700', color: '#111827', fontSize: '0.9rem' }}>Передоплата</div>
+                    <div style={{ fontWeight: '700', color: '#111827', fontSize: '0.9rem' }}>Брати передоплату</div>
                     <div className="anim-toggle-bg" style={{ width: '40px', height: '22px', borderRadius: '11px', position: 'relative' }}>
                        <div className="anim-toggle-circle" style={{ position: 'absolute', left: '2px', top: '2px', width: '18px', height: '18px', background: '#fff', borderRadius: '50%' }}></div>
                     </div>
                  </div>
                  <div className="anim-slide-1" style={{ marginTop: '1.5rem' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Сума передоплати</div>
-                    <div style={{ fontSize: '1.8rem', color: '#111827', fontWeight: '900' }}><CountUp to={50} suffix="%" /></div>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Сума / Відсоток</div>
+                    <div style={{ fontSize: '1.8rem', color: '#111827', fontWeight: '900' }}>{percent}%</div>
                  </div>
               </div>
             </div>
@@ -993,8 +791,47 @@ export default function BusinessLandingPage() {
       </section>
 
       {/* EXPLORE FEATURES */}
-      {/* МОЖЛИВОСТІ ДЛЯ РОСТУ - власний компонент зі своїм станом. */}
-      <GrowthFeatures />
+      <section className="reveal-on-scroll" style={{ padding: '6rem 0 8rem 0', textAlign: 'center', backgroundColor: '#ffffff' }}>
+        <div className="container">
+          <h2 style={{ fontSize: 'clamp(2.5rem, 4vw, 3.2rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', marginBottom: '0.5rem' }}>Можливості для росту</h2>
+          <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '600px', margin: '0 auto 1rem auto', lineHeight: '1.5' }}>
+            Аналітика, розсилки та власна онлайн-вітрина. Усе для того, щоб ви заробляли більше.
+          </p>
+
+          <div className="explore-slider-container">
+
+            <div className="slider-text-area" style={{ textAlign: 'left' }}>
+              <div style={{ minHeight: '180px' }}>
+                 <h3 style={{ fontSize: '2rem', fontWeight: '900', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.03em', lineHeight: '1.1' }}>
+                   {exploreFeatures[activeFeature].title}
+                 </h3>
+                 <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: '1.6', marginBottom: '2rem' }}>
+                   {exploreFeatures[activeFeature].desc}
+                 </p>
+                 <button style={{ background: '#111827', color: '#fff', padding: '1rem 2rem', borderRadius: '999px', fontWeight: '700', fontSize: '0.95rem', border: 'none', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
+                   {exploreFeatures[activeFeature].btn}
+                 </button>
+              </div>
+            </div>
+
+            <div className="slider-image-area">
+               {exploreFeatures.map((f, i) => (
+                  <div key={i} style={{ position: 'absolute', opacity: activeFeature === i ? 1 : 0, transition: 'opacity 0.4s ease', transform: activeFeature === i ? 'scale(1)' : 'scale(0.95)', pointerEvents: activeFeature === i ? 'auto' : 'none', willChange: 'opacity, transform' }}>
+                    {f.mockup}
+                  </div>
+               ))}
+               <button onClick={handleNextFeature} className="slider-nav-btn" style={{ position: 'absolute', right: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>→</button>
+               <button onClick={handlePrevFeature} className="slider-nav-btn" style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>←</button>
+            </div>
+
+          </div>
+
+          <div className="slider-progress-track">
+             <div className="slider-progress-fill" style={{ width: `${((activeFeature + 1) / exploreFeatures.length) * 100}%` }}></div>
+          </div>
+
+        </div>
+      </section>
 
       {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>

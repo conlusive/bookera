@@ -66,7 +66,17 @@ export function useNearbyPrompt(isEnabled: boolean) {
     }
   };
 
-  const locate = () =>
+  /**
+   * fromUser - чи людина сама щойно натиснула щось, що потребує місця
+   * (наприклад, «Спочатку найближчі»).
+   *
+   * Лише тоді показуємо плашку при невдачі. Автоматичний запит при
+   * вході на сайт не показує нічого власного: питає браузер своїм
+   * вікном, а якщо не вийшло - сторінка просто працює без відстаней.
+   * Людина нічого від нас не просила, і плашка з помилкою була б
+   * нав'язливою.
+   */
+  const locate = (fromUser = false) =>
     new Promise<void>(resolve => {
       setIsLocating(true);
       setError(null);
@@ -90,7 +100,9 @@ export function useNearbyPrompt(isEnabled: boolean) {
           // шукати це в налаштуваннях сайту.
           if (err.code === err.PERMISSION_DENIED) {
             setError('denied');
-            setIsVisible(true);
+            // Пояснення, де зняти заборону, - лише якщо людина сама
+            // щойно попросила найближчі. Автоматично не турбуємо.
+            if (fromUser) setIsVisible(true);
           } else {
             // Не відмова, а збій: не встигли, немає сигналу.
             // Беремо останнє відоме місце - воно краще за нічого.
@@ -100,7 +112,7 @@ export function useNearbyPrompt(isEnabled: boolean) {
               setIsVisible(false);
             } else {
               setError('failed');
-              setIsVisible(true);
+              if (fromUser) setIsVisible(true);
             }
           }
           setIsLocating(false);
@@ -148,8 +160,9 @@ export function useNearbyPrompt(isEnabled: boolean) {
         if (cancelled) return;
 
         if (status.state === 'denied') {
+          // Людина вже сказала «ні» браузеру. Не нагадуємо про це
+          // на кожному вході - сторінка працює й без відстаней.
           setError('denied');
-          setIsVisible(true);
           return;
         }
 
@@ -164,16 +177,18 @@ export function useNearbyPrompt(isEnabled: boolean) {
           return;
         }
 
-        // status.state === 'prompt': треба питати.
+        // status.state === 'prompt': браузер ще не питав.
         //
-        // SAFARI ВИМАГАЄ КЛІКУ. Він блокує автоматичний запит
-        // геолокації й не показує своє вікно взагалі - мовчки, без
-        // помилки. Chrome дозволяє автоматично, Safari ні.
+        // Просимо одразу - браузер покаже своє вікно дозволу. Людина
+        // відповідає ОДИН раз: браузер запамʼятовує відповідь, і на
+        // наступних входах ми потрапляємо в гілку granted вище й
+        // беремо координати мовчки.
         //
-        // Тому показуємо власну кнопку. Це не зайвий крок, а єдиний
-        // спосіб узагалі отримати координати в Safari: клік по ній
-        // і є тим жестом, якого браузер чекає.
-        setIsVisible(true);
+        // Раніше тут показувалась наша плашка «Показати заклади,
+        // найближчі до вас?» - через хибне припущення, що Safari не
+        // питає без кліку. Насправді тоді геолокацію для Safari було
+        // вимкнено в налаштуваннях macOS. Зайвий крок прибрано.
+        void locate();
 
         // Людина зняла заборону в налаштуваннях і повернулась на
         // вкладку - пробуємо знову без перезавантаження.
@@ -194,7 +209,9 @@ export function useNearbyPrompt(isEnabled: boolean) {
 
   const decline = () => setIsVisible(false);
 
-  return { point, isVisible, isLocating, error, locate, decline };
+  // Назовні locate викликається лише з дій людини (кнопки,
+  // вибір сортування), тож fromUser = true.
+  return { point, isVisible, isLocating, error, locate: () => locate(true), decline };
 }
 
 export default function NearbyPrompt({

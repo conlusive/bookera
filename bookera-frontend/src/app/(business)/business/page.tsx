@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ArsenalMosaic from '@/components/business/ArsenalMosaic';
+import GrowthHero from '@/components/business/GrowthHero';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
@@ -43,118 +45,10 @@ export default function BusinessLandingPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  const [percent, setPercent] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [activeFeature, setActiveFeature] = useState(0);
 
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // 3. ОПТИМІЗАЦІЯ: Мемоїзація важкого JSX.
-  // Масив перераховується ЛИШЕ коли змінюється `percent`, а не при кожному скролі.
-  const exploreFeatures = useMemo(() => [
-    {
-      title: "Ваша онлайн-вітрина",
-      desc: "Отримайте власну сторінку для запису, яка виглядає ідеально на будь-якому пристрої. Додайте послуги, ціни та портфоліо в пару кліків.",
-      btn: "Переглянути приклад",
-      mockup: (
-        /* Вітрина - як сторінка закладу для клієнта: логотип-ініціали,
-           рейтинг, адреса, зручності, послуги з тривалістю й ціною,
-           кнопка запису. Обкладинка - мʼякий градієнт матчі замість
-           фото: легше вантажиться й не старіє. */
-        <div style={{ width: '300px', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 50px -24px rgba(46,58,48,0.22), 0 0 0 1px rgba(0,0,0,0.04)', overflow: 'hidden', color: '#1D1D1F' }}>
-          <div style={{ height: '88px', position: 'relative', background: 'radial-gradient(120% 100% at 0% 0%, #E4EEE3 0%, transparent 60%), linear-gradient(135deg, #DCE8DB 0%, #C2D8C4 100%)' }}>
-            <div style={{ position: 'absolute', left: '18px', bottom: '-20px', width: '46px', height: '46px', borderRadius: '50%', background: '#EEF1F6', border: '3px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 800 }}>TB</div>
-          </div>
-          <div style={{ padding: '28px 18px 18px' }}>
-            <div style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Top Barber</div>
-            <div style={{ fontSize: '0.75rem', color: '#86868B', marginTop: '2px' }}><span style={{ color: '#1D1D1F', fontWeight: 600 }}>★ 4.9</span> · 128 відгуків · Дорошенка 1</div>
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', margin: '12px 0' }}>
-              {['Wi-Fi', 'Паркування', 'Pet friendly'].map(a => (
-                <span key={a} style={{ fontSize: '0.68rem', fontWeight: 500, padding: '3px 8px', borderRadius: '999px', background: '#F4FAF5', color: '#2E3A30' }}>{a}</span>
-              ))}
-            </div>
-            {[['Чоловіча стрижка', '45 хв', '450 ₴'], ['Стрижка + борода', '60 хв', '650 ₴']].map(([n, d, pr]) => (
-              <div key={n} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderTop: '1px solid #F0F0F2', fontSize: '0.8rem' }}>
-                <div><div style={{ fontWeight: 600 }}>{n}</div><div style={{ fontSize: '0.7rem', color: '#86868B' }}>{d}</div></div>
-                <div style={{ fontWeight: 600 }}>{pr}</div>
-              </div>
-            ))}
-            <div style={{ marginTop: '10px', textAlign: 'center', padding: '10px', borderRadius: '12px', background: '#1D1D1F', color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>Записатися</div>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: "Маркетинг та розсилки",
-      desc: "Повертайте клієнтів частіше. Створюйте персоналізовані розсилки зі знижками для тих, хто давно не був у вас.",
-      btn: "Інструменти маркетингу",
-      mockup: (
-        /* Розсилка - як у кабінеті: сегмент клієнтів, тема листа,
-           промокод. Розсилки справді надсилаються листами. */
-        <div style={{ width: '300px', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 50px -24px rgba(46,58,48,0.22), 0 0 0 1px rgba(0,0,0,0.04)', padding: '18px', color: '#1D1D1F' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-            <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: '#F4FAF5', color: '#6F9273', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
-            </div>
-            <div><div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Нова розсилка</div><div style={{ fontSize: '0.72rem', color: '#86868B' }}>Лист клієнтам</div></div>
-          </div>
-          <div style={{ display: 'inline-block', fontSize: '0.7rem', fontWeight: 600, padding: '4px 9px', borderRadius: '999px', background: '#F5F5F7', color: '#3A3A3C', marginBottom: '10px' }}>Не приходили 60+ днів · 142</div>
-          <div style={{ padding: '12px', borderRadius: '14px', background: '#F7F9F6' }}>
-            <div style={{ fontSize: '0.68rem', color: '#86868B' }}>Тема</div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 600, margin: '2px 0 8px', lineHeight: 1.35 }}>Сумуємо за вами - знижка на наступний візит</div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', fontWeight: 600, color: '#2E3A30' }}>
-              <span style={{ padding: '3px 8px', borderRadius: '7px', border: '1px dashed #8FAE93', background: '#fff', letterSpacing: '0.04em' }}>BACK20</span>−20%
-            </div>
-          </div>
-          <div style={{ marginTop: '12px', textAlign: 'center', padding: '10px', borderRadius: '12px', background: '#1D1D1F', color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>Надіслати 142 клієнтам</div>
-        </div>
-      )
-    },
-    {
-      title: "Глибока аналітика",
-      desc: "Тримайте руку на пульсі бізнесу. Відстежуйте доходи, найпопулярніші послуги та завантаженість по днях тижня.",
-      btn: "Аналітика доходів",
-      mockup: (
-        /* Аналітика - ті самі чотири показники, що у вкладці
-           «Аналітика» кабінету, і дохід за тижнями. */
-        <div style={{ width: '310px', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 50px -24px rgba(46,58,48,0.22), 0 0 0 1px rgba(0,0,0,0.04)', padding: '18px', color: '#1D1D1F' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
-            <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Вересень</div>
-            <div style={{ fontSize: '0.7rem', color: '#86868B' }}>порівняно з серпнем</div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-            {[['Дохід', '84 500 ₴', '+12%', true], ['Нові клієнти', '38', '+9', true], ['Середній чек', '620 ₴', '+4%', true], ['Скасування', '4%', '−2%', true]].map(([l, v, d, good]) => (
-              <div key={l as string} style={{ padding: '10px 11px', borderRadius: '12px', background: '#F5F5F7' }}>
-                <div style={{ fontSize: '0.68rem', color: '#86868B' }}>{l}</div>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em', margin: '1px 0' }}>{v}</div>
-                <div style={{ fontSize: '0.66rem', fontWeight: 600, color: good ? '#5C7A61' : '#B42318' }}>{d}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '7px', height: '64px' }}>
-            {[48, 62, 55, 80, 100].map((h, i) => (
-              <div key={i} style={{ flex: 1, height: `${h}%`, borderRadius: '6px 6px 3px 3px', background: i === 4 ? '#6F9273' : '#DCE8DB' }} />
-            ))}
-          </div>
-        </div>
-      )
-    }
-  ], [percent]);
-
-  const handleNextFeature = () => {
-    setActiveFeature((prev) => (prev + 1) % exploreFeatures.length);
-  };
-
-  const handlePrevFeature = () => {
-    setActiveFeature((prev) => (prev - 1 + exploreFeatures.length) % exploreFeatures.length);
-  };
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % exploreFeatures.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [exploreFeatures.length]);
 
   useEffect(() => {
     setMounted(true);
@@ -231,24 +125,7 @@ export default function BusinessLandingPage() {
         if (entry.isIntersecting) {
           entry.target.classList.add('is-visible');
 
-          if (!entry.target.classList.contains('finance-card-trigger')) {
-             observer.unobserve(entry.target);
-          }
-
-          if (entry.target.classList.contains('finance-card-trigger')) {
-            if (entry.target.getAttribute('data-counted') !== 'true') {
-              entry.target.setAttribute('data-counted', 'true');
-              let start = 0;
-              const interval = setInterval(() => {
-                start += 1;
-                setPercent(start);
-                if (start >= 50) {
-                  clearInterval(interval);
-                }
-              }, 25);
-              observer.unobserve(entry.target);
-            }
-          }
+          observer.unobserve(entry.target);
         }
       });
     }, { threshold: 0.15 });
@@ -723,127 +600,19 @@ export default function BusinessLandingPage() {
       </section>
 
       {/* BENTO GRID SECTION */}
-      <section id="bento" style={{ paddingBottom: '40px' }}>
+      {/* БАЗОВИЙ АРСЕНАЛ - мозаїка з пʼяти карток. */}
+      <section style={{ padding: '6rem 0 3rem', background: '#fff' }}>
         <div className="container">
-          <div className="reveal-on-scroll">
-            <h2 style={{ fontSize: '3rem', fontWeight: '900', textAlign: 'center', letterSpacing: '-0.03em', color: '#111827', marginBottom: '1rem' }}>Базовий арсенал майстра.</h2>
-          </div>
-
-          <div className="bento-grid">
-            <div className="bento-card bento-large reveal-on-scroll">
-              <div className="text-content">
-                <span className="bento-tag">Календар</span>
-                <h3 className="bento-title">Ідеальний розклад.</h3>
-                <p className="bento-desc">Забудьте про блокноти. Керуйте часом зручно з телефону.</p>
-              </div>
-
-              <div className="ui-mockup-calendar">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#111827' }}>Сьогодні</div>
-                  <div style={{ background: '#f1f5f9', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600', color: '#64748b' }}>Вересень</div>
-                </div>
-                <div className="ui-appointment anim-slide-1">
-                  <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginBottom: '4px' }}>10:00 - 11:30</div>
-                  <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '700' }}>Стрижка</div>
-                </div>
-                <div className="ui-appointment blue anim-slide-2">
-                  <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '700', marginBottom: '4px' }}>12:00 - 14:00</div>
-                  <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '700' }}>Фарбування</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bento-card bento-small reveal-on-scroll delay-100" style={{ background: '#111827' }}>
-              <span className="bento-tag" style={{ background: 'rgba(255,255,255,0.1)', color: '#C2D8C4', border: 'none' }}>База клієнтів</span>
-              <h3 className="bento-title" style={{ color: '#ffffff' }}>Всі клієнти<br/>як на долоні.</h3>
-              <div className="anim-slide-1" style={{ marginTop: 'auto', display: 'flex', gap: '1rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                 <div style={{ width: '36px', height: '36px', background: '#C2D8C4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827', fontWeight: '800' }}>М</div>
-                 <div>
-                    <div style={{ color: '#fff', fontWeight: '700', fontSize: '0.9rem' }}>Михайло В.</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Останній візит: 14 днів тому</div>
-                 </div>
-              </div>
-            </div>
-
-            <div className="bento-card bento-small reveal-on-scroll">
-              <span className="bento-tag">Сповіщення</span>
-              <h3 className="bento-title">Автоматичні <br/>нагадування.</h3>
-              <div className="anim-pop" style={{ marginTop: 'auto', background: '#ffffff', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', gap: '0.8rem', boxShadow: '0 10px 20px rgba(0,0,0,0.02)' }}>
-                 <div style={{ color: '#6F9273', display: 'flex' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg></div>
-                 <div>
-                    <div style={{ color: '#111827', fontWeight: '700', fontSize: '0.85rem', marginBottom: '2px' }}>BookEra · лист</div>
-                    <div style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: '1.4' }}>Нагадування: завтра о 14:00</div>
-                 </div>
-              </div>
-            </div>
-
-            <div className="bento-card bento-large reveal-on-scroll delay-100 finance-card-trigger" style={{ background: '#f0fdf4', borderColor: '#dcfce7' }}>
-              <div className="text-content">
-                <span className="bento-tag" style={{ background: '#ffffff', color: '#166534', borderColor: '#bbf7d0' }}>Фінанси</span>
-                <h3 className="bento-title" style={{ color: '#14532d' }}>Захистіть дохід.</h3>
-                <p className="bento-desc" style={{ color: '#166534' }}>Беріть передоплату та захистіть себе від скасувань.</p>
-              </div>
-
-              <div className="ui-mockup-calendar" style={{ right: '-20px', bottom: '-20px', width: '50%', height: '80%', padding: '1.5rem' }}>
-                 <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase' }}>Налаштування</div>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ fontWeight: '700', color: '#111827', fontSize: '0.9rem' }}>Брати передоплату</div>
-                    <div className="anim-toggle-bg" style={{ width: '40px', height: '22px', borderRadius: '11px', position: 'relative' }}>
-                       <div className="anim-toggle-circle" style={{ position: 'absolute', left: '2px', top: '2px', width: '18px', height: '18px', background: '#fff', borderRadius: '50%' }}></div>
-                    </div>
-                 </div>
-                 <div className="anim-slide-1" style={{ marginTop: '1.5rem' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Сума / Відсоток</div>
-                    <div style={{ fontSize: '1.8rem', color: '#111827', fontWeight: '900' }}>{percent}%</div>
-                 </div>
-              </div>
-            </div>
-          </div>
+          <h2 style={{ fontSize: 'clamp(2rem, 4.4vw, 3.25rem)', fontWeight: 700, letterSpacing: '-0.035em', lineHeight: 1.08, color: '#1D1D1F', margin: '0 0 2.5rem' }}>
+            Базовий арсенал майстра.
+          </h2>
+          <ArsenalMosaic />
         </div>
       </section>
 
       {/* EXPLORE FEATURES */}
-      <section className="reveal-on-scroll" style={{ padding: '6rem 0 8rem 0', textAlign: 'center', backgroundColor: '#ffffff' }}>
-        <div className="container">
-          <h2 style={{ fontSize: 'clamp(2.5rem, 4vw, 3.2rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', marginBottom: '0.5rem' }}>Можливості для росту</h2>
-          <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '600px', margin: '0 auto 1rem auto', lineHeight: '1.5' }}>
-            Аналітика, розсилки та власна онлайн-вітрина. Усе для того, щоб ви заробляли більше.
-          </p>
-
-          <div className="explore-slider-container">
-
-            <div className="slider-text-area" style={{ textAlign: 'left' }}>
-              <div style={{ minHeight: '180px' }}>
-                 <h3 style={{ fontSize: '2rem', fontWeight: '900', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.03em', lineHeight: '1.1' }}>
-                   {exploreFeatures[activeFeature].title}
-                 </h3>
-                 <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: '1.6', marginBottom: '2rem' }}>
-                   {exploreFeatures[activeFeature].desc}
-                 </p>
-                 <button style={{ background: '#111827', color: '#fff', padding: '1rem 2rem', borderRadius: '999px', fontWeight: '700', fontSize: '0.95rem', border: 'none', cursor: 'pointer', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#334155'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>
-                   {exploreFeatures[activeFeature].btn}
-                 </button>
-              </div>
-            </div>
-
-            <div className="slider-image-area">
-               {exploreFeatures.map((f, i) => (
-                  <div key={i} style={{ position: 'absolute', opacity: activeFeature === i ? 1 : 0, transition: 'opacity 0.4s ease', transform: activeFeature === i ? 'scale(1)' : 'scale(0.95)', pointerEvents: activeFeature === i ? 'auto' : 'none', willChange: 'opacity, transform' }}>
-                    {f.mockup}
-                  </div>
-               ))}
-               <button onClick={handleNextFeature} className="slider-nav-btn" style={{ position: 'absolute', right: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>→</button>
-               <button onClick={handlePrevFeature} className="slider-nav-btn" style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)' }}>←</button>
-            </div>
-
-          </div>
-
-          <div className="slider-progress-track">
-             <div className="slider-progress-fill" style={{ width: `${((activeFeature + 1) / exploreFeatures.length) * 100}%` }}></div>
-          </div>
-
-        </div>
-      </section>
+      {/* МОЖЛИВОСТІ ДЛЯ РОСТУ - заголовок по центру, картки-теки по кутах. */}
+      <GrowthHero />
 
       {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>

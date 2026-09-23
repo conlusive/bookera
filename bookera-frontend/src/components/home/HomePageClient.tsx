@@ -1748,15 +1748,18 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
            Легкий: сіра доріжка, біла плашка під обраним, без рамок. */
         /* --- Порядок закладів --- */
         .sort-dd { position: relative; flex-shrink: 0; }
+        /* Кнопка ледь помітна: без рамки й тла, квадратніша. Тло
+           проступає лише при наведенні й коли список відкритий -
+           тоді воно пояснює, що це кнопка, а в спокої не відволікає. */
         .sort-dd-trigger {
-          display: inline-flex; align-items: center; gap: 0.5rem;
-          height: 40px; padding: 0 0.85rem 0 0.8rem; border-radius: 999px;
-          border: 1px solid #E5E5EA; background: #fff; color: #1D1D1F;
+          display: inline-flex; align-items: center; gap: 0.45rem;
+          height: 36px; padding: 0 0.6rem; border-radius: 10px;
+          border: none; background: transparent; color: #3A3A3C;
           font-family: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer;
-          transition: border-color .2s ease, box-shadow .2s ease;
+          transition: background-color .2s ease, color .2s ease;
         }
-        .sort-dd-trigger:hover, .sort-dd-trigger.open { border-color: #C7C7CC; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
-        .sort-dd-ico { color: #6F9273; }
+        .sort-dd-trigger:hover, .sort-dd-trigger.open { background: #F5F5F7; color: #1D1D1F; }
+        .sort-dd-ico { color: #86868B; }
         .sort-dd-chev { color: #AEAEB2; transition: transform .25s cubic-bezier(.16,1,.3,1); }
         .sort-dd-trigger.open .sort-dd-chev { transform: rotate(180deg); }
 
@@ -1765,7 +1768,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
            закриття теж плавне, а не різке зникнення. */
         .sort-dd-menu {
           position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
-          width: 264px; padding: 6px; border-radius: 16px; background: #fff;
+          width: 264px; padding: 6px; border-radius: 12px; background: #fff;
           box-shadow: 0 18px 40px -12px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.05);
           transform-origin: top right;
           opacity: 0; transform: translateY(-4px) scale(.97); pointer-events: none;
@@ -1774,7 +1777,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .sort-dd-menu.open { opacity: 1; transform: none; pointer-events: auto; }
         .sort-dd-opt {
           width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-          padding: 0.6rem 0.75rem; border: none; border-radius: 11px; background: transparent;
+          padding: 0.6rem 0.75rem; border: none; border-radius: 8px; background: transparent;
           font-family: inherit; text-align: left; cursor: pointer; transition: background-color .15s ease;
         }
         .sort-dd-opt:hover { background: #F5F5F7; }

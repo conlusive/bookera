@@ -570,7 +570,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   // найближчого. Інші пункти уточнюють порядок серед 12 найближчих.
   // Раніше за замовчуванням стояло «Найкращі оцінки», і тоді «Показати
   // ще» ніколи не показав би більше дванадцяти.
-  const [sortBy, setSortBy] = useState<string>('recommended');
+  // Типово - найближчі: це головна ідея сторінки, «поруч із вами».
+  // Поки місце невідоме, порядок той самий, що в «Рекомендованих»
+  // (див. sortComparator), тож порожньо чи випадково не буде.
+  const [sortBy, setSortBy] = useState<string>('distance');
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -978,19 +981,23 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     const byDistance = dist(a) - dist(b);
 
     if (sortBy === 'distance') {
-      return byDistance;
+      // Відстань відома хоча б для одного - сортуємо за нею.
+      // Infinity - Infinity дає NaN, тож заклади без координат
+      // порівнюємо окремо, інакше порядок став би непередбачуваним.
+      const da = dist(a), db = dist(b);
+      if (Number.isFinite(da) || Number.isFinite(db)) {
+        if (!Number.isFinite(da)) return 1;
+        if (!Number.isFinite(db)) return -1;
+        if (da !== db) return da - db;
+      }
+      // Місце ще невідоме чи відстань однакова - порядок
+      // «Рекомендованих» нижче.
     }
 
     if (sortBy === 'price') {
       const pa = getMinPrice(a);
       const pb = getMinPrice(b);
       if (pa !== pb) return pa - pb;
-      return byDistance;
-    }
-
-    if (sortBy === 'rating') {
-      if (tier(a) !== tier(b)) return tier(b) - tier(a);
-      if (rating(a) !== rating(b)) return rating(b) - rating(a);
       return byDistance;
     }
 
@@ -1340,10 +1347,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
    * нічого не робить, гірший за його відсутність.
    */
     const sortOptions = [
-      { value: 'recommended', label: 'Рекомендовані' },
-    { value: 'distance', label: 'Спочатку найближчі' },
-    { value: 'price', label: 'Спочатку дешевші' },
-    { value: 'rating', label: 'Найкращі оцінки' },
+      // «Найкращі оцінки» прибрано: це та сама якість, яку вже враховують
+    // «Рекомендовані». Два пункти з майже однаковим результатом лише
+    // змушують людину гадати, чим вони відрізняються.
+    { value: 'distance', label: 'Найближчі' },
+    { value: 'recommended', label: 'Рекомендовані' },
+    { value: 'price', label: 'Дешевші' },
     ];
 
   /**
@@ -1726,6 +1735,48 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         }
         .search-dropdown-item:hover { background: rgba(0, 0, 0, 0.05); color: #0f172a; font-weight: 600; }
         .badge-tag { font-size: 0.7rem; color: #94a3b8; background-color: #f1f5f9; padding: 3px 8px; border-radius: 6px; font-weight: 600; }
+
+        /* Сегментований перемикач сортування.
+           Легкий: сіра доріжка, біла плашка під обраним, без рамок. */
+        .sort-seg {
+          position: relative;
+          display: inline-grid;
+          grid-template-columns: repeat(3, 1fr);
+          margin-top: 1.25rem;
+          padding: 4px;
+          border-radius: 12px;
+          background: #F2F2F5;
+        }
+        .sort-seg-thumb {
+          position: absolute;
+          top: 4px; bottom: 4px; left: 4px;
+          width: calc((100% - 8px) / 3);
+          border-radius: 9px;
+          background: #fff;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04);
+          transform: translateX(calc(var(--i) * 100%));
+          transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .sort-seg button {
+          position: relative;
+          z-index: 1;
+          height: 34px;
+          padding: 0 1.1rem;
+          border: none;
+          background: transparent;
+          font-family: inherit;
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: #6E6E73;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: color 0.2s ease;
+        }
+        .sort-seg button:hover { color: #1D1D1F; }
+        .sort-seg button.on { color: #1D1D1F; font-weight: 600; }
+        @media (prefers-reduced-motion: reduce) {
+          .sort-seg-thumb { transition: none; }
+        }
 
         .sort-trigger {
           display: flex; align-items: center; gap: 0.4rem; background: transparent; border: none;
@@ -2559,48 +2610,34 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
   />
 
-  <div style={{ position: 'relative', marginTop: '1.25rem' }} ref={sortRef}>
-    <button
-      type="button"
-      onClick={() => setIsSortOpen(!isSortOpen)}
-      className="sort-trigger"
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-      </svg>
-      Сортування: <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
-    </button>
-
-    {isSortOpen && (
-      <div className="search-dropdown anim" style={{ top: '120%', right: 0, left: 'auto', width: '240px', zIndex: 100 }}>
-        {sortOptions.map(opt => (
-          <button
-            key={opt.value}
-            type="button"
-            className="search-dropdown-item"
-            style={{
-              width: '100%',
-              textAlign: 'left',
-              border: 'none',
-              display: 'block',
-              backgroundColor: sortBy === opt.value ? '#f8fafc' : 'transparent',
-              fontWeight: sortBy === opt.value ? '700' : '500'
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setSortBy(opt.value);
-              setIsSortOpen(false);
-              // «Спочатку найближчі» без місця людини нічого не змінить -
-              // просимо його саме зараз, коли стало зрозуміло, навіщо.
-              if (opt.value === 'distance' && !nearbyPoint) void nearby.locate();
-            }}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-    )}
+  {/* Сегментований перемикач замість випадного списку.
+      Три варіанти видно одразу - без кліку, щоб дізнатись, що там є.
+      Біла плашка плавно їде до обраного: так видно, ЩО змінилось,
+      а не лише що щось змінилось. */}
+  <div
+    className="sort-seg"
+    role="radiogroup"
+    aria-label="Порядок закладів"
+    style={{ ['--i' as string]: Math.max(0, sortOptions.findIndex(o => o.value === sortBy)) }}
+  >
+    <span className="sort-seg-thumb" aria-hidden />
+    {sortOptions.map(opt => (
+      <button
+        key={opt.value}
+        type="button"
+        role="radio"
+        aria-checked={sortBy === opt.value}
+        className={sortBy === opt.value ? 'on' : ''}
+        onClick={() => {
+          setSortBy(opt.value);
+          // «Найближчі» без місця людини нічого не змінять - просимо
+          // його саме зараз, коли стало зрозуміло, навіщо.
+          if (opt.value === 'distance' && !nearbyPoint) void nearby.locate();
+        }}
+      >
+        {opt.label}
+      </button>
+    ))}
   </div>
 </div>
 

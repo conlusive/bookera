@@ -18,6 +18,305 @@ const faqs = [
   { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам та всім, хто працює за попереднім записом." }
 ];
 
+/* ------------------------------------------------------------------ */
+/* БАЗОВИЙ АРСЕНАЛ МАЙСТРА                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Чотири можливості - і кожна показує те, що система справді робить.
+ *
+ * Попередня версія обіцяла зайве:
+ *   - нагадування малювалось як пуш на телефоні, а надсилається листом
+ *   - «беріть передоплату» - сума лише записується в запис, з клієнта
+ *     нічого не списується й він її навіть не бачить. Власник увімкнув
+ *     би її заради захисту від скасувань і не отримав би нічого
+ *
+ * Замість передоплати - зарплати: вони рахуються по-справжньому
+ * (відсоток, ставка, чайові, матеріали), і це реальна економія годин
+ * для власника.
+ */
+function useArsenalInView() {
+  const ref = useRef<HTMLElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setInView(true); return; }
+    const o = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { setInView(true); o.disconnect(); }
+    }, { threshold: 0.2 });
+    o.observe(el);
+    return () => o.disconnect();
+  }, []);
+  return { ref, inView };
+}
+
+function ArsenalCalendar(_: { play?: boolean }) {
+  // Дві колонки майстрів, записи виїжджають по черзі - як у справжньому
+  // календарі кабінету.
+  const cols = [
+    { name: 'Макс', items: [{ top: 6, h: 26, t: '10:00 Стрижка' }, { top: 42, h: 34, t: '12:00 Стрижка + борода' }] },
+    { name: 'Олена', items: [{ top: 16, h: 38, t: '10:30 Фарбування' }, { top: 64, h: 24, t: '14:00 Укладка' }] },
+  ];
+  return (
+    <div className="ar-cal">
+      {cols.map((col, ci) => (
+        <div key={col.name} className="ar-cal-col">
+          <div className="ar-cal-name">{col.name}</div>
+          <div className="ar-cal-lane">
+            {col.items.map((it, i) => (
+              <div key={i} className="ar-cal-item" style={{ top: `${it.top}%`, height: `${it.h}%`, transitionDelay: `${0.3 + (ci * 2 + i) * 0.15}s` }}>
+                {it.t}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ArsenalClient(_: { play?: boolean }) {
+  return (
+    <div className="ar-client">
+      <div className="ar-client-head">
+        <div className="ar-ava">МВ</div>
+        <div>
+          <div className="ar-client-name">Марія В.</div>
+          <div className="ar-client-meta">7 візитів · останній 2 тижні тому</div>
+        </div>
+      </div>
+      {/* Поля, які справді є в картці клієнта: формула фарбування,
+          день народження, Instagram. */}
+      <div className="ar-field" style={{ transitionDelay: '0.35s' }}>
+        <span>Формула</span><b>7.1 + 6% · 1:1.5</b>
+      </div>
+      <div className="ar-field" style={{ transitionDelay: '0.5s' }}>
+        <span>День народження</span><b>14 жовтня</b>
+      </div>
+      <div className="ar-field" style={{ transitionDelay: '0.65s' }}>
+        <span>Instagram</span><b>@maria.v</b>
+      </div>
+    </div>
+  );
+}
+
+function ArsenalReminder(_: { play?: boolean }) {
+  // Лист, а не пуш: нагадування надсилається саме листом, за добу.
+  return (
+    <div className="ar-mail">
+      <div className="ar-mail-bar"><i /><i /><i /></div>
+      <div className="ar-mail-body">
+        <div className="ar-mail-from">BookEra · вхідні</div>
+        <div className="ar-mail-subject">Нагадування: завтра о 14:00</div>
+        <div className="ar-mail-text">Стрижка в Top Barber, вул. Дорошенка 1. Змінилися плани? Перенесіть запис у листі.</div>
+        <div className="ar-mail-btn">Керувати записом</div>
+      </div>
+    </div>
+  );
+}
+
+function ArsenalPayroll({ play = false }: { play?: boolean }) {
+  // Розрахунок виплати: ті самі складові, що в кабінеті.
+  const rows = [
+    { label: 'Виручка за місяць', value: '18 400 ₴' },
+    { label: 'Відсоток майстра, 40%', value: '7 360 ₴' },
+    { label: 'Чайові', value: '+ 600 ₴' },
+    { label: 'Матеріали', value: '− 450 ₴' },
+  ];
+  const [total, setTotal] = useState(0);
+  const target = 7510;
+  useEffect(() => {
+    if (!play) return;
+    let raf = 0;
+    const delay = setTimeout(() => {
+      const t0 = performance.now();
+      const tick = (now: number) => {
+        const k = Math.min(1, (now - t0) / 1200);
+        setTotal(Math.round(target * (1 - Math.pow(1 - k, 3))));
+        if (k < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, 900);
+    return () => { clearTimeout(delay); cancelAnimationFrame(raf); };
+  }, [play]);
+
+  return (
+    <div className="ar-pay">
+      <div className="ar-pay-who">
+        <div className="ar-ava">МБ</div>
+        <div><div className="ar-client-name">Макс Бар</div><div className="ar-client-meta">Вересень</div></div>
+      </div>
+      {rows.map((r, i) => (
+        <div key={r.label} className="ar-pay-row" style={{ transitionDelay: `${0.25 + i * 0.12}s` }}>
+          <span>{r.label}</span><b>{r.value}</b>
+        </div>
+      ))}
+      <div className="ar-pay-total">
+        <span>До виплати</span>
+        <b>{total.toLocaleString('uk-UA')} ₴</b>
+      </div>
+    </div>
+  );
+}
+
+function Arsenal() {
+  const { ref, inView } = useArsenalInView();
+
+  const cards = [
+    { size: 'lg', tag: 'Календар', title: 'Розклад усієї команди', text: 'Записи, перерви й майстри в одному календарі - день, тиждень чи місяць. Перенести візит - перетягнути його.', Visual: ArsenalCalendar },
+    { size: 'sm', tag: 'Клієнти', title: 'Кожен клієнт на виду', text: 'Історія візитів, формули фарбування й дні народження - у картці клієнта.', Visual: ArsenalClient },
+    { size: 'sm', tag: 'Нагадування', title: 'Менше забутих записів', text: 'Клієнт отримує лист за добу до візиту - з кнопкою, щоб перенести сам.', Visual: ArsenalReminder },
+    { size: 'lg', tag: 'Зарплати', title: 'Виплати рахуються самі', text: 'Відсоток чи ставка, чайові й матеріали - сума для кожного майстра без таблиць і калькулятора.', Visual: ArsenalPayroll },
+  ];
+
+  return (
+    <section ref={ref} className={`arsenal ${inView ? 'in' : ''}`}>
+      <div className="container">
+        <h2 className="ar-heading">
+          Базовий арсенал майстра.
+          <span> Усе, що потрібно щодня.</span>
+        </h2>
+
+        <div className="ar-grid">
+          {cards.map(({ size, tag, title, text, Visual }, i) => (
+            <div key={tag} className={`ar-card ${size}`} style={{ transitionDelay: `${i * 0.08}s` }}>
+              <div className="ar-copy">
+                <div className="ar-tag">{tag}</div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+              <div className="ar-stage">
+                <Visual play={inView} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .arsenal { padding: 6rem 0; background: #fff; }
+        .ar-heading {
+          font-size: clamp(2rem, 4.4vw, 3.25rem);
+          font-weight: 700;
+          letter-spacing: -0.035em;
+          line-height: 1.08;
+          color: #1D1D1F;
+          margin: 0 0 3rem;
+          max-width: 820px;
+        }
+        .ar-heading span { color: #86868B; }
+
+        .ar-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1.25rem; }
+        .ar-card {
+          grid-column: span 5;
+          border-radius: 28px;
+          background: #F5F5F7;
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1.75rem;
+          overflow: hidden;
+          opacity: 0;
+          transform: translateY(24px);
+          transition: opacity 0.8s ease, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .ar-card.lg { grid-column: span 7; }
+        .arsenal.in .ar-card { opacity: 1; transform: none; }
+
+        .ar-tag { font-size: 0.8125rem; font-weight: 600; color: #6F9273; margin-bottom: 0.6rem; }
+        .ar-copy h3 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; color: #1D1D1F; margin: 0 0 0.5rem; }
+        .ar-copy p { font-size: 1rem; line-height: 1.55; color: #6E6E73; margin: 0; max-width: 460px; }
+
+        .ar-stage { margin-top: auto; }
+
+        /* Спільні шматки */
+        .ar-ava {
+          width: 36px; height: 36px; border-radius: 50%; background: #EEF1F6;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 0.75rem; font-weight: 700; color: #222; flex-shrink: 0;
+        }
+        .ar-client-name { font-size: 0.9375rem; font-weight: 600; color: #1D1D1F; }
+        .ar-client-meta { font-size: 0.8125rem; color: #86868B; }
+
+        /* Календар */
+        .ar-cal { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; background: #fff; border-radius: 18px; padding: 1rem; }
+        .ar-cal-name { font-size: 0.8125rem; font-weight: 600; color: #3A3A3C; margin-bottom: 0.5rem; }
+        .ar-cal-lane {
+          position: relative; height: 190px; border-radius: 10px;
+          background: repeating-linear-gradient(to bottom, #fff 0, #fff calc(20% - 1px), #F0F0F2 calc(20% - 1px), #F0F0F2 20%);
+        }
+        .ar-cal-item {
+          position: absolute; left: 0; right: 0; border-radius: 8px;
+          background: #E4EEE3; border-left: 3px solid #6F9273;
+          padding: 0.3rem 0.55rem; font-size: 0.75rem; font-weight: 500; color: #2E3A30;
+          overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+          opacity: 0; transform: translateX(-10px);
+          transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .arsenal.in .ar-cal-item { opacity: 1; transform: none; }
+
+        /* Клієнт */
+        .ar-client { background: #fff; border-radius: 18px; padding: 1.1rem; }
+        .ar-client-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; }
+        .ar-field {
+          display: flex; justify-content: space-between; gap: 1rem;
+          padding: 0.6rem 0; border-top: 1px solid #F0F0F2; font-size: 0.8125rem;
+          opacity: 0; transform: translateY(6px);
+          transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .arsenal.in .ar-field { opacity: 1; transform: none; }
+        .ar-field span { color: #86868B; }
+        .ar-field b { color: #1D1D1F; font-weight: 600; }
+
+        /* Лист */
+        .ar-mail { background: #fff; border-radius: 18px; overflow: hidden; }
+        .ar-mail-bar { display: flex; gap: 5px; padding: 0.65rem 0.9rem; border-bottom: 1px solid #F0F0F2; }
+        .ar-mail-bar i { width: 9px; height: 9px; border-radius: 50%; background: #E5E5EA; }
+        .ar-mail-body {
+          padding: 1rem 1.1rem 1.2rem;
+          opacity: 0; transform: translateY(10px);
+          transition: opacity 0.6s ease 0.3s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s;
+        }
+        .arsenal.in .ar-mail-body { opacity: 1; transform: none; }
+        .ar-mail-from { font-size: 0.72rem; color: #86868B; margin-bottom: 0.35rem; }
+        .ar-mail-subject { font-size: 0.9375rem; font-weight: 600; color: #1D1D1F; margin-bottom: 0.4rem; }
+        .ar-mail-text { font-size: 0.8125rem; line-height: 1.5; color: #6E6E73; margin-bottom: 0.9rem; }
+        .ar-mail-btn {
+          display: inline-block; font-size: 0.8125rem; font-weight: 600;
+          padding: 0.45rem 0.9rem; border-radius: 8px; background: #1D1D1F; color: #fff;
+        }
+
+        /* Зарплата */
+        .ar-pay { background: #fff; border-radius: 18px; padding: 1.1rem 1.25rem; }
+        .ar-pay-who { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.6rem; }
+        .ar-pay-row {
+          display: flex; justify-content: space-between; padding: 0.55rem 0;
+          border-top: 1px solid #F0F0F2; font-size: 0.875rem;
+          opacity: 0; transform: translateY(6px);
+          transition: opacity 0.5s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .arsenal.in .ar-pay-row { opacity: 1; transform: none; }
+        .ar-pay-row span { color: #6E6E73; }
+        .ar-pay-row b { color: #1D1D1F; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .ar-pay-total {
+          display: flex; justify-content: space-between; align-items: baseline;
+          margin-top: 0.4rem; padding: 0.85rem 1rem; border-radius: 12px; background: #F4FAF5;
+        }
+        .ar-pay-total span { font-size: 0.875rem; font-weight: 600; color: #2E3A30; }
+        .ar-pay-total b { font-size: 1.5rem; font-weight: 700; color: #2E3A30; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
+        @media (max-width: 900px) {
+          .ar-card, .ar-card.lg { grid-column: span 12; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .ar-card, .ar-cal-item, .ar-field, .ar-mail-body, .ar-pay-row { transition: none !important; }
+        }
+      `}</style>
+    </section>
+  );
+}
+
 export default function BusinessLandingPage() {
   const router = useRouter();
 
@@ -711,84 +1010,8 @@ export default function BusinessLandingPage() {
       </section>
 
       {/* BENTO GRID SECTION */}
-      <section id="bento" style={{ paddingBottom: '40px' }}>
-        <div className="container">
-          <div className="reveal-on-scroll">
-            <h2 style={{ fontSize: '3rem', fontWeight: '900', textAlign: 'center', letterSpacing: '-0.03em', color: '#111827', marginBottom: '1rem' }}>Базовий арсенал майстра.</h2>
-          </div>
-
-          <div className="bento-grid">
-            <div className="bento-card bento-large reveal-on-scroll">
-              <div className="text-content">
-                <span className="bento-tag">Календар</span>
-                <h3 className="bento-title">Ідеальний розклад.</h3>
-                <p className="bento-desc">Забудьте про блокноти. Керуйте часом зручно з телефону.</p>
-              </div>
-
-              <div className="ui-mockup-calendar">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#111827' }}>Сьогодні</div>
-                  <div style={{ background: '#f1f5f9', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600', color: '#64748b' }}>Вересень</div>
-                </div>
-                <div className="ui-appointment anim-slide-1">
-                  <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginBottom: '4px' }}>10:00 - 11:30</div>
-                  <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '700' }}>Стрижка</div>
-                </div>
-                <div className="ui-appointment blue anim-slide-2">
-                  <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '700', marginBottom: '4px' }}>12:00 - 14:00</div>
-                  <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '700' }}>Фарбування</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bento-card bento-small reveal-on-scroll delay-100" style={{ background: '#111827' }}>
-              <span className="bento-tag" style={{ background: 'rgba(255,255,255,0.1)', color: '#C2D8C4', border: 'none' }}>База клієнтів</span>
-              <h3 className="bento-title" style={{ color: '#ffffff' }}>Всі клієнти<br/>як на долоні.</h3>
-              <div className="anim-slide-1" style={{ marginTop: 'auto', display: 'flex', gap: '1rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                 <div style={{ width: '36px', height: '36px', background: '#C2D8C4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827', fontWeight: '800' }}>М</div>
-                 <div>
-                    <div style={{ color: '#fff', fontWeight: '700', fontSize: '0.9rem' }}>Михайло В.</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Останній візит: 14 днів тому</div>
-                 </div>
-              </div>
-            </div>
-
-            <div className="bento-card bento-small reveal-on-scroll">
-              <span className="bento-tag">Сповіщення</span>
-              <h3 className="bento-title">Автоматичні <br/>нагадування.</h3>
-              <div className="anim-pop" style={{ marginTop: 'auto', background: '#ffffff', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', gap: '0.8rem', boxShadow: '0 10px 20px rgba(0,0,0,0.02)' }}>
-                 <div style={{ fontSize: '1.2rem' }}>💬</div>
-                 <div>
-                    <div style={{ color: '#111827', fontWeight: '700', fontSize: '0.85rem', marginBottom: '2px' }}>BookEra</div>
-                    <div style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: '1.4' }}>Нагадуємо про запис завтра о 14:00!</div>
-                 </div>
-              </div>
-            </div>
-
-            <div className="bento-card bento-large reveal-on-scroll delay-100 finance-card-trigger" style={{ background: '#f0fdf4', borderColor: '#dcfce7' }}>
-              <div className="text-content">
-                <span className="bento-tag" style={{ background: '#ffffff', color: '#166534', borderColor: '#bbf7d0' }}>Фінанси</span>
-                <h3 className="bento-title" style={{ color: '#14532d' }}>Захистіть дохід.</h3>
-                <p className="bento-desc" style={{ color: '#166534' }}>Беріть передоплату та захистіть себе від скасувань.</p>
-              </div>
-
-              <div className="ui-mockup-calendar" style={{ right: '-20px', bottom: '-20px', width: '50%', height: '80%', padding: '1.5rem' }}>
-                 <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase' }}>Налаштування</div>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ fontWeight: '700', color: '#111827', fontSize: '0.9rem' }}>Передоплата</div>
-                    <div className="anim-toggle-bg" style={{ width: '40px', height: '22px', borderRadius: '11px', position: 'relative' }}>
-                       <div className="anim-toggle-circle" style={{ position: 'absolute', left: '2px', top: '2px', width: '18px', height: '18px', background: '#fff', borderRadius: '50%' }}></div>
-                    </div>
-                 </div>
-                 <div className="anim-slide-1" style={{ marginTop: '1.5rem' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Сума передоплати</div>
-                    <div style={{ fontSize: '1.8rem', color: '#111827', fontWeight: '900' }}>{percent}%</div>
-                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* БАЗОВИЙ АРСЕНАЛ - чотири можливості, що відповідають системі. */}
+      <Arsenal />
 
       {/* EXPLORE FEATURES */}
       <section className="reveal-on-scroll" style={{ padding: '6rem 0 8rem 0', textAlign: 'center', backgroundColor: '#ffffff' }}>

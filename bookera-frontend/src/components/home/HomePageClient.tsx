@@ -1346,7 +1346,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
    * «За відстанню» зʼявляється лише коли координати є: пункт, який
    * нічого не робить, гірший за його відсутність.
    */
-    const sortOptions = [
+    // Коротке пояснення під кожним варіантом: назва каже ЩО, підказка -
+  // ЯК. «Рекомендовані» без неї незрозумілі - за чим саме?
+  const SORT_HINTS: Record<string, string> = {
+    distance: 'Від найближчого до вас',
+    recommended: 'Вільні вікна сьогодні й відгуки',
+    price: 'За найдешевшою послугою',
+  };
+
+  const sortOptions = [
       // «Найкращі оцінки» прибрано: це та сама якість, яку вже враховують
     // «Рекомендовані». Два пункти з майже однаковим результатом лише
     // змушують людину гадати, чим вони відрізняються.
@@ -1738,44 +1746,44 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
         /* Сегментований перемикач сортування.
            Легкий: сіра доріжка, біла плашка під обраним, без рамок. */
-        .sort-seg {
-          position: relative;
-          display: inline-grid;
-          grid-template-columns: repeat(3, 1fr);
-          margin-top: 1.25rem;
-          padding: 4px;
-          border-radius: 12px;
-          background: #F2F2F5;
+        /* --- Порядок закладів --- */
+        .sort-dd { position: relative; flex-shrink: 0; }
+        .sort-dd-trigger {
+          display: inline-flex; align-items: center; gap: 0.5rem;
+          height: 40px; padding: 0 0.85rem 0 0.8rem; border-radius: 999px;
+          border: 1px solid #E5E5EA; background: #fff; color: #1D1D1F;
+          font-family: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer;
+          transition: border-color .2s ease, box-shadow .2s ease;
         }
-        .sort-seg-thumb {
-          position: absolute;
-          top: 4px; bottom: 4px; left: 4px;
-          width: calc((100% - 8px) / 3);
-          border-radius: 9px;
-          background: #fff;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 1px rgba(0,0,0,0.04);
-          transform: translateX(calc(var(--i) * 100%));
-          transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        .sort-dd-trigger:hover, .sort-dd-trigger.open { border-color: #C7C7CC; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+        .sort-dd-ico { color: #6F9273; }
+        .sort-dd-chev { color: #AEAEB2; transition: transform .25s cubic-bezier(.16,1,.3,1); }
+        .sort-dd-trigger.open .sort-dd-chev { transform: rotate(180deg); }
+
+        /* Список виринає від кнопки - з правого верхнього кута, звідки
+           його відкрили. Лишається в DOM і ховається прозорістю: так
+           закриття теж плавне, а не різке зникнення. */
+        .sort-dd-menu {
+          position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+          width: 264px; padding: 6px; border-radius: 16px; background: #fff;
+          box-shadow: 0 18px 40px -12px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.05);
+          transform-origin: top right;
+          opacity: 0; transform: translateY(-4px) scale(.97); pointer-events: none;
+          transition: opacity .18s ease, transform .22s cubic-bezier(.16,1,.3,1);
         }
-        .sort-seg button {
-          position: relative;
-          z-index: 1;
-          height: 34px;
-          padding: 0 1.1rem;
-          border: none;
-          background: transparent;
-          font-family: inherit;
-          font-size: 0.875rem;
-          font-weight: 500;
-          color: #6E6E73;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: color 0.2s ease;
+        .sort-dd-menu.open { opacity: 1; transform: none; pointer-events: auto; }
+        .sort-dd-opt {
+          width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+          padding: 0.6rem 0.75rem; border: none; border-radius: 11px; background: transparent;
+          font-family: inherit; text-align: left; cursor: pointer; transition: background-color .15s ease;
         }
-        .sort-seg button:hover { color: #1D1D1F; }
-        .sort-seg button.on { color: #1D1D1F; font-weight: 600; }
+        .sort-dd-opt:hover { background: #F5F5F7; }
+        .sort-dd-text { display: flex; flex-direction: column; gap: 1px; }
+        .sort-dd-label { font-size: 0.9rem; font-weight: 500; color: #1D1D1F; }
+        .sort-dd-opt.on .sort-dd-label { font-weight: 600; }
+        .sort-dd-hint { font-size: 0.76rem; color: #86868B; }
+        .sort-dd-check { color: #6F9273; flex-shrink: 0; }
         @media (prefers-reduced-motion: reduce) {
-          .sort-seg-thumb { transition: none; }
         }
 
         .sort-trigger {
@@ -2610,34 +2618,49 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
   />
 
-  {/* Сегментований перемикач замість випадного списку.
-      Три варіанти видно одразу - без кліку, щоб дізнатись, що там є.
-      Біла плашка плавно їде до обраного: так видно, ЩО змінилось,
-      а не лише що щось змінилось. */}
-  <div
-    className="sort-seg"
-    role="radiogroup"
-    aria-label="Порядок закладів"
-    style={{ ['--i' as string]: Math.max(0, sortOptions.findIndex(o => o.value === sortBy)) }}
-  >
-    <span className="sort-seg-thumb" aria-hidden />
-    {sortOptions.map(opt => (
-      <button
-        key={opt.value}
-        type="button"
-        role="radio"
-        aria-checked={sortBy === opt.value}
-        className={sortBy === opt.value ? 'on' : ''}
-        onClick={() => {
-          setSortBy(opt.value);
-          // «Найближчі» без місця людини нічого не змінять - просимо
-          // його саме зараз, коли стало зрозуміло, навіщо.
-          if (opt.value === 'distance' && !nearbyPoint) void nearby.locate();
-        }}
-      >
-        {opt.label}
-      </button>
-    ))}
+  {/* Порядок закладів - кнопка з випадним списком.
+      Кнопка показує поточний порядок, список - усі три з коротким
+      поясненням, що кожен означає. Тихо стоїть поруч із заголовком
+      і не забирає уваги від самих закладів. */}
+  <div className="sort-dd" ref={sortRef} onKeyDown={e => { if (e.key === 'Escape') setIsSortOpen(false); }}>
+    <button
+      type="button"
+      className={`sort-dd-trigger ${isSortOpen ? 'open' : ''}`}
+      aria-haspopup="listbox"
+      aria-expanded={isSortOpen}
+      onClick={() => setIsSortOpen(o => !o)}
+    >
+      <svg className="sort-dd-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5" /></svg>
+      <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
+      <svg className="sort-dd-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+    </button>
+
+    <div className={`sort-dd-menu ${isSortOpen ? 'open' : ''}`} role="listbox" aria-label="Порядок закладів">
+      {sortOptions.map(opt => (
+        <button
+          key={opt.value}
+          type="button"
+          role="option"
+          aria-selected={sortBy === opt.value}
+          className={`sort-dd-opt ${sortBy === opt.value ? 'on' : ''}`}
+          onClick={() => {
+            setSortBy(opt.value);
+            setIsSortOpen(false);
+            // «Найближчі» без місця людини нічого не змінять - просимо
+            // його саме зараз, коли стало зрозуміло, навіщо.
+            if (opt.value === 'distance' && !nearbyPoint) void nearby.locate();
+          }}
+        >
+          <span className="sort-dd-text">
+            <span className="sort-dd-label">{opt.label}</span>
+            <span className="sort-dd-hint">{SORT_HINTS[opt.value]}</span>
+          </span>
+          {sortBy === opt.value && (
+            <svg className="sort-dd-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+          )}
+        </button>
+      ))}
+    </div>
   </div>
 </div>
 

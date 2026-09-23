@@ -563,7 +563,11 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return () => { cancelled = true; };
   }, [nearbyPoint, businesses]);
 
-  const [sortBy, setSortBy] = useState<string>('rating');
+  // «Рекомендовані» за замовчуванням: весь список поруч, від
+  // найближчого. Інші пункти уточнюють порядок серед 12 найближчих.
+  // Раніше за замовчуванням стояло «Найкращі оцінки», і тоді «Показати
+  // ще» ніколи не показав би більше дванадцяти.
+  const [sortBy, setSortBy] = useState<string>('recommended');
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -1039,12 +1043,32 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
    * категорія, ні відстань на нього не впливали, хоча підпис обіцяв
    * «поруч».
    */
-  const nearbyBusinesses = useMemo(() => {
-    let result = businesses;
+  /**
+   * «Поблизу вас» - тепер ЄДИНИЙ список закладів на верху сторінки.
+   *
+   * «Рекомендовані» й «Усі заклади» прибрано: їхню роботу виконує
+   * сортування (найкращі оцінки, найдешевші, нові). Так вся увага -
+   * на головній можливості продукту, пошуку поруч.
+   *
+   * База - filteredBusinesses, а не всі заклади: саме там живуть
+   * фільтри пошукового рядка (текст, дата, час). Раніше їхні
+   * результати показувались у «Усі заклади», і без цієї заміни пошук
+   * після прибирання блоку перестав би щось показувати.
+   *
+   * Два кроки, і розділені навмисно:
+   *   nearbyBase       - відфільтровано й відсортовано ЛИШЕ за
+   *                      відстанню. Від слотів не залежить.
+   *   nearbyBusinesses - порядок, який бачить людина (з обраним
+   *                      сортуванням; «вільні вікна» залежать від слотів).
+   * Слоти вантажимо за nearbyBase - інакше повернувся б нескінченний
+   * цикл: слоти → пересортування → інший набір → нові слоти.
+   */
+  const nearbyBase = useMemo(() => {
+    let result = filteredBusinesses;
 
     if (searchWhere && searchWhere.trim() !== '') {
       const loc = searchWhere.toLowerCase().trim();
-      const inCity = businesses.filter(b =>
+      const inCity = result.filter((b: any) =>
         (b.city && b.city.toLowerCase().includes(loc)) ||
         (b.address && b.address.toLowerCase().includes(loc))
       );
@@ -1053,28 +1077,37 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
     if (activeCategory !== 'all') {
       const terms = CATEGORY_TERMS[activeCategory] || [];
-      result = result.filter(b => {
+      result = result.filter((b: any) => {
         const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
         return terms.some(t => text.includes(t));
       });
     }
 
-    // 1. Спочатку суворо ранжуємо за відстанню
-    const sortedByDistance = [...result].sort((a, b) => {
-      const da = distanceById[a.id] ?? Infinity;
-      const db = distanceById[b.id] ?? Infinity;
-      return da - db;
-    });
+    return [...result].sort((a: any, b: any) =>
+      (distanceById[a.id] ?? Infinity) - (distanceById[b.id] ?? Infinity)
+    );
+  }, [filteredBusinesses, searchWhere, activeCategory, distanceById]);
 
-    // 2. Якщо обрано фільтр (наприклад, «найдешевші»), беремо пул найближчих (до 12)
-    //    і сортуємо їх за обраним критерієм
+  // Скільки показано. «Показати ще» додає по вісім: тепер це весь
+  // список, а не шість карток у каруселі.
+  const NEARBY_STEP = 8;
+  const [nearbyVisible, setNearbyVisible] = useState(NEARBY_STEP);
+  useEffect(() => { setNearbyVisible(NEARBY_STEP); }, [activeCategory, sortBy, appliedSearch]);
+
+  // Скільки найближчих бере участь в обраному сортуванні. «Найдешевші»
+  // серед 12 найближчих, а не найдешевші в місті: інакше сортування
+  // вивело б наперед заклад з іншого кінця міста, і «поблизу»
+  // перестало б бути поблизу.
+  const NEARBY_POOL = 12;
+
+  const nearbyBusinesses = useMemo(() => {
     if (sortBy !== 'recommended' && sortBy !== 'distance') {
-      const closePool = sortedByDistance.slice(0, 12);
-      return closePool.sort((a, b) => sortComparator(a, b) || ((distanceById[a.id] ?? Infinity) - (distanceById[b.id] ?? Infinity))).slice(0, 6);
+      return nearbyBase
+        .slice(0, NEARBY_POOL)
+        .sort((a: any, b: any) => sortComparator(a, b) || ((distanceById[a.id] ?? Infinity) - (distanceById[b.id] ?? Infinity)));
     }
-
-    return sortedByDistance.slice(0, 6);
-  }, [businesses, searchWhere, activeCategory, distanceById, sortBy, sortComparator]);
+    return nearbyBase;
+  }, [nearbyBase, sortBy, sortComparator, distanceById]);
 
   // Розрахунок точної відстані від користувача до закладу
   // getSalonDistance прибрано.
@@ -1089,7 +1122,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   // Завантаження реальних слотів на сьогодні для закладу
   // Сортований рядок id: не змінюється від пересортування, лише коли
   // заклад додався або зник.
-  const nearbyIdsKey = nearbyBusinesses.map((b: any) => b.id).sort((a: number, b: number) => a - b).join(',');
+  // Для яких закладів вантажити слоти: за ВІДСТАННЮ, а не за видимим
+  // порядком. Цей набір від слотів не залежить, тому цикл неможливий.
+  const nearbySlotTargets = nearbyBase.slice(0, Math.max(NEARBY_POOL, nearbyVisible));
+  const nearbyIdsKey = nearbySlotTargets.map((b: any) => b.id).sort((a: number, b: number) => a - b).join(',');
 
   useEffect(() => {
     if (!nearbyBusinesses || nearbyBusinesses.length === 0) return;
@@ -1110,7 +1146,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       const slotsMap: Record<number, string[]> = {};
 
       await Promise.all(
-        nearbyBusinesses.slice(0, 6).map(async (biz) => {
+        nearbySlotTargets.map(async (biz: any) => {
           const srvId = biz.services?.[0]?.id;
           if (!srvId) return;
 
@@ -1173,7 +1209,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const isDefaultView = activeCategory === 'all' && !appliedSearch && !searchDate;
   const showNearby = true;
   const showCollections = true;
-  const showRecommended = true;
 
   const getDisplayDateTime = () => {
     if (!searchDate && !searchTime) return 'Будь-коли';
@@ -1289,7 +1324,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       { value: 'price', label: 'Найдешевші' },
       { value: 'rating', label: 'Найкращі оцінки' },
       { value: 'available', label: 'Вільні сьогодні' },
-      ...(nearbyPoint ? [{ value: 'distance', label: 'Найближчі до мене' }] : []),
       { value: 'newest', label: 'Нові заклади' },
     ];
 
@@ -1305,61 +1339,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
    */
 
 
-  /**
-   * Рекомендовані - НЕЗАЛЕЖНИЙ блок.
-   *
-   * Не реагує ні на категорію, ні на пошук, ні на геолокацію. Це
-   * просто найкращі заклади міста за рейтингом і кількістю відгуків.
-   *
-   * Раніше тут показувався той самий відфільтрований список, що
-   * й у результатах пошуку - тобто ніяких рекомендацій не було,
-   * лише другий екземпляр тих самих карток.
-   *
-   * Рейтинг без відгуків нічого не вартий: заклад із однією пʼятіркою
-   * стояв би вище за той, що має 4.8 із сотні оцінок. Тому спершу
-   * порівнюємо кількість відгуків у грубих сходинках, і лише
-   * всередині сходинки - за рейтингом.
-   */
-  const recommendedBusinesses = useMemo(() => {
-    const tier = (count: number) => (count >= 40 ? 3 : count >= 10 ? 2 : count >= 1 ? 1 : 0);
-
-    let pool = businesses;
-    if (activeCategory !== 'all') {
-      const terms = CATEGORY_TERMS[activeCategory] || [];
-      pool = businesses.filter((b: any) => {
-        const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
-        return terms.some(t => text.includes(t));
-      });
-    }
-
-    // 1. Спочатку відбираємо пул найкращих за якістю закладів міста
-    const topQualityPool = [...pool].sort((a, b) => {
-      const ta = tier(parseInt(a.reviews_count) || 0);
-      const tb = tier(parseInt(b.reviews_count) || 0);
-      if (ta !== tb) return tb - ta;
-      return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
-    }).slice(0, 16);
-
-    // 2. Якщо обрано інший фільтр (наприклад, «найдешевші» або «найближчі»),
-    //    сортуємо цей якісний пул за обраним критерієм
-    if (sortBy !== 'recommended') {
-      return [...topQualityPool].sort(sortComparator).slice(0, 8);
-    }
-
-    return topQualityPool.slice(0, 8);
-  }, [businesses, activeCategory, sortBy, sortComparator]);
 
 
-  /**
-   * Коли людина дала координати, найближчі стають типовим порядком.
-   *
-   * Це головне, заради чого вона дозволила доступ до розташування:
-   * питати дозвіл і далі сортувати за популярністю означало б узяти
-   * дані й не скористатись ними.
-   */
-  useEffect(() => {
-    if (nearbyPoint && sortBy === 'rating') setSortBy('distance');
-  }, [nearbyPoint]);
 
   /**
    * Заголовок СЕРЕДНЬОЇ зони - повного списку закладів.
@@ -2519,7 +2500,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
       {/* 🟢 1. СПЕРШУ: ПОБЛИЗУ ВАС ІЗ ВІЛЬНИМИ ВІКНАМИ (КАРУСЕЛЬ З ОДНАКОВИМ РОЗМІРОМ) */}
       {showNearby && (
-        <section className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
+        <section id="salons-section" className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
           <div className="container">
             {/* Пропозиція показати найближчі - ТУТ, над самим блоком
                 «поблизу», а не після вибору категорії.
@@ -2542,12 +2523,21 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 0, position: 'relative', zIndex: 50 }}>
   <SectionHeader
     eyebrow={searchWhere || 'Львів'}
+    // Тепер це єдиний список, тож заголовок відповідає й за пошук:
+    // людина, яка шукала «Top Barber», має бачити, що це результати
+    // її запиту, а не просто заклади поруч.
     title={
-      activeCategory !== 'all'
-        ? `${categoryTitles[activeCategory] || 'Заклади'} поблизу`
-        : 'Поблизу вас'
+      appliedSearch
+        ? `Результати: «${appliedSearch}»`
+        : activeCategory !== 'all'
+          ? `${categoryTitles[activeCategory] || 'Заклади'} поблизу`
+          : 'Поблизу вас'
     }
-
+    subtitle={
+      nearbyBase.length > 0
+        ? `${nearbyBase.length} ${nearbyBase.length % 10 === 1 && nearbyBase.length % 100 !== 11 ? 'заклад' : [2, 3, 4].includes(nearbyBase.length % 10) && ![12, 13, 14].includes(nearbyBase.length % 100) ? 'заклади' : 'закладів'}`
+        : undefined
+    }
   />
 
   <div style={{ position: 'relative', marginTop: '1.25rem' }} ref={sortRef}>
@@ -2612,8 +2602,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               </div>
             )}
 
-            <div ref={nearbyScrollRef} className="nearby-carousel hide-scrollbar">
-              {nearbyBusinesses.map((biz, idx) => {
+            {/* Сітка, а не карусель: тепер це весь список закладів,
+                а в каруселі половина ховалась би за краєм. */}
+            <div className="salons-layout anim">
+              {nearbyBusinesses.slice(0, nearbyVisible).map((biz: any, idx: number) => {
                 // Справжня відстань, а не вигадана.
                 //
                 // Раніше тут стояло `250 + idx * 150` - число з
@@ -2634,105 +2626,26 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 );
               })}
             </div>
-          </div>
-        </section>
-      )}
 
-      {/* 🟢 2. ПОТІМ: ВАМ МОЖЕ СПОДОБАТИСЯ (РЕКОМЕНДОВАНІ) */}
-      {showRecommended && (
-        <section className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
-          <div className="container">
-            <SectionHeader
-              eyebrow="Найвищі оцінки"
-              title={
-                activeCategory !== 'all'
-                  ? `${categoryTitles[activeCategory] || 'Заклади'} — Рекомендовані`
-                  : 'Рекомендовані'
-              }
-            />
-
-            {recommendedBusinesses.length === 0 ? (
-              <div className="anim" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '4rem 2rem', backgroundColor: '#f8fafc', borderRadius: '24px', border: '1px dashed #cbd5e1', margin: '1.5rem 0' }}>
-                <div style={{ width: '64px', height: '64px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                </div>
-                <h3 style={{ color: '#111827', fontSize: '1.35rem', fontWeight: '800', marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>
-                  Рекомендованих закладів не знайдено
-                </h3>
-                <p style={{ color: '#64748b', fontSize: '0.95rem', maxWidth: '440px', margin: '0 auto', lineHeight: '1.5' }}>
-                  У цій категорії поки немає закладів з високим рейтингом. Спробуйте скинути фільтри.
-                </p>
+            {nearbyBusinesses.length > nearbyVisible && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2.5rem' }}>
                 <button
-                  onClick={() => { handleCategorySelect('all'); setAppliedSearch(''); setSearchWhat(''); }}
-                  style={{ marginTop: '1.5rem', padding: '0.75rem 1.75rem', backgroundColor: '#222222', color: '#fff', border: 'none', borderRadius: '99px', cursor: 'pointer', fontWeight: '700', fontSize: '0.95rem', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  type="button"
+                  onClick={() => setNearbyVisible(v => v + NEARBY_STEP)}
+                  style={{
+                    height: '44px', padding: '0 1.5rem', borderRadius: '999px',
+                    border: '1px solid #E5E5EA', background: '#fff', color: '#1D1D1F',
+                    fontSize: '0.9375rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+                  }}
                 >
-                  Скинути фільтри
+                  Показати ще {Math.min(NEARBY_STEP, nearbyBusinesses.length - nearbyVisible)}
                 </button>
-              </div>
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: '1.5rem',
-              }}>
-                {recommendedBusinesses.map((biz: any) =>
-                  renderCard(biz)
-                )}
               </div>
             )}
           </div>
         </section>
       )}
 
-
-      {/* 🟢 3. І ПОТІМ: РЕКОМЕНДОВАНІ МАЙСТРИ ТА СТУДІЇ (КАТАЛОГ) */}
-      <section className="reveal-on-scroll" style={{ paddingBottom: '5rem' }} id="salons-section">
-        <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 0, position: 'relative', zIndex: 50 }}>
-           <SectionHeader
-  eyebrow="Усі заклади"
-  title={getSectionTitle()}
-  subtitle={getSectionSubtitle()}
-/>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-              {filteredBusinesses.length > 8 && (
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className={`view-all-text-btn anim ${isExpanded ? 'expanded' : ''}`}
-                >
-                  {isExpanded ? 'Згорнути' : 'Дивитись всі'}
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    {isExpanded ? <polyline points="18 15 12 9 6 15"></polyline> : <polyline points="6 9 12 15 18 9"></polyline>}
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {filteredBusinesses.length === 0 ? (
-            <div className="anim" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '6rem 2rem', backgroundColor: '#f8fafc', borderRadius: '24px', border: '1px dashed #cbd5e1', margin: '2rem 0' }}>
-              <div style={{ width: '72px', height: '72px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              </div>
-              <h3 style={{ color: '#111827', fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>Закладів не знайдено</h3>
-              <p style={{ color: '#64748b', fontSize: '1.05rem', maxWidth: '480px', margin: '0 auto', lineHeight: '1.5' }}>Спробуйте обрати інше місто або скинути фільтри.</p>
-              <button
-                onClick={() => { handleCategorySelect('all'); setAppliedSearch(''); setSearchWhat(''); }}
-                style={{ marginTop: '2rem', padding: '0.85rem 2rem', backgroundColor: '#222222', color: '#fff', border: 'none', borderRadius: '99px', cursor: 'pointer', fontWeight: '700', fontSize: '1rem', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-              >
-                Скинути фільтри
-              </button>
-            </div>
-          ) : (
-            <div className="salons-layout anim">
-              {displayedBusinesses.map((biz: any) =>
-                renderCard(biz)
-              )}
-            </div>
-          )}
-        </div>
-      </section>
 
       {/* ЯК ЦЕ ПРАЦЮЄ
           Три тези, і кожна ПОКАЗАНА живою мініатюрою поруч із текстом.

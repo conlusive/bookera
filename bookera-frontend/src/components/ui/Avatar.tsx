@@ -1,5 +1,5 @@
-import SmartImage from '@/components/ui/SmartImage';
 'use client';
+import SmartImage from '@/components/ui/SmartImage';
 
 /**
  * Аватарка людини або закладу.

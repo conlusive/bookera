@@ -1133,3 +1133,62 @@ async def get_nearest_slots(
                 break
 
     return result
+
+
+@router.get("/today-slots")
+async def get_today_slots(
+    business_ids: str = Query(..., description="id закладів через кому"),
+    target_date: date = Query(...),
+    limit: int = Query(3, ge=1, le=10),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Перші вільні години на дату - для кількох закладів одним запитом.
+
+    Раніше головна робила окремий запит на кожну картку: дванадцять
+    запитів при кожному відкритті сторінки. Паралельних, але кожен зі
+    своїми накладними витратами - зʼєднання, заголовки, черга браузера
+    (він тримає лише кілька одночасних запитів до одного сервера).
+
+    Для кожного закладу береться послуга з найменшим id - та сама
+    «основна», що й на картці. Відповідь: {business_id: ["10:00", ...]}.
+    Заклад без послуг чи без вільних годин - порожній список.
+    """
+    try:
+        ids = [int(x) for x in business_ids.split(",") if x.strip()][:24]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="business_ids мають бути числами через кому")
+
+    if not ids:
+        return {}
+
+    services_res = await db.execute(
+        select(Service).where(Service.business_id.in_(ids)).order_by(Service.business_id, Service.id)
+    )
+    primary: dict[int, int] = {}
+    for s in services_res.scalars().all():
+        primary.setdefault(s.business_id, s.id)
+
+    result: dict[str, list[str]] = {}
+    for bid in ids:
+        service_id = primary.get(bid)
+        if not service_id:
+            result[str(bid)] = []
+            continue
+        try:
+            data = await get_available_slots(
+                business_id=bid,
+                service_id=service_id,
+                target_date=target_date,
+                master_id="0",
+                step_minutes=None,
+                duration_minutes=None,
+                db=db,
+            )
+            result[str(bid)] = [str(s.time)[:5] for s in data.slots if s.status == "available"][:limit]
+        except HTTPException:
+            # Заклад на паузі чи без майстрів - просто без годин, решта
+            # карток від цього не страждає.
+            result[str(bid)] = []
+
+    return result

@@ -18,6 +18,12 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.supabase.co', // Швидке завантаження обкладинок з Supabase Storage
       },
+      {
+        // Запасні фото карток і каруселі порад. Без цього дозволу
+        // next/image відмовився б їх оптимізувати.
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
     ],
   },
 

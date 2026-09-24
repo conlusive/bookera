@@ -2,6 +2,20 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Image from 'next/image';
+
+/**
+ * Чи можна оптимізувати зображення через next/image.
+ *
+ * Лише хости з next.config (Supabase, Unsplash). Власник міг вказати
+ * фото з будь-якого сайту - для такого next/image без дозволу впав би
+ * з помилкою й зламав картку. Тоді показуємо як є, без оптимізації.
+ */
+const OPTIMIZABLE_HOSTS = [/\.supabase\.co$/, /^images\.unsplash\.com$/];
+const canOptimize = (url: string) => {
+  try { return OPTIMIZABLE_HOSTS.some(r => r.test(new URL(url).hostname)); }
+  catch { return false; }
+};
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -265,7 +279,16 @@ function StyleTipsCarousel() {
         >
           {STYLE_TIPS.map((t, i) => (
             <div key={i} className="stc-slide" aria-hidden={i !== index}>
-              <img src={t.img} alt={t.title} draggable={false} loading={i < 2 ? 'eager' : 'lazy'} />
+              {/* Стилі каруселі ізольовані (styled-jsx) і на зображення від
+                  next/image не діють - тому обтікання задано напряму. */}
+              <Image
+                src={t.img}
+                alt={t.title}
+                fill
+                sizes="(max-width: 1340px) 100vw, 1340px"
+                draggable={false}
+                style={{ objectFit: 'cover', pointerEvents: 'none' }}
+              />
             </div>
           ))}
         </div>
@@ -296,7 +319,7 @@ function StyleTipsCarousel() {
               onClick={() => go(i)}
               aria-label={t.title}
             >
-              <img src={t.img.replace('w=1800', 'w=300')} alt="" draggable={false} />
+              <Image src={t.img} alt="" fill sizes="120px" draggable={false} style={{ objectFit: 'cover', pointerEvents: 'none' }} />
             </button>
           ))}
         </div>
@@ -316,7 +339,7 @@ function StyleTipsCarousel() {
         }
         .stc-main:active { cursor: grabbing; }
         .stc-track { display: flex; height: 100%; }
-        .stc-slide { flex-shrink: 0; width: 100%; height: 100%; }
+        .stc-slide { position: relative; flex-shrink: 0; width: 100%; height: 100%; }
         .stc-slide img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
         /* Затемнення знизу під текст поради. */
@@ -400,6 +423,7 @@ function StyleTipsCarousel() {
         .stc-thumbs::-webkit-scrollbar { display: none; }
         .stc-thumbs-row { display: flex; gap: ${THUMB_GAP}px; height: 72px; width: fit-content; }
         .stc-thumb {
+          position: relative;
           flex-shrink: 0;
           height: 100%;
           padding: 0;
@@ -1172,30 +1196,20 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       setIsLoadingNearbySlots(true);
       const slotsMap: Record<number, string[]> = {};
 
-      await Promise.all(
-        nearbySlotTargets.map(async (biz: any) => {
-          const srvId = biz.services?.[0]?.id;
-          if (!srvId) return;
-
-          try {
-            const res = await api.getAvailableSlots({
-              business_id: Number(biz.id),
-              service_id: Number(srvId),
-              target_date: todayStr,
-              master_id: '0',
-            });
-
-            const free = (res.slots || [])
-              .filter((s: any) => s.status === 'available')
-              .slice(0, 3)
-              .map((s: any) => s.time.substring(0, 5));
-
-            slotsMap[biz.id] = free;
-          } catch (err) {
-            console.warn(`Помилка отримання слотів салону ${biz.id}:`, err);
-          }
-        })
-      );
+      // ОДИН запит на всі картки замість окремого на кожну.
+      //
+      // Раніше - дванадцять запитів при кожному відкритті головної.
+      // Паралельних, але браузер тримає лише кілька одночасних запитів
+      // до одного сервера, решта стоять у черзі.
+      try {
+        const ids = nearbySlotTargets.map((b: any) => Number(b.id));
+        if (ids.length > 0) {
+          const data = await api.getTodaySlots(ids, todayStr);
+          for (const [id, times] of Object.entries(data)) slotsMap[Number(id)] = times;
+        }
+      } catch (err) {
+        console.warn('Не вдалося отримати слоти для карток:', err);
+      }
 
       if (isMounted) {
         setNearbySlots(slotsMap);
@@ -1528,7 +1542,17 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return (
       <Link key={biz.id} href={`/${biz.slug || biz.id}`} className="apple-biz-card anim">
         <div className="card-photo-box">
-          <img src={bgImage} alt={biz.name} loading="lazy" decoding="async" className="card-photo-img" />
+          {/* next/image: браузер отримує фото під розмір картки у WebP
+              чи AVIF, а не оригінал на кілька мегабайт. На телефоні
+              картка на всю ширину, на компʼютері - чверть. */}
+          <Image
+            src={bgImage}
+            alt={biz.name}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 25vw"
+            className="card-photo-img"
+            unoptimized={!canOptimize(bgImage)}
+          />
 
           <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>
             {options?.distanceTag ? (

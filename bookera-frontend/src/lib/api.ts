@@ -244,11 +244,21 @@ async function handle(res: Response) {
   return res.json();
 }
 
-/** Публічні запити - без токена авторизації. */
-async function publicFetch(path: string, options: RequestInit = {}) {
+/**
+ * Публічні запити - без токена авторизації.
+ *
+ * За замовчуванням без кешу: слоти, бронювання, відстані мають бути
+ * живими. Але no-store на сервері робить ВСЮ сторінку динамічною - вона
+ * рендериться заново на кожен запит, ігноруючи `revalidate` сторінки.
+ * Саме так головна тягнула 100 закладів із бекенду для кожного
+ * відвідувача. Тому `revalidate` (секунди) дозволяє кешувати там, де
+ * дані можуть бути хвилину старими.
+ */
+async function publicFetch(path: string, options: RequestInit & { revalidate?: number } = {}) {
+  const { revalidate, ...rest } = options;
   const res = await fetch(`${API_URL}${path}`, {
-    cache: 'no-store',
-    ...options,
+    ...(revalidate !== undefined ? { next: { revalidate } } : { cache: 'no-store' as const }),
+    ...rest,
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
   return handle(res);
@@ -306,8 +316,8 @@ export const api = {
     return publicFetch(`/businesses/search-available?${query}`);
   },
 
-  async listBusinesses(limit = 50, offset = 0): Promise<Business[]> {
-    return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`);
+  async listBusinesses(limit = 50, offset = 0, revalidate?: number): Promise<Business[]> {
+    return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`, { revalidate });
   },
 
   /** Перші вільні години на дату для кількох закладів - одним запитом. */

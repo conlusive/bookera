@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 
@@ -443,9 +443,23 @@ function StyleTipsCarousel() {
   );
 }
 
+/**
+ * Невидимий компонент, що читає параметри адреси.
+ *
+ * useSearchParams вимагає межі Suspense, інакше продакшн-збірка падає.
+ * Якби обгорнути всю головну, Next.js віддав би порожню сторінку й
+ * дорендерив вміст лише в браузері - повільний перший показ і нічого
+ * для Google. Тому читання параметрів винесено сюди: обгортка потрібна
+ * тільки йому, а головна рендериться на сервері повністю.
+ */
+function SearchParamsSync({ onChange }: { onChange: (sp: URLSearchParams) => void }) {
+  const sp = useSearchParams();
+  useEffect(() => { onChange(new URLSearchParams(sp.toString())); }, [sp, onChange]);
+  return null;
+}
+
 export default function HomePageClient({ initialBusinesses }: { initialBusinesses: any[] }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
   const [mounted, setMounted] = useState(false);
@@ -920,25 +934,30 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
   };
 
-  useEffect(() => {
-    const what = searchParams.get('what');
-    const where = searchParams.get('where');
-    const date = searchParams.get('date');
-    const time = searchParams.get('time');
+  // Параметри адреси заповнюють поля пошуку. Читає їх окремий
+  // невидимий SearchParamsSync - див. нижче, навіщо.
+  // Дата з адреси - для автоматичного пошуку нижче.
+  const [urlDate, setUrlDate] = useState<string | null>(null);
+
+  const applySearchParams = useCallback((sp: URLSearchParams) => {
+    const what = sp.get('what');
+    const where = sp.get('where');
+    const date = sp.get('date');
+    const time = sp.get('time');
 
     if (what) setSearchWhat(what);
     if (where) setSearchWhere(where);
     if (date) setSearchDate(date);
     if (time) setSearchTime(time);
-  }, [searchParams]);
+    setUrlDate(date);
+  }, []);
 
   useEffect(() => {
-    const dateParam = searchParams.get('date');
-    if (!isAutoSearchRun.current && dateParam && searchDate === dateParam) {
+    if (!isAutoSearchRun.current && urlDate && searchDate === urlDate) {
       isAutoSearchRun.current = true;
       void handleSearch();
     }
-  }, [searchDate, searchParams]);
+  }, [searchDate, urlDate]);
 
   const handleCategorySelect = (slug: string) => {
     setActiveCategory(slug);
@@ -1704,6 +1723,9 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif', color: '#222222', overflowX: 'hidden' }}>
+      <Suspense fallback={null}>
+        <SearchParamsSync onChange={applySearchParams} />
+      </Suspense>
 
       <style>{`
         html, body {

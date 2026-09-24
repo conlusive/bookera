@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Suspense } from 'react';
 import Tracker from '@/components/Tracker';
 import { ToastProvider } from '@/context/ToastContext';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
@@ -43,7 +44,12 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ToastProvider>
           {/* 🟢 Наш трекер для рефералок */}
-          <Tracker />
+          {/* Tracker читає параметри адреси (реферальні мітки). Без
+              Suspense це змушувало б КОЖНУ сторінку сайту рендеритись
+              лише в браузері - і продакшн-збірка падала. */}
+          <Suspense fallback={null}>
+            <Tracker />
+          </Suspense>
 
           {children}
         </ToastProvider>

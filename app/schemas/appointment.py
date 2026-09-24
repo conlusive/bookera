@@ -130,3 +130,17 @@ class AppointmentResponse(BaseModel):
 
 
 AppointmentOut = AppointmentResponse
+
+
+class MyAppointmentResponse(AppointmentResponse):
+    """
+    Запис у власному списку людини (/appointments/my).
+
+    Окремою схемою, а не полем у загальній: токен керування потрібен
+    профілю для перенесення, скасування й відгуку, але в ПУБЛІЧНИХ
+    відповідях його не має бути навіть порожнім ключем - з ним можна
+    керувати чужим записом.
+    """
+    manage_token: Optional[str] = None
+    # Чи людина вже оцінила цей візит - щоб не пропонувати оцінку вдруге.
+    has_review: bool = False

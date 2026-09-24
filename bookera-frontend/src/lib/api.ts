@@ -320,6 +320,14 @@ export const api = {
     return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`, { revalidate });
   },
 
+  /** Відгук на власний завершений візит - за токеном керування записом. */
+  async createVisitReview(appointmentId: number, token: string, rating: number, comment?: string): Promise<{ ok: boolean }> {
+    return publicFetch(`/appointments/${appointmentId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ token, rating, comment }),
+    });
+  },
+
   /** Перші вільні години на дату для кількох закладів - одним запитом. */
   async getTodaySlots(businessIds: number[], date: string): Promise<Record<string, string[]>> {
     return publicFetch(`/appointments/today-slots?business_ids=${businessIds.join(',')}&target_date=${date}`);
@@ -412,15 +420,6 @@ export const api = {
     return publicFetch(`/public/reviews?business_id=${businessId}`);
   },
 
-  async createReview(payload: {
-    business_id: number;
-    appointment_id?: number;
-    author_name?: string;
-    rating: number;
-    comment?: string;
-  }): Promise<Review> {
-    return publicFetch(`/public/reviews`, { method: 'POST', body: JSON.stringify(payload) });
-  },
 
   async checkGiftCertificate(code: string, businessId: number): Promise<{ valid: boolean; remaining_amount?: number; message: string }> {
     return publicFetch(`/public/gift-certificates/check`, {

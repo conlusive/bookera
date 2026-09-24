@@ -36,8 +36,8 @@ import {
 import SmartImage from '@/components/ui/SmartImage';
 import { loadFavorites, setFavorite } from '@/lib/favorites';
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
+import { categoryTitles } from '@/lib/categories';
 
-const FAVS_PER_PAGE = 4;
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
 const compressImage = (file: File): Promise<Blob> => {
@@ -103,7 +103,7 @@ function ProfileContent() {
   // а не загальний профіль, де їх ще треба знайти.
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams?.get('tab');
-  const [activeTab, setActiveTab] = useState<'appointments' | 'balance' | 'vouchers' | 'favorites' | 'settings'>(
+  const [activeTab, setActiveTab] = useState<'appointments' | 'favorites' | 'settings'>(
     (tabFromUrl as any) || 'appointments'
   );
   const [appointmentFilter, setAppointmentFilter] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
@@ -112,7 +112,6 @@ function ProfileContent() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<any[]>([]);
-  const [currentFavPage, setCurrentFavPage] = useState(1);
 
   // --- Форма налаштувань ---
   const [fullName, setFullName] = useState('');
@@ -408,6 +407,120 @@ function ProfileContent() {
   };
 
 // Видалення салону з улюблених
+  /**
+   * Файл календаря (.ics) для майбутнього візиту.
+   *
+   * Відкривається календарем телефона чи компʼютера з уже заповненим
+   * записом і нагадуванням за годину. Жодних дозволів і підключень -
+   * звичайний файл, який розуміє будь-який календар.
+   */
+  const downloadIcs = (app: any) => {
+    const start = new Date(app.start_time);
+    const end = app.end_time ? new Date(app.end_time) : new Date(start.getTime() + 60 * 60000);
+    const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const esc = (s: string) => String(s || '').replace(/[\\;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
+    const title = [app.service_name, app.business_name].filter(Boolean).join(' · ') || 'Візит';
+    const ics = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BookEra//UK', 'CALSCALE:GREGORIAN',
+      'BEGIN:VEVENT',
+      `UID:bookera-${app.id}@bookera.com.ua`,
+      `DTSTAMP:${stamp(new Date())}`,
+      `DTSTART:${stamp(start)}`,
+      `DTEND:${stamp(end)}`,
+      `SUMMARY:${esc(title)}`,
+      app.business_address ? `LOCATION:${esc(app.business_address)}` : '',
+      app.master_name ? `DESCRIPTION:${esc('Майстер: ' + app.master_name)}` : '',
+      'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', `DESCRIPTION:${esc(title)}`, 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR',
+    ].filter(Boolean).join('\r\n');
+
+    const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bookera-${app.id}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // --- Відгук ---
+  const [reviewAppt, setReviewAppt] = useState<any | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewText, setReviewText] = useState('');
+  const [isSendingReview, setIsSendingReview] = useState(false);
+  // Оцінені в цій сесії - щоб кнопка зникла одразу, без перезавантаження.
+  const [reviewedIds, setReviewedIds] = useState<number[]>([]);
+
+  const submitReview = async () => {
+    if (!reviewAppt || reviewRating < 1) return;
+    if (!reviewAppt.manage_token) {
+      showToast('Не вдалося надіслати відгук', 'error');
+      return;
+    }
+    setIsSendingReview(true);
+    try {
+      await api.createVisitReview(reviewAppt.id, reviewAppt.manage_token, reviewRating, reviewText.trim() || undefined);
+      setReviewedIds(prev => [...prev, reviewAppt.id]);
+      setReviewAppt(null);
+      showToast('Дякуємо за відгук!', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося надіслати відгук', 'error');
+    } finally {
+      setIsSendingReview(false);
+    }
+  };
+
+  /**
+   * «Час повторити» - на основі вашого ж ритму.
+   *
+   * Для кожної пари «заклад + послуга» з двома й більше завершеними
+   * візитами беремо звичний інтервал (медіану між візитами). Якщо з
+   * останнього минуло більше - пропонуємо записатись.
+   *
+   * Лише за власною історією, без вигаданих норм на кшталт «стрижка
+   * раз на місяць»: у кожного свій ритм. Не нагадуємо, якщо запис уже
+   * є, і якщо інтервал коротший за тиждень - це не ритм, а збіг.
+   */
+  const repeatSuggestions = useMemo(() => {
+    const now = Date.now();
+    const DAY = 86400000;
+    const groups = new Map<string, any[]>();
+    const upcomingKeys = new Set<string>();
+
+    for (const a of appointments as any[]) {
+      if (!a.business_id || !a.service_id || !a.start_time) continue;
+      const key = `${a.business_id}:${a.service_id}`;
+      const t = new Date(a.start_time).getTime();
+      if (a.status === 'completed') {
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(a);
+      } else if (a.status !== 'cancelled' && a.status !== 'no-show' && t > now) {
+        upcomingKeys.add(key);
+      }
+    }
+
+    const out: { app: any; usualDays: number; sinceDays: number }[] = [];
+    for (const [key, visits] of groups) {
+      if (visits.length < 2 || upcomingKeys.has(key)) continue;
+      const times = visits.map(v => new Date(v.start_time).getTime()).sort((x, y) => x - y);
+      const gaps = times.slice(1).map((t, i) => (t - times[i]) / DAY).sort((x, y) => x - y);
+      const usual = gaps[Math.floor(gaps.length / 2)];
+      if (usual < 7) continue;
+      const since = (now - times[times.length - 1]) / DAY;
+      if (since >= usual) {
+        const last = visits.reduce((x, y) => (new Date(x.start_time) > new Date(y.start_time) ? x : y));
+        out.push({ app: last, usualDays: Math.round(usual), sinceDays: Math.round(since) });
+      }
+    }
+    // Спершу ті, що прострочені найбільше відносно свого ритму.
+    return out.sort((x, y) => y.sinceDays / y.usualDays - x.sinceDays / x.usualDays).slice(0, 2);
+  }, [appointments]);
+
+  // «4 тижні», «2 місяці» - як сказала б людина, а не «28 днів».
+  const humanDays = (d: number) =>
+    d < 14 ? `${d} дн.` : d < 60 ? `${Math.round(d / 7)} тиж.` : `${Math.round(d / 30)} міс.`;
+
   const handleRemoveFavorite = async (businessId: string | number) => {
     const targetBizId = Number(businessId);
     const before = favorites;
@@ -807,11 +920,39 @@ function ProfileContent() {
   const initials = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
 
   // Пагінація улюблених
-  const totalFavPages = Math.ceil(favorites.length / FAVS_PER_PAGE);
-  const paginatedFavorites = useMemo(() => {
-    const start = (currentFavPage - 1) * FAVS_PER_PAGE;
-    return favorites.slice(start, start + FAVS_PER_PAGE);
-  }, [favorites, currentFavPage]);
+  // Категорії серед улюблених - для фільтра.
+  const [favCategory, setFavCategory] = useState('all');
+  const favCategories = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const b of favorites) {
+      const slug = String(b.category || '');
+      if (slug && !seen.has(slug)) seen.set(slug, categoryTitles[slug] || slug);
+    }
+    return Array.from(seen, ([slug, title]) => ({ slug, title }));
+  }, [favorites]);
+  const visibleFavorites = useMemo(
+    () => favCategory === 'all' ? favorites : favorites.filter((b: any) => String(b.category) === favCategory),
+    [favorites, favCategory],
+  );
+
+  // Вільні години сьогодні - для всіх улюблених одним запитом.
+  const [favSlots, setFavSlots] = useState<Record<number, string[]>>({});
+  const favIdsKey = favorites.map((b: any) => b.id).join(',');
+  useEffect(() => {
+    if (!favIdsKey) return;
+    let cancelled = false;
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    void api.getTodaySlots(favIdsKey.split(',').map(Number), today)
+      .then(data => {
+        if (cancelled) return;
+        const map: Record<number, string[]> = {};
+        for (const [id, times] of Object.entries(data)) map[Number(id)] = times;
+        setFavSlots(map);
+      })
+      .catch(() => { /* без годин картка просто показує «Швидкий запис» */ });
+    return () => { cancelled = true; };
+  }, [favIdsKey]);
 
   if (loading) {
     return (
@@ -824,6 +965,51 @@ function ProfileContent() {
   return (
     <div style={{ backgroundColor: '#fafbfc', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif', color: '#111827', letterSpacing: '-0.015em' }}>
       <BusinessCardStyles />
+
+      {/* Вікно оцінки візиту */}
+      {reviewAppt && (
+        <div
+          onClick={() => !isSendingReview && setReviewAppt(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem' }}
+        >
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Оцінити візит"
+            style={{ width: '100%', maxWidth: '420px', background: '#fff', borderRadius: '20px', padding: '1.75rem', boxShadow: '0 30px 60px -20px rgba(0,0,0,.35)' }}>
+            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.02em' }}>Як усе пройшло?</div>
+            <div style={{ fontSize: '0.9rem', color: '#86868B', marginTop: '0.3rem' }}>
+              {reviewAppt.service_name || 'Візит'} · {reviewAppt.business_name}
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.35rem', margin: '1.25rem 0 1rem' }} role="radiogroup" aria-label="Оцінка">
+              {[1, 2, 3, 4, 5].map(n => (
+                <button key={n} type="button" role="radio" aria-checked={reviewRating === n} aria-label={`${n} з 5`}
+                  onClick={() => setReviewRating(n)}
+                  style={{ fontSize: '2rem', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem', color: n <= reviewRating ? '#F5A623' : '#E5E5EA', transition: 'color .15s ease, transform .15s ease', transform: n <= reviewRating ? 'scale(1.05)' : 'none' }}>
+                  ★
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={reviewText}
+              onChange={e => setReviewText(e.target.value.slice(0, 1000))}
+              placeholder="Що сподобалось? Необовʼязково"
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '0.75rem 0.85rem', borderRadius: '12px', border: '1px solid #E5E5EA', fontFamily: 'inherit', fontSize: '0.9rem', resize: 'vertical', outline: 'none' }}
+            />
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.1rem' }}>
+              <button type="button" onClick={() => setReviewAppt(null)} disabled={isSendingReview}
+                style={{ height: '40px', padding: '0 1rem', borderRadius: '10px', border: 'none', background: '#F5F5F7', color: '#1D1D1F', fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 500, cursor: 'pointer' }}>
+                Скасувати
+              </button>
+              <button type="button" onClick={() => void submitReview()} disabled={reviewRating < 1 || isSendingReview}
+                style={{ height: '40px', padding: '0 1.2rem', borderRadius: '10px', border: 'none', background: '#1D1D1F', color: '#fff', fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 600, cursor: reviewRating < 1 ? 'default' : 'pointer', opacity: reviewRating < 1 || isSendingReview ? 0.4 : 1 }}>
+                {isSendingReview ? 'Надсилаємо…' : 'Надіслати'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; }
@@ -1014,20 +1200,11 @@ function ProfileContent() {
                 )}
               </button>
 
-              <button onClick={() => setActiveTab('balance')} className={`nav-item anim ${activeTab === 'balance' ? 'active' : ''}`}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                  <Coins className="w-4 h-4 text-slate-400" />
-                  <span>Бонуси</span>
-                </div>
-              </button>
 
-              <button onClick={() => setActiveTab('vouchers')} className={`nav-item anim ${activeTab === 'vouchers' ? 'active' : ''}`}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                  <Gift className="w-4 h-4 text-slate-400" />
-                  <span>Сертифікати</span>
-                </div>
-              </button>
 
+              {/* «Бонуси» й «Подарункові картки» прибрано: обидві були
+                  заглушками «в розробці». Порожня обіцянка в профілі
+                  підточує довіру сильніше, ніж відсутність розділу. */}
               <button onClick={() => setActiveTab('favorites')} className={`nav-item anim ${activeTab === 'favorites' ? 'active' : ''}`}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                   <Heart className="w-4 h-4 text-slate-400" />
@@ -1056,6 +1233,34 @@ function ProfileContent() {
               {/* 1. ВКЛАДКА: ВІЗИТИ */}
               {activeTab === 'appointments' && (
                 <div>
+                  {repeatSuggestions.length > 0 && (
+                    <div style={{ marginBottom: '1.75rem', padding: '1.25rem 1.4rem', borderRadius: '18px', background: '#F4FAF5' }}>
+                      <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#5C7A61', marginBottom: '0.75rem' }}>
+                        Час повторити
+                      </div>
+                      {repeatSuggestions.map(({ app, usualDays, sinceDays }) => (
+                        <div key={`${app.business_id}:${app.service_id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.55rem 0', flexWrap: 'wrap' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '0.975rem', fontWeight: 600, color: '#1D1D1F' }}>
+                              {app.service_name || 'Візит'} · {app.business_name}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#5C6B5E', marginTop: '2px' }}>
+                              Зазвичай раз на {humanDays(usualDays)} · минуло {humanDays(sinceDays)}
+                            </div>
+                          </div>
+                          {app.business_slug && (
+                            <Link
+                              href={`/${app.business_slug}?service=${app.service_id}${app.master_id ? `&master=${app.master_id}` : ''}`}
+                              style={{ height: '36px', padding: '0 1.1rem', borderRadius: '10px', background: '#1D1D1F', color: '#fff', fontSize: '0.875rem', fontWeight: 500, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+                            >
+                              Записатися
+                            </Link>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                     <div className="segmented-tabs">
                       <button onClick={() => setAppointmentFilter('upcoming')} className={`segmented-btn anim ${appointmentFilter === 'upcoming' ? 'active' : ''}`}>
@@ -1168,7 +1373,7 @@ function ProfileContent() {
                               const placeAndMaster = [app.business_name, app.master_name]
                                 .filter(Boolean).join(', ');
 
-                              const hasActions = isUpcoming || (isDone && app.business_slug && app.service_id);
+                              const hasActions = isUpcoming || isDone;
 
                               return (
                                 <div
@@ -1281,7 +1486,20 @@ function ProfileContent() {
                                           <button onClick={() => setCancelModalAppt(app)} style={visitActionStyle}>
                                             Скасувати
                                           </button>
+                                          {/* Файл .ics відкриває календар телефона чи
+                                              компʼютера з уже заповненим записом. */}
+                                          <button onClick={() => downloadIcs(app)} style={visitActionStyle}>
+                                            У календар
+                                          </button>
                                         </>
+                                      )}
+                                      {isDone && !app.has_review && !reviewedIds.includes(app.id) && (
+                                        <button
+                                          onClick={() => { setReviewAppt(app); setReviewRating(0); setReviewText(''); }}
+                                          style={{ ...visitActionStyle, background: '#1D1D1F', color: '#fff', borderColor: '#1D1D1F' }}
+                                        >
+                                          Оцінити
+                                        </button>
                                       )}
                                       {app.business_slug && app.service_id && (
                                         <Link
@@ -1328,30 +1546,8 @@ function ProfileContent() {
               )}
 
               {/* 2. ВКЛАДКА: БОНУСИ */}
-              {activeTab === 'balance' && (
-                <div className="clean-card anim" style={{ padding: '3.5rem 1.5rem', textAlign: 'center' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f8fafc', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
-                    <Coins className="w-6 h-6" />
-                  </div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.25rem' }}>Бонуси та баланс</div>
-                  <p style={{ color: '#6b7280', fontSize: '0.85rem', maxWidth: '320px', margin: '0 auto' }}>
-                    Розділ бонусного балансу наразі знаходиться <strong>в розробці</strong>.
-                  </p>
-                </div>
-              )}
 
               {/* 3. ВКЛАДКА: СЕРТИФІКАТИ */}
-              {activeTab === 'vouchers' && (
-                <div className="clean-card anim" style={{ padding: '3.5rem 1.5rem', textAlign: 'center' }}>
-                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f8fafc', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
-                    <Gift className="w-6 h-6" />
-                  </div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.25rem' }}>Сертифікати та промокоди</div>
-                  <p style={{ color: '#6b7280', fontSize: '0.85rem', maxWidth: '320px', margin: '0 auto' }}>
-                    Функціонал подарункових карток наразі знаходиться <strong>в розробці</strong>.
-                  </p>
-                </div>
-              )}
 
               {/* 4. ВКЛАДКА: УЛЮБЛЕНІ ЗАКЛАДИ */}
               {activeTab === 'favorites' && (
@@ -1373,52 +1569,50 @@ function ProfileContent() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                        {/* Та сама картка, що й на головній - спільний компонент.
-                            Раніше тут була власна копія зі старими стилями. */}
-                        {paginatedFavorites.map(item => (
+                      {/* Фільтр категорій - лише коли улюблених понад шість.
+                          Менше - фільтрувати нема що, і рядок кнопок лише
+                          відсуває самі заклади. */}
+                      {favCategories.length > 1 && favorites.length > 6 && (
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                          {[{ slug: 'all', title: 'Усі' }, ...favCategories].map(cat => (
+                            <button
+                              key={cat.slug}
+                              type="button"
+                              onClick={() => setFavCategory(cat.slug)}
+                              style={{
+                                height: '34px', padding: '0 0.9rem', borderRadius: '10px', border: 'none',
+                                background: favCategory === cat.slug ? '#1D1D1F' : '#F5F5F7',
+                                color: favCategory === cat.slug ? '#fff' : '#3A3A3C',
+                                fontSize: '0.85rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+                                transition: 'background-color .2s ease, color .2s ease',
+                              }}
+                            >
+                              {cat.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Усі улюблені одразу, сіткою як на головній. Раніше -
+                          по чотири на сторінку: шість закладів уже вимагали
+                          гортати сторінки.
+
+                          На кожній картці - вільні години сьогодні: улюблене
+                          зберігають, щоб туди повернутись, і найкоротший шлях
+                          до цього - один клік по годині. */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
+                        {visibleFavorites.map(item => (
                           <BusinessCard
                             key={item.id}
                             biz={item}
                             // Усе в цьому списку - улюблене; зняти сердечко означає прибрати звідси.
                             isFavorite
                             onToggleFavorite={id => void handleRemoveFavorite(id)}
+                            showTimeSlots
+                            slots={favSlots[item.id]}
                           />
                         ))}
                       </div>
-
-                      {/* Пагінація */}
-                      {totalFavPages > 1 && (
-                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem', marginTop: '2rem' }}>
-                          <button
-                            onClick={() => setCurrentFavPage(p => Math.max(1, p - 1))}
-                            disabled={currentFavPage === 1}
-                            className="page-btn anim"
-                            style={{ opacity: currentFavPage === 1 ? 0.4 : 1 }}
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </button>
-
-                          {Array.from({ length: totalFavPages }).map((_, i) => (
-                            <button
-                              key={i}
-                              onClick={() => setCurrentFavPage(i + 1)}
-                              className={`page-btn anim ${currentFavPage === i + 1 ? 'active' : ''}`}
-                            >
-                              {i + 1}
-                            </button>
-                          ))}
-
-                          <button
-                            onClick={() => setCurrentFavPage(p => Math.min(totalFavPages, p + 1))}
-                            disabled={currentFavPage === totalFavPages}
-                            className="page-btn anim"
-                            style={{ opacity: currentFavPage === totalFavPages ? 0.4 : 1 }}
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>

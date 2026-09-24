@@ -4,11 +4,12 @@ import os
 import secrets
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
+from pydantic import BaseModel
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.appointment import AppointmentStatusUpdate
+from app.schemas.appointment import AppointmentStatusUpdate, MyAppointmentResponse
 
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access, is_limited_to_own_schedule
@@ -987,7 +988,7 @@ async def update_appointment_status(
     await db.refresh(appointment)
     return appointment
 
-@router.get("/my", response_model=List[AppointmentResponse])
+@router.get("/my", response_model=List[MyAppointmentResponse])
 async def list_my_appointments(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -1038,8 +1039,19 @@ async def list_my_appointments(
     # Назви закладу й послуги: без них профіль показує дати без натяку,
     # куди саме людина ходила.
     out = []
+    # Які візити вже оцінено - одним запитом на всі, а не по одному.
+    from app.models.extras import Review
+    reviewed: set[int] = set()
+    if appointments:
+        rv = await db.execute(
+            select(Review.appointment_id).where(Review.appointment_id.in_([a.id for a in appointments]))
+        )
+        reviewed = {row[0] for row in rv.all() if row[0] is not None}
+
     for appointment in appointments:
-        response = AppointmentResponse.model_validate(appointment, from_attributes=True)
+        response = MyAppointmentResponse.model_validate(appointment, from_attributes=True)
+        response.manage_token = appointment.manage_token
+        response.has_review = appointment.id in reviewed
 
         biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
         business = biz_res.scalars().first()
@@ -1192,3 +1204,70 @@ async def get_today_slots(
             result[str(bid)] = []
 
     return result
+
+
+class ClientReviewRequest(BaseModel):
+    token: str
+    rating: int
+    comment: Optional[str] = None
+
+
+@router.post("/{appointment_id}/review")
+async def create_review_by_client(
+    appointment_id: int,
+    payload: ClientReviewRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Відгук клієнта на власний завершений візит.
+
+    Модель відгуків була, але клієнт не мав як її заповнити - тож усі
+    заклади лишались «Новий заклад», а рейтинг стояв на типовому значенні.
+
+    Доступ за токеном керування записом (той самий, що для перенесення):
+    відгук може залишити лише той, хто справді був на візиті.
+
+    Один відгук на візит. Після збереження рейтинг і кількість відгуків
+    закладу перераховуються з усіх його відгуків - раніше їх не
+    оновлювало ніщо.
+    """
+    from app.models.extras import Review
+
+    if not 1 <= payload.rating <= 5:
+        raise HTTPException(status_code=400, detail="Оцінка має бути від 1 до 5")
+
+    comment = (payload.comment or "").strip()[:1000] or None
+
+    res = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+    appointment = res.scalars().first()
+    if not appointment or not appointment.manage_token or appointment.manage_token != payload.token:
+        raise HTTPException(status_code=404, detail="Візит не знайдено")
+
+    if appointment.status != "completed":
+        raise HTTPException(status_code=409, detail="Відгук можна залишити лише після візиту")
+
+    existing = await db.execute(select(Review).where(Review.appointment_id == appointment.id))
+    if existing.scalars().first():
+        raise HTTPException(status_code=409, detail="Ви вже оцінили цей візит")
+
+    db.add(Review(
+        business_id=appointment.business_id,
+        appointment_id=appointment.id,
+        author_name=appointment.client_name,
+        rating=payload.rating,
+        comment=comment,
+    ))
+    await db.flush()
+
+    # Рейтинг - середнє всіх відгуків закладу, з одним знаком.
+    stats = await db.execute(
+        select(func.avg(Review.rating), func.count(Review.id)).where(Review.business_id == appointment.business_id)
+    )
+    avg, count = stats.one()
+    biz = await db.get(Business, appointment.business_id)
+    if biz:
+        biz.rating = round(float(avg), 1) if avg is not None else None
+        biz.reviews_count = int(count)
+
+    await db.commit()
+    return {"ok": True, "rating": biz.rating if biz else None, "reviews_count": biz.reviews_count if biz else None}

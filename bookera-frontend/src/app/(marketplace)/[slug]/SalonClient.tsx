@@ -961,47 +961,6 @@ const formatRole = (role?: string) => {
   };
 
   // Відправка відгуку (без TS-помилок)
-  const handleReviewSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isLoggedIn) {
-      setIsAuthModalOpen(true);
-      return;
-    }
-    if (reviewRating === 0) {
-      showToast("Будь ласка, оберіть кількість зірок.", 'info');
-      return;
-    }
-
-    setIsSubmittingReview(true);
-    try {
-      const authorName = userName || 'Гість';
-      const created = await api.createReview({
-        business_id: salon.id,
-        author_name: authorName,
-        rating: reviewRating,
-        comment: reviewText,
-      });
-
-      const newReviewItem = {
-        ...created,
-        id: created?.id || Date.now(),
-        author_name: created?.author_name || (created as any)?.client_name || authorName,
-        rating: created?.rating || reviewRating,
-        comment: created?.comment || reviewText,
-        created_at: created?.created_at || new Date().toISOString(),
-      };
-
-      setReviews([newReviewItem, ...reviews]);
-      setReviewRating(0);
-      setHoverRating(0);
-      setReviewText('');
-      showToast('Дякуємо за ваш відгук!', 'success');
-    } catch (err: any) {
-      showToast(err?.message || 'Не вдалося відправити відгук.', 'error');
-    } finally {
-      setIsSubmittingReview(false);
-    }
-  };
 
   const handleReplySubmit = async (reviewId: number | string) => {
     if (!replyText.trim()) return;
@@ -2093,31 +2052,19 @@ const formatRole = (role?: string) => {
                 </div>
               </div>
 
-              {/* ФОРМА ЗАЛИШЕННЯ ВІДГУКУ */}
-              <div style={{ padding: '1.5rem', borderRadius: '20px', border: '1px solid #e2e8f0', background: '#f8fafc', marginBottom: '2rem' }}>
-                {!isLoggedIn ? (
-                  <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-                    <p style={{ color: '#475569', fontSize: '1rem', fontWeight: '500', marginBottom: '1rem' }}>Увійдіть, щоб поділитися враженнями</p>
-                    <button onClick={() => setIsAuthModalOpen(true)} className="apple-btn-primary">Увійти в акаунт</button>
+              {/* Замість форми - підказка. Відгук залишають лише після
+                  справжнього візиту, у профілі: так рейтинг не можна
+                  накрутити чи засипати одиницями без жодного запису. */}
+              <div style={{ padding: '1.25rem 1.4rem', borderRadius: '18px', background: '#F4FAF5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: '0.975rem', fontWeight: 600, color: '#1D1D1F' }}>Були тут?</div>
+                  <div style={{ fontSize: '0.875rem', color: '#5C6B5E', marginTop: '2px' }}>
+                    Оцінити візит можна після нього - у профілі, розділ «Мої візити».
                   </div>
-                ) : (
-                  <form onSubmit={handleReviewSubmit}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-                      <div style={{ fontWeight: '700', color: '#1D1D1F', fontSize: '1.05rem' }}>Залишити відгук як <span style={{color: '#8fae92', marginLeft: '4px', fontWeight: '800'}}>{userName}</span></div>
-                      <div style={{ display: 'flex', gap: '2px' }} onMouseLeave={() => setHoverRating(0)}>
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button key={star} type="button" className={`star-btn ${(hoverRating || reviewRating) >= star ? 'active' : ''}`} onMouseEnter={() => setHoverRating(star)} onClick={() => setReviewRating(star)}>★</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ position: 'relative' }}>
-                      <textarea className="review-textarea" placeholder="Напишіть ваші враження..." value={reviewText} onChange={(e) => setReviewText(e.target.value)} maxLength={REVIEW_MAX_LENGTH} required></textarea>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                      <button type="submit" disabled={isSubmittingReview} className="apple-btn-primary">{isSubmittingReview ? 'Відправка...' : 'Надіслати відгук'}</button>
-                    </div>
-                  </form>
-                )}
+                </div>
+                <Link href="/account/profile" style={{ height: '36px', padding: '0 1.1rem', borderRadius: '10px', background: '#1D1D1F', color: '#fff', fontSize: '0.875rem', fontWeight: 500, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                  Мої візити
+                </Link>
               </div>
 
               {/* СПИСОК ВІДГУКІВ (МАКСИМУМ 5 НА СТОРІНКУ) */}

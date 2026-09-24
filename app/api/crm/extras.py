@@ -29,11 +29,17 @@ async def create_review(
     db: AsyncSession = Depends(get_db),
     _rl=Depends(rate_limit("review", max_requests=5, window_seconds=3600)),
 ):
-    review = Review(**review_in.model_dump())
-    db.add(review)
-    await db.commit()
-    await db.refresh(review)
-    return review
+    # ЗАКРИТО. Маршрут приймав відгук від будь-кого - без входу й без
+    # візиту: будь-яке імʼя, будь-яка оцінка, будь-який заклад. Перевірка
+    # входу була лише в браузері й обходилась одним прямим запитом -
+    # конкурент міг засипати заклад одиницями. Рейтинг він теж не оновлював.
+    #
+    # Тепер відгук - лише на власний завершений візит:
+    # POST /appointments/{id}/review (за токеном керування записом).
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Відгук можна залишити після візиту - у профілі, розділ «Мої візити»",
+    )
 
 
 @router.get("/public/reviews", response_model=List[ReviewResponse])

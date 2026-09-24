@@ -457,44 +457,41 @@ export default function SalonClient({
     if (!salon?.id || !services?.length) return;
     let cancelled = false;
 
+    // ОДИН запит замість циклу.
+    //
+    // Раніше тут був цикл: до 12 послуг x до 14 днів, кожен день -
+    // окремий запит, і всі ПОСЛІДОВНО. У гіршому випадку - 168
+    // запитів у черзі при кожному відкритті сторінки. Тепер сервер
+    // шукає сам, без мережі між кроками.
     void (async () => {
-      const found: Record<number, string> = {};
+      try {
+        const data: Record<string, string> = await api.getNearestSlots(salon.id);
+        if (cancelled) return;
 
-      for (const service of services.slice(0, 12)) {
-        // Шукаємо на 14 днів уперед: далі вже не «найближче»,
-        // і 14 запитів на послугу - забагато.
-        for (let offset = 0; offset < 14; offset++) {
-          const day = new Date();
-          day.setDate(day.getDate() + offset);
-          // Локальна дата, а не ISO: у ISO вечірні дати зсуваються
-          // на наступний день через UTC.
-          const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+        const today = new Date();
+        const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const todayKey = dayKey(today);
+        const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+        const tomorrowKey = dayKey(tomorrow);
 
-          try {
-            const data = await api.getAvailableSlots({
-              business_id: salon.id,
-              service_id: service.id,
-              target_date: dateStr,
-              master_id: '0',
-            });
-            const free = (data.slots || []).find((s: any) => s.status === 'available');
-            if (free) {
-              const label = offset === 0 ? 'Сьогодні' : offset === 1 ? 'Завтра'
-                : day.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-              found[service.id] = `${label} о ${free.time}`;
-              break;
-            }
-          } catch {
-            break;
-          }
+        const found: Record<number, string> = {};
+        for (const [serviceId, stamp] of Object.entries(data)) {
+          const [date, time] = stamp.split('T');
+          // Підпис - той самий, що й раніше: «Сьогодні о 10:00».
+          const label = date === todayKey ? 'Сьогодні'
+            : date === tomorrowKey ? 'Завтра'
+            : new Date(`${date}T00:00:00`).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+          found[Number(serviceId)] = `${label} о ${time}`;
         }
+        setNearestSlots(found);
+      } catch {
+        // Не вийшло - підпис просто не показується. Вигадане «Сьогодні
+        // о 13:15» гірше за його відсутність.
       }
-
-      if (!cancelled) setNearestSlots(found);
     })();
 
     return () => { cancelled = true; };
-  }, [salon?.id, services]);
+  }, [salon?.id, services?.length]);
 
   const getServiceAvailabilityText = useCallback(
     (service: any) => nearestSlots[service.id] || '',

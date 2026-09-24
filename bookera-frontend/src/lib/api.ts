@@ -310,6 +310,11 @@ export const api = {
     return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`);
   },
 
+  /** Найближче вільне вікно для кожної послуги закладу - одним запитом. */
+  async getNearestSlots(businessId: number): Promise<Record<string, string>> {
+    return publicFetch(`/appointments/nearest-slots?business_id=${businessId}`);
+  },
+
   async getAvailableSlots(params: {
     business_id: number;
     service_id: number;

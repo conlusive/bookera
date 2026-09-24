@@ -16,14 +16,34 @@ import { Business } from '@/types';
 import { Icons, navItems, toLocalDateStr } from '@/components/shared';
 
 import CalendarTab from '@/components/cabinet/CalendarTab';
-import StatsTab from '@/components/cabinet/StatsTab';
-import ClientsTab from '@/components/cabinet/ClientsTab';
-import ServicesTab from '@/components/cabinet/ServicesTab';
-import TeamTab from '@/components/cabinet/TeamTab';
-import InventoryTab from '@/components/cabinet/InventoryTab';
-import MarketingTab from '@/components/cabinet/MarketingTab';
-import SettingsTab from '@/components/cabinet/SettingsTab';
-import StorefrontTab from '@/components/cabinet/StorefrontTab';
+import dynamic from 'next/dynamic';
+
+/**
+ * Вкладки кабінету вантажаться, лише коли їх відкривають.
+ *
+ * Раніше всі девʼять імпортувались одразу - понад 12 тисяч рядків коду,
+ * хоча людина бачить одну вкладку. Власник, що зайшов глянути розклад,
+ * чекав, поки завантажаться склад, маркетинг, налаштування й решта.
+ *
+ * Календар лишається звичайним імпортом: з нього кабінет відкривається,
+ * і відкладати його означало б показати порожній екран на старті.
+ *
+ * Поки вкладка вантажиться вперше - тихий заповнювач тієї ж висоти:
+ * без стрибка сторінки, коли вкладка зʼявиться.
+ */
+const TabLoading = () => (
+  <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#AEAEB2', fontSize: '0.9rem' }}>
+    Завантаження…
+  </div>
+);
+const StatsTab = dynamic(() => import('@/components/cabinet/StatsTab'), { ssr: false, loading: TabLoading });
+const ClientsTab = dynamic(() => import('@/components/cabinet/ClientsTab'), { ssr: false, loading: TabLoading });
+const ServicesTab = dynamic(() => import('@/components/cabinet/ServicesTab'), { ssr: false, loading: TabLoading });
+const TeamTab = dynamic(() => import('@/components/cabinet/TeamTab'), { ssr: false, loading: TabLoading });
+const InventoryTab = dynamic(() => import('@/components/cabinet/InventoryTab'), { ssr: false, loading: TabLoading });
+const MarketingTab = dynamic(() => import('@/components/cabinet/MarketingTab'), { ssr: false, loading: TabLoading });
+const SettingsTab = dynamic(() => import('@/components/cabinet/SettingsTab'), { ssr: false, loading: TabLoading });
+const StorefrontTab = dynamic(() => import('@/components/cabinet/StorefrontTab'), { ssr: false, loading: TabLoading });
 
 function normalizeStaff(list: any[]): any[] {
   return (list || []).map((s: any) => ({

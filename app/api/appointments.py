@@ -1078,3 +1078,58 @@ async def list_my_appointments(
         out.append(response)
 
     return out
+
+
+@router.get("/nearest-slots")
+async def get_nearest_slots(
+    business_id: int = Query(...),
+    days: int = Query(14, ge=1, le=31),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Найближче вільне вікно для КОЖНОЇ послуги закладу - одним запитом.
+
+    Раніше сторінка салону шукала їх сама: до 12 послуг x до 14 днів,
+    кожен день - окремий HTTP-запит, і ВСІ ПОСЛІДОВНО, бо наступний
+    чекав на попередній. У гіршому випадку - 168 запитів у черзі при
+    кожному відкритті сторінки.
+
+    Тут та сама логіка слотів викликається всередині сервера, без
+    мережі між кроками. Для кожної послуги - від сьогодні вперед,
+    до першого вільного вікна: зазвичай це перший же день.
+
+    Відповідь: {service_id: "YYYY-MM-DDTHH:MM"}. Послуги без вільного
+    вікна в межах days у відповідь не потрапляють.
+    """
+    services_res = await db.execute(
+        select(Service).where(Service.business_id == business_id).order_by(Service.id).limit(12)
+    )
+    services = services_res.scalars().all()
+
+    result: dict[str, str] = {}
+    today = local_now().date()
+
+    for service in services:
+        for offset in range(days):
+            target = today + timedelta(days=offset)
+            try:
+                data = await get_available_slots(
+                    business_id=business_id,
+                    service_id=service.id,
+                    target_date=target,
+                    master_id="0",
+                    step_minutes=None,
+                    duration_minutes=None,
+                    db=db,
+                )
+            except HTTPException:
+                # Послуга недоступна (заклад на паузі, немає майстрів) -
+                # далі шукати немає сенсу.
+                break
+
+            free = next((s for s in data.slots if s.status == "available"), None)
+            if free:
+                result[str(service.id)] = f"{target.isoformat()}T{str(free.time)[:5]}"
+                break
+
+    return result

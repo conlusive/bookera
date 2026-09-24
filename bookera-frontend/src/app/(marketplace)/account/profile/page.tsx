@@ -34,6 +34,8 @@ import {
   ChevronRight
 } from "lucide-react";
 import SmartImage from '@/components/ui/SmartImage';
+import { loadFavorites, setFavorite } from '@/lib/favorites';
+import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 
 const FAVS_PER_PAGE = 4;
 
@@ -148,43 +150,15 @@ function ProfileContent() {
   const fetchFavorites = useCallback(async () => {
     try {
       const token = await getAuthToken().catch(() => null);
-      let list: any[] = [];
 
-      // 1. Отримуємо улюблені з бази через API
-      if (token) {
-        try {
-          const data = await api.listMyFavorites(token);
-          if (Array.isArray(data) && data.length > 0) {
-            list = data;
-          }
-        } catch (err) {
-          console.warn('api.listMyFavorites помилка:', err);
-        }
-      }
-
-      // 2. Якщо в базі порожньо, підтягуємо збережені з головної (localStorage)
-      if (list.length === 0 && typeof window !== 'undefined') {
-        const raw = localStorage.getItem('bookera_favs');
-        if (raw) {
-          try {
-            const ids: number[] = JSON.parse(raw);
-            if (ids.length > 0) {
-              const { data: businesses } = await supabase
-                .from('businesses')
-                .select('*')
-                .in('id', ids);
-              if (businesses && businesses.length > 0) {
-                list = businesses;
-                if (token) {
-                  for (const id of ids) {
-                    api.addFavorite(token, id).catch(() => {});
-                  }
-                }
-              }
-            }
-          } catch {}
-        }
-      }
+      // Спільна логіка з головною: сервер - джерело правди.
+      //
+      // Раніше, якщо на сервері було порожньо, профіль брав список із
+      // localStorage, читав заклади НАПРЯМУ з Supabase (правила доступу
+      // таке блокують) і дописував їх назад на сервер. Прибрали всі
+      // улюблені в одному браузері - інший повертав їх зі свого кешу.
+      const { businesses } = await loadFavorites(token);
+      const list: any[] = businesses;
 
       setFavorites(list);
     } catch (err) {
@@ -436,25 +410,17 @@ function ProfileContent() {
 // Видалення салону з улюблених
   const handleRemoveFavorite = async (businessId: string | number) => {
     const targetBizId = Number(businessId);
+    const before = favorites;
     setFavorites(prev => prev.filter(b => Number(b.id) !== targetBizId));
-
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('bookera_favs');
-        if (raw) {
-          const ids: number[] = JSON.parse(raw);
-          localStorage.setItem('bookera_favs', JSON.stringify(ids.filter(id => id !== targetBizId)));
-        }
-      } catch {}
-    }
 
     try {
       const token = await getAuthToken().catch(() => null);
-      if (token) {
-        await api.removeFavorite(token, targetBizId);
-      }
+      await setFavorite(targetBizId, false, token, before.map((b: any) => Number(b.id)));
       showToast('Заклад видалено з улюблених', 'info');
     } catch {
+      // Сервер не прийняв - повертаємо картку: інакше вона зникла б тут,
+      // а в іншому браузері лишилась би.
+      setFavorites(before);
       showToast('Не вдалося оновити улюблені', 'error');
     }
   };
@@ -857,6 +823,7 @@ function ProfileContent() {
 
   return (
     <div style={{ backgroundColor: '#fafbfc', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif', color: '#111827', letterSpacing: '-0.015em' }}>
+      <BusinessCardStyles />
 
       <style>{`
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; }
@@ -903,101 +870,6 @@ function ProfileContent() {
           box-shadow: 0 1px 3px rgba(0,0,0,0.015);
         }
         .clean-card:hover { border-color: #e5e7eb; box-shadow: 0 4px 16px rgba(0,0,0,0.03); }
-
-        /* Картки улюблених закладів (стиль як на головній) */
-        .apple-biz-card {
-          background: #ffffff;
-          border-radius: 20px;
-          border: 1px solid rgba(0, 0, 0, 0.06);
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          text-decoration: none;
-          position: relative;
-          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
-          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
-          box-sizing: border-box;
-        }
-        .apple-biz-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.08);
-          border-color: rgba(0, 0, 0, 0.1);
-        }
-        .card-photo-box {
-          width: 100%;
-          height: 175px;
-          position: relative;
-          overflow: hidden;
-          background-color: #f1f5f9;
-        }
-        .card-photo-img {
-          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-          object-fit: cover;
-          transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .apple-biz-card:hover .card-photo-img {
-          transform: scale(1.04);
-        }
-        .glass-pill {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.7);
-          padding: 4px 9px;
-          border-radius: 999px;
-          font-size: 0.72rem;
-          font-weight: 700;
-          color: #111827;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-        }
-        .glass-fav-btn {
-          position: absolute; top: 10px; right: 10px; z-index: 2;
-          width: 32px; height: 32px; border-radius: 50%;
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.7);
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-          border: none;
-        }
-        .glass-fav-btn:hover {
-          transform: scale(1.1);
-          background: #ffffff;
-        }
-        .card-body {
-          padding: 1.15rem;
-          display: flex;
-          flex-direction: column;
-          flex: 1;
-        }
-        .card-heading {
-          font-size: 1.12rem;
-          font-weight: 800;
-          color: #111827;
-          margin: 0;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          letter-spacing: -0.015em;
-        }
-        .card-action-link {
-          font-size: 0.85rem;
-          font-weight: 700;
-          color: #111827;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          transition: color 0.15s ease, transform 0.15s ease;
-        }
-        .apple-biz-card:hover .card-action-link {
-          color: #8fae92;
-          transform: translateX(2px);
-        }
 
         .page-btn { width: 34px; height: 34px; border-radius: 8px; background: #ffffff; border: 1px solid #e2e8f0; color: #475569; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
         .page-btn:hover { border-color: #cbd5e1; color: #111827; }
@@ -1502,95 +1374,17 @@ function ProfileContent() {
                   ) : (
                     <>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                        {paginatedFavorites.map(item => {
-                          const rank = parseFloat(item.rating);
-                          const hasRating = !isNaN(rank) && rank > 0;
-                          const displayRank = hasRating ? rank.toFixed(1) : '5.0';
-                          const reviewCount = parseInt(item.reviews_count) || 0;
-                          const bgImage = item.cover_photo || item.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
-
-                          const categoryLabels: Record<string, string> = {
-                            barber: 'Барбер',
-                            hair: 'Волосся',
-                            nails: 'Нігті',
-                            skincare: 'Догляд',
-                            brows: 'Брови',
-                            massage: 'Масаж',
-                            makeup: 'Макіяж',
-                            spa: 'Spa',
-                          };
-                          const category = categoryLabels[item.category] || item.category || 'Студія';
-                          const locationText = [item.city, item.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
-
-                          return (
-                            <Link key={item.id} href={`/${item.slug || item.id}`} className="apple-biz-card anim">
-                              <div className="card-photo-box">
-                                <SmartImage sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 25vw" src={bgImage} alt={item.name} loading="lazy" decoding="async" className="card-photo-img" />
-
-                                <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>
-                                  {(!hasRating || rank >= 4.8) && (
-                                    <div className="glass-pill">
-                                      <span style={{ color: '#f59e0b' }}>★</span>
-                                      <span>Топ вибір</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    void handleRemoveFavorite(item.id);
-                                  }}
-                                  className="glass-fav-btn anim"
-                                  title="Видалити з улюблених"
-                                >
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                                  </svg>
-                                </button>
-                              </div>
-
-                              <div className="card-body">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
-                                  <h3 className="card-heading">{item.name}</h3>
-                                  <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111827', whiteSpace: 'nowrap' }}>
-                                    від 450 ₴
-                                  </span>
-                                </div>
-
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '700' }}>
-                                    <span style={{ color: '#f59e0b' }}>★</span> {displayRank}
-                                    <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.75rem' }}>({reviewCount})</span>
-                                  </span>
-                                  <span>•</span>
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{category}</span>
-                                </div>
-
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
-                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
-                                  <span style={{ color: '#10b981', fontWeight: '600' }}>Відкрито</span>
-                                  <span>•</span>
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationText}</span>
-                                </div>
-
-                                <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '500' }}>
-                                    Швидкий запис
-                                  </span>
-                                  <span className="card-action-link">
-                                    Записатись
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                                    </svg>
-                                  </span>
-                                </div>
-                              </div>
-                            </Link>
-                          );
-                        })}
+                        {/* Та сама картка, що й на головній - спільний компонент.
+                            Раніше тут була власна копія зі старими стилями. */}
+                        {paginatedFavorites.map(item => (
+                          <BusinessCard
+                            key={item.id}
+                            biz={item}
+                            // Усе в цьому списку - улюблене; зняти сердечко означає прибрати звідси.
+                            isFavorite
+                            onToggleFavorite={id => void handleRemoveFavorite(id)}
+                          />
+                        ))}
                       </div>
 
                       {/* Пагінація */}

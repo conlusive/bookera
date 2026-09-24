@@ -4,7 +4,10 @@ import { Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'rea
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 
-import { canOptimize } from '@/lib/images';
+import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
+import { getOpenStatus } from '@/lib/businessStatus';
+import { categoryTitles } from '@/lib/categories';
+import { cachedFavoriteIds, loadFavorites, setFavorite } from '@/lib/favorites';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -73,26 +76,6 @@ const extraCategoriesData = [
   { name: 'Інше', slug: 'other' }
 ];
 
-const categoryTitles: Record<string, string> = {
-  'hair': 'Волосся',
-  'barber': 'Барбершопи',
-  'nails': 'Нігті та манікюр',
-  'skincare': 'Догляд за шкірою',
-  'brows': 'Брови та вії',
-  'massage': 'Масаж та SPA',
-  'makeup': 'Макіяж та візаж',
-  'spa': 'Масаж та SPA',
-  'aesthetic-medicine': 'Косметологія',
-  'hair-removal': 'Епіляція',
-  'home-services': 'Послуги на дому',
-  'piercing': 'Пірсинг студії',
-  'pets': 'Послуги для улюбленців',
-  'dentistry': 'Стоматологія',
-  'health': 'Здоров\'я та самопочуття',
-  'professional': 'Професійні послуги',
-  'tattoo': 'Тату та пірсинг',
-  'other': 'Інші послуги'
-};
 
 const topCities = [
   'Київ', 'Львів', 'Одеса', 'Дніпро',
@@ -649,11 +632,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       const storedName = localStorage.getItem('userName');
       const storedRole = localStorage.getItem('userRole') || 'client';
       const storedAvatar = localStorage.getItem('userAvatar');
-      const storedFavs = localStorage.getItem('bookera_favs');
-
-      if (storedFavs) {
-        try { setFavorites(JSON.parse(storedFavs)); } catch {}
-      }
+      // Кеш - лише для першого кадру. Справжній список - з сервера нижче.
+      setFavorites(cachedFavoriteIds());
 
       if (storedAvatar) setAvatarUrl(storedAvatar);
 
@@ -748,25 +728,40 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   }, []);
 
 
+  // Справжній список улюблених - із сервера, коли людина увійшла.
+  // Раніше головна читала лише localStorage, і в іншому браузері
+  // сердечка були порожні, хоча на сервері все збережено.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const { ids } = await loadFavorites(session?.access_token ?? null);
+        if (!cancelled) setFavorites(ids);
+      } catch (err) {
+        // Сервер недоступний - лишаємо кеш: краще приблизно, ніж порожньо.
+        console.warn('Не вдалося завантажити улюблені:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const toggleFavorite = async (bizId: number) => {
-    const isFav = favorites.includes(bizId);
-    const updated = isFav
-      ? favorites.filter(id => id !== bizId)
-      : [...favorites, bizId];
-    setFavorites(updated);
-    localStorage.setItem('bookera_favs', JSON.stringify(updated));
+    const before = favorites;
+    const makeFavorite = !before.includes(bizId);
+    // Сердечко змінюється одразу - людина не чекає на мережу.
+    setFavorites(makeFavorite ? [...before, bizId] : before.filter(id => id !== bizId));
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        if (isFav) {
-          await api.removeFavorite(session.access_token, bizId);
-        } else {
-          await api.addFavorite(session.access_token, bizId);
-        }
-      }
+      const next = await setFavorite(bizId, makeFavorite, session?.access_token ?? null, before);
+      setFavorites(next);
     } catch (err) {
-      console.error('Помилка синхронізації улюбленого з БД:', err);
+      // Сервер не прийняв - повертаємо як було. Сердечко, що горить,
+      // але на сервері не збережене, - неправда, яку людина побачить
+      // в іншому браузері.
+      setFavorites(before);
+      console.error('Не вдалося зберегти улюблене:', err);
     }
   };
 
@@ -1422,280 +1417,20 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   };
 
   // 🟢 ЄДИНА КАРТКА ЗАКЛАДУ (ОДНАКОВИЙ РОЗМІР 1:1)
-  /**
-   * Статус закладу просто зараз.
-   *
-   * Раніше на кожній картці стояло «Відкрито» - незалежно від часу
-   * й графіка. О третій ночі теж.
-   *
-   * Три різні стани, і вони означають різне:
-   *   open   - працює за графіком
-   *   closed - зачинено за графіком: сьогодні вихідний або вже пізно
-   *   paused - заклад сам зупинив запис (ремонт, хвороба майстра).
-   *            Це тимчасово, і сказати «зачинено» було б неточно:
-   *            людина вирішила б, що заклад не працює взагалі.
-   */
-  const getOpenStatus = (biz: any): { state: 'open' | 'closed' | 'paused'; label: string } => {
-    if (biz.booking_settings?.is_paused_emergency) {
-      return { state: 'paused', label: 'Запис тимчасово зупинено' };
-    }
-
-    const hours = biz.working_hours;
-    if (!Array.isArray(hours) || hours.length === 0) {
-      // Графік не заповнений - не стверджуємо нічого. «Відкрито»
-      // без даних було б вигадкою, «Зачинено» - наклепом.
-      return { state: 'open', label: '' };
-    }
-
-    const now = new Date();
-    // weekday у базі: 0 = понеділок. getDay(): 0 = неділя.
-    const weekday = (now.getDay() + 6) % 7;
-    const today = hours.find((h: any) => Number(h.weekday) === weekday);
-
-    if (!today || !today.is_open) {
-      return { state: 'closed', label: 'Сьогодні зачинено' };
-    }
-
-    const toMinutes = (t?: string | null) => {
-      if (!t) return null;
-      const [h, m] = t.split(':').map(Number);
-      return h * 60 + m;
-    };
-
-    const open = toMinutes(today.open_time);
-    const close = toMinutes(today.close_time);
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-    if (open == null || close == null) return { state: 'open', label: 'Відкрито' };
-
-    if (nowMinutes < open) {
-      return { state: 'closed', label: `Відчиниться о ${today.open_time}` };
-    }
-    if (nowMinutes >= close) {
-      return { state: 'closed', label: 'Зачинено' };
-    }
-
-    // Попередження за годину до закриття: людина не встигне
-    // записатись, і краще дізнатись про це зараз.
-    if (close - nowMinutes <= 60) {
-      return { state: 'open', label: `Зачиниться о ${today.close_time}` };
-    }
-
-    return { state: 'open', label: 'Відкрито' };
-  };
 
 
-  /**
-   * Картка закладу.
-   *
-   * Вигляд трохи різний у кожній зоні - показуємо те, що там важить:
-   *
-   *   Поблизу вас   - відстань і вільні слоти на сьогодні
-   *   Усі заклади   - без відстані: зона не про близькість
-   *   Рекомендовані - без відстані: тут важить якість, а не дорога
-   *
-   * Відстань на кожній картці знецінює саму себе: якщо вона всюди,
-   * око перестає її помічати саме там, де вона вирішує.
-   */
-  const renderCard = (biz: any, options?: { distanceTag?: string; showTimeSlots?: boolean }) => {
-    const rank = parseFloat(biz.rating);
-    const hasRating = !isNaN(rank) && rank > 0;
-    // Рейтингу немає - не вигадуємо.
-    //
-    // Раніше тут стояло '5.0': заклад без жодного відгуку виглядав
-    // ідеальним. Людина довіряла цифрі, за якою нічого не стояло,
-    // і це найгірший вид обману в маркетплейсі.
-    const displayRank = hasRating ? rank.toFixed(1) : null;
-    const reviewCount = parseInt(biz.reviews_count) || 0;
-    const bgImage = biz.cover_photo || biz.logo || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80";
-    const isFav = favorites.includes(biz.id);
-
-    // Справжня мінімальна ціна серед послуг салону
-    const prices = (biz.services || [])
-      .map((s: any) => Number(s.price))
-      .filter((p: number) => !isNaN(p) && p > 0);
-    const minPrice = prices.length > 0 ? Math.min(...prices) : null;
-
-    const categoryLabels: Record<string, string> = {
-      barber: 'Барбер',
-      hair: 'Волосся',
-      nails: 'Нігті',
-      skincare: 'Догляд',
-      brows: 'Брови',
-      massage: 'Масаж',
-      makeup: 'Макіяж',
-      spa: 'Spa',
-    };
-    const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Студія';
-
-    // Формування точної локації та відстані
-    // Адреса без відстані: відстань тепер окремою плашкою поверх фото.
-    //
-    // У рядку «500 м • Дорошенка 10» вона губилась серед тексту того
-    // самого кольору й розміру, хоча це найцінніше, що є в картці:
-    // адресу людина прочитає потім, а «як далеко» вирішує одразу.
-    const locationText = [biz.city, biz.address].filter(Boolean).join(', ') || 'Адресу уточнюйте';
-
-    // Локальна дата, НЕ через toISOString.
-    //
-    // toISOString повертає дату в UTC: після 21:00 за Києвом це вже
-    // завтра, і картка просила слоти не на той день - показувала
-    // завтрашні години як сьогоднішні.
-    const todayStr = (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })();
-    const salonSlots = nearbySlots[biz.id] || [];
-    const primaryService = biz.services?.[0];
-
-    return (
-      <Link key={biz.id} href={`/${biz.slug || biz.id}`} className="apple-biz-card anim">
-        <div className="card-photo-box">
-          {/* next/image: браузер отримує фото під розмір картки у WebP
-              чи AVIF, а не оригінал на кілька мегабайт. На телефоні
-              картка на всю ширину, на компʼютері - чверть. */}
-          <Image
-            src={bgImage}
-            alt={biz.name}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 25vw"
-            className="card-photo-img"
-            unoptimized={!canOptimize(bgImage)}
-          />
-
-          <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>
-            {options?.distanceTag ? (
-              <div className="glass-pill">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                  <circle cx="12" cy="10" r="3" />
-                </svg>
-                <span>{options.distanceTag}</span>
-              </div>
-            ) : null}
-            {/* Плашку «Топ вибір» прибрано.
-                Умова була `!hasRating || rank >= 4.8` - тобто заклад
-                БЕЗ ЖОДНОГО рейтингу теж отримував «Топ вибір».
-                Плашка, яку має майже кожен, нічого не означає, а тут
-                вона ще й брехала.
-                Для найкращих є ціла зона «Рекомендовані». */}
-          </div>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleFavorite(biz.id);
-            }}
-            className="glass-fav-btn anim"
-            title="Зберегти"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill={isFav ? "#ef4444" : "none"} stroke={isFav ? "#ef4444" : "#111827"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="card-body">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
-            <h3 className="card-heading">{biz.name}</h3>
-            <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111827', whiteSpace: 'nowrap' }}>
-              {minPrice ? `від ${minPrice} ₴` : 'від 450 ₴'}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
-            {displayRank && reviewCount > 0 ? (
-              <>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '600' }}>
-                  <span style={{ color: '#f59e0b' }}>★</span> {displayRank}
-                  <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.75rem' }}>({reviewCount})</span>
-                </span>
-                <span>•</span>
-              </>
-            ) : (
-              /* Новий заклад - так і кажемо. Це чесно й навіть
-                 працює на нього: людина розуміє, що відгуків немає
-                 не через погану роботу. */
-              <>
-                <span style={{ color: '#94a3b8' }}>Новий заклад</span>
-                <span>•</span>
-              </>
-            )}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{category}</span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
-            {(() => {
-              const status = getOpenStatus(biz);
-              if (!status.label) return null;
-              const color = status.state === 'open' ? '#10b981'
-                : status.state === 'paused' ? '#d97706'
-                : '#94a3b8';
-              return (
-                <>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, display: 'inline-block' }}></span>
-                  <span style={{ color, fontWeight: '600' }}>{status.label}</span>
-                  <span>•</span>
-                </>
-              );
-            })()}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationText}</span>
-          </div>
-
-          {/* РЕАЛЬНІ СЛОТИ ЧАСУ НА СЬОГОДНІ */}
-          {options?.showTimeSlots ? (
-            <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.72rem', color: '#8fae92', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Сьогодні:
-              </span>
-              {salonSlots.length > 0 ? (
-                <div style={{ display: 'flex', gap: '5px' }}>
-                  {salonSlots.map(time => (
-                    <button
-                      key={time}
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const query = new URLSearchParams({
-                          date: todayStr,
-                          time: time,
-                        });
-                        // Послугу НЕ підставляємо: раніше тут ставилась перша
-                        // послуга закладу, і людина потрапляла одразу на
-                        // вибір часу, не обравши ні послуги, ні майстра.
-                        // Тепер вона обирає їх сама, а година чекає.
-                        router.push(`/${biz.slug || biz.id}?${query.toString()}`);
-                      }}
-                      className="interactive-time-chip anim"
-                    >
-                      {time}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: '500' }}>
-                  Немає слотів на сьогодні
-                </span>
-              )}
-            </div>
-          ) : (
-            <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '500' }}>
-                Швидкий запис
-              </span>
-              <span className="card-action-link">
-                Записатись
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-              </span>
-            </div>
-          )}
-        </div>
-      </Link>
-    );
-  };
+  // Картка закладу - спільний компонент (components/ui/BusinessCard).
+  const renderCard = (biz: any, options?: { distanceTag?: string; showTimeSlots?: boolean }) => (
+    <BusinessCard
+      key={biz.id}
+      biz={biz}
+      isFavorite={favorites.includes(biz.id)}
+      onToggleFavorite={toggleFavorite}
+      distanceTag={options?.distanceTag}
+      showTimeSlots={options?.showTimeSlots}
+      slots={nearbySlots[biz.id]}
+    />
+  );
 
   const scrollNearby = (direction: 'left' | 'right') => {
     if (nearbyScrollRef.current) {
@@ -1723,6 +1458,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif', color: '#222222', overflowX: 'hidden' }}>
+      <BusinessCardStyles />
       <Suspense fallback={null}>
         <SearchParamsSync onChange={applySearchParams} />
       </Suspense>
@@ -1843,138 +1579,6 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         }
         .view-all-text-btn:hover { color: #8fae92; }
 
-        /* ОДНАКОВІ КАРТКИ В СТИЛІ APPLE */
-        /* Картка закладу - плитка, а не «картка».
-           Рамка, тінь і підйом при наведенні робили з кожного закладу
-           окремий обʼєкт, що претендує на увагу. У сітці з восьми це
-           вісім прямокутників, які змагаються між собою.
-           Лишилось фото й текст під ним: межі задає сам вміст. */
-        .apple-biz-card {
-          background: transparent;
-          border: none;
-          box-shadow: none;
-          display: flex;
-          flex-direction: column;
-          text-decoration: none;
-          position: relative;
-          box-sizing: border-box;
-        }
-        /* При наведенні рухається ЛИШЕ фото - легке наближення.
-           Підйом усієї картки зсуває сусідні рядки й ламає сітку. */
-        .apple-biz-card:hover .card-photo-img {
-          transform: scale(1.04);
-        }
-        .card-photo-img {
-          transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .card-photo-box {
-          width: 100%;
-          /* Стале співвідношення замість фіксованої висоти: плитки
-             в ряду однакові незалежно від ширини колонки. */
-          aspect-ratio: 4 / 3;
-          height: auto;
-          border-radius: 14px;
-          position: relative;
-          overflow: hidden;
-          background: #F5F5F7;
-          background-color: #f1f5f9;
-        }
-        .card-photo-img {
-          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-          object-fit: cover;
-          transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .apple-biz-card:hover .card-photo-img {
-          transform: scale(1.04);
-        }
-
-        /* СКЛЯНИЙ БЕЙДЖ */
-        .glass-pill {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.7);
-          padding: 4px 9px;
-          border-radius: 999px;
-          font-size: 0.72rem;
-          font-weight: 700;
-          color: #111827;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-        }
-
-        /* КНОПКА «В ОБРАНЕ» */
-        .glass-fav-btn {
-          position: absolute; top: 10px; right: 10px; z-index: 2;
-          width: 32px; height: 32px; border-radius: 50%;
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.7);
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-        }
-        .glass-fav-btn:hover {
-          transform: scale(1.1);
-          background: #ffffff;
-        }
-
-        .card-body {
-          /* Без бічних полів: текст вирівняний по краю фото, як
-             у сітці альбому. Поля всередині картки мали сенс, поки
-             була рамка - тепер вони лише зсували текст від плитки. */
-          padding: 0.85rem 0.15rem 0;
-          display: flex;
-          flex-direction: column;
-          flex: 1;
-        }
-        .card-heading {
-          /* Легша вага й менший кегль: 800 на кожній назві в сітці
-             з восьми читається як вісім заголовків. */
-          font-size: 1.0625rem;
-          font-weight: 600;
-          letter-spacing: -0.015em;
-          color: #111827;
-          margin: 0;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          letter-spacing: -0.015em;
-        }
-        .card-action-link {
-          font-size: 0.85rem;
-          font-weight: 700;
-          color: #111827;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          transition: color 0.15s ease, transform 0.15s ease;
-        }
-        .apple-biz-card:hover .card-action-link {
-          color: #8fae92;
-          transform: translateX(2px);
-        }
-
-        /* КЛІКАБЕЛЬНІ СЛОТИ ЧАСУ */
-        .interactive-time-chip {
-          background: #f1f5f9;
-          color: #111827;
-          border: 1px solid transparent;
-          border-radius: 8px;
-          padding: 4px 8px;
-          font-size: 0.75rem;
-          font-weight: 700;
-          cursor: pointer;
-        }
-        .interactive-time-chip:hover {
-          background: #C2D8C4;
-          color: #111827;
-          transform: translateY(-1px);
-        }
-
         /* СІТКА КАТАЛОГУ */
         .salons-layout {
           display: grid;
@@ -1982,9 +1586,12 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           gap: 1.75rem 1.5rem;
           width: 100%;
         }
-        @media (max-width: 1120px) { .salons-layout { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 820px) { .salons-layout { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 560px) { .salons-layout { grid-template-columns: 1fr; } }
+        @media (max-width: 1120px) { .salons-layout { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (max-width: 820px) { .salons-layout { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 560px) { .salons-layout { grid-template-columns: 1fr; }
+        }
 
         /* ОДНАКОВИЙ РОЗМІР КАРТОК У КАРУСЕЛІ */
         .nearby-carousel {
@@ -2143,13 +1750,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .delay-200 { transition-delay: 200ms; }
 
         .compact-features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-bottom: 1rem; }
-        @media (max-width: 992px) { .compact-features-grid { grid-template-columns: 1fr; gap: 2.5rem; } }
+        @media (max-width: 992px) { .compact-features-grid { grid-template-columns: 1fr; gap: 2.5rem; }
+        }
         
         .info-section { padding: 5rem 0 6rem 0; position: relative; z-index: 10; }
         .info-title { font-size: 2rem; font-weight: 900; color: #111827; line-height: 1.2; margin-bottom: 1rem; letter-spacing: -0.02em; }
         .info-desc { color: #64748b; font-size: 1rem; line-height: 1.6; margin-bottom: 1rem; font-weight: 400; }
 
-        @keyframes float-widget { 0% { transform: translateY(0px); } 50% { transform: translateY(-12px); } 100% { transform: translateY(0px); } }
+        @keyframes float-widget { 0% { transform: translateY(0px); } 50% { transform: translateY(-12px); } 100% { transform: translateY(0px); }
+        }
 
         .massive-blob { position: absolute; right: -5%; top: -10%; width: 55%; height: 120%; background: #222222; border-radius: 40% 60% 30% 70% / 50% 50% 50% 50%; z-index: 1; pointer-events: none; }
         .massive-blob-bg { position: absolute; right: -2%; top: -5%; width: 58%; height: 120%; background: #C2D8C4; border-radius: 50% 50% 60% 40% / 40% 60% 40% 60%; z-index: 0; opacity: 0.5; pointer-events: none; }
@@ -2223,8 +1832,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         .main-header.scrolled .nav-link, .main-header.hiding .nav-link { color: #475569; }
         .main-header.scrolled .nav-link:hover, .main-header.hiding .nav-link:hover { color: #8fae92 !important; }
 
-        @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
-        @keyframes slideUp { from { transform: translateY(0); } to { transform: translateY(-100%); } }
+        @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); }
+        }
+        @keyframes slideUp { from { transform: translateY(0); } to { transform: translateY(-100%); }
+        }
       `}</style>
 
       {/* МОДАЛКА ЛОГІНУ/РЕЄСТРАЦІЇ */}

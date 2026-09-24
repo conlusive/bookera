@@ -33,6 +33,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
+import SmartImage from '@/components/ui/SmartImage';
 
 const FAVS_PER_PAGE = 4;
 
@@ -1052,7 +1053,7 @@ function ProfileContent() {
                 </span>
 
                 {avatarUrl ? (
-                  <img
+                  <SmartImage width={36} height={36}
                     src={avatarUrl}
                     alt={displayName}
                     style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
@@ -1111,7 +1112,7 @@ function ProfileContent() {
               {/* Віджет користувача */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0.25rem 1rem 0.25rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>
                 {avatarUrl ? (
-                  <img
+                  <SmartImage width={40} height={40}
                     src={avatarUrl}
                     alt={displayName}
                     style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
@@ -1524,7 +1525,7 @@ function ProfileContent() {
                           return (
                             <Link key={item.id} href={`/${item.slug || item.id}`} className="apple-biz-card anim">
                               <div className="card-photo-box">
-                                <img src={bgImage} alt={item.name} loading="lazy" decoding="async" className="card-photo-img" />
+                                <SmartImage sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 25vw" src={bgImage} alt={item.name} loading="lazy" decoding="async" className="card-photo-img" />
 
                                 <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>
                                   {(!hasRating || rank >= 4.8) && (
@@ -1647,7 +1648,7 @@ function ProfileContent() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>
                       <div style={{ position: 'relative' }}>
                         {avatarUrl ? (
-                          <img
+                          <SmartImage width={64} height={64}
                             src={avatarUrl}
                             alt="Аватарка"
                             style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover' }}

@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
+import SmartImage from '@/components/ui/SmartImage';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
@@ -511,7 +512,7 @@ export default function BusinessLandingPage() {
                   </span>
 
                   {avatarUrl ? (
-                    <img
+                    <SmartImage width={36} height={36}
                       src={avatarUrl}
                       alt={userName || 'Аватарка'}
                       style={{

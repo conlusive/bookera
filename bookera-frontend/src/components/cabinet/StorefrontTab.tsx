@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import { ALL_AMENITIES } from '@/lib/amenities';
+import SmartImage from '@/components/ui/SmartImage';
 
 interface StorefrontTabProps {
   onNavigate?: (tab: string, view?: string) => void;
@@ -352,13 +353,13 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               {allGalleryPhotos.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: allGalleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', borderRadius: '24px', overflow: 'hidden' }}>
                   <div style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', position: 'relative', background: '#f1f5f9' }}>
-                    <img src={allGalleryPhotos[0]} alt="Головна обкладинка" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <SmartImage src={allGalleryPhotos[0]} alt="Головна обкладинка" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                   {allGalleryPhotos.length > 1 && (
                     <div style={{ display: 'grid', gridTemplateRows: allGalleryPhotos.length > 2 ? 'repeat(2, 1fr)' : '1fr', gap: '1rem', height: '100%' }}>
                       {allGalleryPhotos.slice(1, 3).map((photo, idx) => (
                         <div key={idx} style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.04)', position: 'relative', background: '#f1f5f9' }}>
-                          <img src={photo} alt={`Фото ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <SmartImage src={photo} alt={`Фото ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </div>
                       ))}
                     </div>
@@ -564,7 +565,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                           <div key={idx} title={staff.show_in_storefront === false ? 'Не показується на сторінці закладу' : undefined} style={{ opacity: staff.show_in_storefront === false ? 0.45 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
                               {staff.avatar_url ? (
-                                <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
+                                <SmartImage src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
                               ) : (
                                 <div style={{ display: 'flex', width: '20px', height: '20px', color: '#86868B' }}><Icons.User /></div>
                               )}
@@ -696,7 +697,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                         </span>
                         <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#e2e8f0', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {staff.avatar_url ? (
-                            <img src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                            <SmartImage src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                           ) : (
                             <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{staff.name?.[0] || 'М'}</span>
                           )}
@@ -810,7 +811,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   {coverPhoto ? (
                     <div style={{ position: 'relative', width: '100%', maxWidth: '440px', height: '180px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                      <img src={coverPhoto} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <SmartImage src={coverPhoto} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <button className="media-delete-btn" onClick={() => handleDeletePhoto('cover', coverPhoto)}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                       </button>
@@ -835,7 +836,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem' }}>
                   {workplacePhotos.map((url, idx) => (
                     <div key={idx} style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                      <img src={url} alt={`Workplace ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <SmartImage src={url} alt={`Workplace ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <button className="media-delete-btn" onClick={() => handleDeletePhoto('workplace', url)}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                       </button>

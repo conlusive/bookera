@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useToast } from '@/context/ToastContext';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import SmartImage from '@/components/ui/SmartImage';
 
 interface SmartSlot {
   id: string;
@@ -737,7 +738,7 @@ export default function MarketingTab({
               {/* Блок з QR-кодом справа */}
               <div style={{ width: '220px', background: '#f8fafc', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #e2e8f0', flexShrink: 0 }}>
                  <div style={{ width: '110px', height: '110px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', overflow: 'hidden', padding: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                   <img src={qrCodeUrl} alt="QR Code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                   <SmartImage src={qrCodeUrl} alt="QR Code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                  </div>
                  <button onClick={downloadQR} className="mini-action-btn" style={{ width: '100%', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0' }}>
                    <SvgDownload size={14} /> Завантажити QR

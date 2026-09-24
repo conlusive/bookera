@@ -1,3 +1,4 @@
+import SmartImage from '@/components/ui/SmartImage';
 'use client';
 
 /**
@@ -56,9 +57,14 @@ export default function Avatar({
       }}
     >
       {src ? (
-        <img
+        <SmartImage
           src={src}
           alt={name || ''}
+          /* Справжній розмір аватарки, а не типова підказка 800px:
+             інакше браузер тягнув би 800-піксельне фото для кружечка
+             на 36px. */
+          width={size}
+          height={size}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (

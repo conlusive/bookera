@@ -12,6 +12,7 @@ import { isBusinessRole } from '@/lib/roles';
 import { ALL_AMENITIES } from '@/lib/amenities';
 import Avatar from '@/components/ui/Avatar';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
+import SmartImage from '@/components/ui/SmartImage';
 
 // === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
@@ -1782,7 +1783,7 @@ const formatRole = (role?: string) => {
                   </span>
 
                   {avatarUrl ? (
-                    <img
+                    <SmartImage width={36} height={36}
                       src={avatarUrl}
                       alt={userName || 'Аватарка'}
                       style={{
@@ -2684,7 +2685,7 @@ const formatRole = (role?: string) => {
             </button>
           )}
 
-          <img
+          <SmartImage width={1600} height={1200} sizes="88vw"
             src={galleryPhotos[currentImageIndex]}
             alt={`Фото ${currentImageIndex + 1}`}
             style={{

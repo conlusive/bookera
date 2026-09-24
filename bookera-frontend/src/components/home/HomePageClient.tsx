@@ -4,18 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 
-/**
- * Чи можна оптимізувати зображення через next/image.
- *
- * Лише хости з next.config (Supabase, Unsplash). Власник міг вказати
- * фото з будь-якого сайту - для такого next/image без дозволу впав би
- * з помилкою й зламав картку. Тоді показуємо як є, без оптимізації.
- */
-const OPTIMIZABLE_HOSTS = [/\.supabase\.co$/, /^images\.unsplash\.com$/];
-const canOptimize = (url: string) => {
-  try { return OPTIMIZABLE_HOSTS.some(r => r.test(new URL(url).hostname)); }
-  catch { return false; }
-};
+import { canOptimize } from '@/lib/images';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -28,6 +17,7 @@ import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
 import HowItWorks from '@/components/home/HowItWorks';
 import BusinessShowcase from '@/components/home/BusinessShowcase';
+import SmartImage from '@/components/ui/SmartImage';
 
 /**
  * Ключові слова категорій.
@@ -2387,7 +2377,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                   </span>
 
                   {avatarUrl ? (
-                    <img
+                    <SmartImage width={36} height={36}
                       src={avatarUrl}
                       alt={userName || 'Аватарка'}
                       style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}

@@ -17,6 +17,7 @@ import { Icons, navItems, toLocalDateStr } from '@/components/shared';
 
 import CalendarTab from '@/components/cabinet/CalendarTab';
 import dynamic from 'next/dynamic';
+import SmartImage from '@/components/ui/SmartImage';
 
 /**
  * Вкладки кабінету вантажаться, лише коли їх відкривають.
@@ -1093,7 +1094,7 @@ export default function BusinessCabinet() {
                 boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
               }}>
                 {(business?.cover_photo || business?.logo) ? (
-                  <img src={business.cover_photo || business.logo} alt={business?.name || 'Лого'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <SmartImage src={business.cover_photo || business.logo} alt={business?.name || 'Лого'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   business?.name?.charAt(0).toUpperCase() || 'B'
                 )}
@@ -1198,7 +1199,7 @@ export default function BusinessCabinet() {
                           flexShrink: 0,
                           overflow: 'hidden',
                         }}>
-                          {photo ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : biz.name?.charAt(0).toUpperCase()}
+                          {photo ? <SmartImage src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : biz.name?.charAt(0).toUpperCase()}
                         </div>
                         <span style={{ fontSize: '0.88rem', fontWeight: isActive ? '700' : '500', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {biz.name}

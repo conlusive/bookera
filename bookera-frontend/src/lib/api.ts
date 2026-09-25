@@ -320,6 +320,22 @@ export const api = {
     return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`, { revalidate });
   },
 
+  /** Гаманець: баланс бонусів BookEra, історія й подарункові картки. */
+  async getWallet(token: string): Promise<{
+    bonus_balance: number;
+    bonus_history: { amount: number; reason: string; business_name: string | null; created_at: string | null }[];
+    gift_cards: any[];
+  }> {
+    return authFetch('/wallet/my', token);
+  },
+
+  /** Купівля подарункової картки. checkout_url - куди вести на оплату (null, якщо вже оплачено). */
+  async buyGiftCard(token: string, payload: {
+    business_id: number; amount: number; recipient_name?: string; recipient_email?: string; message?: string;
+  }): Promise<{ card: any; checkout_url: string | null }> {
+    return authFetch('/wallet/gift-cards', token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
   /** Відгук на власний завершений візит - за токеном керування записом. */
   async createVisitReview(appointmentId: number, token: string, rating: number, comment?: string): Promise<{ ok: boolean }> {
     return publicFetch(`/appointments/${appointmentId}/review`, {

@@ -8,7 +8,7 @@ from app.models.extras import Review, InventoryItem, Expense, ServiceMaterial, I
 from app.models.monetization import (
     PointsLedgerEntry, PointsReasonEnum, ReferralCommission,
     RadarBoost, GiftCertificate, Payment, StaffPayout,
-)
+ ClientBonusEntry)
 
 __all__ = [
     "Base", "User", "RoleEnum", "StaffInvite", "StaffMembership", "Favorite",

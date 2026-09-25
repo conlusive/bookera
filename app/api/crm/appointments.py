@@ -274,7 +274,12 @@ async def update_crm_appointment_status(
         appointment.status = "cancelled"
         return appointment
 
+    _old_status = appointment.status
     appointment.status = new_status
+    # Бонуси BookEra: нарахувати за завершений візит або повернути,
+    # якщо позначку «завершено» зняли.
+    from app.services.bonuses import sync_visit_bonus
+    await sync_visit_bonus(db, appointment, _old_status)
     appointment.updated_at = to_naive_utc(utc_now())
 
     try:

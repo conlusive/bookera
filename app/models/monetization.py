@@ -84,6 +84,14 @@ class GiftCertificate(Base):
     purchaser_name = Column(String, nullable=True)
     purchaser_email = Column(String, nullable=True)
     message = Column(Text, nullable=True)  # "З днем народження, мамо!"
+    # Купівля клієнтом онлайн. Сертифікат створюється зі статусом
+    # 'pending' і стає 'active' лише після підтвердження оплати - код до
+    # того не показується, інакше його можна було б використати, не
+    # заплативши.
+    recipient_name = Column(String, nullable=True)
+    recipient_email = Column(String, nullable=True, index=True)
+    purchaser_user_id = Column(String, nullable=True, index=True)
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)
     created_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=True)
 
@@ -146,4 +154,28 @@ class StaffPayout(Base):
     notes = Column(Text, nullable=True)
     expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # пов'язаний запис витрати
 
+    created_at = Column(DateTime, default=utc_now)
+
+
+class ClientBonusEntry(Base):
+    """
+    Бонуси BookEra для клієнтів - історія нарахувань і повернень.
+
+    Єдині на всю платформу: нараховані в одному закладі видно й діють
+    усюди. Баланс - сума всіх записів, окремого поля балансу немає:
+    так його неможливо «поправити» без сліду в історії.
+
+    Власник - за поштою чи останніми 9 цифрами телефону, так само, як
+    /appointments/my знаходить візити людини: запис міг бути зроблений
+    до реєстрації, і бонуси за нього не мають губитись.
+    """
+    __tablename__ = "client_bonuses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_email = Column(String, nullable=True, index=True)
+    client_phone_tail = Column(String, nullable=True, index=True)
+    amount = Column(Integer, nullable=False)  # +/- у бонусах, 1 бонус = 1 ₴
+    reason = Column(String, nullable=False)   # visit_completed, visit_reversed
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=True)
     created_at = Column(DateTime, default=utc_now)

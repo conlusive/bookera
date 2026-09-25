@@ -187,7 +187,12 @@ async def complete_past_appointments(db: AsyncSession) -> int:
         biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
         business = biz_res.scalars().first()
 
+        _old_status = appointment.status
         appointment.status = "completed"
+        # Бонуси BookEra: нарахувати за завершений візит або повернути,
+        # якщо позначку «завершено» зняли.
+        from app.services.bonuses import sync_visit_bonus
+        await sync_visit_bonus(db, appointment, _old_status)
         completed += 1
 
         if business:

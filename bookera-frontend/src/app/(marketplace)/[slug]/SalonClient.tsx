@@ -13,6 +13,7 @@ import { ALL_AMENITIES } from '@/lib/amenities';
 import Avatar from '@/components/ui/Avatar';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import SmartImage from '@/components/ui/SmartImage';
+import GiftCardModal from '@/components/salon/GiftCardModal';
 
 // === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
@@ -544,6 +545,8 @@ export default function SalonClient({
     }
     void checkFavorite();
   }, [salon?.id]);
+
+  const [isGiftOpen, setIsGiftOpen] = useState(false);
 
   const handleToggleFavorite = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -1545,6 +1548,15 @@ const formatRole = (role?: string) => {
       `}} />
 
       {/* МОДАЛКА АВТОРИЗАЦІЇ */}
+      {isGiftOpen && salon && (
+        <GiftCardModal
+          businessId={salon.id}
+          businessName={salon.name}
+          onClose={() => setIsGiftOpen(false)}
+          onNeedLogin={() => { setIsGiftOpen(false); setIsAuthModalOpen(true); }}
+          showToast={showToast}
+        />
+      )}
       {isAuthModalOpen && (
         <div onClick={() => setIsAuthModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
           <div className="anim" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '420px', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
@@ -1879,6 +1891,21 @@ const formatRole = (role?: string) => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {/* Подарункова картка цього закладу */}
+            <button
+              type="button"
+              className="icon-btn anim"
+              onClick={() => setIsGiftOpen(true)}
+              title="Подарувати картку"
+              aria-label="Подарувати картку"
+              style={{ width: '42px', height: '42px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.08)', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#1D1D1F', transition: 'all 0.15s ease' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="8" width="18" height="4" rx="1" /><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+                <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+              </svg>
+            </button>
+
             <button
               type="button"
               className="icon-btn anim"

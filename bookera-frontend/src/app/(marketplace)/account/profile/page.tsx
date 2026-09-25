@@ -37,6 +37,7 @@ import SmartImage from '@/components/ui/SmartImage';
 import { loadFavorites, setFavorite } from '@/lib/favorites';
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { categoryTitles } from '@/lib/categories';
+import WalletTab from '@/components/profile/WalletTab';
 
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
@@ -103,7 +104,7 @@ function ProfileContent() {
   // а не загальний профіль, де їх ще треба знайти.
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams?.get('tab');
-  const [activeTab, setActiveTab] = useState<'appointments' | 'favorites' | 'settings'>(
+  const [activeTab, setActiveTab] = useState<'appointments' | 'favorites' | 'wallet' | 'settings'>(
     (tabFromUrl as any) || 'appointments'
   );
   const [appointmentFilter, setAppointmentFilter] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
@@ -443,6 +444,8 @@ function ProfileContent() {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  const walletToken = useCallback(() => getAuthToken().catch(() => null), []);
 
   // --- Відгук ---
   const [reviewAppt, setReviewAppt] = useState<any | null>(null);
@@ -1216,6 +1219,12 @@ function ProfileContent() {
                   </span>
                 )}
               </button>
+              <button onClick={() => setActiveTab('wallet')} className={`nav-item anim ${activeTab === 'wallet' ? 'active' : ''}`}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <Gift className="w-4 h-4 text-slate-400" />
+                  <span>Бонуси та картки</span>
+                </div>
+              </button>
 
               <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '0.4rem 0' }}></div>
 
@@ -1550,6 +1559,10 @@ function ProfileContent() {
               {/* 3. ВКЛАДКА: СЕРТИФІКАТИ */}
 
               {/* 4. ВКЛАДКА: УЛЮБЛЕНІ ЗАКЛАДИ */}
+              {activeTab === 'wallet' && (
+                <WalletTab getToken={walletToken} />
+              )}
+
               {activeTab === 'favorites' && (
                 <div>
                   {favorites.length === 0 ? (

@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import businesses, services, appointments, platform
+from app.api import businesses, services, appointments, platform, wallet
 from app.services.reminders import reminder_loop
 from app.api.crm import (
     clients as crm_clients,
@@ -193,6 +193,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(businesses.router)
+app.include_router(wallet.router)
 app.include_router(platform.router)
 app.include_router(services.router)
 app.include_router(appointments.router)

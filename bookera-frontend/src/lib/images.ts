@@ -17,3 +17,36 @@ export function canOptimize(url: string | null | undefined): boolean {
     return false;
   }
 }
+
+/**
+ * Unsplash має власний CDN, що сам віддає фото потрібного розміру й
+ * формату. Пускати їх через локальний оптимізатор Next.js означало
+ * зайвий перехід і повторне кодування - фото вантажились повільніше,
+ * ніж напряму. Цей завантажувач просто підставляє потрібну ширину в
+ * адресу Unsplash.
+ */
+export function isUnsplash(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try { return new URL(url).hostname === 'images.unsplash.com'; } catch { return false; }
+}
+
+export function unsplashLoader({ src, width, quality }: { src: string; width: number; quality?: number }): string {
+  const u = new URL(src);
+  u.searchParams.set('w', String(width));
+  u.searchParams.set('q', String(quality ?? 75));
+  u.searchParams.set('auto', 'format');
+  if (!u.searchParams.has('fit')) u.searchParams.set('fit', 'crop');
+  return u.toString();
+}
+
+/**
+ * Як показувати зображення:
+ *   Unsplash  - напряму з їхнього CDN, потрібного розміру
+ *   Supabase  - через оптимізатор Next.js (Supabase без платного плану
+ *               розміри не змінює)
+ *   решта     - як є
+ */
+export function imageLoadProps(url: string | null | undefined) {
+  if (isUnsplash(url)) return { loader: unsplashLoader, unoptimized: false };
+  return { unoptimized: !canOptimize(url) };
+}

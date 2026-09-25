@@ -8,6 +8,7 @@ import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { getOpenStatus } from '@/lib/businessStatus';
 import { categoryTitles } from '@/lib/categories';
 import { cachedFavoriteIds, loadFavorites, setFavorite } from '@/lib/favorites';
+import { imageLoadProps } from '@/lib/images';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -255,6 +256,7 @@ function StyleTipsCarousel() {
               {/* Стилі каруселі ізольовані (styled-jsx) і на зображення від
                   next/image не діють - тому обтікання задано напряму. */}
               <Image
+                {...imageLoadProps(t.img)}
                 src={t.img}
                 alt={t.title}
                 fill
@@ -292,7 +294,7 @@ function StyleTipsCarousel() {
               onClick={() => go(i)}
               aria-label={t.title}
             >
-              <Image src={t.img} alt="" fill sizes="120px" draggable={false} style={{ objectFit: 'cover', pointerEvents: 'none' }} />
+              <Image {...imageLoadProps(t.img)} src={t.img} alt="" fill sizes="120px" draggable={false} style={{ objectFit: 'cover', pointerEvents: 'none' }} />
             </button>
           ))}
         </div>

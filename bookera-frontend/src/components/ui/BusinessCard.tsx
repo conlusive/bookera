@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { canOptimize } from '@/lib/images';
+import { imageLoadProps } from '@/lib/images';
 import { getOpenStatus } from '@/lib/businessStatus';
 import { categoryTitles } from '@/lib/categories';
 
@@ -97,7 +97,7 @@ export default function BusinessCard({
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 25vw"
           className="card-photo-img"
-          unoptimized={!canOptimize(bgImage)}
+          {...imageLoadProps(bgImage)}
         />
 
         <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>

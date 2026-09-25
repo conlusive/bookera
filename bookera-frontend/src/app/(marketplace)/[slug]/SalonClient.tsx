@@ -4,6 +4,11 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
+// Галерея - з пріоритетом: головне фото - перше, що бачить людина, і
+// «ліниве» завантаження змушувало чекати, поки намалюється сторінка.
+// imageLoadProps: Unsplash - напряму з їхнього CDN, чужі адреси (напр.
+// аватарка Google у майстра) - як є, інакше next/image падає з помилкою.
+import { imageLoadProps } from '@/lib/images';
 import { createClient } from '@/lib/supabase/client';
 import { Icons } from '@/components/shared';
 import { api, SlotStatusItem } from '@/lib/api';
@@ -1833,13 +1838,13 @@ const formatRole = (role?: string) => {
         {galleryPhotos.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', marginBottom: '2.5rem' }}>
             <div style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', position: 'relative' }}>
-              <Image src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 768px) 100vw, 66vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(0)} />
+              <Image {...imageLoadProps(galleryPhotos[0])} priority src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 768px) 100vw, 66vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(0)} />
             </div>
             {galleryPhotos.length > 1 && (
               <div style={{ display: 'grid', gridTemplateRows: galleryPhotos.length > 2 ? 'repeat(2, 1fr)' : '1fr', gap: '1rem', height: '100%' }}>
                 {galleryPhotos.slice(1, 3).map((photo, idx) => (
                   <div key={idx} style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 10px 20px rgba(0,0,0,0.05)', position: 'relative', height: '100%' }}>
-                    <Image src={photo} alt={`Фото ${idx + 1}`} fill sizes="(max-width: 768px) 100vw, 33vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(idx + 1)} />
+                    <Image {...imageLoadProps(photo)} priority src={photo} alt={`Фото ${idx + 1}`} fill sizes="(max-width: 768px) 100vw, 33vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(idx + 1)} />
                   </div>
                 ))}
               </div>
@@ -2380,7 +2385,7 @@ const formatRole = (role?: string) => {
                     >
                       <div className="team-avatar" style={{ width: '50px', height: '50px', borderRadius: '50%', marginBottom: '0.45rem', position: 'relative', flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {staff.photo ? (
-                          <Image src={staff.photo} alt={staff.name} fill sizes="50px" style={{ objectFit: 'cover' }} />
+                          <Image {...imageLoadProps(staff.photo)} src={staff.photo} alt={staff.name} fill sizes="50px" style={{ objectFit: 'cover' }} />
                         ) : (
                           <div style={{ display: 'flex', width: '22px', height: '22px', color: '#86868B' }}><Icons.User /></div>
                         )}
@@ -2990,7 +2995,7 @@ const formatRole = (role?: string) => {
                         >
                           <div style={{ width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#F5F5F7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem', position: 'relative', overflow: 'hidden' }}>
                             {staff.photo ? (
-                              <Image src={staff.photo} alt={staff.name} fill sizes="52px" style={{ objectFit: 'cover' }} />
+                              <Image {...imageLoadProps(staff.photo)} src={staff.photo} alt={staff.name} fill sizes="52px" style={{ objectFit: 'cover' }} />
                             ) : (
                               <div style={{ display: 'flex', width: '20px', height: '20px', color: '#86868B' }}><Icons.User /></div>
                             )}

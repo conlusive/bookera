@@ -1,7 +1,7 @@
 'use client';
 
 import Image, { type ImageProps } from 'next/image';
-import { canOptimize } from '@/lib/images';
+import { imageLoadProps } from '@/lib/images';
 
 /**
  * Зображення, що оптимізується скрізь, де це можливо.
@@ -24,10 +24,10 @@ type Props = Omit<ImageProps, 'src' | 'alt' | 'width' | 'height'> & {
 
 export default function SmartImage({ src, alt = '', width = 800, height = 600, fill, sizes, style, ...rest }: Props) {
   if (!src) return null;
-  const unoptimized = !canOptimize(src);
+  const load = imageLoadProps(src);
 
   if (fill) {
-    return <Image src={src} alt={alt} fill sizes={sizes ?? '100vw'} unoptimized={unoptimized} style={style} {...rest} />;
+    return <Image src={src} alt={alt} fill sizes={sizes ?? '100vw'} {...load} style={style} {...rest} />;
   }
   // width і height тут - лише підказка для вибору розміру файлу, але
   // next/image ставить їх ще й атрибутами. Там, де стилі задають тільки
@@ -42,7 +42,7 @@ export default function SmartImage({ src, alt = '', width = 800, height = 600, f
       width={width}
       height={height}
       sizes={sizes}
-      unoptimized={unoptimized}
+      {...load}
       style={{ width: 'auto', height: 'auto', ...style }}
       {...rest}
     />

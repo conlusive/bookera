@@ -774,11 +774,9 @@ const formatRole = (role?: string) => {
           return;
         }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, role, avatar_url')
-          .eq('id', data.user.id)
-          .single();
+        // Через бекенд: таблиці profiles у Supabase не існує.
+        const loginToken = data.session?.access_token;
+        const profile: any = loginToken ? await api.getMe(loginToken).catch(() => null) : null;
 
         const metadataName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name;
         let finalName = profile?.full_name || metadataName || 'Гість';

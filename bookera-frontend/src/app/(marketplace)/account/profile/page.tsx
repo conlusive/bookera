@@ -180,11 +180,10 @@ function ProfileContent() {
       setEmail(user.email || '');
 
       // 1. Профіль
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      // Через бекенд: таблиці profiles у Supabase не існує, дані
+      // користувачів живуть у users на сервері.
+      const meToken = await getAuthToken().catch(() => null);
+      const profileData: any = meToken ? await api.getMe(meToken).catch(() => null) : null;
 
       if (profileData) {
         setProfile(profileData);
@@ -358,12 +357,8 @@ function ProfileContent() {
 
       const publicUrl = urlData.publicUrl;
 
-      const { error: dbError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', user.id);
-
-      if (dbError) throw dbError;
+      const token = await getAuthToken();
+      await api.updateMe(token, { avatar_url: publicUrl });
 
       setAvatarUrl(publicUrl);
       localStorage.setItem('userAvatar', publicUrl);
@@ -389,12 +384,8 @@ function ProfileContent() {
     }
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ avatar_url: null })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      const token = await getAuthToken();
+      await api.updateMe(token, { avatar_url: null });
 
       setAvatarUrl(null);
       localStorage.removeItem('userAvatar');
@@ -639,18 +630,18 @@ function ProfileContent() {
     const cleanPhone = phone.replace(/\s+/g, '');
     const phoneToSave = cleanPhone.length > 4 ? cleanPhone : null;
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name: fullName.trim(),
-        phone: phoneToSave
-      })
-      .eq('id', user.id);
+    let error: string | null = null;
+    try {
+      const token = await getAuthToken();
+      await api.updateMe(token, { full_name: fullName.trim(), phone: phoneToSave });
+    } catch (err: any) {
+      error = err?.message || 'Не вдалося зберегти';
+    }
 
     setIsSaving(false);
 
     if (error) {
-      showToast(`Помилка: ${error.message}`, 'error');
+      showToast(`Помилка: ${error}`, 'error');
     } else {
       showToast('Дані успішно збережено', 'success');
       localStorage.setItem('userName', fullName.trim());

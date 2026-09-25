@@ -187,17 +187,15 @@ export default function BusinessLandingPage() {
           return;
         }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, role')
-          .eq('id', data.user.id)
-          .single();
+        // Через бекенд: таблиці profiles у Supabase не існує.
+        const loginToken = data.session?.access_token;
+        const profile: any = loginToken ? await api.getMe(loginToken).catch(() => null) : null;
 
         const metadataName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name;
-        let finalName = profile?.full_name || metadataName || 'Василь Циган';
+        let finalName = profile?.full_name || metadataName || 'Користувач';
 
         if (finalName.includes('@')) {
-          finalName = 'Василь Циган';
+          finalName = 'Користувач';
         }
 
         const finalRole = profile?.role || 'client';

@@ -314,14 +314,12 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         return;
       }
 
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('full_name, phone')
-        .ilike('email', targetEmail)
-        .maybeSingle();
-
-      const staffName = existingProfile?.full_name?.trim() || targetEmail.split('@')[0];
-      const staffPhone = existingProfile?.phone?.trim() || null;
+      // Раніше тут шукали профіль за поштою напряму в Supabase, у таблиці
+      // profiles, якої не існує: пошук завжди повертав порожньо, і імʼя
+      // все одно бралось із пошти. Мертвий запит прибрано. Справжні імʼя
+      // й телефон майстер вкаже сам, коли прийме запрошення.
+      const staffName = targetEmail.split('@')[0];
+      const staffPhone = null;
 
       const newStaffData = {
         business_id: business.id,
@@ -329,7 +327,9 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         email: targetEmail,
         phone: staffPhone,
         role: inviteForm.role || 'master',
-        status: existingProfile ? 'active' : 'pending',
+        // «Очікує», доки майстер не прийме запрошення. Раніше залежало від
+        // мертвого пошуку профілю й фактично завжди було саме таким.
+        status: 'pending',
         title: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
         specialization: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
         provides_services: inviteForm.role === 'master',

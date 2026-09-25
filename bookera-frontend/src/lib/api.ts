@@ -320,6 +320,16 @@ export const api = {
     return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`, { revalidate });
   },
 
+  /** Власні дані: імʼя, телефон, фото, роль. Пошта - лише через Supabase Auth. */
+  async getMe(token: string): Promise<{ email: string | null; full_name: string | null; phone: string | null; avatar_url: string | null; role: string | null }> {
+    return authFetch('/account/me', token);
+  },
+
+  /** Змінюються лише передані поля; avatar_url: null прибирає фото. */
+  async updateMe(token: string, payload: { full_name?: string; phone?: string | null; avatar_url?: string | null }): Promise<any> {
+    return authFetch('/account/me', token, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
   /** Гаманець: баланс бонусів BookEra, історія й подарункові картки. */
   async getWallet(token: string): Promise<{
     bonus_balance: number;

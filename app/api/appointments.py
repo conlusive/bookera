@@ -1053,44 +1053,61 @@ async def list_my_appointments(
         )
         reviewed = {row[0] for row in rv.all() if row[0] is not None}
 
+    # Усі повʼязані дані - ЧОТИРМА запитами на весь список.
+    #
+    # Раніше - 3-4 запити на КОЖЕН візит (заклад, послуга, майстер,
+    # додаткові послуги), послідовно. До 200 візитів - до 800 запитів
+    # один за одним при кожному відкритті профілю: чим довша історія,
+    # тим повільніше. Тепер кількість запитів не залежить від історії.
+    biz_ids = {a.business_id for a in appointments if a.business_id}
+    srv_ids = {a.service_id for a in appointments if a.service_id}
+    for a in appointments:
+        srv_ids.update(a.addon_service_ids or [])
+    master_ids = {str(a.master_id) for a in appointments if a.master_id}
+
+    businesses = {}
+    if biz_ids:
+        rows = await db.execute(select(Business).where(Business.id.in_(biz_ids)))
+        businesses = {b.id: b for b in rows.scalars().all()}
+    services_by_id = {}
+    if srv_ids:
+        rows = await db.execute(select(Service).where(Service.id.in_(srv_ids)))
+        services_by_id = {s.id: s for s in rows.scalars().all()}
+    masters = {}
+    if master_ids:
+        rows = await db.execute(select(User).where(User.id.in_(master_ids)))
+        masters = {str(u.id): u for u in rows.scalars().all()}
+
     for appointment in appointments:
         response = MyAppointmentResponse.model_validate(appointment, from_attributes=True)
         response.manage_token = appointment.manage_token
         response.has_review = appointment.id in reviewed
 
-        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
-        business = biz_res.scalars().first()
+        business = businesses.get(appointment.business_id)
         if business:
             response.business_name = business.name
             # Дані для картки візиту: людина має розуміти, КУДИ їй їхати
-            # і як зв'язатись, не відкриваючи сторінку закладу.
+            # і як звʼязатись, не відкриваючи сторінку закладу.
             response.business_slug = business.slug
-            response.business_address = ", ".join(
-                x for x in [business.city, business.address] if x
-            )
+            response.business_address = ", ".join(x for x in [business.city, business.address] if x)
             response.business_phone = business.phone if business.show_phone_publicly is not False else None
             response.business_photo = business.cover_photo or business.logo
 
-        if appointment.service_id:
-            srv_res = await db.execute(select(Service).where(Service.id == appointment.service_id))
-            service = srv_res.scalars().first()
-            if service:
-                response.service_name = service.name
+        service = services_by_id.get(appointment.service_id) if appointment.service_id else None
+        if service:
+            response.service_name = service.name
 
         # Майстер: перше питання після «коли» - до кого саме.
-        if appointment.master_id:
-            m_res = await db.execute(select(User).where(User.id == str(appointment.master_id)))
-            master = m_res.scalars().first()
-            if master:
-                response.master_name = master.full_name
+        master = masters.get(str(appointment.master_id)) if appointment.master_id else None
+        if master:
+            response.master_name = master.full_name
 
-        # Додаткові послуги: вони вже в ціні й тривалості, тому людина
+        # Додаткові послуги: вони вже в ціні й тривалості, тож людина
         # має бачити, за що заплатила.
         if appointment.addon_service_ids:
-            addons_res = await db.execute(
-                select(Service).where(Service.id.in_(appointment.addon_service_ids))
-            )
-            response.addon_names = [a.name for a in addons_res.scalars().all()]
+            response.addon_names = [
+                services_by_id[i].name for i in appointment.addon_service_ids if i in services_by_id
+            ]
 
         out.append(response)
 

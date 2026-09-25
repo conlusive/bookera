@@ -57,80 +57,123 @@ function useInView<T extends HTMLElement>(threshold = 0.35) {
 
 function BookingDemo({ play }: { play: boolean }) {
   /**
-   * Мініатюра запису - жива.
+   * Мініатюра запису - міні-ролик.
    *
-   * Сама відтворює сценарій (обрано 14:00 → підтверджено), але людина
-   * може перехопити: за курсором ковзає підсвітка від години до години,
-   * а клік справді обирає годину - і підтвердження показує саме її.
-   * Так мініатюра не лише розповідає, як це працює, а дає спробувати.
+   * Курсор сам зʼявляється, веде до години, вагається на сусідній,
+   * натискає потрібну - і запис підтверджується. Потім іде, і сцена
+   * повторюється з іншою годиною. Людина нічого не натискає: вона
+   * дивиться, як легко записатись, - як у промо-роликах Apple.
    */
   const slots = ['10:00', '11:30', '14:00', '15:30', '17:00', '18:30'];
-  const [step, setStep] = useState(0);
+  // Кожне коло - інша година, і спершу курсор «вагається» на сусідній:
+  // рух виглядає людським, а не прямою лінією робота.
+  const SCENES = [{ decoy: 1, target: 2 }, { decoy: 3, target: 4 }, { decoy: 0, target: 1 }];
+
   const [picked, setPicked] = useState<number | null>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const [touched, setTouched] = useState(false);
-  // Поки години зʼявляються по черзі, у них затримки переходів. Після
-  // появи затримки прибираємо - інакше підсвітка при наведенні
-  // відставала б на ті самі 60-300 мс.
-  const [entered, setEntered] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [cursor, setCursor] = useState<{ x: number; y: number; visible: boolean; pressed: boolean }>({ x: 0, y: 0, visible: false, pressed: false });
+  const [ripple, setRipple] = useState<{ x: number; y: number; key: number } | null>(null);
   const [glide, setGlide] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  // Для таймерів автосценарію: чи людина вже обрала сама.
-  const touchedRef = useRef(false);
-  useEffect(() => { touchedRef.current = touched; }, [touched]);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const refs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Центр години - куди веде курсор (трохи нижче й правіше центру:
+  // так кінчик стрілки лягає на цифри, а не закриває їх).
+  const pointAt = (i: number) => {
+    const el = refs.current[i];
+    if (!el) return { x: 0, y: 0 };
+    return { x: el.offsetLeft + el.offsetWidth * 0.55, y: el.offsetTop + el.offsetHeight * 0.55 };
+  };
+  // Звідки курсор приходить і куди йде - з-за правого нижнього кута.
+  const offstage = () => {
+    const g = gridRef.current;
+    return { x: (g?.offsetWidth ?? 300) + 30, y: (g?.offsetHeight ?? 100) + 70 };
+  };
+
+  useEffect(() => {
+    const el = hover !== null ? refs.current[hover] : null;
+    setGlide(el ? { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight } : null);
+  }, [hover]);
 
   useEffect(() => {
     if (!play) return;
-    const t0 = setTimeout(() => setEntered(true), 700);
-    // Автосценарій - лише поки людина нічого не чіпала.
-    const t1 = setTimeout(() => { if (!touchedRef.current) { setPicked(2); setStep(1); } }, 900);
-    const t2 = setTimeout(() => { if (!touchedRef.current) setStep(2); }, 2100);
-    return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); };
+
+    // Без анімацій - одразу кінцевий стан, без курсора.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setPicked(2);
+      setConfirmed(true);
+      return;
+    }
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const at = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
+    let alive = true;
+
+    const runScene = (n: number) => {
+      if (!alive) return;
+      const { decoy, target } = SCENES[n % SCENES.length];
+      const start = offstage();
+
+      setCursor({ ...start, visible: false, pressed: false });
+      at(80, () => setCursor(c => ({ ...c, visible: true })));
+      at(350, () => { setCursor(c => ({ ...c, ...pointAt(decoy) })); setHover(decoy); });
+      at(1250, () => { setCursor(c => ({ ...c, ...pointAt(target) })); setHover(target); });
+      // Натискання: курсор «втискається», від точки розходиться коло.
+      at(2050, () => {
+        const pt = pointAt(target);
+        setCursor(c => ({ ...c, pressed: true }));
+        setRipple({ ...pt, key: Date.now() });
+      });
+      at(2200, () => {
+        setCursor(c => ({ ...c, pressed: false }));
+        setPicked(target);
+        setConfirmed(true);
+      });
+      at(3700, () => { setHover(null); setCursor(c => ({ ...c, ...offstage() })); });
+      at(4300, () => setCursor(c => ({ ...c, visible: false })));
+      // Пауза на підтвердженні - і нове коло.
+      at(6400, () => { setPicked(null); setConfirmed(false); setRipple(null); });
+      at(7000, () => runScene(n + 1));
+    };
+
+    at(500, () => runScene(0));
+    return () => { alive = false; timers.forEach(clearTimeout); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [play]);
-
-  // Підсвітка їде до години під курсором.
-  useEffect(() => {
-    const el = hover !== null ? refs.current[hover] : null;
-    if (!el) { setGlide(null); return; }
-    setGlide({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });
-  }, [hover]);
-
-  const choose = (i: number) => {
-    setTouched(true);
-    setPicked(i);
-    setStep(2);
-  };
 
   return (
     <div className="demo-card">
       <div className="demo-label">Сьогодні, 24 вересня</div>
 
-      <div className="slots" onMouseLeave={() => setHover(null)}>
+      <div className="slots" ref={gridRef} aria-hidden>
         <span
           className={`slot-glide ${glide ? 'on' : ''}`}
           style={glide ? { transform: `translate(${glide.x}px, ${glide.y}px)`, width: glide.w, height: glide.h } : undefined}
-          aria-hidden
         />
         {slots.map((time, i) => (
-          <button
+          <div
             key={time}
-            type="button"
             ref={el => { refs.current[i] = el; }}
             className={`slot ${picked === i ? 'picked' : ''} ${hover === i ? 'hovered' : ''}`}
-            style={{ transitionDelay: play && !entered ? `${i * 60}ms` : '0ms', opacity: play ? 1 : 0 }}
-            onMouseEnter={() => setHover(i)}
-            onFocus={() => setHover(i)}
-            onBlur={() => setHover(null)}
-            onClick={() => choose(i)}
-            aria-pressed={picked === i}
+            style={{ transitionDelay: play && picked === null && hover === null ? `${i * 60}ms` : '0ms', opacity: play ? 1 : 0 }}
           >
             {time}
-          </button>
+          </div>
         ))}
+
+        {ripple && <span key={ripple.key} className="demo-ripple" style={{ left: ripple.x, top: ripple.y }} />}
+
+        <svg
+          className={`demo-cursor ${cursor.visible ? 'on' : ''} ${cursor.pressed ? 'pressed' : ''}`}
+          style={{ transform: `translate(${cursor.x}px, ${cursor.y}px) scale(${cursor.pressed ? 0.86 : 1})` }}
+          width="22" height="26" viewBox="0 0 24 28"
+        >
+          <path d="M3 2 L3 22 L8.2 17.2 L11.6 25 L15 23.5 L11.7 15.9 L18.6 15.9 Z" fill="#fff" stroke="#1D1D1F" strokeWidth="1.4" strokeLinejoin="round" />
+        </svg>
       </div>
 
-      {/* key - при новому виборі підтвердження зʼявляється знову */}
-      <div key={picked ?? -1} className={`confirm ${step === 2 && picked !== null ? 'shown' : ''}`}>
+      <div key={picked ?? -1} className={`confirm ${confirmed && picked !== null ? 'shown' : ''}`}>
         <span className="check">✓</span>
         <div>
           <div className="confirm-title">Запис підтверджено</div>
@@ -408,6 +451,30 @@ export default function HowItWorks() {
           transition: transform .38s cubic-bezier(.16,1,.3,1), width .38s cubic-bezier(.16,1,.3,1), height .38s cubic-bezier(.16,1,.3,1), opacity .2s ease;
         }
         .how .slot-glide.on { opacity: 1; }
+
+        /* Курсор ролика. Рух - плавний, з розгоном і гальмуванням, як у
+           людської руки; пряма рівномірна лінія виглядала б механічно. */
+        .how .demo-cursor {
+          position: absolute; left: 0; top: 0; z-index: 3;
+          pointer-events: none; opacity: 0;
+          filter: drop-shadow(0 2px 3px rgba(0,0,0,.22));
+          transform-origin: 3px 2px;
+          transition: transform .75s cubic-bezier(.45,0,.2,1), opacity .3s ease;
+        }
+        .how .demo-cursor.on { opacity: 1; }
+        /* Натискання - швидше за переміщення, інакше «клік» розмазується. */
+        .how .demo-cursor.pressed { transition: transform .12s ease, opacity .3s ease; }
+
+        /* Коло від точки натискання - підтверджує, що клік відбувся. */
+        .how .demo-ripple {
+          position: absolute; z-index: 2; width: 44px; height: 44px; margin: -22px 0 0 -22px;
+          border-radius: 50%; border: 2px solid #6F9273; pointer-events: none;
+          animation: demoRipple .6s ease-out forwards;
+        }
+        @keyframes demoRipple {
+          from { transform: scale(.3); opacity: .9; }
+          to { transform: scale(1.4); opacity: 0; }
+        }
         .how .slot {
           position: relative; z-index: 1;
           height: 44px;
@@ -422,14 +489,11 @@ export default function HowItWorks() {
           font-weight: 500;
           color: #1D1D1F;
           font-variant-numeric: tabular-nums;
-          cursor: pointer;
+          cursor: default;
           transition: opacity 0.5s ease, background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, transform 0.3s cubic-bezier(.16,1,.3,1);
         }
         /* Під курсором - ледь піднімається, рамка ховається в підсвітку. */
         .how .slot.hovered:not(.picked) { border-color: transparent; color: #2E3A30; transform: translateY(-1px); }
-        /* Натискання - коротке «втискання», як у фізичної кнопки. */
-        .how .slot:active { transform: scale(0.96); }
-        .how .slot:focus-visible { outline: 2px solid #6F9273; outline-offset: 2px; }
         .how .slot.picked {
           background: #1D1D1F;
           border-color: #1D1D1F;
@@ -628,7 +692,7 @@ export default function HowItWorks() {
 
         @media (prefers-reduced-motion: reduce) {
           .how .text, .how .demo-card, .how .device, .how .notif,
-          .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .bar-fill {
+          .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .demo-cursor, .how .bar-fill {
             transition: none !important;
           }
         }

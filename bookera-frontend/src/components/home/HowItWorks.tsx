@@ -56,39 +56,85 @@ function useInView<T extends HTMLElement>(threshold = 0.35) {
 /* ------------------------------------------------------------------ */
 
 function BookingDemo({ play }: { play: boolean }) {
-  // Кроки сценарію: 0 - слоти, 1 - обрано, 2 - підтверджено.
+  /**
+   * Мініатюра запису - жива.
+   *
+   * Сама відтворює сценарій (обрано 14:00 → підтверджено), але людина
+   * може перехопити: за курсором ковзає підсвітка від години до години,
+   * а клік справді обирає годину - і підтвердження показує саме її.
+   * Так мініатюра не лише розповідає, як це працює, а дає спробувати.
+   */
+  const slots = ['10:00', '11:30', '14:00', '15:30', '17:00', '18:30'];
   const [step, setStep] = useState(0);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const [touched, setTouched] = useState(false);
+  // Поки години зʼявляються по черзі, у них затримки переходів. Після
+  // появи затримки прибираємо - інакше підсвітка при наведенні
+  // відставала б на ті самі 60-300 мс.
+  const [entered, setEntered] = useState(false);
+  const [glide, setGlide] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Для таймерів автосценарію: чи людина вже обрала сама.
+  const touchedRef = useRef(false);
+  useEffect(() => { touchedRef.current = touched; }, [touched]);
 
   useEffect(() => {
     if (!play) return;
-    const t1 = setTimeout(() => setStep(1), 900);
-    const t2 = setTimeout(() => setStep(2), 2100);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const t0 = setTimeout(() => setEntered(true), 700);
+    // Автосценарій - лише поки людина нічого не чіпала.
+    const t1 = setTimeout(() => { if (!touchedRef.current) { setPicked(2); setStep(1); } }, 900);
+    const t2 = setTimeout(() => { if (!touchedRef.current) setStep(2); }, 2100);
+    return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); };
   }, [play]);
 
-  const slots = ['10:00', '11:30', '14:00', '15:30', '17:00', '18:30'];
+  // Підсвітка їде до години під курсором.
+  useEffect(() => {
+    const el = hover !== null ? refs.current[hover] : null;
+    if (!el) { setGlide(null); return; }
+    setGlide({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });
+  }, [hover]);
+
+  const choose = (i: number) => {
+    setTouched(true);
+    setPicked(i);
+    setStep(2);
+  };
 
   return (
     <div className="demo-card">
       <div className="demo-label">Сьогодні, 24 вересня</div>
 
-      <div className="slots">
+      <div className="slots" onMouseLeave={() => setHover(null)}>
+        <span
+          className={`slot-glide ${glide ? 'on' : ''}`}
+          style={glide ? { transform: `translate(${glide.x}px, ${glide.y}px)`, width: glide.w, height: glide.h } : undefined}
+          aria-hidden
+        />
         {slots.map((time, i) => (
-          <div
+          <button
             key={time}
-            className={`slot ${step >= 1 && i === 2 ? 'picked' : ''}`}
-            style={{ transitionDelay: play ? `${i * 60}ms` : '0ms', opacity: play ? 1 : 0 }}
+            type="button"
+            ref={el => { refs.current[i] = el; }}
+            className={`slot ${picked === i ? 'picked' : ''} ${hover === i ? 'hovered' : ''}`}
+            style={{ transitionDelay: play && !entered ? `${i * 60}ms` : '0ms', opacity: play ? 1 : 0 }}
+            onMouseEnter={() => setHover(i)}
+            onFocus={() => setHover(i)}
+            onBlur={() => setHover(null)}
+            onClick={() => choose(i)}
+            aria-pressed={picked === i}
           >
             {time}
-          </div>
+          </button>
         ))}
       </div>
 
-      <div className={`confirm ${step === 2 ? 'shown' : ''}`}>
+      {/* key - при новому виборі підтвердження зʼявляється знову */}
+      <div key={picked ?? -1} className={`confirm ${step === 2 && picked !== null ? 'shown' : ''}`}>
         <span className="check">✓</span>
         <div>
           <div className="confirm-title">Запис підтверджено</div>
-          <div className="confirm-sub">Стрижка · 14:00</div>
+          <div className="confirm-sub">Стрижка · {picked !== null ? slots[picked] : '14:00'}</div>
         </div>
       </div>
     </div>
@@ -349,20 +395,41 @@ export default function HowItWorks() {
         .how .demo-label { font-size: 0.8125rem; color: #86868B; margin-bottom: 1rem; }
 
         /* --- Слоти --- */
-        .how .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+        .how .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; position: relative; }
+
+        /* Підсвітка, що ковзає за курсором між годинами. Одна на всю
+           сітку: вона не спалахує на кожній годині окремо, а переїжджає -
+           так рух читається як «я веду курсором», а не як мерехтіння. */
+        .how .slot-glide {
+          position: absolute; left: 0; top: 0; z-index: 0;
+          border-radius: 11px; background: #F4FAF5;
+          box-shadow: inset 0 0 0 1px #C2D8C4;
+          opacity: 0; pointer-events: none;
+          transition: transform .38s cubic-bezier(.16,1,.3,1), width .38s cubic-bezier(.16,1,.3,1), height .38s cubic-bezier(.16,1,.3,1), opacity .2s ease;
+        }
+        .how .slot-glide.on { opacity: 1; }
         .how .slot {
+          position: relative; z-index: 1;
           height: 44px;
           border-radius: 11px;
           border: 1px solid #E8E8ED;
+          background: transparent;
           display: flex;
           align-items: center;
           justify-content: center;
+          font-family: inherit;
           font-size: 0.9375rem;
           font-weight: 500;
           color: #1D1D1F;
           font-variant-numeric: tabular-nums;
-          transition: opacity 0.5s ease, background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, transform 0.35s ease;
+          cursor: pointer;
+          transition: opacity 0.5s ease, background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, transform 0.3s cubic-bezier(.16,1,.3,1);
         }
+        /* Під курсором - ледь піднімається, рамка ховається в підсвітку. */
+        .how .slot.hovered:not(.picked) { border-color: transparent; color: #2E3A30; transform: translateY(-1px); }
+        /* Натискання - коротке «втискання», як у фізичної кнопки. */
+        .how .slot:active { transform: scale(0.96); }
+        .how .slot:focus-visible { outline: 2px solid #6F9273; outline-offset: 2px; }
         .how .slot.picked {
           background: #1D1D1F;
           border-color: #1D1D1F;
@@ -561,7 +628,7 @@ export default function HowItWorks() {
 
         @media (prefers-reduced-motion: reduce) {
           .how .text, .how .demo-card, .how .device, .how .notif,
-          .how .confirm, .how .quote, .how .slot, .how .bar-fill {
+          .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .bar-fill {
             transition: none !important;
           }
         }

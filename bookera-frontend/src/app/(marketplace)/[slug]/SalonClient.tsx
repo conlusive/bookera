@@ -159,7 +159,6 @@ export default function SalonClient({
   const [services] = useState<any[]>(initialServices || []);
   const [team] = useState<any[]>(initialTeam || []);
   const [reviews, setReviews] = useState<any[]>(initialReviews || []);
-  const [, setBookedAppointments] = useState<any[]>([]);
 
   // --- Стейт юзера ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -579,28 +578,14 @@ export default function SalonClient({
     }
   };
 
-  const fetchBookings = useCallback(async (bizId: number) => {
-    const { data } = await supabase
-      .from('appointments')
-      .select('*')
-      .eq('business_id', bizId)
-      .neq('status', 'cancelled');
-    if (data) setBookedAppointments(data);
-  }, [supabase]);
-
-  useEffect(() => {
-    if (!salon?.id) return;
-    const channel = supabase
-      .channel(`room_${salon.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-        void fetchBookings(salon.id);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [salon?.id, fetchBookings, supabase]);
+  // Тут було читання ВСІХ записів закладу напряму з Supabase - з усіма
+  // полями, включно з іменами, телефонами й поштами клієнтів, - плюс
+  // підписка на зміни всієї таблиці записів платформи без фільтра.
+  // Результат ніде не використовувався (стан оголошено як
+  // `[, setBookedAppointments]`): слоти давно приходять із сервера.
+  // Прибрано - і як витік особистих даних, і як зайве навантаження:
+  // кожен запис у будь-якому салоні змушував кожну відкриту сторінку
+  // салону перезавантажувати дані.
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -908,10 +893,8 @@ const formatRole = (role?: string) => {
 
       setPendingBookingId(lockRes.booking_id);
       setCurrentStep(4);
-      void fetchBookings(salon.id);
     } catch (err: any) {
       showToast(err.message || "Цей час щойно зайняли. Будь ласка, оберіть інший слот.", 'error');
-      void fetchBookings(salon.id);
     }
   };
 
@@ -958,7 +941,6 @@ const formatRole = (role?: string) => {
       });
 
       setBookingSuccess(true);
-      void fetchBookings(salon.id);
       showToast('Запис успішно підтверджено!', 'success');
       setTimeout(() => void closeModal(), 2200);
     } catch (e: any) {

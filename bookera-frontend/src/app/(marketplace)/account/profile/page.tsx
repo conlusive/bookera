@@ -619,6 +619,18 @@ function ProfileContent() {
     setPhone(`+380 ${digitsOnly}`);
   };
 
+  /**
+   * Чи є що зберігати.
+   *
+   * Фото зберігається одразу - людина обрала файл і чекає результату.
+   * Імʼя й телефон - кнопкою: зберігати на кожну літеру означало б
+   * десятки запитів на сервер. Кнопка активна лише коли щось справді
+   * змінилось, тож натиснути її «про всяк випадок» не вийде.
+   */
+  const savedPhone = (profile?.phone || '').replace(/\s+/g, '');
+  const currentPhone = (() => { const p = phone.replace(/\s+/g, ''); return p.length > 4 ? p : ''; })();
+  const hasProfileChanges = fullName.trim() !== (profile?.full_name || '') || currentPhone !== savedPhone;
+
   // Збереження особистих даних
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -644,6 +656,7 @@ function ProfileContent() {
       showToast(`Помилка: ${error}`, 'error');
     } else {
       showToast('Дані успішно збережено', 'success');
+      setProfile((prev: any) => ({ ...(prev || {}), full_name: fullName.trim(), phone: phoneToSave }));
       localStorage.setItem('userName', fullName.trim());
       window.dispatchEvent(new Event('storage'));
     }
@@ -655,12 +668,17 @@ function ProfileContent() {
     setIsSubmittingAction(true);
 
     try {
-      await supabase
-        .from('appointments')
-        .update({ status: 'cancelled' })
-        .eq('id', cancelModalAppt.id);
+      // Через сервер, за токеном керування записом.
+      //
+      // Раніше - напряму в Supabase: правила доступу блокували запис, а
+      // помилку ніхто не перевіряв. Інтерфейс показував «скасовано», а
+      // на сервері нічого не змінювалось - після перезавантаження запис
+      // повертався, і майстер чекав на клієнта, який «скасував».
+      if (!cancelModalAppt.manage_token) throw new Error('no token');
+      const updated: any = await api.cancelAppointmentByClient(Number(cancelModalAppt.id), cancelModalAppt.manage_token);
 
-      setAppointments(prev => prev.map(a => a.id === cancelModalAppt.id ? { ...a, status: 'cancelled' } : a));
+      // Показуємо те, що повернув СЕРВЕР, а не те, що хотілося б.
+      setAppointments(prev => prev.map(a => a.id === cancelModalAppt.id ? { ...a, status: updated?.status ?? a.status } : a));
       setCancelModalAppt(null);
       showToast('Візит скасовано', 'info');
     } catch {
@@ -691,35 +709,27 @@ function ProfileContent() {
       const pad = (n: number) => String(n).padStart(2, '0');
 
       const startStr = `${newRescheduleDate}T${newRescheduleTime}:00`;
-      const endStr = `${endDt.getFullYear()}-${pad(endDt.getMonth() + 1)}-${pad(endDt.getDate())}T${pad(endDt.getHours())}:${pad(endDt.getMinutes())}:00`;
 
-      // 1. Оновлюємо безпосередньо в базі даних через API
-      const token = await getAuthToken();
-      let updatedApp: any = null;
+      // Через сервер, за токеном керування записом.
+      //
+      // Раніше - через маршрут кабінету закладу, куди клієнт доступу не
+      // має, а при відмові «переносили» напряму в Supabase, в обхід
+      // сервера. Правила доступу це блокували, але інтерфейс уже показував
+      // новий час - запис лишався на старому.
+      //
+      // Сервер перевіряє новий час тими самими правилами, що й нове
+      // бронювання: робочі години, перерви, інші записи того ж майстра.
+      if (!rescheduleModalAppt.manage_token) throw new Error('Не вдалося перенести цей запис');
+      const updatedApp: any = await api.rescheduleByClient(
+        Number(rescheduleModalAppt.id), rescheduleModalAppt.manage_token, startStr,
+      );
 
-      try {
-        updatedApp = await api.rescheduleAppointment(token, Number(rescheduleModalAppt.id), startStr);
-      } catch (apiErr) {
-        console.warn('api.rescheduleAppointment помилка, резервне оновлення через Supabase:', apiErr);
-        const { error: supaErr } = await supabase
-          .from('appointments')
-          .update({
-            start_time: startStr,
-            end_time: endStr,
-            status: 'confirmed'
-          })
-          .eq('id', Number(rescheduleModalAppt.id));
-
-        if (supaErr) throw supaErr;
-      }
-
-      // 2. Оновлюємо стейт інтерфейсу
+      // Показуємо час, який зберіг СЕРВЕР.
       setAppointments(prev => prev.map(a => a.id === rescheduleModalAppt.id ? {
         ...a,
-        ...(updatedApp || {}),
-        start_time: startStr,
-        end_time: endStr,
-        status: 'confirmed'
+        start_time: updatedApp.start_time,
+        end_time: updatedApp.end_time,
+        status: updatedApp.status,
       } : a));
 
       setRescheduleModalAppt(null);
@@ -1413,7 +1423,8 @@ function ProfileContent() {
                                         letterSpacing: '-0.01em', lineHeight: 1.4,
                                         textDecoration: isCancelled ? 'line-through' : 'none',
                                       }}>
-                                        {allServices || 'Візит'}
+                                        {/* Без послуги в записі - назва закладу, а не безлике «Візит». */}
+                                        {allServices || app.business_name || 'Візит'}
                                       </div>
 
                                       <div style={{
@@ -1689,7 +1700,7 @@ function ProfileContent() {
                             </button>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>JPG, PNG або WEBP до 3 МБ</div>
+                        <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>JPG, PNG або WEBP до 3 МБ · зберігається одразу</div>
                       </div>
                     </div>
 
@@ -1726,7 +1737,7 @@ function ProfileContent() {
                       <div>
                         <button
                           type="submit"
-                          disabled={isSaving}
+                          disabled={isSaving || !hasProfileChanges}
                           className="btn-dark anim"
                           style={{
                             padding: '0.65rem 1.35rem',
@@ -1736,11 +1747,13 @@ function ProfileContent() {
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '6px'
+                            gap: '6px',
+                            opacity: isSaving || !hasProfileChanges ? 0.4 : 1,
+                            cursor: isSaving || !hasProfileChanges ? 'default' : 'pointer',
                           }}
                         >
                           {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                          {isSaving ? 'Збереження...' : 'Зберегти зміни'}
+                          {isSaving ? 'Збереження...' : hasProfileChanges ? 'Зберегти зміни' : 'Збережено'}
                         </button>
                       </div>
                     </form>

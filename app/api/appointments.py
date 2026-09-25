@@ -1293,3 +1293,62 @@ async def create_review_by_client(
 
     await db.commit()
     return {"ok": True, "rating": biz.rating if biz else None, "reviews_count": biz.reviews_count if biz else None}
+
+
+class ClientRescheduleRequest(BaseModel):
+    token: str
+    start_time: datetime
+
+
+@router.post("/{appointment_id}/reschedule", response_model=AppointmentResponse)
+async def reschedule_appointment_by_client(
+    appointment_id: int,
+    payload: ClientRescheduleRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Клієнт переносить власний запис - за токеном керування записом.
+
+    Раніше профіль звертався до маршруту кабінету закладу, куди клієнт
+    доступу не має, отримував відмову й «переносив» напряму в базі, в
+    обхід сервера - правила доступу це блокували, але інтерфейс уже
+    показував успіх. Запис лишався на старому часі, а людина думала,
+    що перенесла.
+
+    Новий час перевіряється тими самими правилами, що й нове
+    бронювання: робочі години, перерви, інші записи - у ТОГО САМОГО
+    майстра й на ту саму тривалість.
+    """
+    res = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+    appointment = res.scalars().first()
+    if not appointment or not appointment.manage_token or appointment.manage_token != payload.token:
+        raise HTTPException(status_code=404, detail="Запис не знайдено")
+
+    if appointment.status not in ("confirmed", "pending_approval"):
+        raise HTTPException(status_code=409, detail="Цей запис уже не можна перенести")
+
+    new_start = payload.start_time.replace(tzinfo=None, second=0, microsecond=0)
+    if new_start <= local_now().replace(tzinfo=None):
+        raise HTTPException(status_code=400, detail="Оберіть час у майбутньому")
+
+    duration = (appointment.end_time - appointment.start_time) if appointment.end_time else timedelta(hours=1)
+    minutes = max(5, int(duration.total_seconds() // 60))
+
+    slots = await get_available_slots(
+        business_id=appointment.business_id,
+        service_id=appointment.service_id,
+        target_date=new_start.date(),
+        master_id=str(appointment.master_id) if appointment.master_id else "0",
+        step_minutes=None,
+        duration_minutes=minutes,
+        db=db,
+    )
+    wanted = new_start.strftime("%H:%M")
+    if not any(str(s.time)[:5] == wanted and s.status == "available" for s in slots.slots):
+        raise HTTPException(status_code=409, detail="Цей час уже зайнятий - оберіть інший")
+
+    appointment.start_time = new_start
+    appointment.end_time = new_start + timedelta(minutes=minutes)
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment

@@ -434,6 +434,14 @@ export const api = {
     return publicFetch(`/appointments/${appointmentId}/manage?token=${encodeURIComponent(token)}`);
   },
 
+  /** Клієнт переносить своє бронювання за токеном керування записом. */
+  async rescheduleByClient(appointmentId: number, token: string, startTime: string): Promise<Appointment> {
+    return publicFetch(`/appointments/${appointmentId}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify({ token, start_time: startTime }),
+    });
+  },
+
   /** Клієнт скасовує своє бронювання за тим самим токеном. */
   async cancelAppointmentByClient(appointmentId: number, token: string): Promise<Appointment> {
     return publicFetch(`/appointments/${appointmentId}/cancel`, {

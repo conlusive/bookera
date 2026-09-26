@@ -451,6 +451,25 @@ async def delete_business(
     await db.commit()
 
 
+@router.get("/geo/suggest")
+async def geo_suggest(
+    q: str,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Підказки адрес для мапи в налаштуваннях закладу.
+
+    Через бекенд, а не напряму з браузера: повтори беруться з кешу,
+    зовнішній сервіс бачить одного клієнта, а не кожного власника, і
+    постачальника можна замінити в одному місці. Лише для тих, хто
+    увійшов, - щоб маршрут не став безкоштовним геокодером для всіх.
+    """
+    from app.services.geocoding import suggest_addresses
+    return await suggest_addresses(q, lat, lng)
+
+
 @router.post("/{business_id}/geocode")
 async def geocode_business(
     business_id: int,

@@ -152,3 +152,79 @@ async def geocode_address(
         if found:
             return found
     return None
+
+
+# --- Підказки під час набору (мапа в налаштуваннях) -------------------
+
+# Nominatim прямо забороняє підказки під час набору у своїх правилах
+# використання. Photon - на тих самих даних OpenStreetMap, але створений
+# саме для цього.
+PHOTON_URL = "https://photon.komoot.io/api/"
+_suggest_cache: dict = {}
+_SUGGEST_CACHE_LIMIT = 500
+
+
+def _label(props: dict) -> Tuple[str, str]:
+    """Заголовок і підпис підказки: «вулиця Городоцька, 45» / «Львів»."""
+    street = props.get("street")
+    house = props.get("housenumber")
+    name = props.get("name")
+    if street and house:
+        title = f"{street}, {house}"
+        if name and name not in (street, house):
+            title = f"{name} · {title}"
+    else:
+        title = name or street or ""
+    where = ", ".join(x for x in [props.get("city") or props.get("town") or props.get("village"), props.get("district")] if x)
+    return title, where
+
+
+async def suggest_addresses(query: str, lat: Optional[float] = None, lon: Optional[float] = None, limit: int = 6) -> list:
+    """
+    Варіанти адрес під час набору. Ближчі до (lat, lon) - вище: людина
+    шукає адресу у своєму місті, а не однойменну вулицю на іншому кінці
+    країни. Лише Україна.
+    """
+    q = (query or "").strip()
+    if len(q) < 3:
+        return []
+
+    key = (q.lower(), round(lat or 0, 2), round(lon or 0, 2))
+    if key in _suggest_cache:
+        return _suggest_cache[key]
+
+    params = {"q": q, "limit": limit * 2}
+    if lat is not None and lon is not None:
+        params.update({"lat": lat, "lon": lon})
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(PHOTON_URL, params=params, headers={"User-Agent": USER_AGENT})
+        if response.status_code != 200:
+            logger.warning("Підказки адрес: сервіс відповів %s", response.status_code)
+            return []
+        features = response.json().get("features", [])
+    except Exception as exc:
+        logger.warning("Підказки адрес не вдалися (%s): %s", q, exc)
+        return []
+
+    out, seen = [], set()
+    for f in features:
+        props = f.get("properties", {})
+        if props.get("countrycode", "").upper() != "UA":
+            continue
+        coords = (f.get("geometry") or {}).get("coordinates") or []
+        if len(coords) != 2:
+            continue
+        title, where = _label(props)
+        if not title or (title, where) in seen:
+            continue
+        seen.add((title, where))
+        out.append({"title": title, "subtitle": where, "lat": float(coords[1]), "lng": float(coords[0])})
+        if len(out) >= limit:
+            break
+
+    if len(_suggest_cache) >= _SUGGEST_CACHE_LIMIT:
+        _suggest_cache.clear()
+    _suggest_cache[key] = out
+    return out

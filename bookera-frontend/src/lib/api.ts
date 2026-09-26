@@ -320,6 +320,13 @@ export const api = {
     return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`, { revalidate });
   },
 
+  /** Підказки адрес під час набору - для мапи в налаштуваннях. */
+  async geoSuggest(token: string, q: string, lat?: number, lng?: number): Promise<{ title: string; subtitle: string; lat: number; lng: number }[]> {
+    const params = new URLSearchParams({ q });
+    if (lat != null && lng != null) { params.set('lat', String(lat)); params.set('lng', String(lng)); }
+    return authFetch(`/crm/businesses/geo/suggest?${params}`, token);
+  },
+
   /** Знайти координати закладу за його поточною адресою. */
   async geocodeBusiness(token: string, businessId: number): Promise<{ latitude: number; longitude: number }> {
     return authFetch(`/crm/businesses/${businessId}/geocode`, token, { method: 'POST' });

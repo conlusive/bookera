@@ -140,7 +140,7 @@ export default function BusinessShowcase() {
               Створити профіль
               <ArrowRight size={16} />
             </Link>
-            <Link href="/business#pricing" className="bh-link">Тарифи</Link>
+            <Link href="/business#features" className="bh-link">Усі можливості</Link>
           </div>
         </div>
       </div>

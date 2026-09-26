@@ -2392,7 +2392,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                 <Link href="/business" className="footer-nav-link" style={{ color: '#C2D8C4', fontWeight: 600 }}>BookEra Business</Link>
                 <Link href="/business/register" className="footer-nav-link">Підключити салон</Link>
                 <Link href="/cabinet" className="footer-nav-link">Панель керування CRM</Link>
-                <Link href="/business#pricing" className="footer-nav-link">Тарифи</Link>
+                <Link href="/business#features" className="footer-nav-link">Можливості для бізнесу</Link>
               </div>
             </div>
 

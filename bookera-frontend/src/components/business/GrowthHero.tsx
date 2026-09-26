@@ -44,7 +44,13 @@ const Icon = {
   check: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>,
 };
 
-export default function GrowthHero() {
+/**
+ * onStart - та сама дія, що й головна кнопка лендінгу: гостя - на
+ * реєстрацію, власника з закладом - у кабінет. Раніше тут було пряме
+ * посилання на реєстрацію, і власник, що вже має заклад, потрапляв
+ * на форму створення нового.
+ */
+export default function GrowthHero({ onStart, startLabel = 'Спробувати безкоштовно' }: { onStart?: () => void; startLabel?: string }) {
   const { ref, inView } = useInView<HTMLElement>();
 
   return (
@@ -110,7 +116,11 @@ export default function GrowthHero() {
               <span>для росту.</span>
             </h2>
             <p>Аналітика, розсилки та власна онлайн-вітрина. Усе для того, щоб ви заробляли більше.</p>
-            <Link href="/business/register" className="gh-cta">Спробувати безкоштовно</Link>
+            {onStart ? (
+              <button type="button" onClick={onStart} className="gh-cta" style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{startLabel}</button>
+            ) : (
+              <Link href="/business/register" className="gh-cta">{startLabel}</Link>
+            )}
           </div>
         </div>
       </div>

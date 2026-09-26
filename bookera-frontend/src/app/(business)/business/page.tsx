@@ -33,6 +33,9 @@ export default function BusinessLandingPage() {
   const [mounted, setMounted] = useState(false);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  // Помилка входу чи реєстрації - текстом у самому вікні. Раніше -
+  // системний alert(), що блокував сторінку й виглядав чужорідно.
+  const [authError, setAuthError] = useState('');
   const [isLoginView, setIsLoginView] = useState(true);
 
   const [loginEmail, setLoginEmail] = useState('');
@@ -175,6 +178,7 @@ export default function BusinessLandingPage() {
 
   const handleModalAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError('');
     try {
       if (isLoginView) {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -183,7 +187,7 @@ export default function BusinessLandingPage() {
         });
 
         if (error) {
-          alert(`Помилка входу: ${error.message}`);
+          setAuthError(error.message === 'Invalid login credentials' ? 'Невірна пошта або пароль' : error.message);
           return;
         }
 
@@ -233,7 +237,7 @@ export default function BusinessLandingPage() {
         });
 
         if (error) {
-          alert(`Помилка реєстрації: ${error.message}`);
+          setAuthError(error.message);
           return;
         }
 
@@ -252,7 +256,7 @@ export default function BusinessLandingPage() {
         router.push('/business/register');
       }
     } catch (error) {
-      alert("Відбулася непередбачувана помилка при з'єднанні з сервером.");
+      setAuthError('Не вдалося зʼєднатися з сервером. Спробуйте ще раз.');
     }
   };
 
@@ -454,7 +458,7 @@ export default function BusinessLandingPage() {
       {isAuthModalOpen && (
         <div onClick={() => setIsAuthModalOpen(false)} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
           <div onClick={(e) => e.stopPropagation()} className="anim" style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '400px', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-            <button onClick={() => { setIsAuthModalOpen(false); setIsLoginView(true); }} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1.2rem', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>×</button>
+            <button onClick={() => { setIsAuthModalOpen(false); setIsLoginView(true); setAuthError(''); }} style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1.2rem', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' }}>×</button>
             <h2 style={{ fontSize: '1.6rem', fontWeight: '800', textAlign: 'center', marginBottom: '0.5rem', color: '#111827', letterSpacing: '-0.02em' }}>{isLoginView ? 'З поверненням' : 'Почати роботу'}</h2>
             <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.9rem', marginBottom: '2rem', lineHeight: '1.4' }}>{isLoginView ? 'Увійдіть, щоб керувати розкладом.' : 'Створіть акаунт для вашого бізнесу.'}</p>
             <form onSubmit={handleModalAuth}>
@@ -466,10 +470,11 @@ export default function BusinessLandingPage() {
               )}
               <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="modal-input" required />
               <input type="password" placeholder="Пароль" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="modal-input" required />
+              {authError && (
+                <p style={{ color: '#B42318', fontSize: '0.85rem', margin: '0 0 0.75rem', textAlign: 'left' }}>{authError}</p>
+              )}
               <button type="submit" style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: '#fff', borderRadius: '12px', fontWeight: '700', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', marginTop: '0.5rem', fontSize: '1rem', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#0f172a'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>{isLoginView ? 'Продовжити' : 'Зареєструватись'}</button>
             </form>
-            <div style={{ display: 'flex', alignItems: 'center', margin: '1rem 0', color: '#94a3b8', fontSize: '0.85rem' }}><div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div><span style={{ padding: '0 1rem' }}>АБО</span><div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div></div>
-            <button className="social-btn" onClick={() => alert('Ця функція з\'явиться пізніше')}>Google</button>
             <p style={{ textAlign: 'center', fontSize: '0.9rem', color: '#64748b', marginTop: '1.5rem' }}>{isLoginView ? (<>Немає акаунту? <span onClick={() => setIsLoginView(false)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Створити</span></>) : (<>Вже маєте акаунт? <span onClick={() => setIsLoginView(true)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Увійти</span></>)}</p>
           </div>
         </div>
@@ -576,7 +581,7 @@ export default function BusinessLandingPage() {
               <button onClick={handleStartBusinessClick} className="btn-primary">
                 {isBusinessRole(userRole) ? 'Перейти в кабінет' : isLoggedIn ? 'Відкрити бізнес' : 'Створити профіль'}
               </button>
-              <button onClick={() => document.getElementById('bento')?.scrollIntoView({ behavior: 'smooth' })} className="btn-secondary">
+              <button onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="btn-secondary">
                 Огляд функцій
               </button>
             </div>
@@ -599,8 +604,11 @@ export default function BusinessLandingPage() {
       </section>
 
       {/* BENTO GRID SECTION */}
-      {/* БАЗОВИЙ АРСЕНАЛ - мозаїка з пʼяти карток. */}
-      <section style={{ padding: '6rem 0 3rem', background: '#fff' }}>
+      {/* БАЗОВИЙ АРСЕНАЛ - мозаїка з пʼяти карток.
+          id="features" - сюди веде «Огляд функцій». Раніше кнопка шукала
+          id="bento", якого після переробки блоку не стало, і не робила
+          нічого. scrollMarginTop - щоб заголовок не ховався під шапкою. */}
+      <section id="features" style={{ padding: '6rem 0 3rem', background: '#fff', scrollMarginTop: '80px' }}>
         <div className="container">
           <h2 style={{ fontSize: 'clamp(2rem, 4.4vw, 3.25rem)', fontWeight: 700, letterSpacing: '-0.035em', lineHeight: 1.08, color: '#1D1D1F', margin: '0 0 2.5rem' }}>
             Базовий арсенал майстра.
@@ -611,7 +619,7 @@ export default function BusinessLandingPage() {
 
       {/* EXPLORE FEATURES */}
       {/* МОЖЛИВОСТІ ДЛЯ РОСТУ - заголовок по центру, картки-теки по кутах. */}
-      <GrowthHero />
+      <GrowthHero onStart={handleStartBusinessClick} startLabel={isBusinessRole(userRole) ? 'Перейти в кабінет' : 'Спробувати безкоштовно'} />
 
       {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
@@ -688,7 +696,7 @@ export default function BusinessLandingPage() {
       </section>
 
       {/* FAQ */}
-      <section className="reveal-on-scroll" style={{ padding: '8rem 0 6rem 0', backgroundColor: '#f8fafc', position: 'relative', zIndex: 10 }}>
+      <section id="faq" className="reveal-on-scroll" style={{ padding: '8rem 0 6rem 0', backgroundColor: '#f8fafc', position: 'relative', zIndex: 10 }}>
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '4rem' }}>
             <div>
@@ -730,11 +738,9 @@ export default function BusinessLandingPage() {
             </div>
 
             <div>
-              <div className="footer-col-title">Можливості</div>
+              <div className="footer-col-title">Клієнтам</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                <Link href="/" className="footer-nav-link">Онлайн-запис</Link>
-                <Link href="/" className="footer-nav-link">Пошук закладів</Link>
-                <Link href="/" className="footer-nav-link">Подарункові сертифікати</Link>
+                <Link href="/" className="footer-nav-link">Знайти заклад</Link>
                 <Link href="/account/profile" className="footer-nav-link">Особистий кабінет</Link>
               </div>
             </div>
@@ -742,31 +748,20 @@ export default function BusinessLandingPage() {
             <div>
               <div className="footer-col-title">Для бізнесу</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                <Link href="/business" className="footer-nav-link" style={{ color: '#C2D8C4', fontWeight: 600 }}>BookEra Business</Link>
-                <Link href="/business/register" className="footer-nav-link">Підключити салон</Link>
-                <Link href="/cabinet" className="footer-nav-link">Панель керування CRM</Link>
-                <Link href="/business#pricing" className="footer-nav-link">Тарифи</Link>
-              </div>
-            </div>
-
-            <div>
-              <div className="footer-col-title">Підтримка</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                <Link href="#" className="footer-nav-link">Служба турботи</Link>
-                <Link href="/#faq" className="footer-nav-link">Поширені запитання</Link>
-                <Link href="#" className="footer-nav-link">Безпека клієнтів</Link>
-                <Link href="#" className="footer-nav-link">Контакти команди</Link>
+                {/* Та сама дія, що й кнопки «почати» вгорі: гостя -
+                    на реєстрацію, власника - у кабінет. */}
+                <button type="button" onClick={handleStartBusinessClick} className="footer-nav-link"
+                  style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+                  {isBusinessRole(userRole) ? 'Мій кабінет' : 'Підключити заклад'}
+                </button>
+                <a href="#features" className="footer-nav-link">Можливості</a>
+                <a href="#faq" className="footer-nav-link">Поширені запитання</a>
               </div>
             </div>
           </div>
 
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
-                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>ПОЛІТИКА КОНФІДЕНЦІЙНОСТІ</Link>
-                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>УМОВИ ВИКОРИСТАННЯ</Link>
-                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>БЕЗПЕКА</Link>
-              </div>
 
               <div style={{ color: '#64748B', fontSize: '0.78rem' }}>
                 © 2026 BookEra. Платформа онлайн-запису до закладів краси в Україні.

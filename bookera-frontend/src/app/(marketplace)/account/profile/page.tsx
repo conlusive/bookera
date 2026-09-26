@@ -31,13 +31,15 @@ import {
   User,
   ShieldAlert,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Briefcase,
 } from "lucide-react";
 import SmartImage from '@/components/ui/SmartImage';
 import { loadFavorites, setFavorite } from '@/lib/favorites';
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { categoryTitle, normalizeCategory } from '@/lib/categories';
 import WalletTab from '@/components/profile/WalletTab';
+import WorkTab from '@/components/profile/WorkTab';
 
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
@@ -104,7 +106,7 @@ function ProfileContent() {
   // а не загальний профіль, де їх ще треба знайти.
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams?.get('tab');
-  const [activeTab, setActiveTab] = useState<'appointments' | 'favorites' | 'wallet' | 'settings'>(
+  const [activeTab, setActiveTab] = useState<'appointments' | 'work' | 'favorites' | 'wallet' | 'settings'>(
     (tabFromUrl as any) || 'appointments'
   );
   const [appointmentFilter, setAppointmentFilter] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
@@ -437,6 +439,21 @@ function ProfileContent() {
   };
 
   const walletToken = useCallback(() => getAuthToken().catch(() => null), []);
+
+  // «Моя робота» - лише тим, хто справді працює в салоні: майстрам,
+  // адміністраторам, власникам. Звичайний клієнт вкладки не бачить.
+  const [worksSomewhere, setWorksSomewhere] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getAuthToken();
+        const places = await api.listMyWorkplaces(token);
+        if (!cancelled) setWorksSomewhere(Array.isArray(places) && places.length > 0);
+      } catch { /* немає робочих місць - немає вкладки */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // --- Відгук ---
   const [reviewAppt, setReviewAppt] = useState<any | null>(null);
@@ -1203,6 +1220,14 @@ function ProfileContent() {
                   </span>
                 )}
               </button>
+              {worksSomewhere && (
+                <button onClick={() => setActiveTab('work')} className={`nav-item anim ${activeTab === 'work' ? 'active' : ''}`}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <Briefcase className="w-4 h-4 text-slate-400" />
+                    <span>Моя робота</span>
+                  </div>
+                </button>
+              )}
 
 
 
@@ -1561,6 +1586,10 @@ function ProfileContent() {
               {/* 3. ВКЛАДКА: СЕРТИФІКАТИ */}
 
               {/* 4. ВКЛАДКА: УЛЮБЛЕНІ ЗАКЛАДИ */}
+              {activeTab === 'work' && worksSomewhere && (
+                <WorkTab getToken={walletToken} />
+              )}
+
               {activeTab === 'wallet' && (
                 <WalletTab getToken={walletToken} />
               )}

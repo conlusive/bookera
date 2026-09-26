@@ -342,6 +342,11 @@ export const api = {
     return authFetch('/account/me', token, { method: 'PATCH', body: JSON.stringify(payload) });
   },
 
+  /** «Моя робота»: розклад, заробіток і салони майстра - по всіх салонах разом. */
+  async getMyWork(token: string): Promise<any> {
+    return authFetch('/work/me', token);
+  },
+
   /** Гаманець: баланс бонусів BookEra, історія й подарункові картки. */
   async getWallet(token: string): Promise<{
     bonus_balance: number;

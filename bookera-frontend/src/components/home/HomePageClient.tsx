@@ -6,7 +6,7 @@ import Image from 'next/image';
 
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { getOpenStatus } from '@/lib/businessStatus';
-import { categoryTitles } from '@/lib/categories';
+import { categoryTitles, categoryTitle, categoryPlace, matchesCategory, CATEGORIES, MAIN_CATEGORIES, MORE_CATEGORIES } from '@/lib/categories';
 import { cachedFavoriteIds, loadFavorites, setFavorite } from '@/lib/favorites';
 import { imageLoadProps } from '@/lib/images';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -23,59 +23,12 @@ import HowItWorks from '@/components/home/HowItWorks';
 import BusinessShowcase from '@/components/home/BusinessShowcase';
 import SmartImage from '@/components/ui/SmartImage';
 
-/**
- * Ключові слова категорій.
- *
- * Категорія закладу в базі записана людською мовою («Барбер»,
- * «Салон краси»), а в інтерфейсі ми оперуємо ключами («barber»).
- * Пряме порівняння biz.category === activeCategory ніколи не
- * збігається - саме через це блок «Поблизу вас» не реагував на
- * вибір категорії.
- *
- * Словник спільний для всіх списків: дві копії розійшлися б після
- * першої ж правки, і один блок фільтрував би інакше за інший.
- */
-const CATEGORY_TERMS: Record<string, string[]> = {
-  'barber': ['барбер', 'barber', 'чоловічі', 'men', 'fades'],
-  'hair': ['волосся', 'перукар', 'hair', 'стрижк', 'salon', 'зачіск'],
-  'nails': ['нігті', 'манікюр', 'педикюр', 'nail', 'маникюр'],
-  'massage': ['масаж', 'massage', 'spa', 'спа', 'wellness', 'релакс', 'сауна', 'лазня'],
-  'spa': ['spa', 'спа', 'wellness', 'релакс'],
-  'skincare': ['шкір', 'косметолог', 'skin', 'догляд'],
-  'brows': ['бров', 'вій', 'brows', 'lashes', 'брови', 'вії'],
-  'makeup': ['макіяж', 'makeup', 'мейкап', 'візаж'],
-  'tattoo': ['тату', 'татуювання', 'tattoo', 'пірсинг', 'прокол'],
-  'hair-removal': ['лазер', 'епіляція', 'депіляція', 'шугаринг'],
-  'aesthetic-medicine': ['косметолог', 'чистка', 'пілінг', 'медицина', 'естетика', 'ін\'єкції', 'лікар'],
-  'home-services': ['дому', 'виїзд'],
-  'pets': ['тварини', 'грумінг', 'собак', 'котів'],
-  'dentistry': ['стоматолог', 'зуби', 'відбілювання'],
-  'health': ['здоров', 'остеопат', 'терапія'],
-  'professional': ['консультація', 'стиліст', 'імідж'],
-  'other': ['інше']
-};
 
-const categoriesData = [
-  { name: 'Волосся', slug: 'hair' },
-  { name: 'Барбер', slug: 'barber' },
-  { name: 'Нігті', slug: 'nails' },
-  { name: 'Брови та вії', slug: 'brows' },
-  { name: 'Догляд', slug: 'skincare' },
-  { name: 'Косметологія', slug: 'aesthetic-medicine' },
-  { name: 'Масаж та SPA', slug: 'massage' },
-  { name: 'Тату та пірсинг', slug: 'tattoo' },
-  { name: 'Епіляція', slug: 'hair-removal' },
-  { name: 'Макіяж', slug: 'makeup' }
-];
-
-const extraCategoriesData = [
-  { name: 'Послуги на дому', slug: 'home-services' },
-  { name: 'Домашні улюбленці', slug: 'pets' },
-  { name: 'Стоматологія', slug: 'dentistry' },
-  { name: 'Здоров\'я та самопочуття', slug: 'health' },
-  { name: 'Професійні послуги', slug: 'professional' },
-  { name: 'Інше', slug: 'other' }
-];
+// Категорії - з єдиного списку (lib/categories). Раніше тут був власний,
+// і «Послуги на дому» мали код home-services, а реєстрація - home_services:
+// такі заклади на головній не знаходились ніколи.
+const categoriesData = MAIN_CATEGORIES.map(c => ({ name: c.title, slug: c.slug }));
+const extraCategoriesData = MORE_CATEGORIES.map(c => ({ name: c.title, slug: c.slug }));
 
 
 const topCities = [
@@ -1057,18 +1010,24 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         }
 
 
-        let matchesCategory = true;
+        let inCategory = true;
         if (activeCategory !== 'all' && !appliedSearch) {
-          const terms = CATEGORY_TERMS[activeCategory] || [];
-          const searchableText = `${biz.category || ''} ${biz.name || ''} ${biz.description || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
-          matchesCategory = terms.some(term => searchableText.includes(term));
+          // За кодом категорії, а не пошуком слів в описі: раніше барбершоп
+          // із «доглядом за бородою» в описі потрапляв у «Догляд за шкірою».
+          inCategory = matchesCategory(biz, activeCategory);
         }
 
         let matchesText = true;
         if (appliedSearch) {
-          const query = appliedSearch.toLowerCase();
-          const fullText = `${biz.category || ''} ${biz.name || ''} ${biz.description || ''} ${biz.address || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
-          matchesText = fullText.includes(query);
+          const query = appliedSearch.toLowerCase().trim();
+          // У базі - коди категорій (nails), тож до тексту додаємо назву
+          // категорії, а запит звіряємо ще й із синонімами: «педикюр»
+          // знаходить манікюрні, «спа» - масаж і SPA.
+          const fullText = `${categoryTitle(biz.category)} ${biz.name || ''} ${biz.description || ''} ${biz.address || ''} ${(biz.tags || []).join(' ')}`.toLowerCase();
+          const queryCategory = CATEGORIES.find(cat =>
+            cat.title.toLowerCase().includes(query) || cat.terms.some(t => query.includes(t) || t.includes(query)),
+          );
+          matchesText = fullText.includes(query) || (!!queryCategory && query.length >= 3 && matchesCategory(biz, queryCategory.slug));
         }
 
         let matchesLocation = true;
@@ -1078,7 +1037,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
           matchesLocation = bizLocation.includes(locationQuery);
         }
 
-        return matchesCategory && matchesText && matchesLocation;
+        return inCategory && matchesText && matchesLocation;
       })
       .sort((a, b) => {
         const primary = sortComparator(a, b);
@@ -1135,11 +1094,8 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     }
 
     if (activeCategory !== 'all') {
-      const terms = CATEGORY_TERMS[activeCategory] || [];
-      result = result.filter((b: any) => {
-        const text = `${b.category || ''} ${b.name || ''} ${b.description || ''} ${(b.tags || []).join(' ')}`.toLowerCase();
-        return terms.some(t => text.includes(t));
-      });
+      // За кодом категорії, а не пошуком слів в описі.
+      result = result.filter((b: any) => matchesCategory(b, activeCategory));
     }
 
     return [...result].sort((a: any, b: any) =>
@@ -2263,7 +2219,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       appliedSearch
         ? `Результати: «${appliedSearch}»`
         : activeCategory !== 'all'
-          ? `${categoryTitles[activeCategory] || 'Заклади'} поблизу`
+          ? `${categoryPlace(activeCategory)} поблизу`
           : 'Поблизу вас'
     }
     subtitle={

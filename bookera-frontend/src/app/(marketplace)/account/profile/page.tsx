@@ -36,7 +36,7 @@ import {
 import SmartImage from '@/components/ui/SmartImage';
 import { loadFavorites, setFavorite } from '@/lib/favorites';
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
-import { categoryTitles } from '@/lib/categories';
+import { categoryTitle, normalizeCategory } from '@/lib/categories';
 import WalletTab from '@/components/profile/WalletTab';
 
 
@@ -929,13 +929,13 @@ function ProfileContent() {
   const favCategories = useMemo(() => {
     const seen = new Map<string, string>();
     for (const b of favorites) {
-      const slug = String(b.category || '');
-      if (slug && !seen.has(slug)) seen.set(slug, categoryTitles[slug] || slug);
+      const slug = normalizeCategory(b.category);
+      if (!seen.has(slug)) seen.set(slug, categoryTitle(slug));
     }
     return Array.from(seen, ([slug, title]) => ({ slug, title }));
   }, [favorites]);
   const visibleFavorites = useMemo(
-    () => favCategory === 'all' ? favorites : favorites.filter((b: any) => String(b.category) === favCategory),
+    () => favCategory === 'all' ? favorites : favorites.filter((b: any) => normalizeCategory(b.category) === favCategory),
     [favorites, favCategory],
   );
 

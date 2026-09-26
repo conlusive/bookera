@@ -38,7 +38,10 @@ def default_booking_settings(category: str | None, business_type: str | None,
     Раніше всі отримували однакові значення, і власник мусив сам
     здогадуватись, що для манікюру крок у 30 хвилин незручний.
     """
-    base = dict(CATEGORY_DEFAULTS.get((category or "").lower(), _FALLBACK))
+    # Стара назва категорії теж знаходить свої налаштування: «beauty» -
+    # це тепер «hair», «spa» - «massage».
+    from app.core.categories import normalize_category
+    base = dict(CATEGORY_DEFAULTS.get(normalize_category(category), CATEGORY_DEFAULTS.get((category or "").lower(), _FALLBACK)))
 
     settings: Dict[str, Any] = {
         "is_active": True,

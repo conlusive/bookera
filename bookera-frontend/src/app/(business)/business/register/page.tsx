@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import { OWNER_ROLE } from '@/lib/roles';
+import { MAIN_CATEGORIES, MORE_CATEGORIES } from '@/lib/categories';
 
 export default function BusinessRegisterWizard() {
   const { showToast } = useToast();
@@ -55,27 +56,13 @@ export default function BusinessRegisterWizard() {
 
   // Категорії
   const mainCategories = [
-    { id: 'hair', name: 'Волосся' },
-    { id: 'barber', name: 'Барбер' },
-    { id: 'nails', name: 'Нігті' },
-    { id: 'skincare', name: 'Догляд за шкірою' },
-    { id: 'brows', name: 'Брови та вії' },
-    { id: 'massage', name: 'Масаж' },
-    { id: 'makeup', name: 'Макіяж' },
-    { id: 'wellness', name: 'Wellness & Spa' }
+    // Той самий список, що на головній і в налаштуваннях (lib/categories):
+    // раніше тут були власні коди (wellness, home_services), і такі
+    // заклади не знаходились у пошуку за категорією.
+    ...MAIN_CATEGORIES.map(cat => ({ id: cat.slug, name: cat.title })),
   ];
 
-  const moreCategories = [
-    { id: 'aesthetic', name: 'Естетична медицина' },
-    { id: 'hair_removal', name: 'Видалення волосся' },
-    { id: 'home_services', name: 'Послуги на дому' },
-    { id: 'piercing', name: 'Пірсинг' },
-    { id: 'pets', name: 'Домашні улюбленці' },
-    { id: 'dentistry', name: 'Стоматологія' },
-    { id: 'health', name: 'Здоров\'я та самопочуття' },
-    { id: 'professional', name: 'Професійні послуги' },
-    { id: 'other', name: 'Інше' }
-  ];
+  const moreCategories = MORE_CATEGORIES.map(cat => ({ id: cat.slug, name: cat.title }));
 
   // Динамічні базові послуги
   const defaultServicesMap: Record<string, any[]> = {

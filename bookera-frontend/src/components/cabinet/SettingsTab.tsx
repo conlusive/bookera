@@ -7,6 +7,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import AppSelect from '@/components/ui/AppSelect';
 import LocationPicker from '@/components/ui/LocationPicker';
+import { categoryTitle } from '@/lib/categories';
 
 interface SettingsTabProps {
   onNavigate?: (tab: string) => void;
@@ -37,15 +38,6 @@ const SvgDownload = (p:any) => <SvgIcon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5
 const SvgGift = (p:any) => <SvgIcon {...p}><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></SvgIcon>;
 const SvgCreditCardPlus = (p:any) => <SvgIcon {...p}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line><line x1="12" y1="15" x2="12" y2="19"></line><line x1="10" y1="17" x2="14" y2="17"></line></SvgIcon>;
 
-const CATEGORY_LABELS: Record<string, string> = {
-  barber: 'Барбершоп',
-  hair: 'Перукарня',
-  nails: 'Манікюр і педикюр',
-  beauty: 'Салон краси',
-  brows: 'Брови та вії',
-  massage: 'Масаж',
-  spa: 'Wellness і SPA',
-};
 
 const businessSettingsCards = [
   { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgStorefront, color: '#0f766e', bg: '#f0fdfa' },
@@ -95,7 +87,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   const [deleteConfirm, setDeleteConfirm] = useState('');
 
   const [profileSettings, setProfileSettings] = useState({
-    category: 'beauty', business_type: 'company', workspace_type: 'my_place',
+    category: 'other', business_type: 'company', workspace_type: 'my_place',
   });
   // Мапа згорнута, поки координати знайшлись самі: розгорнута мапа
   // на весь блок каже «зроби щось», хоча робити нічого не треба.
@@ -148,7 +140,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
       longitude: (business as any).longitude != null ? Number((business as any).longitude) : null,
     });
     setProfileSettings({
-      category: (business as any).category || 'beauty',
+      category: (business as any).category || 'other',
       business_type: (business as any).business_type || 'company',
       workspace_type: (business as any).workspace_type || 'my_place',
     });
@@ -388,7 +380,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                     background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px',
                     fontSize: '0.9rem', color: '#475569',
                   }}>
-                    <span>{CATEGORY_LABELS[profileSettings.category] || profileSettings.category || '—'}</span>
+                    <span>{profileSettings.category ? categoryTitle(profileSettings.category) : '—'}</span>
                     <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0 }}>
                       змінюється у «Вітрині»
                     </span>

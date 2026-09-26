@@ -17,7 +17,7 @@ class Business(Base):
     owner_id = Column(String, ForeignKey("users.id"), nullable=True)
     name = Column(String, nullable=False)
     slug = Column(String, unique=True, index=True, nullable=False)
-    category = Column(String, default="Салон краси")
+    category = Column(String, default="other")
     business_type = Column(String, nullable=True)
     workspace_type = Column(String, nullable=True)
     description = Column(Text, nullable=True)

@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { imageLoadProps } from '@/lib/images';
 import { getOpenStatus } from '@/lib/businessStatus';
-import { categoryTitles } from '@/lib/categories';
+import { categoryTitles, categoryTitle } from '@/lib/categories';
 
 /**
  * Картка закладу - ОДНА на весь сайт.
@@ -52,18 +52,7 @@ export default function BusinessCard({
     .map((s: any) => Number(s.price))
     .filter((p: number) => !isNaN(p) && p > 0);
   const minPrice = prices.length > 0 ? Math.min(...prices) : null;
-
-  const categoryLabels: Record<string, string> = {
-    barber: 'Барбер',
-    hair: 'Волосся',
-    nails: 'Нігті',
-    skincare: 'Догляд',
-    brows: 'Брови',
-    massage: 'Масаж',
-    makeup: 'Макіяж',
-    spa: 'Spa',
-  };
-  const category = categoryLabels[biz.category] || categoryTitles[biz.category] || biz.category || 'Студія';
+  const category = categoryTitle(biz.category);
 
   // Формування точної локації та відстані
   // Адреса без відстані: відстань тепер окремою плашкою поверх фото.

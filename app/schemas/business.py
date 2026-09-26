@@ -1,6 +1,7 @@
 from datetime import time as dt_time
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from app.core.categories import normalize_category
+from pydantic import field_validator, BaseModel, ConfigDict
 from decimal import Decimal
 
 
@@ -29,7 +30,7 @@ class BusinessHoursItem(BaseModel):
 
 class BusinessBase(BaseModel):
     name: str
-    category: Optional[str] = "Салон краси"
+    category: Optional[str] = "other"
     business_type: Optional[str] = None
     workspace_type: Optional[str] = None
     description: Optional[str] = None
@@ -41,6 +42,12 @@ class BusinessBase(BaseModel):
     logo: Optional[str] = None
     tags: Optional[List[str]] = []
 
+    # Будь-яке значення - стара назва, код зі старого списку - стає
+    # кодом із єдиного списку (app/core/categories.py).
+    @field_validator("category", mode="before")
+    @classmethod
+    def _normalize_category(cls, v):
+        return normalize_category(v) if v is not None else v
 
 class BusinessCreate(BusinessBase):
     # slug генерується на бекенді (унікальність гарантована тут, а не хаотично на фронті)
@@ -80,6 +87,12 @@ class BusinessUpdate(BaseModel):
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None
 
+    # Будь-яке значення - стара назва, код зі старого списку - стає
+    # кодом із єдиного списку (app/core/categories.py).
+    @field_validator("category", mode="before")
+    @classmethod
+    def _normalize_category(cls, v):
+        return normalize_category(v) if v is not None else v
 
 class WorkingDayOut(BaseModel):
     """Робочий день закладу для публічної сторінки.

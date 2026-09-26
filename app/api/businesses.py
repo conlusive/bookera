@@ -106,7 +106,17 @@ async def search_available_businesses(
         .options(selectinload(Business.services))
     )
     if category and category != "all":
-        stmt = stmt.where(func.lower(Business.category).like(f"%{category.lower()}%"))
+        # Точний збіг коду. Раніше - LIKE по підрядку: «hair» знаходив і
+        # «hair_removal», а українські назви в базі не збігались із
+        # кодами з інтерфейсу взагалі.
+        from app.core.categories import normalize_category
+        slug = normalize_category(category)
+        if slug == "home":
+            # «Майстри з виїздом» - формат, а не вид послуги: сюди
+            # потрапляє будь-який заклад, що їде до клієнта.
+            stmt = stmt.where(or_(Business.category == "home", Business.workspace_type == "client_place"))
+        else:
+            stmt = stmt.where(Business.category == slug)
     stmt = stmt.limit(limit)
 
     result = await db.execute(stmt)

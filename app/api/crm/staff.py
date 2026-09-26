@@ -180,6 +180,13 @@ async def update_staff(
 
     for field, value in data.items():
         setattr(staff, field, value)
+
+    # Перше налаштування оплати - точка відліку для зарплати. Достатньо
+    # ставки (відсоток чи фіксована): платити можна й вручну, без
+    # нагадувань. Період виплат потрібен лише для нагадувань «пора платити».
+    has_scheme = (staff.commission_rate or 0) > 0 or (staff.fixed_salary or 0) > 0
+    if {"commission_rate", "fixed_salary"} & set(data) and has_scheme and staff.pay_configured_at is None:
+        staff.pay_configured_at = utc_now()
     await db.commit()
     await db.refresh(staff)
     return staff

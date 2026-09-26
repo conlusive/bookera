@@ -154,8 +154,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         provides_services: true,
         assigned_services: (services || []).map((s: any) => String(s.id)),
         shifts: globalShifts,
-        commission_rate: 100,
-        fixed_salary: 0
+        // Власник зарплати не отримує - у нього прибуток закладу. Раніше
+        // тут стояла комісія 100%, і кабінет пропонував «виплатити
+        // зарплату» самому собі.
+        commission_rate: null,
+        fixed_salary: null
       });
     }
     return list;
@@ -164,6 +167,13 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   let currentStaff = selectedStaffId ? effectiveTeam.find((t: any) => String(t.id) === String(selectedStaffId)) : (effectiveTeam[0] || null);
 
   let isOwnerProfile = false;
+
+  // Картка власника: зарплати в нього немає - вкладку «Зарплата» не
+  // показуємо зовсім.
+  const isOwnerCard = !!currentStaff && (
+    currentStaff.role === 'owner' || currentStaff.role === 'business_owner'
+    || (business?.owner_id && String(currentStaff.id) === String(business.owner_id))
+  );
 
   if (currentStaff) {
     currentStaff = { ...currentStaff };
@@ -334,8 +344,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         specialization: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
         provides_services: inviteForm.role === 'master',
         assigned_services: inviteForm.role === 'master' ? (services || []).map((s: any) => String(s.id)) : [],
-        commission_rate: 40,
-        fixed_salary: 0,
+        // Ставку обирає власник у вкладці «Зарплата». Раніше тут стояло
+        // 40% - число, яке ніхто не обирав, і зарплата «існувала» з
+        // першого дня.
+        commission_rate: null,
+        fixed_salary: null,
         tax_rate: 0,
         payment_method: 'cash'
       };
@@ -850,7 +863,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 { id: 'general', label: 'Загальна інформація' },
                 { id: 'services', label: 'Послуги' },
                 { id: 'schedule', label: 'Графік роботи' },
-                { id: 'finance', label: 'Зарплата' },
+                ...(isOwnerCard ? [] : [{ id: 'finance', label: 'Зарплата' }]),
                 ...(hasAdminRights ? [{ id: 'security', label: 'Доступ та Безпека' }] : [])
               ].map(tab => (
                 <div
@@ -1226,11 +1239,27 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             )}
 
             {/* --- 4. ЗАРПЛАТА ТА КОМІСІЙНІ --- */}
-            {activeStaffTab === 'finance' && (
+            {activeStaffTab === 'finance' && !isOwnerCard && (
               <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
                 {/* М'ЯТНИЙ ВІДЖЕТ ЗАРОБІТКУ ТА ПОДАТКІВ */}
                 {(() => {
+                  // Оплату ще не налаштовано - зарплати не існує. Замість
+                  // «до виплати» з типових значень - пояснення, що зробити.
+                  const hasScheme = Number(currentStaff?.commission_rate || 0) > 0 || Number(currentStaff?.fixed_salary || 0) > 0;
+                  if (!hasScheme && !currentStaff?.pay_configured_at) {
+                    return (
+                      <div style={{ borderRadius: '16px', padding: '1.5rem 1.6rem', background: '#F5F5F7' }}>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1D1D1F', marginBottom: '0.4rem' }}>
+                          Оплату ще не налаштовано
+                        </div>
+                        <div style={{ fontSize: '0.9rem', lineHeight: 1.55, color: '#6E6E73', maxWidth: '520px' }}>
+                          Вкажіть нижче відсоток від послуг чи фіксовану ставку. Після цього тут зʼявиться
+                          розрахунок, а нагадування «пора платити» - не раніше, ніж мине перший період виплат.
+                        </div>
+                      </div>
+                    );
+                  }
                   if (!payoutPreview) {
                     return (
                       <div style={{ background: colors.wMintBg, border: `1.5px dashed ${colors.wMintBorder}`, borderRadius: '16px', padding: '1.5rem', minHeight: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.wMintText, opacity: 0.7, fontSize: '0.9rem', fontWeight: 600 }}>

@@ -98,6 +98,11 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
     # status != 'cancelled' - принципово: скасована виплата НЕ закриває
     # період, тому візити з неї повертаються в наступний розрахунок.
     # Без цієї умови гроші за них зникли б після скасування.
+    # Майстра завантажуємо ПЕРШИМ: від нього залежить початок періоду
+    # (момент налаштування оплати).
+    staff_res = await db.execute(select(User).where(User.id == staff_id))
+    staff = staff_res.scalars().first()
+
     last_payout_res = await db.execute(
         select(StaffPayout)
         .where(
@@ -115,12 +120,13 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
     else:
         biz_res = await db.execute(select(Business).where(Business.id == business_id))
         business = biz_res.scalars().first()
-        period_start = business.created_at if business else utc_now()
+        # Від моменту, коли оплату налаштували, а не від реєстрації
+        # закладу: до налаштування умов оплати не існувало.
+        period_start = (staff.pay_configured_at if staff and staff.pay_configured_at else None) \
+            or (business.created_at if business else utc_now())
 
     period_end = utc_now()
 
-    staff_res = await db.execute(select(User).where(User.id == staff_id))
-    staff = staff_res.scalars().first()
     rate = (staff.commission_rate if staff and staff.commission_rate is not None else Decimal("0"))
 
     appts_stmt = select(Appointment).where(

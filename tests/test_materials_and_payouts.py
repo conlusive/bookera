@@ -12,10 +12,10 @@ async def _add_master(business_id: int, staff_id: str, **fields):
     try:
         await conn.execute(
             "INSERT INTO users (id, email, role, business_id, commission_rate, fixed_salary, tax_rate, "
-            "deduct_materials, payout_period, is_active, created_at) "
-            "VALUES ($1,$2,'master',$3,$4,$5,$6,$7,$8,true,now()) "
+            "deduct_materials, payout_period, is_active, created_at, pay_configured_at) "
+            "VALUES ($1,$2,'master',$3,$4,$5,$6,$7,$8,true,now(), now() - interval '8 days') "
             "ON CONFLICT (id) DO UPDATE SET business_id=$3, commission_rate=$4, fixed_salary=$5, "
-            "tax_rate=$6, deduct_materials=$7, payout_period=$8",
+            "tax_rate=$6, deduct_materials=$7, payout_period=$8, pay_configured_at=now() - interval '8 days'",
             staff_id, f"{staff_id}@test.com", business_id,
             cols["commission_rate"], cols["fixed_salary"], cols["tax_rate"],
             cols["deduct_materials"], cols["payout_period"],

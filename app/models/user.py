@@ -65,6 +65,10 @@ class User(Base):
     # виглядали робочими, але значення губились при перезавантаженні.
     payout_period = Column(String, nullable=True)  # weekly / monthly
     payout_day = Column(String, nullable=True)     # 'monday' або число дня місяця
+    # Коли власник налаштував оплату цього майстра. До того зарплати не
+    # існує: ні сум, ні нагадувань «пора платити». І звідси, а не від
+    # реєстрації закладу, рахується перший період.
+    pay_configured_at = Column(DateTime, nullable=True)
     tips_full = Column(Boolean, default=True, nullable=False)       # майстер забирає 100% чайових
     deduct_materials = Column(Boolean, default=False, nullable=False)  # віднімати вартість матеріалів
     auto_reset_balance = Column(Boolean, default=False, nullable=False)

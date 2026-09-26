@@ -258,6 +258,15 @@ async def create_payout(
     preview почнеться вже звідси, той самий візит не потрапить у виплату
     двічі) і одразу створює пов'язаний запис витрати для обліку.
     """
+    # Власнику зарплату не виплачуємо, і без налаштованої оплати - теж:
+    # інакше сума бралась би з типових значень, яких ніхто не обирав.
+    _biz = (await db.execute(select(Business).where(Business.id == business_id))).scalars().first()
+    if _biz and str(_biz.owner_id) == str(staff_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Власник не отримує зарплату - у нього прибуток закладу")
+    _staff = (await db.execute(select(User).where(User.id == str(staff_id)))).scalars().first()
+    if _staff and not _staff.pay_configured_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Спершу налаштуйте оплату цього майстра")
+
     await assert_business_admin(db, current_user, business_id)
     preview = await calculate_payout_preview(db, business_id, staff_id)
 
@@ -428,11 +437,18 @@ async def list_due_payouts(
     staff_res = await db.execute(
         select(User).where(User.business_id == business_id, User.is_active == True)
     )
+    biz = (await db.execute(select(Business).where(Business.id == business_id))).scalars().first()
     now = utc_now()
     due = []
 
     for staff in staff_res.scalars().all():
-        if not staff.payout_period or staff.payout_period == "none":
+        # Власник зарплати не отримує - у нього прибуток закладу. Раніше
+        # кабінет рахував йому 100% власного доходу й пропонував
+        # «виплатити зарплату» самому собі.
+        if biz and str(biz.owner_id) == str(staff.id):
+            continue
+        # Оплату не налаштовано - зарплати ще не існує.
+        if not staff.pay_configured_at or not staff.payout_period or staff.payout_period == "none":
             continue
 
         last_res = await db.execute(
@@ -447,11 +463,12 @@ async def list_due_payouts(
         )
         last = last_res.scalars().first()
         last_date = last.paid_at if last else None
-
-        if staff.payout_period == "weekly":
-            is_due = last_date is None or (now - last_date).days >= 7
-        else:  # monthly
-            is_due = last_date is None or (now - last_date).days >= 30
+        # Перший період - від налаштування оплати, а не «одразу»: раніше
+        # «немає жодної виплати» означало «пора платити», і новий салон
+        # отримував нагадування ще до першого клієнта.
+        anchor = last_date or staff.pay_configured_at
+        period_days = 7 if staff.payout_period == "weekly" else 30
+        is_due = (now - anchor).days >= period_days
 
         if not is_due:
             continue

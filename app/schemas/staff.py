@@ -62,6 +62,7 @@ class StaffResponse(BaseModel):
     show_in_storefront: bool = True
     payout_period: Optional[str] = None
     payout_day: Optional[str] = None
+    pay_configured_at: Optional[datetime] = None
     tips_full: bool = True
     deduct_materials: bool = False
     auto_reset_balance: bool = False

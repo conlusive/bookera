@@ -19,9 +19,9 @@ async def test_payout_preview_and_creation(client, auth_headers):
     import asyncpg
     conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/bookera_test")
     await conn.execute(
-        "INSERT INTO users (id, email, role, business_id, commission_rate, is_active, created_at) "
-        "VALUES ($1, $2, 'master', $3, 40.0, true, now()) "
-        "ON CONFLICT (id) DO UPDATE SET business_id=$3, commission_rate=40.0",
+        "INSERT INTO users (id, email, role, business_id, commission_rate, is_active, created_at, pay_configured_at) "
+        "VALUES ($1, $2, 'master', $3, 40.0, true, now(), now() - interval '8 days') "
+        "ON CONFLICT (id) DO UPDATE SET business_id=$3, commission_rate=40.0, pay_configured_at=now() - interval '8 days'",
         "payout-master", "master@test.com", business_id,
     )
     await conn.close()
@@ -114,8 +114,8 @@ async def test_payout_includes_fixed_salary_and_tax(client, auth_headers):
     import asyncpg
     conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/bookera_test")
     await conn.execute(
-        "INSERT INTO users (id, email, role, business_id, commission_rate, fixed_salary, tax_rate, is_active, created_at) "
-        "VALUES ($1,$2,'master',$3,40.0,5000.0,10.0,true,now()) "
+        "INSERT INTO users (id, email, role, business_id, commission_rate, fixed_salary, tax_rate, is_active, created_at, pay_configured_at) "
+        "VALUES ($1,$2,'master',$3,40.0,5000.0,10.0,true,now(), now() - interval '8 days') "
         "ON CONFLICT (id) DO UPDATE SET business_id=$3, commission_rate=40.0, fixed_salary=5000.0, tax_rate=10.0",
         "formula-master", "formula@test.com", business_id,
     )

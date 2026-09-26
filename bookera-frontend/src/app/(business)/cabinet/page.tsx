@@ -318,6 +318,15 @@ export default function BusinessCabinet() {
           return;
         }
 
+        // Повні дані закладу - після перемикання, з сервера. Раніше поточним
+        // ставився урізаний обʼєкт зі списку перемикача (назва, адреса,
+        // лого): налаштування, правила бронювання й решта полів у ньому
+        // відсутні, і вкладки показували порожнечу.
+        try {
+          const fresh = await api.getMyProfile(token);
+          if (fresh?.business && String(fresh.business.id) === String(targetBiz.id)) targetBiz = fresh.business;
+        } catch { /* лишаємо те, що маємо */ }
+
         setBusiness(targetBiz);
         localStorage.setItem('bookera_active_biz_id', String(targetBiz.id));
         const savedCal = localStorage.getItem(`bookera_cal_settings_${targetBiz.id}`);

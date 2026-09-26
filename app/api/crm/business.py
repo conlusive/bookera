@@ -234,6 +234,14 @@ async def register_business(
 
     user.business_id = business.id
 
+    # Власник - теж член свого закладу. Раніше створення лише переписувало
+    # «поточний заклад», а в таблицю членства нічого не писало. Перемикач
+    # закладів будується саме з членства, тож другий створений заклад у
+    # ньому не зʼявлявся, а перемикання туди відхилялось як «ви не
+    # працюєте в цьому закладі».
+    from app.models import StaffMembership
+    db.add(StaffMembership(user_id=str(user.id), business_id=business.id, role="business_owner", is_active=True))
+
     for h in (payload.hours or []):
         db.add(BusinessHours(business_id=business.id, **h.model_dump()))
 
@@ -399,10 +407,37 @@ async def delete_business(
 
     # Відвʼязуємо персонал, а не видаляємо: люди мають облікові записи,
     # якими користуються і в інших закладах.
+    #
+    # Хто має ще один заклад, перемикається на нього, а не стає клієнтом:
+    # власник двох салонів, що закрив один, лишається власником другого.
+    from app.models import StaffMembership
+    from sqlalchemy import delete as sa_delete
+
     staff_res = await db.execute(select(User).where(User.business_id == business_id))
     for member in staff_res.scalars().all():
-        member.business_id = None
-        member.role = RoleEnum.CLIENT
+        other = await db.execute(
+            select(StaffMembership).where(
+                StaffMembership.user_id == str(member.id),
+                StaffMembership.business_id != business_id,
+                StaffMembership.is_active.is_(True),
+            )
+        )
+        next_place = other.scalars().first()
+        if next_place:
+            member.business_id = next_place.business_id
+            member.role = next_place.role
+        else:
+            member.business_id = None
+            member.role = RoleEnum.CLIENT
+
+    # Членство в закладі, що зникає, - разом із ним.
+    await db.execute(sa_delete(StaffMembership).where(StaffMembership.business_id == business_id))
+
+    # Записати зміни ДО видалення. У закладу є звʼязок `staff`: при
+    # видаленні ORM завантажує його з бази й обнуляє поточний заклад у
+    # кожного. Без flush власник ще числився б у базі за цим закладом, і
+    # його перемикання на інший перетерлося б на порожнє.
+    await db.flush()
 
     logger.warning(
         "Заклад видалено: id=%s name=%s owner=%s",
@@ -459,6 +494,24 @@ async def list_my_workplaces(
         .order_by(Business.name)
     )
 
+    # Страховка: заклади, якими людина ВОЛОДІЄ, - у списку завжди, навіть
+    # якщо запису членства бракує (заклади, створені до виправлення).
+    # Відсутній запис членства створюємо одразу - інакше перемкнутись
+    # туди не дало б switch-workplace.
+    rows = list(m_res.all())
+    member_of = {biz.id for _, biz in rows}
+    owned = await db.execute(select(Business).where(Business.owner_id == str(current_user.id)))
+    added = False
+    for biz in owned.scalars().all():
+        if biz.id not in member_of:
+            m = StaffMembership(user_id=str(current_user.id), business_id=biz.id, role="business_owner", is_active=True)
+            db.add(m)
+            rows.append((m, biz))
+            added = True
+    if added:
+        await db.commit()
+    rows.sort(key=lambda r: (r[1].name or "").lower())
+
     return [
         WorkplaceOut(
             business_id=biz.id,
@@ -470,7 +523,7 @@ async def list_my_workplaces(
             is_current=(user.business_id == biz.id),
             has_access=has_access(biz),
         )
-        for membership, biz in m_res.all()
+        for membership, biz in rows
     ]
 
 

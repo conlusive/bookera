@@ -474,6 +474,16 @@ export const api = {
     });
   },
 
+  /** Що за запрошення - для сторінки прийняття, ще до входу. */
+  async getInviteInfo(inviteToken: string): Promise<any> {
+    return publicFetch(`/public/invites/${encodeURIComponent(inviteToken)}`);
+  },
+
+  /** Скасувати запрошення - посилання з нього більше не спрацює. */
+  async cancelInvite(token: string, businessId: number, inviteId: number): Promise<void> {
+    await authFetch(`/crm/businesses/${businessId}/invites/${inviteId}`, token, { method: 'DELETE' });
+  },
+
   async acceptStaffInvite(token: string, inviteToken: string): Promise<{ status: string; business_id: number; role: string }> {
     return authFetch(`/public/invites/accept`, token, { method: 'POST', body: JSON.stringify({ token: inviteToken }) });
   },

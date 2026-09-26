@@ -3,7 +3,7 @@ from datetime import timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -18,6 +18,46 @@ router = APIRouter(tags=["CRM - Staff"])
 INVITE_EXPIRY_DAYS = 7
 
 
+import os
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+ROLE_LABELS = {"master": "майстра", "admin": "адміністратора"}
+
+
+def _invite_url(invite: StaffInvite) -> str:
+    return f"{FRONTEND_URL}/invite?token={invite.token}"
+
+
+def _with_url(invite: StaffInvite) -> StaffInviteResponse:
+    out = StaffInviteResponse.model_validate(invite, from_attributes=True)
+    out.invite_url = _invite_url(invite)
+    return out
+
+
+def _invite_email(invite: StaffInvite, business_name: str) -> str:
+    """
+    Лист із КНОПКОЮ. Раніше в листі був лише сирий токен без посилання -
+    майстрові не було на що натиснути.
+    """
+    url = _invite_url(invite)
+    role = ROLE_LABELS.get(invite.role, "члена команди")
+    return f"""
+    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;color:#1D1D1F">
+      <h2 style="font-size:22px;margin:0 0 12px">Вас запросили в команду</h2>
+      <p style="font-size:15px;line-height:1.55;color:#3A3A3C;margin:0 0 22px">
+        <b>{business_name}</b> запрошує вас у BookEra як {role}. Ви бачитимете свій
+        розклад і записи клієнтів.
+      </p>
+      <a href="{url}" style="display:inline-block;background:#1D1D1F;color:#fff;text-decoration:none;
+         padding:13px 22px;border-radius:12px;font-size:15px;font-weight:600">Прийняти запрошення</a>
+      <p style="font-size:13px;color:#86868B;margin:22px 0 0">
+        Запрошення дійсне {INVITE_EXPIRY_DAYS} днів. Якщо кнопка не працює, відкрийте посилання:<br>
+        <a href="{url}" style="color:#6F9273;word-break:break-all">{url}</a>
+      </p>
+    </div>
+    """
+
+
 @router.post("/crm/businesses/{business_id}/invites", response_model=StaffInviteResponse, status_code=status.HTTP_201_CREATED)
 async def create_invite(
     business_id: int,
@@ -27,33 +67,56 @@ async def create_invite(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     await assert_business_admin(db, current_user, business_id)
+    business = (await db.execute(select(Business).where(Business.id == business_id))).scalars().first()
+    email = str(invite_in.email).strip().lower()
 
-    biz_res = await db.execute(select(Business).where(Business.id == business_id))
-    business = biz_res.scalars().first()
-
-    invite = StaffInvite(
-        business_id=business_id,
-        email=invite_in.email,
-        role=invite_in.role,
-        token=secrets.token_urlsafe(32),
-        status="pending",
-        invited_by=current_user.id,
-        expires_at=utc_now() + timedelta(days=INVITE_EXPIRY_DAYS),
+    # Людина вже в команді - друге запрошення їй ні до чого.
+    already = await db.execute(
+        select(StaffMembership).join(User, User.id == StaffMembership.user_id).where(
+            StaffMembership.business_id == business_id,
+            StaffMembership.is_active.is_(True),
+            func.lower(User.email) == email,
+        )
     )
-    db.add(invite)
+    if already.scalars().first():
+        raise HTTPException(status_code=409, detail="Ця людина вже у вашій команді")
+
+    # Запрошення вже чекає - оновлюємо строк і шлемо лист ще раз, а не
+    # плодимо дублікати в списку «очікують».
+    pending = (await db.execute(
+        select(StaffInvite).where(
+            StaffInvite.business_id == business_id,
+            func.lower(StaffInvite.email) == email,
+            StaffInvite.status == "pending",
+        )
+    )).scalars().first()
+
+    if pending:
+        pending.role = invite_in.role
+        pending.expires_at = utc_now() + timedelta(days=INVITE_EXPIRY_DAYS)
+        invite = pending
+    else:
+        invite = StaffInvite(
+            business_id=business_id,
+            email=email,
+            role=invite_in.role,
+            token=secrets.token_urlsafe(32),
+            status="pending",
+            invited_by=current_user.id,
+            expires_at=utc_now() + timedelta(days=INVITE_EXPIRY_DAYS),
+        )
+        db.add(invite)
     await db.commit()
     await db.refresh(invite)
 
+    name = business.name if business else "Заклад"
     background_tasks.add_task(
         send_email_sync,
         to_email=invite.email,
-        subject=f"Запрошення приєднатись до {business.name if business else 'команди'} на Bookera",
-        html_content=(
-            f"<p>Вас запросили приєднатись до команди <b>{business.name if business else ''}</b> на Bookera.</p>"
-            f"<p>Токен запрошення: <code>{invite.token}</code></p>"
-        ),
+        subject=f"{name} запрошує вас у команду",
+        html_content=_invite_email(invite, name),
     )
-    return invite
+    return _with_url(invite)
 
 
 @router.get("/crm/businesses/{business_id}/invites", response_model=List[StaffInviteResponse])
@@ -62,9 +125,53 @@ async def list_invites(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    """Запрошення, що ще чекають, - для списку «Очікують» у команді."""
     await assert_business_admin(db, current_user, business_id)
-    result = await db.execute(select(StaffInvite).where(StaffInvite.business_id == business_id))
-    return result.scalars().all()
+    rows = (await db.execute(
+        select(StaffInvite).where(StaffInvite.business_id == business_id, StaffInvite.status == "pending")
+        .order_by(StaffInvite.created_at.desc())
+    )).scalars().all()
+    now = utc_now()
+    return [_with_url(i) for i in rows if i.expires_at and i.expires_at > now]
+
+
+@router.delete("/crm/businesses/{business_id}/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_invite(
+    business_id: int,
+    invite_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Скасувати запрошення: посилання з нього більше не спрацює."""
+    await assert_business_admin(db, current_user, business_id)
+    invite = (await db.execute(
+        select(StaffInvite).where(StaffInvite.id == invite_id, StaffInvite.business_id == business_id)
+    )).scalars().first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Запрошення не знайдено")
+    if invite.status == "pending":
+        invite.status = "cancelled"
+        await db.commit()
+
+
+@router.get("/public/invites/{token}")
+async def invite_info(token: str, db: AsyncSession = Depends(get_db)):
+    """
+    Що за запрошення - для сторінки прийняття, ще ДО входу. Людина має
+    бачити, куди її кличуть, перш ніж реєструватись.
+    """
+    invite = (await db.execute(select(StaffInvite).where(StaffInvite.token == token))).scalars().first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Запрошення не знайдено")
+    business = (await db.execute(select(Business).where(Business.id == invite.business_id))).scalars().first()
+    expired = invite.status == "pending" and invite.expires_at < utc_now()
+    return {
+        "business_name": business.name if business else None,
+        "business_logo": (business.logo if business else None),
+        "role": invite.role,
+        "email": invite.email,
+        "status": "expired" if expired else invite.status,
+    }
 
 
 @router.post("/public/invites/accept")

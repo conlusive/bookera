@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
@@ -310,6 +310,32 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     return parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
   };
 
+  // --- Запрошення ---
+  // Через сервер. Раніше кабінет писав запрошення напряму в Supabase, у
+  // таблицю staff, - сервер про нього не знав, лист не йшов, а сторінка
+  // прийняття все одно не працювала.
+  const [invites, setInvites] = useState<any[]>([]);
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
+  const [copiedInvite, setCopiedInvite] = useState<number | 'last' | null>(null);
+
+  const loadInvites = useCallback(async () => {
+    if (!business?.id || !hasAdminRights) return;
+    try {
+      const token = await getAuthToken();
+      setInvites(await api.listInvites(token, business.id));
+    } catch { /* список запрошень - не привід ламати вкладку */ }
+  }, [business?.id, hasAdminRights]);
+
+  useEffect(() => { void loadInvites(); }, [loadInvites]);
+
+  const copyInvite = async (url: string, key: number | 'last') => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedInvite(key);
+      setTimeout(() => setCopiedInvite(k => (k === key ? null : k)), 1600);
+    } catch { showToast('Не вдалося скопіювати - виділіть посилання вручну', 'error'); }
+  };
+
   const handleInviteStaff = async () => {
     const targetEmail = inviteForm.email.trim().toLowerCase();
     if (!targetEmail) return showToast('Введіть електронну пошту співробітника', 'error');
@@ -317,62 +343,28 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
     setIsInvitingStaff(true);
     try {
-      const existingInTeam = (team || []).find((t: any) => t.email?.toLowerCase() === targetEmail);
-      if (existingInTeam) {
-        showToast('Співробітник із такою поштою вже у команді', 'error');
-        setIsInvitingStaff(false);
-        return;
-      }
-
-      // Раніше тут шукали профіль за поштою напряму в Supabase, у таблиці
-      // profiles, якої не існує: пошук завжди повертав порожньо, і імʼя
-      // все одно бралось із пошти. Мертвий запит прибрано. Справжні імʼя
-      // й телефон майстер вкаже сам, коли прийме запрошення.
-      const staffName = targetEmail.split('@')[0];
-      const staffPhone = null;
-
-      const newStaffData = {
-        business_id: business.id,
-        name: staffName,
-        email: targetEmail,
-        phone: staffPhone,
-        role: inviteForm.role || 'master',
-        // «Очікує», доки майстер не прийме запрошення. Раніше залежало від
-        // мертвого пошуку профілю й фактично завжди було саме таким.
-        status: 'pending',
-        title: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
-        specialization: inviteForm.role === 'admin' ? 'Адміністратор' : 'Спеціаліст',
-        provides_services: inviteForm.role === 'master',
-        assigned_services: inviteForm.role === 'master' ? (services || []).map((s: any) => String(s.id)) : [],
-        // Ставку обирає власник у вкладці «Зарплата». Раніше тут стояло
-        // 40% - число, яке ніхто не обирав, і зарплата «існувала» з
-        // першого дня.
-        commission_rate: null,
-        fixed_salary: null,
-        tax_rate: 0,
-        payment_method: 'cash'
-      };
-
-      const { data, error } = await supabase
-        .from('staff')
-        .insert([newStaffData])
-        .select()
-        .single();
-
-      if (error) {
-        showToast(error?.message || 'Не вдалося зберегти', 'error');
-        return;
-      }
-
-      setTeam((prev: any[]) => [...prev, data]);
-      setSelectedStaffId(data.id);
-      setIsInviteStaffModalOpen(false);
+      const token = await getAuthToken();
+      const invite: any = await api.inviteStaff(token, business.id, { email: targetEmail, role: inviteForm.role || 'master' });
+      setLastInviteUrl(invite.invite_url || null);
       setInviteForm({ email: '', role: 'master' });
-      showToast(`Запрошення надіслано: ${data.name}`, 'info');
+      await loadInvites();
+      showToast(`Запрошення надіслано на ${targetEmail}`, 'success');
     } catch (err: any) {
-      showToast(err?.message || 'Не вдалося додати співробітника', 'error');
+      showToast(err?.message || 'Не вдалося надіслати запрошення', 'error');
     } finally {
       setIsInvitingStaff(false);
+    }
+  };
+
+  const handleCancelInvite = async (inviteId: number) => {
+    if (!business?.id) return;
+    try {
+      const token = await getAuthToken();
+      await api.cancelInvite(token, business.id, inviteId);
+      setInvites(prev => prev.filter(i => i.id !== inviteId));
+      showToast('Запрошення скасовано', 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося скасувати', 'error');
     }
   };
 
@@ -1930,8 +1922,46 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
               onClick={handleInviteStaff}
               disabled={isInvitingStaff}
             >
-              {isInvitingStaff ? 'Додавання...' : 'Додати в команду'}
+              {isInvitingStaff ? 'Надсилаємо…' : 'Надіслати запрошення'}
             </Button>
+
+            {/* Посилання на щойно надіслане запрошення: якщо лист не дійде,
+                власник копіює його й шле у Viber чи Telegram. */}
+            {lastInviteUrl && (
+              <div style={{ marginTop: '1rem', padding: '0.85rem 1rem', borderRadius: '12px', background: '#F4FAF5' }}>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#2E3A30', marginBottom: '0.4rem' }}>Запрошення надіслано</div>
+                <div style={{ fontSize: '0.78rem', color: '#5C6B5E', marginBottom: '0.6rem' }}>Якщо лист не дійде - надішліть посилання в месенджер:</div>
+                <button type="button" onClick={() => void copyInvite(lastInviteUrl, 'last')}
+                  style={{ width: '100%', height: '38px', borderRadius: '10px', border: '1px dashed #8FAE93', background: '#fff', color: '#2E3A30', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                  {copiedInvite === 'last' ? 'Скопійовано' : 'Скопіювати посилання'}
+                </button>
+              </div>
+            )}
+
+            {/* Запрошення, що чекають відповіді: скопіювати ще раз або скасувати. */}
+            {invites.length > 0 && (
+              <div style={{ marginTop: '1.25rem' }}>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#86868B', marginBottom: '0.5rem' }}>Очікують відповіді</div>
+                {invites.map((inv: any) => (
+                  <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0', borderTop: '1px solid #F2F2F5' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.875rem', color: '#1D1D1F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.email}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#86868B' }}>{inv.role === 'admin' ? 'Адміністратор' : 'Майстер'} · до {new Date(inv.expires_at).toLocaleDateString('uk-UA')}</div>
+                    </div>
+                    {inv.invite_url && (
+                      <button type="button" onClick={() => void copyInvite(inv.invite_url, inv.id)}
+                        style={{ height: '30px', padding: '0 0.7rem', borderRadius: '8px', border: '1px solid #E5E5EA', background: '#fff', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        {copiedInvite === inv.id ? 'Скопійовано' : 'Посилання'}
+                      </button>
+                    )}
+                    <button type="button" onClick={() => void handleCancelInvite(inv.id)}
+                      style={{ height: '30px', padding: '0 0.7rem', borderRadius: '8px', border: 'none', background: 'none', color: '#B42318', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer' }}>
+                      Скасувати
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

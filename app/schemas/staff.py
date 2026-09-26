@@ -1,11 +1,20 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import field_validator, BaseModel, EmailStr, ConfigDict
 
 
 class StaffInviteCreate(BaseModel):
     email: EmailStr
     role: str = "master"
+
+    # Лише ролі персоналу. Запросити когось «власником» через форму
+    # запрошення не можна - передача закладу має окремий шлях.
+    @field_validator("role")
+    @classmethod
+    def _role(cls, v):
+        if v not in ("master", "admin"):
+            raise ValueError("Роль має бути master або admin")
+        return v
 
 
 class StaffInviteResponse(BaseModel):
@@ -16,6 +25,9 @@ class StaffInviteResponse(BaseModel):
     status: str
     created_at: datetime
     expires_at: datetime
+    # Посилання для власника: скопіювати й надіслати у Viber чи Telegram,
+    # якщо лист не дійде. Лише у відповідях для власника закладу.
+    invite_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

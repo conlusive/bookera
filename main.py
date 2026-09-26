@@ -159,9 +159,19 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # exc.errors() може містити сам виняток (поле ctx.error), коли
+    # перевірку зробив власний валідатор через ValueError. JSONResponse не
+    # вміє перетворити його на JSON - і обробник помилки сам падав із 500.
+    # Беремо лише серіалізовні поля, а текст першої помилки валідатора -
+    # як зрозуміле пояснення для людини.
+    errors = [
+        {"loc": list(e.get("loc", [])), "msg": str(e.get("msg", "")), "type": str(e.get("type", ""))}
+        for e in exc.errors()
+    ]
+    custom = next((e["msg"].removeprefix("Value error, ") for e in errors if e["type"] == "value_error"), None)
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        content={"detail": "Некоректні дані запиту", "errors": exc.errors()},
+        content={"detail": custom or "Некоректні дані запиту", "errors": errors},
     )
 
 

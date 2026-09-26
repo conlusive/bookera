@@ -320,6 +320,11 @@ export const api = {
     return publicFetch(`/businesses/?limit=${limit}&offset=${offset}`, { revalidate });
   },
 
+  /** Знайти координати закладу за його поточною адресою. */
+  async geocodeBusiness(token: string, businessId: number): Promise<{ latitude: number; longitude: number }> {
+    return authFetch(`/crm/businesses/${businessId}/geocode`, token, { method: 'POST' });
+  },
+
   /** Власні дані: імʼя, телефон, фото, роль. Пошта - лише через Supabase Auth. */
   async getMe(token: string): Promise<{ email: string | null; full_name: string | null; phone: string | null; avatar_url: string | null; role: string | null }> {
     return authFetch('/account/me', token);

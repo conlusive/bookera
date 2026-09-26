@@ -126,6 +126,23 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   // 🟢 3. Завантаження даних бізнесу (залежить лише від business?.id, щоб не скидати змінені поля)
   const hasCoords = contactSettings.latitude != null && contactSettings.longitude != null;
 
+  // «Знайти за адресою» - для закладів, де автоматичний пошук колись
+  // не вдався або ще не запускався (створені до появи геокодування).
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const retryGeocode = async () => {
+    setIsGeocoding(true);
+    try {
+      const token = await getAuthToken();
+      const found = await api.geocodeBusiness(token, Number(business.id));
+      setContactSettings(prev => ({ ...prev, latitude: found.latitude, longitude: found.longitude }));
+      showToast('Точку знайдено за адресою', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Адресу не знайдено - поставте мітку вручну', 'error');
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
   const canAutoSave = useRef(false);
   useEffect(() => {
     if (!business) return;
@@ -510,6 +527,30 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                 </div>
               ) : (
               <div style={{ padding: '1.5rem 2rem' }}>
+                {/* Коли точки немає - спершу пропонуємо знайти її ще раз за
+                    адресою. Пошук тепер розумніший (прибирає офіс, поверх,
+                    розгортає «вул.»), і для багатьох адрес, що не знайшлись
+                    раніше, це спрацює без ручної мітки. */}
+                {!hasCoords && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => void retryGeocode()}
+                      disabled={isGeocoding || !contactSettings.address || !contactSettings.city}
+                      style={{
+                        height: '36px', padding: '0 1rem', borderRadius: '10px', border: 'none',
+                        background: '#1D1D1F', color: '#fff', fontSize: '0.875rem', fontWeight: 500,
+                        fontFamily: 'inherit', cursor: 'pointer',
+                        opacity: isGeocoding || !contactSettings.address || !contactSettings.city ? 0.4 : 1,
+                      }}
+                    >
+                      {isGeocoding ? 'Шукаємо…' : 'Знайти за адресою'}
+                    </button>
+                    <span style={{ fontSize: '0.8125rem', color: '#86868B' }}>
+                      {contactSettings.address ? `${contactSettings.address}, ${contactSettings.city}` : 'Спершу вкажіть адресу вище й збережіть'}
+                    </span>
+                  </div>
+                )}
                 <LocationPicker
                   city={contactSettings.city}
                   value={

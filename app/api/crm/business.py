@@ -285,7 +285,10 @@ async def update_business(
     # і перетирати її автоматичною було б неповагою до його роботи.
     coords_set_manually = "latitude" in data and data["latitude"] is not None
 
-    if address_changed and not coords_set_manually:
+    # Шукаємо й тоді, коли адреса та сама, але координат немає: раніше
+    # невдалий пошук (тимчасовий збій, ліміт запитів) лишався назавжди -
+    # повторне збереження тієї ж адреси вже нічого не шукало.
+    if (address_changed or business.latitude is None) and not coords_set_manually and business.address:
         from app.services.geocoding import geocode_address
 
         found = await geocode_address(business.city, business.address)
@@ -446,6 +449,41 @@ async def delete_business(
 
     await db.delete(business)
     await db.commit()
+
+
+@router.post("/{business_id}/geocode")
+async def geocode_business(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Знайти координати за поточною адресою - кнопка «Знайти ще раз» у
+    налаштуваннях. Для закладів, створених до появи геокодування, і
+    тих, де пошук колись не вдався.
+    """
+    res = await db.execute(select(Business).where(Business.id == business_id))
+    business = res.scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+    if str(business.owner_id) != str(current_user.id):
+        user = (await db.execute(select(User).where(User.id == str(current_user.id)))).scalars().first()
+        if not user or user.business_id != business_id:
+            raise HTTPException(status_code=403, detail="Немає доступу до цього закладу")
+
+    if not business.address or not business.city:
+        raise HTTPException(status_code=400, detail="Вкажіть місто й адресу закладу")
+
+    from app.services.geocoding import geocode_address
+    found = await geocode_address(business.city, business.address)
+    if not found:
+        raise HTTPException(
+            status_code=404,
+            detail="Адресу не знайдено на мапі. Поставте мітку вручну - так навіть точніше.",
+        )
+    business.latitude, business.longitude = found
+    await db.commit()
+    return {"latitude": float(business.latitude), "longitude": float(business.longitude)}
 
 
 # === Робота в кількох закладах ===

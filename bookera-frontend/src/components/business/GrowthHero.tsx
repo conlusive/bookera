@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { Caveat } from 'next/font/google';
 
 /**
@@ -116,10 +115,10 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
               <span>для росту.</span>
             </h2>
             <p>Аналітика, розсилки та власна онлайн-вітрина. Усе для того, щоб ви заробляли більше.</p>
-            {onStart ? (
+            {/* Кнопка - лише якщо сторінка її передала. На бізнес-лендінгу
+                «почати» вже є вгорі й унизу, третя однакова тут зайва. */}
+            {onStart && (
               <button type="button" onClick={onStart} className="gh-cta" style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>{startLabel}</button>
-            ) : (
-              <Link href="/business/register" className="gh-cta">{startLabel}</Link>
             )}
           </div>
         </div>

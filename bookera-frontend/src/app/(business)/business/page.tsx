@@ -11,6 +11,7 @@ import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import SmartImage from '@/components/ui/SmartImage';
+import ProfileMenu from '@/components/ui/ProfileMenu';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
@@ -535,16 +536,12 @@ export default function BusinessLandingPage() {
                 </div>
 
                 {isProfileOpen && (
-                  <div className="search-dropdown anim" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '210px', background: '#ffffff', borderRadius: '16px', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.4rem', zIndex: 1001, border: '1px solid #e2e8f0' }}>
-                    <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.25rem' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Акаунт</div>
-                      <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#222222', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
-                    </div>
-                    <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
-                    {isBusinessRole(userRole) && (<Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Бізнес-кабінет</Link>)}
-                    <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
-                    <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #f1f5f9', marginTop: '2px', boxSizing: 'border-box' }}>Вийти з акаунту</button>
-                  </div>
+                  <ProfileMenu
+                    userName={userName}
+                    showCabinet={isBusinessRole(userRole)}
+                    onLogout={handleLogout}
+                    onNavigate={() => setIsProfileOpen(false)}
+                  />
                 )}
               </div>
             ) : (
@@ -619,7 +616,9 @@ export default function BusinessLandingPage() {
 
       {/* EXPLORE FEATURES */}
       {/* МОЖЛИВОСТІ ДЛЯ РОСТУ - заголовок по центру, картки-теки по кутах. */}
-      <GrowthHero onStart={handleStartBusinessClick} startLabel={isBusinessRole(userRole) ? 'Перейти в кабінет' : 'Спробувати безкоштовно'} />
+      {/* Без кнопки: «почати» - лише вгорі й унизу сторінки. Посередині
+          третя однакова кнопка лише відволікала від самих можливостей. */}
+      <GrowthHero />
 
       {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
@@ -748,12 +747,6 @@ export default function BusinessLandingPage() {
             <div>
               <div className="footer-col-title">Для бізнесу</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                {/* Та сама дія, що й кнопки «почати» вгорі: гостя -
-                    на реєстрацію, власника - у кабінет. */}
-                <button type="button" onClick={handleStartBusinessClick} className="footer-nav-link"
-                  style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
-                  {isBusinessRole(userRole) ? 'Мій кабінет' : 'Підключити заклад'}
-                </button>
                 <a href="#features" className="footer-nav-link">Можливості</a>
                 <a href="#faq" className="footer-nav-link">Поширені запитання</a>
               </div>

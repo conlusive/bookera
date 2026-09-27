@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Icons, MASTER_COLORS, toLocalDateStr, checkSameDay, CurrentTimeIndicator } from '@/components/shared';
+import { isOwnerRole } from '@/lib/roles';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
@@ -19,6 +20,8 @@ const TASK_COLORS = ['#fdf4ff', '#f0fdf4', '#fffbeb', '#f0f9ff', '#fff1f2'];
 const TASK_BORDERS = ['#f5d0fe', '#bbf7d0', '#fde68a', '#bae6fd', '#fecdd3'];
 
 export default function CalendarTab({ business, team = [], services = [], refreshClients, userProfile }: any) {
+  // Години роботи закладу - лише власник і адміністратор.
+  const canEditSalonHours = isOwnerRole(userProfile?.role) || userProfile?.role === 'admin';
   const supabase = useMemo(() => createClient(), []);
   const { showToast } = useToast();
   const now = new Date();
@@ -2407,6 +2410,10 @@ const handleSaveShifts = async () => {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.85rem' }}>Графік роботи закладу</div>
+{/* Години закладу змінюють лише власник і адміністратор - сервер
+                    однаково не дасть зберегти (403). Майстрові - пояснення,
+                    а не форма, яку він заповнить і не зможе зберегти. */}
+                {canEditSalonHours ? (
                 <button
                   type="button"
                   onClick={() => { setShowCalSettingsModal(false); setShowShiftsModal(true); }}
@@ -2414,6 +2421,11 @@ const handleSaveShifts = async () => {
                 >
                   <Icons.Clock /> Змінити
                 </button>
+                ) : (
+                  <span style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'right', maxWidth: '200px', lineHeight: 1.4 }}>
+                    Змінює власник. Свій графік можна попросити змінити у «Запитах».
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -2421,7 +2433,7 @@ const handleSaveShifts = async () => {
       )}
 
       {/* --- МОДАЛКА НАЛАШТУВАННЯ РОБОЧИХ ЗМІН (КОМПАКТНА) --- */}
-      {showShiftsModal && (
+      {showShiftsModal && canEditSalonHours && (
         <div className="modal-overlay" onClick={() => setShowShiftsModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)', maxWidth: '460px', padding: '0', borderRadius: '16px' }}>
             <div style={{ padding: '1.1rem 1.4rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

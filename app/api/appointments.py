@@ -99,6 +99,34 @@ def _on_shift(shifts, day, start_mins: int, end_mins: int) -> bool:
     return s <= start_mins and end_mins <= e
 
 
+async def _notify_team(db: AsyncSession, background_tasks: BackgroundTasks, appointment, title: str, extra_rows: list) -> None:
+    """
+    Скасування чи перенесення клієнтом - листом майстрові й закладу.
+    Раніше не повідомляли нікого: салон дізнавався, лише коли зазирав у
+    календар, а майстер чекав на клієнта, який уже скасував.
+    """
+    from app.core.email import send_staff_notice
+    business = await db.get(Business, appointment.business_id)
+    if not business:
+        return
+    service = await db.get(Service, appointment.service_id) if appointment.service_id else None
+    rows = [("Клієнт", appointment.client_name or "Без імені", False),
+            ("Послуга", service.name if service else "Візит", False)] + extra_rows
+    to = set()
+    if business.email:
+        to.add(business.email.lower())
+    elif business.owner_id:
+        owner = (await db.execute(select(User).where(User.id == str(business.owner_id)))).scalars().first()
+        if owner and owner.email:
+            to.add(owner.email.lower())
+    if appointment.master_id:
+        m = (await db.execute(select(User).where(User.id == str(appointment.master_id)))).scalars().first()
+        if m and m.email:
+            to.add(m.email.lower())
+    for email in to:
+        background_tasks.add_task(send_staff_notice, email, business.name, title, rows, "")
+
+
 @router.get("/available-slots", response_model=AvailableSlotsResponse)
 async def get_available_slots(
     business_id: int = Query(...),
@@ -839,6 +867,25 @@ async def create_appointment(
                 needs_approval=not auto_approve,
             )
 
+        # Майстрові - особисто, якщо в нього своя пошта. Раніше лист ішов
+        # лише на пошту закладу: майстер дізнавався про клієнта, коли
+        # відкривав календар.
+        if appointment.master_id:
+            _m = (await db.execute(select(User).where(User.id == str(appointment.master_id)))).scalars().first()
+            if _m and _m.email and _m.email.lower() != (staff_email or "").lower():
+                background_tasks.add_task(
+                    send_new_booking_to_staff,
+                    to_email=_m.email,
+                    business_name=business.name,
+                    client_name=appointment_in.client_name or "",
+                    client_phone=appointment_in.client_phone or "",
+                    service_name=service.name if service else "Візит",
+                    booking_date=appointment.start_time.strftime("%d.%m.%Y"),
+                    booking_time=appointment.start_time.strftime("%H:%M"),
+                    master_name="",
+                    needs_approval=not auto_approve,
+                )
+
     # Фонова відправка листа клієнту через SMTP
     if notify_client and appointment_in.client_email and business and service:
         background_tasks.add_task(
@@ -905,6 +952,7 @@ async def get_appointment_for_client(
 
 @router.post("/{appointment_id}/cancel", response_model=AppointmentResponse)
 async def cancel_appointment_by_client(
+    background_tasks: BackgroundTasks,
     appointment_id: int,
     payload: ManageBookingRequest,
     db: AsyncSession = Depends(get_db),
@@ -924,6 +972,8 @@ async def cancel_appointment_by_client(
 
     appointment.status = "cancelled"
     await db.commit()
+    await _notify_team(db, background_tasks, appointment, "Клієнт скасував запис",
+                       [("Коли", appointment.start_time.strftime('%d.%m.%Y, %H:%M'), True)])
     await db.refresh(appointment)
     return appointment
 
@@ -1359,6 +1409,7 @@ class ClientRescheduleRequest(BaseModel):
 async def reschedule_appointment_by_client(
     appointment_id: int,
     payload: ClientRescheduleRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -1402,8 +1453,13 @@ async def reschedule_appointment_by_client(
     if not any(str(s.time)[:5] == wanted and s.status == "available" for s in slots.slots):
         raise HTTPException(status_code=409, detail="Цей час уже зайнятий - оберіть інший")
 
+    old_start = appointment.start_time
     appointment.start_time = new_start
     appointment.end_time = new_start + timedelta(minutes=minutes)
     await db.commit()
+    await _notify_team(db, background_tasks, appointment, "Клієнт переніс запис", [
+        ("Було", old_start.strftime("%d.%m.%Y, %H:%M"), False),
+        ("Тепер", new_start.strftime("%d.%m.%Y, %H:%M"), True),
+    ])
     await db.refresh(appointment)
     return appointment

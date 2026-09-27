@@ -255,3 +255,22 @@ async def send_booking_reminder_email(
                      "щоб хтось інший міг зайняти цей час."),
     )
     await asyncio.to_thread(send_email_sync, to_email, f"Нагадування про візит — {business_name}", html)
+
+
+async def send_staff_notice(
+        to_email: str,
+        business_name: str,
+        title: str,
+        rows: list,
+        footer_note: str = "",
+):
+    """
+    Коротке сповіщення персоналу: майстрові про запис, перенесення чи
+    скасування; власнику - про запит майстра; майстрові - про рішення.
+
+    rows - [(підпис, значення, великий?)]. Оформлення - те саме, що в
+    листі про новий запис, щоб усі листи BookEra виглядали однаково.
+    """
+    body = "".join(info_row(label, value, big=bool(big)) for label, value, big in rows)
+    html = layout(business_name=business_name, title=title, body_html=card(body), footer_note=footer_note)
+    await asyncio.to_thread(send_email_sync, to_email, f"{title} — {business_name}", html)

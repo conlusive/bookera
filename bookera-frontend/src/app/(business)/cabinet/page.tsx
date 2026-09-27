@@ -44,6 +44,9 @@ const TeamTab = dynamic(() => import('@/components/cabinet/TeamTab'), { ssr: fal
 const InventoryTab = dynamic(() => import('@/components/cabinet/InventoryTab'), { ssr: false, loading: TabLoading });
 const MarketingTab = dynamic(() => import('@/components/cabinet/MarketingTab'), { ssr: false, loading: TabLoading });
 const SettingsTab = dynamic(() => import('@/components/cabinet/SettingsTab'), { ssr: false, loading: TabLoading });
+const MasterClients = dynamic(() => import('@/components/cabinet/MasterClients'), { ssr: false, loading: TabLoading });
+const MasterPortfolio = dynamic(() => import('@/components/cabinet/MasterPortfolio'), { ssr: false, loading: TabLoading });
+const MasterRequests = dynamic(() => import('@/components/cabinet/MasterRequests'), { ssr: false, loading: TabLoading });
 const MasterEarnings = dynamic(() => import('@/components/cabinet/MasterEarnings'), { ssr: false, loading: TabLoading });
 const StorefrontTab = dynamic(() => import('@/components/cabinet/StorefrontTab'), { ssr: false, loading: TabLoading });
 
@@ -89,9 +92,9 @@ export default function BusinessCabinet() {
   /**
    * Вкладки за роллю.
    *
-   * Майстер: календар (одразу з його записами й «Перервою» для закриття
-   * часу), клієнти й «Заробіток» - гроші, візити й рейтинг у цьому
-   * закладі. Окремої «Моєї роботи» немає: її розклад дублював календар. Раніше йому показувались «Послуги» й
+   * Майстер: календар (одразу з його записами й «Перервою»), «Мої
+   * клієнти» (ті, хто ходить саме до нього), «Портфоліо», «Запити»
+   * (графік, відпустка) і «Заробіток». Окремої «Моєї роботи» немає: її розклад дублював календар. Раніше йому показувались «Послуги» й
    * «Команда»: він міг змінити чи видалити будь-яку послугу, а вкладка
    * команди одразу тягнула чужі зарплати й отримувала 403.
    * Адміністратор - робочі вкладки закладу без грошей власника.
@@ -101,9 +104,9 @@ export default function BusinessCabinet() {
 
   const allowedTabs = useMemo(() => {
     const role = userProfile?.role;
-    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => id !== 'MyEarnings');
-    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyEarnings'];
-    return ['Calendar', 'Clients', 'MyEarnings'];
+    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => !['MyClients', 'MyPortfolio', 'MyRequests', 'MyEarnings'].includes(id));
+    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyPortfolio', 'MyRequests', 'MyEarnings'];
+    return ['Calendar', 'MyClients', 'MyPortfolio', 'MyRequests', 'MyEarnings'];
   }, [userProfile?.role]);
 
   // Запамʼятана вкладка, якої для ролі немає (майстер колись відкрив
@@ -1522,6 +1525,12 @@ export default function BusinessCabinet() {
           <MasterEarnings businessId={Number(business.id)} userId={String(userProfile.id)} />
 
         )}
+
+        {activeTab === 'MyClients' && business?.id && <MasterClients businessId={Number(business.id)} />}
+
+        {activeTab === 'MyPortfolio' && business?.id && userProfile?.id && <MasterPortfolio businessId={Number(business.id)} userId={String(userProfile.id)} />}
+
+        {activeTab === 'MyRequests' && business?.id && <MasterRequests businessId={Number(business.id)} />}
 
         {activeTab === 'Team' && <TeamTab business={business} team={team} setTeam={setTeam} services={services} userProfile={userProfile} appointments={appointments} setActiveTab={setActiveTab} setFilterMaster={setFilterMaster} globalShifts={shifts} />}
 

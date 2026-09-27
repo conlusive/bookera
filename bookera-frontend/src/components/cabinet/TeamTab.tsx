@@ -9,6 +9,7 @@ import { useToast } from '@/context/ToastContext';
 import Button from '@/components/ui/AppButton';
 import { Icons } from '@/components/shared';
 import Avatar from '@/components/ui/Avatar';
+import TeamRequestsPanel from '@/components/cabinet/TeamRequestsPanel';
 
 // Локальні іконки
 const WalletIcon = () => (
@@ -823,6 +824,12 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       <div className="custom-scroll" style={{ flex: 1, backgroundColor: colors.bg, overflowY: 'auto', position: 'relative' }}>
         {currentStaff ? (
           <div style={{ maxWidth: '850px', margin: '0 auto', padding: '3rem 2rem' }}>
+
+            {/* Запити команди (графік, відпустка) - лише коли є що розглянути.
+                Погоджений графік одразу зʼявиться в картці майстра. */}
+            {hasAdminRights && business?.id && (
+              <TeamRequestsPanel businessId={Number(business.id)} onDecided={async () => { try { const t = await getAuthToken(); setTeam(await api.listStaff(t, Number(business.id))); } catch { /* лишаємо як є */ } }} />
+            )}
 
             {/* ХЕДЕР ПРОФІЛЮ */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>

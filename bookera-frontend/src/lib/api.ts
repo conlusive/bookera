@@ -343,6 +343,38 @@ export const api = {
   },
 
   /** «Моя робота»: розклад, заробіток і салони майстра - по всіх салонах разом. */
+  // --- Інструменти майстра ---
+  async listMyRequests(token: string, businessId: number): Promise<any[]> {
+    return authFetch(`/work/me/requests?business_id=${businessId}`, token);
+  },
+  async createStaffRequest(token: string, payload: any): Promise<any> {
+    return authFetch('/work/me/requests', token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async cancelStaffRequest(token: string, id: number): Promise<void> {
+    await authFetch(`/work/me/requests/${id}`, token, { method: 'DELETE' });
+  },
+  async listStaffRequests(token: string, businessId: number, status = 'pending'): Promise<any[]> {
+    return authFetch(`/crm/businesses/${businessId}/staff-requests?status=${status}`, token);
+  },
+  async decideStaffRequest(token: string, businessId: number, id: number, approve: boolean, note?: string): Promise<any> {
+    return authFetch(`/crm/businesses/${businessId}/staff-requests/${id}/decide`, token, { method: 'POST', body: JSON.stringify({ approve, note }) });
+  },
+  async listMyClients(token: string, businessId: number): Promise<any[]> {
+    return authFetch(`/work/me/clients?business_id=${businessId}`, token);
+  },
+  async listMyPortfolio(token: string, businessId: number): Promise<any[]> {
+    return authFetch(`/work/me/portfolio?business_id=${businessId}`, token);
+  },
+  async addPortfolioItem(token: string, payload: { business_id: number; image_url: string; caption?: string }): Promise<any> {
+    return authFetch('/work/me/portfolio', token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async deletePortfolioItem(token: string, id: number): Promise<void> {
+    await authFetch(`/work/me/portfolio/${id}`, token, { method: 'DELETE' });
+  },
+  async getPublicPortfolio(businessId: number): Promise<{ user_id: string; name: string; avatar_url: string | null; items: { id: number; image_url: string; caption: string | null }[] }[]> {
+    return publicFetch(`/public/businesses/${businessId}/portfolio`);
+  },
+
   /** Скільки моїх записів у кожен день місяця: {"2026-09-24": 3}. */
   async getMyCalendar(token: string, businessId: number, month: string): Promise<Record<string, number>> {
     return authFetch(`/work/me/calendar?business_id=${businessId}&month=${month}`, token);

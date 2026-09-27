@@ -552,6 +552,14 @@ export default function SalonClient({
 
   const [isGiftOpen, setIsGiftOpen] = useState(false);
 
+  // Роботи майстрів - з їхніх портфоліо в кабінеті
+  const [portfolio, setPortfolio] = useState<{ user_id: string; name: string; avatar_url: string | null; items: { id: number; image_url: string; caption: string | null }[] }[]>([]);
+  const [portfolioOpen, setPortfolioOpen] = useState<{ image_url: string; caption: string | null } | null>(null);
+  useEffect(() => {
+    if (!salon?.id) return;
+    void api.getPublicPortfolio(salon.id).then(setPortfolio).catch(() => setPortfolio([]));
+  }, [salon?.id]);
+
   const handleToggleFavorite = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -2380,6 +2388,41 @@ const formatRole = (role?: string) => {
                   ))}
                 </div>
               </div>
+              )}
+
+              {/* РОБОТИ МАЙСТРІВ - портфоліо, яке майстри додають у кабінеті.
+                  Лише коли хтось щось додав: порожній блок нічого не каже. */}
+              {portfolio.length > 0 && (
+              <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
+                <h3 className="section-title" style={{ fontSize: '1.25rem', margin: '0 0 1.25rem' }}>Роботи майстрів</h3>
+                {portfolio.map(m => (
+                  <div key={m.user_id} style={{ marginBottom: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.7rem' }}>
+                      <span style={{ width: 30, height: 30, borderRadius: '50%', background: '#EEF1F6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, position: 'relative' }}>
+                        {m.avatar_url ? <SmartImage src={m.avatar_url} alt="" width={30} height={30} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : m.name.slice(0, 1)}
+                      </span>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{m.name}</span>
+                      <span style={{ fontSize: '0.8rem', color: '#86868B' }}>{m.items.length}</span>
+                    </div>
+                    <div className="hide-scrollbar" style={{ display: 'flex', gap: '0.6rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                      {m.items.map(it => (
+                        <button key={it.id} type="button" onClick={() => setPortfolioOpen(it)}
+                          style={{ flex: '0 0 auto', width: 150, aspectRatio: '4 / 5', borderRadius: 12, overflow: 'hidden', position: 'relative', border: 'none', padding: 0, cursor: 'zoom-in', background: '#F5F5F7' }}>
+                          <SmartImage src={it.image_url} alt={it.caption || `Робота: ${m.name}`} fill sizes="150px" style={{ objectFit: 'cover' }} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              )}
+              {portfolioOpen && (
+                <div onClick={() => setPortfolioOpen(null)} role="dialog" aria-label="Робота майстра"
+                  style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', cursor: 'zoom-out' }}>
+                  <SmartImage src={portfolioOpen.image_url} alt={portfolioOpen.caption || ''} width={1400} height={1750} sizes="90vw"
+                    style={{ maxWidth: '90vw', maxHeight: '82vh', width: 'auto', height: 'auto', borderRadius: 14, objectFit: 'contain' }} />
+                  {portfolioOpen.caption && <div style={{ color: '#fff', marginTop: '0.9rem', fontSize: '0.95rem' }}>{portfolioOpen.caption}</div>}
+                </div>
               )}
 
               {/* КАРТА

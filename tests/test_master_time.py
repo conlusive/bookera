@@ -189,3 +189,20 @@ async def test_master_stays_in_team_after_switching(client, auth_headers):
     team = (await client.get(f"/crm/businesses/{a_bid}/staff", headers=a_owner)).json()
     assert m in {t["id"] for t in team}, "у команді першого салону лишається"
     assert await _free(client, a_bid, a_sid, m, day), "і до нього можна записатись"
+
+
+@pytest.mark.asyncio
+async def test_calendar_break_blocks_online_booking(client, auth_headers):
+    """
+    «Перерва» з календаря кабінету (is_block) - постійний блок без терміну
+    дії. Клієнт не має змоги записатись на цей час онлайн.
+    """
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "brk")
+    r = await client.post("/crm/appointments", json={
+        "business_id": bid, "master_id": m, "start_time": f"{day.isoformat()}T13:00:00",
+        "duration_minutes": 60, "client_name": "Обід", "is_block": True,
+    }, headers=owner)
+    assert r.status_code in (200, 201), r.text
+    free = await _free(client, bid, sid, m, day)
+    assert "13:00" not in free and "12:30" not in free, "перерва закриває час"
+    assert "14:00" in free

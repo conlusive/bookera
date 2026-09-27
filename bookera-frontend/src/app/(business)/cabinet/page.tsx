@@ -45,7 +45,6 @@ const InventoryTab = dynamic(() => import('@/components/cabinet/InventoryTab'), 
 const MarketingTab = dynamic(() => import('@/components/cabinet/MarketingTab'), { ssr: false, loading: TabLoading });
 const SettingsTab = dynamic(() => import('@/components/cabinet/SettingsTab'), { ssr: false, loading: TabLoading });
 const MasterEarnings = dynamic(() => import('@/components/cabinet/MasterEarnings'), { ssr: false, loading: TabLoading });
-const MasterWorkspace = dynamic(() => import('@/components/cabinet/MasterWorkspace'), { ssr: false, loading: TabLoading });
 const StorefrontTab = dynamic(() => import('@/components/cabinet/StorefrontTab'), { ssr: false, loading: TabLoading });
 
 function normalizeStaff(list: any[]): any[] {
@@ -90,8 +89,9 @@ export default function BusinessCabinet() {
   /**
    * Вкладки за роллю.
    *
-   * Майстер: календар, клієнти й «Моя робота» - його візити, заробіток
-   * і рейтинг у цьому закладі. Раніше йому показувались «Послуги» й
+   * Майстер: календар (одразу з його записами й «Перервою» для закриття
+   * часу), клієнти й «Заробіток» - гроші, візити й рейтинг у цьому
+   * закладі. Окремої «Моєї роботи» немає: її розклад дублював календар. Раніше йому показувались «Послуги» й
    * «Команда»: він міг змінити чи видалити будь-яку послугу, а вкладка
    * команди одразу тягнула чужі зарплати й отримувала 403.
    * Адміністратор - робочі вкладки закладу без грошей власника.
@@ -101,9 +101,9 @@ export default function BusinessCabinet() {
 
   const allowedTabs = useMemo(() => {
     const role = userProfile?.role;
-    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => id !== 'MyWork' && id !== 'MyEarnings');
-    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyWork', 'MyEarnings'];
-    return ['Calendar', 'Clients', 'MyWork', 'MyEarnings'];
+    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => id !== 'MyEarnings');
+    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyEarnings'];
+    return ['Calendar', 'Clients', 'MyEarnings'];
   }, [userProfile?.role]);
 
   // Запамʼятана вкладка, якої для ролі немає (майстер колись відкрив
@@ -1516,12 +1516,6 @@ export default function BusinessCabinet() {
         {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 
         {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} />}
-
-        {activeTab === 'MyWork' && business?.id && (
-
-          <MasterWorkspace businessId={Number(business.id)} userName={userProfile?.full_name || userProfile?.name} />
-
-        )}
 
         {activeTab === 'MyEarnings' && business?.id && userProfile?.id && (
 

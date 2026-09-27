@@ -7,8 +7,8 @@ import { getAuthToken } from '@/lib/auth-token-client';
 /**
  * «Заробіток» майстра - окремо від розкладу.
  *
- * Розклад майстер відкриває кілька разів на день, заробіток - раз на
- * тиждень. В одній вкладці вони заважали одне одному, тож гроші тут.
+ * Розклад майстра - у «Календарі» (одразу з його записами й «Перервою»),
+ * тож тут лише те, чого там немає: гроші, візити й рейтинг.
  *
  * Мова оформлення - як у «Аналітиці»: заголовок 1.75rem, білі картки з
  * рамкою #e5e5ea і радіусом 16px, палітра #1d1d1f / #86868b.
@@ -86,12 +86,12 @@ export default function MasterEarnings({ businessId, userId }: { businessId: num
         <div className="me-kpi">
           <div className="me-kpi-l">Виручка за 30 днів</div>
           <div className="me-kpi-v">{work ? money(s30.revenue) : '—'}</div>
-          <div className="me-kpi-s">{work ? `${s30.visits ?? 0} ${plural(Number(s30.visits || 0), 'візит', 'візити', 'візитів')}` : ' '}</div>
+          <div className="me-kpi-s">{work ? `${s30.visits ?? 0} ${plural(Number(s30.visits || 0), 'візит', 'візити', 'візитів')} · середній чек ${money(s30.avg_check)}` : ' '}</div>
         </div>
         <div className="me-kpi">
-          <div className="me-kpi-l">Середній чек</div>
-          <div className="me-kpi-v">{work ? money(s30.avg_check) : '—'}</div>
-          <div className="me-kpi-s">за 30 днів</div>
+          <div className="me-kpi-l">Рейтинг</div>
+          <div className="me-kpi-v">{work?.rating ? `${work.rating} ★` : '—'}</div>
+          <div className="me-kpi-s">{work?.reviews ? `${work.reviews} ${plural(work.reviews, 'відгук', 'відгуки', 'відгуків')}` : 'поки без відгуків'}</div>
         </div>
       </div>
 

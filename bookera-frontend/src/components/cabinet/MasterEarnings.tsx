@@ -11,13 +11,13 @@ import { getAuthToken } from '@/lib/auth-token-client';
  * тож тут лише те, чого там немає: гроші, візити й рейтинг.
  *
  * Мова оформлення - як у «Аналітиці»: заголовок 1.75rem, білі картки з
- * рамкою #e5e5ea і радіусом 16px, палітра #1d1d1f / #86868b.
+ * рамкою #e2e8f0 і радіусом 16px, палітра #0f172a / #64748b.
  *
  * Дані - ті самі, що бачить власник: розрахунок до виплати з розбивкою
  * й історія виплат. Майстер бачить лише свої, чужі - ні (сервер).
  */
 
-const C = { text: '#1d1d1f', sub: '#86868b', border: '#e5e5ea', green: '#6F9273' };
+const C = { text: '#0f172a', sub: '#64748b', border: '#e2e8f0', green: '#6F9273' };
 const MONTHS_GEN = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 
 const money = (n: number | null | undefined) => `${Math.round(Number(n || 0)).toLocaleString('uk-UA')} ₴`;
@@ -149,7 +149,7 @@ export default function MasterEarnings({ businessId, userId }: { businessId: num
       <style jsx>{`
         .me { font-family: inherit; padding: 1.5rem 3rem; flex-grow: 1; background: #fff; min-height: 100vh; width: 100%; box-sizing: border-box; color: ${C.text}; }
         .me-header { display: flex; justify-content: space-between; align-items: center; margin: 0.5rem 0 1.5rem; gap: 1rem; flex-wrap: wrap; }
-        .me-header h2 { font-size: 1.75rem; font-weight: 700; margin: 0; letter-spacing: -0.3px; }
+        .me-header h2 { font-size: 1.6rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
         .me-period { font-size: 0.85rem; color: ${C.sub}; padding: 8px 14px; border: 1px solid ${C.border}; border-radius: 10px; }
         .me-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
         .me-kpi { background: #fff; border: 1px solid ${C.border}; border-radius: 16px; padding: 1.1rem 1.25rem; }
@@ -162,7 +162,7 @@ export default function MasterEarnings({ businessId, userId }: { businessId: num
         .me-card-sub { font-size: 0.85rem; color: ${C.sub}; margin-bottom: 0.9rem; }
         .me-muted { font-size: 0.9rem; color: ${C.sub}; margin-top: 0.5rem; }
         .me-rows { display: flex; flex-direction: column; }
-        .me-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid #f2f2f4; font-size: 0.9rem; }
+        .me-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid #f1f5f9; font-size: 0.9rem; }
         .me-row:first-child { border-top: none; }
         .me-row span { color: ${C.sub}; }
         .me-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -172,7 +172,7 @@ export default function MasterEarnings({ businessId, userId }: { businessId: num
         .me-table { display: flex; flex-direction: column; margin-top: 0.6rem; }
         .me-th, .me-tr { display: grid; grid-template-columns: 1fr 1.6fr 0.6fr 1fr; gap: 0.75rem; align-items: center; padding: 0.7rem 0; font-size: 0.875rem; }
         .me-th { font-size: 0.78rem; color: ${C.sub}; font-weight: 600; border-bottom: 2px solid ${C.border}; padding-top: 0.2rem; }
-        .me-tr { border-bottom: 1px solid #f2f2f4; }
+        .me-tr { border-bottom: 1px solid #f1f5f9; }
         .me-tr b { font-weight: 600; font-variant-numeric: tabular-nums; }
         .me-sub { color: ${C.sub}; font-variant-numeric: tabular-nums; }
         @media (max-width: 1100px) {

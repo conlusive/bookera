@@ -1132,8 +1132,11 @@ export default function BusinessCabinet() {
                 overflow: 'hidden',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
               }}>
-                {(business?.cover_photo || business?.logo) ? (
-                  <SmartImage src={business.cover_photo || business.logo} alt={business?.name || 'Лого'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {/* Спершу ЛОГОТИП: раніше першою бралась обкладинка - широке фото,
+                    яке в квадраті 36x36 обрізалось як вийде. display: block - без
+                    зсуву по базовій лінії рядка. */}
+                {(business?.logo || business?.cover_photo) ? (
+                  <SmartImage src={business.logo || business.cover_photo} alt={business?.name || 'Лого'} width={72} height={72} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 ) : (
                   business?.name?.charAt(0).toUpperCase() || 'B'
                 )}
@@ -1322,7 +1325,8 @@ export default function BusinessCabinet() {
                   onMouseOver={e => { if (!isActive) { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; } }}
                   onMouseOut={e => { if (!isActive) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b'; } }}
                 >
-                  <div style={{ flexShrink: 0, color: isActive ? '#0f172a' : '#94a3b8', display: 'flex', transition: '0.15s' }}>
+                  {/* Рамка 20x20: іконка будь-якого розміру не зсуває рядок */}
+                  <div style={{ flexShrink: 0, width: 20, height: 20, color: isActive ? '#0f172a' : '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.15s' }}>
                     <item.icon />
                   </div>
                   <div style={{

@@ -12,7 +12,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
  * відпустку, показуємо ДО рішення - щоб власник знав, кого переносити.
  */
 
-const C = { text: '#1d1d1f', sub: '#86868b', border: '#e5e5ea' };
+const C = { text: '#0f172a', sub: '#64748b', border: '#e2e8f0' };
 const MONTHS_GEN = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 const REASON: Record<string, string> = { vacation: 'Відпустка', sick: 'Лікарняний', other: 'Особисті справи' };
 const d = (iso: string) => { const x = new Date(`${iso.slice(0, 10)}T12:00:00`); return `${x.getDate()} ${MONTHS_GEN[x.getMonth()]}`; };
@@ -93,7 +93,7 @@ export default function TeamRequestsPanel({ businessId, onDecided }: { businessI
         .tr { border: 1px solid ${C.border}; border-radius: 16px; padding: 1.1rem 1.3rem; margin-bottom: 1.5rem; background: #fff; color: ${C.text}; }
         .tr-title { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
         .tr-title span { font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #FBF3E4; color: #8A6516; }
-        .tr-item { display: flex; justify-content: space-between; gap: 1.25rem; padding: 0.9rem 0; border-top: 1px solid #f2f2f4; }
+        .tr-item { display: flex; justify-content: space-between; gap: 1.25rem; padding: 0.9rem 0; border-top: 1px solid #f1f5f9; }
         .tr-title + .tr-item { border-top: none; }
         .tr-main { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1; }
         .tr-main b { font-size: 0.95rem; }

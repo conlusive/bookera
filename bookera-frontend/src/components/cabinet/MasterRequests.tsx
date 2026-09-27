@@ -10,7 +10,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
  * сама. Мова оформлення - як у «Аналітиці» й «Заробітку».
  */
 
-const C = { text: '#1d1d1f', sub: '#86868b', border: '#e5e5ea', green: '#10b981' };
+const C = { text: '#0f172a', sub: '#64748b', border: '#e2e8f0', green: '#10b981' };
 const DAYS = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пʼятниця', 'Субота', 'Неділя'];
 const MONTHS_GEN = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 const REASONS = [{ id: 'vacation', label: 'Відпустка' }, { id: 'sick', label: 'Лікарняний' }, { id: 'other', label: 'Особисті справи' }];
@@ -18,7 +18,7 @@ const STATUS: Record<string, { label: string; bg: string; fg: string }> = {
   pending: { label: 'Очікує рішення', bg: '#FBF3E4', fg: '#8A6516' },
   approved: { label: 'Погоджено', bg: '#E8F7EF', fg: '#0F7A4B' },
   declined: { label: 'Відхилено', bg: '#FCEDEC', fg: '#B42318' },
-  cancelled: { label: 'Відкликано', bg: '#F5F5F7', fg: '#86868b' },
+  cancelled: { label: 'Відкликано', bg: '#F5F5F7', fg: '#64748b' },
 };
 
 const d = (iso: string) => { const x = new Date(`${iso.slice(0, 10)}T12:00:00`); return `${x.getDate()} ${MONTHS_GEN[x.getMonth()]}`; };
@@ -170,20 +170,20 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
       <style jsx>{`
         .rq { padding: 1.5rem 3rem; background: #fff; min-height: 100vh; width: 100%; box-sizing: border-box; color: ${C.text}; }
         .rq-header { display: flex; align-items: center; gap: 1rem; margin: 0.5rem 0 0.5rem; }
-        .rq-header h2 { font-size: 1.75rem; font-weight: 700; margin: 0; letter-spacing: -0.3px; }
+        .rq-header h2 { font-size: 1.6rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
         .rq-pill { font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #FBF3E4; color: #8A6516; }
         .rq-lead { color: ${C.sub}; font-size: 0.95rem; margin: 0 0 1.5rem; max-width: 640px; line-height: 1.5; }
         .rq-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 360px)); gap: 1rem; margin-bottom: 1.25rem; }
         .rq-action { display: flex; align-items: center; gap: 0.9rem; text-align: left; padding: 1.1rem 1.2rem; border-radius: 16px; border: 1px solid ${C.border}; background: #fff; cursor: pointer; font-family: inherit; transition: border-color .15s, background-color .15s; }
-        .rq-action:hover { background: #fafafa; }
+        .rq-action:hover { background: #f8fafc; }
         .rq-action.on { border-color: ${C.text}; }
-        .rq-ico { width: 42px; height: 42px; border-radius: 12px; background: #f5f5f7; display: flex; align-items: center; justify-content: center; color: ${C.text}; flex-shrink: 0; }
+        .rq-ico { width: 42px; height: 42px; border-radius: 12px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; color: ${C.text}; flex-shrink: 0; }
         .rq-action b { display: block; font-size: 0.975rem; font-weight: 600; color: ${C.text}; }
         .rq-action small { display: block; font-size: 0.82rem; color: ${C.sub}; margin-top: 2px; }
         .rq-card { background: #fff; border: 1px solid ${C.border}; border-radius: 16px; padding: 1.25rem 1.4rem; margin-bottom: 1.25rem; max-width: 760px; }
         .rq-card-title { font-size: 1.05rem; font-weight: 700; }
         .rq-sub { font-size: 0.85rem; color: ${C.sub}; margin: 0.2rem 0 0.9rem; }
-        .rq-shift { display: grid; grid-template-columns: 40px 130px 1fr; align-items: center; gap: 0.75rem; padding: 0.45rem 0; border-top: 1px solid #f2f2f4; }
+        .rq-shift { display: grid; grid-template-columns: 40px 130px 1fr; align-items: center; gap: 0.75rem; padding: 0.45rem 0; border-top: 1px solid #f1f5f9; }
         .rq-shift:first-of-type { border-top: none; }
         .rq-day { font-size: 0.9rem; font-weight: 500; }
         .rq-switch { width: 40px; height: 22px; border-radius: 12px; border: none; background: #e2e8f0; position: relative; cursor: pointer; padding: 0; transition: background-color .2s; }
@@ -194,7 +194,7 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
         .rq-times em { font-style: normal; color: ${C.sub}; }
         input[type='time'], input[type='date'] { height: 36px; padding: 0 0.6rem; border-radius: 9px; border: 1px solid ${C.border}; font-family: inherit; font-size: 0.875rem; color: ${C.text}; background: #fff; outline: none; }
         input:focus, textarea:focus { border-color: ${C.text}; }
-        .rq-seg { display: inline-flex; background: #f2f2f7; border-radius: 9px; padding: 2px; margin: 0.8rem 0 1rem; }
+        .rq-seg { display: inline-flex; background: #f1f5f9; border-radius: 9px; padding: 2px; margin: 0.8rem 0 1rem; }
         .rq-seg button { border: none; background: transparent; padding: 6px 14px; border-radius: 7px; font-family: inherit; font-size: 0.85rem; color: ${C.text}; cursor: pointer; }
         .rq-seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }
         .rq-dates { display: flex; gap: 1rem; flex-wrap: wrap; }
@@ -205,7 +205,7 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
         .rq-btn { height: 38px; padding: 0 1.1rem; border-radius: 10px; border: none; background: ${C.text}; color: #fff; font-family: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
         .rq-btn:disabled { opacity: .45; }
         .rq-btn.ghost { background: #fff; color: ${C.text}; border: 1px solid ${C.border}; }
-        .rq-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.9rem 0; border-top: 1px solid #f2f2f4; }
+        .rq-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.9rem 0; border-top: 1px solid #f1f5f9; }
         .rq-card-title + .rq-row { margin-top: 0.6rem; border-top: none; }
         .rq-row-main { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
         .rq-row-main b { font-size: 0.95rem; font-weight: 600; }

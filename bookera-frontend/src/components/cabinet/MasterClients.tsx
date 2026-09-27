@@ -11,7 +11,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
  * скоро день народження, давно не приходив.
  */
 
-const C = { text: '#1d1d1f', sub: '#86868b', border: '#e5e5ea' };
+const C = { text: '#0f172a', sub: '#64748b', border: '#e2e8f0' };
 const MONTHS_GEN = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 const d = (iso?: string | null) => { if (!iso) return '—'; const x = new Date(iso); return `${x.getDate()} ${MONTHS_GEN[x.getMonth()]}`; };
 const money = (n: number) => `${Math.round(n).toLocaleString('uk-UA')} ₴`;
@@ -132,7 +132,7 @@ export default function MasterClients({ businessId }: { businessId: number }) {
       <style jsx>{`
         .mc { padding: 1.5rem 3rem; background: #fff; min-height: 100vh; width: 100%; box-sizing: border-box; color: ${C.text}; }
         .mc-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 0.5rem 0 1.25rem; flex-wrap: wrap; }
-        .mc-header h2 { font-size: 1.75rem; font-weight: 700; margin: 0; letter-spacing: -0.3px; }
+        .mc-header h2 { font-size: 1.6rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
         .mc-search { display: flex; align-items: center; gap: 0.5rem; height: 38px; padding: 0 0.8rem; border: 1px solid ${C.border}; border-radius: 10px; min-width: 260px; }
         .mc-search input { border: none; outline: none; font-family: inherit; font-size: 0.875rem; flex: 1; color: ${C.text}; }
         .mc-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -144,10 +144,10 @@ export default function MasterClients({ businessId }: { businessId: number }) {
         .mc-card { border: 1px solid ${C.border}; border-radius: 16px; padding: 0.4rem 1.2rem 0.6rem; }
         .mc-th, .mc-tr { display: grid; grid-template-columns: minmax(0, 2.4fr) 0.6fr 1fr 1fr 1fr; gap: 0.75rem; align-items: center; }
         .mc-th { font-size: 0.78rem; color: ${C.sub}; font-weight: 600; padding: 0.8rem 0 0.6rem; border-bottom: 2px solid ${C.border}; }
-        .mc-item { border-bottom: 1px solid #f2f2f4; }
+        .mc-item { border-bottom: 1px solid #f1f5f9; }
         .mc-item:last-child { border-bottom: none; }
         .mc-tr { width: 100%; padding: 0.75rem 0; border: none; background: none; font-family: inherit; font-size: 0.9rem; color: ${C.text}; text-align: left; cursor: pointer; }
-        .mc-tr:hover { background: #fafafa; }
+        .mc-tr:hover { background: #f8fafc; }
         .mc-who { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
         .mc-who b { display: block; font-weight: 600; }
         .mc-who small { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; font-size: 0.8rem; color: ${C.sub}; margin-top: 1px; }
@@ -158,7 +158,7 @@ export default function MasterClients({ businessId }: { businessId: number }) {
         .mc-detail { padding: 0.2rem 0 1rem 48px; }
         .mc-actions { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
         .mc-actions a { height: 32px; padding: 0 0.85rem; display: inline-flex; align-items: center; border-radius: 9px; border: 1px solid ${C.border}; font-size: 0.82rem; font-weight: 500; color: ${C.text}; text-decoration: none; }
-        .mc-actions a:hover { background: #fafafa; }
+        .mc-actions a:hover { background: #f8fafc; }
         .mc-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem 1.5rem; }
         .mc-facts .wide { grid-column: 1 / -1; }
         .mc-facts small { display: block; font-size: 0.75rem; color: ${C.sub}; }

@@ -14,7 +14,7 @@ import SmartImage from '@/components/ui/SmartImage';
  * (business_media), окремою папкою portfolio/.
  */
 
-const C = { text: '#1d1d1f', sub: '#86868b', border: '#e5e5ea' };
+const C = { text: '#0f172a', sub: '#64748b', border: '#e2e8f0' };
 const MAX_MB = 8;
 
 export default function MasterPortfolio({ businessId, userId }: { businessId: number; userId: string }) {
@@ -99,18 +99,18 @@ export default function MasterPortfolio({ businessId, userId }: { businessId: nu
       <style jsx>{`
         .pf { padding: 1.5rem 3rem; background: #fff; min-height: 100vh; width: 100%; box-sizing: border-box; color: ${C.text}; }
         .pf-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin: 0.5rem 0 1.5rem; flex-wrap: wrap; }
-        .pf-header h2 { font-size: 1.75rem; font-weight: 700; margin: 0; letter-spacing: -0.3px; }
+        .pf-header h2 { font-size: 1.6rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
         .pf-header p { margin: 0.35rem 0 0; color: ${C.sub}; font-size: 0.95rem; }
         .pf-btn { height: 40px; padding: 0 1.2rem; border-radius: 10px; border: none; background: ${C.text}; color: #fff; font-family: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
         .pf-btn:disabled { opacity: .5; }
         .pf-err { color: #d70015; font-size: 0.875rem; margin: -0.8rem 0 1rem; }
         .pf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
         .pf-item { margin: 0; }
-        .pf-img { position: relative; aspect-ratio: 4 / 5; border-radius: 14px; overflow: hidden; background: #f5f5f7; }
+        .pf-img { position: relative; aspect-ratio: 4 / 5; border-radius: 14px; overflow: hidden; background: #f1f5f9; }
         .pf-del { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(255,255,255,.92); color: ${C.text}; font-size: 1.1rem; cursor: pointer; opacity: 0; transition: opacity .15s; }
         .pf-img:hover .pf-del { opacity: 1; }
         .pf-item figcaption { font-size: 0.85rem; color: ${C.sub}; margin-top: 0.4rem; }
-        .pf-drop { width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 3rem 2rem; border: 1.5px dashed ${C.border}; border-radius: 18px; background: #fafafa; cursor: pointer; font-family: inherit; text-align: center; }
+        .pf-drop { width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 3rem 2rem; border: 1.5px dashed ${C.border}; border-radius: 18px; background: #f8fafc; cursor: pointer; font-family: inherit; text-align: center; }
         .pf-drop b { font-size: 1rem; color: ${C.text}; }
         .pf-drop span { font-size: 0.875rem; color: ${C.sub}; max-width: 360px; line-height: 1.5; }
         .pf-empty { padding: 3rem 0; color: ${C.sub}; }

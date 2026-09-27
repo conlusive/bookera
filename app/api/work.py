@@ -318,47 +318,29 @@ async def remove_time_off(
     await db.commit()
 
 
-class ShiftsIn(BaseModel):
-    shifts: list
-
-
-@router.put("/me/shifts")
-async def set_my_shifts(
-    payload: ShiftsIn,
-    db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-):
-    """
-    Майстер сам виставляє свій тижневий графік: 7 днів від понеділка,
-    {active, start, end}. Клієнти бачать вільні години лише в межах
-    його змін.
-    """
-    shifts = payload.shifts
-    if len(shifts) != 7:
-        raise HTTPException(status_code=400, detail="Графік - сім днів від понеділка")
-    clean = []
-    for d in shifts:
-        start, end = str(d.get("start", "09:00"))[:5], str(d.get("end", "20:00"))[:5]
-        if not re.match(r"^\d{2}:\d{2}$", start) or not re.match(r"^\d{2}:\d{2}$", end):
-            raise HTTPException(status_code=400, detail="Час у форматі ГГ:ХХ")
-        if d.get("active") and end <= start:
-            raise HTTPException(status_code=400, detail="Кінець зміни має бути пізніше за початок")
-        clean.append({"day": d.get("day"), "active": bool(d.get("active")), "start": start, "end": end})
-    user = (await db.execute(select(User).where(User.id == str(current_user.id)))).scalars().first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Користувача не знайдено")
-    user.shifts = clean
-    await db.commit()
-    return {"shifts": clean}
 
 
 @router.get("/me/shifts")
 async def get_my_shifts(
+    business_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Мій тижневий графік. Не заповнений - типовий, як у кабінеті власника."""
-    user = (await db.execute(select(User).where(User.id == str(current_user.id)))).scalars().first()
+    """
+    Мій тижневий графік - ТОЙ САМИЙ, що салон виставив у «Команді».
+
+    Графік виставляє салон, майстер його бачить. Якщо власного графіка
+    майстрові не задано - він працює в години закладу: саме так рахує
+    вільні години й сервер (_on_shift), тож показуємо їх.
+
+    source: "master" - графік задано саме цьому майстрові,
+            "salon"  - години закладу.
+    """
+    me = str(current_user.id)
+    await _my_membership(db, me, business_id)
+    user = (await db.execute(select(User).where(User.id == me))).scalars().first()
+    days = ["Понеділок", "Вівторок", "Середа", "Четвер", "Пʼятниця", "Субота", "Неділя"]
+
     shifts = user.shifts if user else None
     if isinstance(shifts, str):
         import json
@@ -366,8 +348,21 @@ async def get_my_shifts(
             shifts = json.loads(shifts)
         except Exception:
             shifts = None
-    if not isinstance(shifts, list) or len(shifts) != 7:
-        days = ["Понеділок", "Вівторок", "Середа", "Четвер", "Пʼятниця", "Субота", "Неділя"]
-        shifts = [{"day": d, "active": i < 6, "start": "09:00" if i < 5 else "10:00", "end": "20:00" if i < 5 else "18:00"}
-                  for i, d in enumerate(days)]
-    return {"shifts": shifts}
+    if isinstance(shifts, list) and len(shifts) == 7:
+        return {"source": "master", "shifts": [
+            {"day": days[i], "active": bool(s.get("active", True)),
+             "start": str(s.get("start") or "09:00")[:5], "end": str(s.get("end") or "20:00")[:5]}
+            for i, s in enumerate(shifts)
+        ]}
+
+    from app.models import BusinessHours
+    hours = {h.weekday: h for h in (await db.execute(
+        select(BusinessHours).where(BusinessHours.business_id == business_id)
+    )).scalars().all()}
+    return {"source": "salon", "shifts": [
+        {"day": days[i],
+         "active": bool(hours[i].is_open) if i in hours else i < 6,
+         "start": str(hours[i].open_time)[:5] if i in hours and hours[i].open_time else "09:00",
+         "end": str(hours[i].close_time)[:5] if i in hours and hours[i].close_time else "20:00"}
+        for i in range(7)
+    ]}

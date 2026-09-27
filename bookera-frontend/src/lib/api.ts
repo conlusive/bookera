@@ -361,12 +361,9 @@ export const api = {
     await authFetch(`/work/me/time-off/${id}`, token, { method: 'DELETE' });
   },
 
-  async getMyShifts(token: string): Promise<{ shifts: { day: string; active: boolean; start: string; end: string }[] }> {
-    return authFetch('/work/me/shifts', token);
-  },
-
-  async setMyShifts(token: string, shifts: any[]): Promise<{ shifts: any[] }> {
-    return authFetch('/work/me/shifts', token, { method: 'PUT', body: JSON.stringify({ shifts }) });
+  /** Мій графік - той, що виставив салон у «Команді». source: master | salon. */
+  async getMyShifts(token: string, businessId: number): Promise<{ source: 'master' | 'salon'; shifts: { day: string; active: boolean; start: string; end: string }[] }> {
+    return authFetch(`/work/me/shifts?business_id=${businessId}`, token);
   },
 
   /** «Моя робота». З businessId - лише один заклад (для кабінету майстра). */

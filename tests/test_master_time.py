@@ -24,7 +24,7 @@ async def _setup(client, auth_headers, tag):
     finally:
         await conn.close()
     tomorrow = (local_now() + timedelta(days=1)).date()
-    return bid, sid, m, auth_headers(m), tomorrow
+    return bid, sid, m, auth_headers(m), tomorrow, owner
 
 
 async def _free(client, bid, sid, master, day):
@@ -39,25 +39,26 @@ async def test_day_off_closes_booking(client, auth_headers):
     Раніше графік майстра на сервері не враховувався: до нього можна
     було записатись навіть у вихідний.
     """
-    bid, sid, m, me, day = await _setup(client, auth_headers, "off")
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "off")
     week = [{"active": True, "start": "09:00", "end": "20:00"} for _ in range(7)]
     week[day.weekday()] = {"active": False, "start": "09:00", "end": "20:00"}
-    assert (await client.put("/work/me/shifts", json={"shifts": week}, headers=me)).status_code == 200
+    # Графік виставляє САЛОН у «Команді» - тим самим маршрутом, що кабінет.
+    assert (await client.patch(f"/crm/staff/{m}", json={"shifts": week}, headers=owner)).status_code == 200
     assert await _free(client, bid, sid, m, day) == set(), "у вихідний - жодної вільної години"
 
 
 @pytest.mark.asyncio
 async def test_shift_limits_hours(client, auth_headers):
-    bid, sid, m, me, day = await _setup(client, auth_headers, "shift")
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "shift")
     week = [{"active": True, "start": "12:00", "end": "16:00"} for _ in range(7)]
-    await client.put("/work/me/shifts", json={"shifts": week}, headers=me)
+    await client.patch(f"/crm/staff/{m}", json={"shifts": week}, headers=owner)
     free = await _free(client, bid, sid, m, day)
     assert free and min(free) >= "12:00" and max(free) <= "15:00", "лише в межах зміни, послуга 60 хв"
 
 
 @pytest.mark.asyncio
 async def test_time_off_blocks_and_can_be_removed(client, auth_headers):
-    bid, sid, m, me, day = await _setup(client, auth_headers, "off2")
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "off2")
     start = f"{day.isoformat()}T13:00:00"
     r = await client.post("/work/me/time-off", json={"business_id": bid, "start_time": start,
                                                      "end_time": f"{day.isoformat()}T15:00:00", "note": "Лікар"}, headers=me)
@@ -75,7 +76,7 @@ async def test_time_off_blocks_and_can_be_removed(client, auth_headers):
 @pytest.mark.asyncio
 async def test_time_off_cannot_cover_client_booking(client, auth_headers):
     """Особистий час не перекриває клієнта: спершу перенести запис."""
-    bid, sid, m, me, day = await _setup(client, auth_headers, "clash")
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "clash")
     conn = await asyncpg.connect(DB)
     try:
         from datetime import datetime
@@ -91,7 +92,7 @@ async def test_time_off_cannot_cover_client_booking(client, auth_headers):
 @pytest.mark.asyncio
 async def test_pending_booking_holds_time(client, auth_headers):
     """Запис, що чекає підтвердження, теж тримає час - раніше не тримав."""
-    bid, sid, m, me, day = await _setup(client, auth_headers, "pend")
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "pend")
     conn = await asyncpg.connect(DB)
     try:
         from datetime import datetime
@@ -105,6 +106,35 @@ async def test_pending_booking_holds_time(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_stranger_cannot_read_agenda(client, auth_headers):
-    bid, sid, m, me, day = await _setup(client, auth_headers, "priv")
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "priv")
     r = await client.get("/work/me/agenda", params={"business_id": bid, "date": day.isoformat()}, headers=auth_headers("mt-outsider"))
     assert r.status_code == 403
+
+
+
+@pytest.mark.asyncio
+async def test_master_sees_salon_schedule_but_cannot_change_it(client, auth_headers):
+    """Майстер бачить той самий графік, що виставив салон, але змінити сам не може."""
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "ro")
+    week = [{"active": i < 5, "start": "11:00", "end": "19:00"} for i in range(7)]
+    await client.patch(f"/crm/staff/{m}", json={"shifts": week}, headers=owner)
+
+    r = (await client.get("/work/me/shifts", params={"business_id": bid}, headers=me)).json()
+    assert r["source"] == "master"
+    assert r["shifts"][0] == {"day": "Понеділок", "active": True, "start": "11:00", "end": "19:00"}
+    assert r["shifts"][6]["active"] is False
+
+    # Сам - не може: ні окремим маршрутом, ні через картку в «Команді»
+    assert (await client.put("/work/me/shifts", json={"shifts": week}, headers=me)).status_code in (404, 405)
+    await client.patch(f"/crm/staff/{m}", json={"shifts": [{"active": True, "start": "00:00", "end": "23:59"}] * 7}, headers=me)
+    r2 = (await client.get("/work/me/shifts", params={"business_id": bid}, headers=me)).json()
+    assert r2["shifts"][0]["start"] == "11:00", "графік не змінився"
+
+
+@pytest.mark.asyncio
+async def test_no_own_schedule_shows_salon_hours(client, auth_headers):
+    """Власного графіка немає - майстер працює в години закладу, і бачить саме їх."""
+    bid, sid, m, me, day, owner = await _setup(client, auth_headers, "salon")
+    r = (await client.get("/work/me/shifts", params={"business_id": bid}, headers=me)).json()
+    assert r["source"] == "salon"
+    assert all(s["start"] == "09:00" and s["end"] == "20:00" for s in r["shifts"])

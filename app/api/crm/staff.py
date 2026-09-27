@@ -282,7 +282,8 @@ async def update_staff(
         biz = biz_res.scalars().first()
         is_admin = (biz and str(biz.owner_id) == str(current_user.id)) or (me and me.role in ADMIN_ROLES)
         if not is_admin:
-            for protected in ("role", "commission_rate", "fixed_salary", "tax_rate", "is_active"):
+            # shifts - графік виставляє салон, не сам майстер.
+            for protected in ("role", "commission_rate", "fixed_salary", "tax_rate", "is_active", "shifts"):
                 data.pop(protected, None)
 
     for field, value in data.items():

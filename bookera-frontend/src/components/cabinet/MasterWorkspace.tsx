@@ -46,8 +46,7 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
   const [marks, setMarks] = useState<Record<string, number>>({});
   const [agenda, setAgenda] = useState<any[] | null>(null);
   const [shifts, setShifts] = useState<any[] | null>(null);
-  const [savedShifts, setSavedShifts] = useState<string>('');
-  const [savingShifts, setSavingShifts] = useState(false);
+  const [shiftSource, setShiftSource] = useState<'master' | 'salon'>('salon');
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [offOpen, setOffOpen] = useState(false);
@@ -67,7 +66,7 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
   // Місяць і цифри - один раз
   useEffect(() => {
     void withToken(t => api.getMyWork(t, businessId)).then(setWork).catch(() => setWork({}));
-    void withToken(t => api.getMyShifts(t)).then(r => { setShifts(r.shifts); setSavedShifts(JSON.stringify(r.shifts)); }).catch(() => setShifts([]));
+    void withToken(t => api.getMyShifts(t, businessId)).then(r => { setShifts(r.shifts); setShiftSource(r.source); }).catch(() => setShifts([]));
   }, [businessId, withToken]);
 
   // Крапки календаря - за місяць
@@ -130,23 +129,6 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
     }
   };
 
-  // --- Графік ---
-  const shiftsChanged = shifts !== null && JSON.stringify(shifts) !== savedShifts;
-  const setShift = (i: number, patch: any) => setShifts(prev => prev ? prev.map((s, k) => (k === i ? { ...s, ...patch } : s)) : prev);
-  const saveShifts = async () => {
-    if (!shifts) return;
-    setSavingShifts(true);
-    try {
-      const r = await withToken(t => api.setMyShifts(t, shifts));
-      setShifts(r.shifts);
-      setSavedShifts(JSON.stringify(r.shifts));
-      flash('Графік збережено');
-    } catch (e: any) {
-      flash(e?.message || 'Не вдалося зберегти графік', false);
-    } finally {
-      setSavingShifts(false);
-    }
-  };
 
   const hour = today.getHours();
   const greeting = hour < 12 ? 'Доброго ранку' : hour < 18 ? 'Добрий день' : 'Добрий вечір';
@@ -161,17 +143,32 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
           <h1>Моя робота</h1>
           <p>{greeting}{userName ? `, ${userName.split(' ')[0]}` : ''} · {WEEKDAYS_LONG[today.getDay()].toLowerCase()}, {today.getDate()} {MONTHS_GEN[today.getMonth()]}</p>
         </div>
+        {work?.next && (
+          <div className="mw-next">
+            <span className="mw-next-dot" />
+            <div>
+              <div className="mw-next-label">Наступний клієнт</div>
+              <div className="mw-next-val">
+                {new Date(work.next.start_time).toDateString() === today.toDateString() ? '' : `${new Date(work.next.start_time).getDate()} ${MONTHS_GEN[new Date(work.next.start_time).getMonth()]}, `}
+                {hhmm(work.next.start_time)} · {work.next.client_name || 'Клієнт'}{work.next.service_name ? ` · ${work.next.service_name}` : ''}
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Місяць у цифрах */}
       <section className="mw-stats">
         {[
-          { label: 'Візити за 30 днів', value: work ? String(s30.visits ?? 0) : '—' },
-          { label: 'Виручка', value: work ? money(s30.revenue ?? 0) : '—' },
-          { label: 'Середній чек', value: work ? money(s30.avg_check ?? 0) : '—' },
-          { label: 'Рейтинг', value: work?.rating ? `★ ${work.rating}` : '—', sub: work?.reviews ? `${work.reviews} відгуків` : 'ще немає відгуків' },
+          { label: 'Візити за 30 днів', value: work ? String(s30.visits ?? 0) : '—', icon: 'M8 2.5v4M16 2.5v4M3 9.5h18M5 4.5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2z' },
+          { label: 'Виручка', value: work ? money(s30.revenue ?? 0) : '—', icon: 'M3 17l5-5 4 4 8-8M15 8h5v5' },
+          { label: 'Середній чек', value: work ? money(s30.avg_check ?? 0) : '—', icon: 'M4 7h16v12H4zM4 7l2-3h12l2 3M9 12h6' },
+          { label: 'Рейтинг', value: work?.rating ? `★ ${work.rating}` : '—', sub: work?.reviews ? `${work.reviews} відгуків` : 'ще немає відгуків', icon: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z' },
         ].map(s => (
           <div key={s.label} className="mw-stat">
+            <span className="mw-stat-ico">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5C7A61" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d={s.icon} /></svg>
+            </span>
             <div className="mw-stat-label">{s.label}</div>
             <div className="mw-stat-value">{s.value}</div>
             {s.sub && <div className="mw-stat-sub">{s.sub}</div>}
@@ -217,39 +214,27 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
 
           <section className="mw-card">
             <div className="mw-card-title">Мій графік</div>
-            <div className="mw-card-sub">Клієнти бачать вільні години лише в межах ваших змін.</div>
+            <div className="mw-card-sub">
+              {shiftSource === 'salon'
+                ? 'Ви працюєте в години закладу. Графік виставляє салон у розділі «Команда».'
+                : 'Графік виставив салон у розділі «Команда». Клієнти бачать вільні години лише в межах ваших змін.'}
+            </div>
             {shifts === null ? (
               <div className="mw-muted">Завантаження…</div>
             ) : (
               <div className="mw-shifts">
-                {shifts.map((s, i) => (
-                  <div key={i} className={`mw-shift ${s.active ? '' : 'off'}`}>
-                    <span className="mw-shift-day">{WEEKDAYS[i]}</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={!!s.active}
-                      aria-label={`${WEEKDAYS[i]}: ${s.active ? 'працюю' : 'вихідний'}`}
-                      className={`mw-switch ${s.active ? 'on' : ''}`}
-                      onClick={() => setShift(i, { active: !s.active })}
-                    ><i /></button>
-                    {s.active ? (
-                      <span className="mw-times">
-                        <input type="time" value={s.start} onChange={e => setShift(i, { start: e.target.value })} aria-label="Початок" />
-                        <em>–</em>
-                        <input type="time" value={s.end} onChange={e => setShift(i, { end: e.target.value })} aria-label="Кінець" />
-                      </span>
-                    ) : (
-                      <span className="mw-muted">Вихідний</span>
-                    )}
-                  </div>
-                ))}
+                {shifts.map((s, i) => {
+                  const isTodayRow = ((today.getDay() + 6) % 7) === i;
+                  return (
+                    <div key={i} className={`mw-shift ${s.active ? '' : 'off'} ${isTodayRow ? 'now' : ''}`}>
+                      {/* Той самий перемикач, що в «Команді», - лише показує стан */}
+                      <span className={`mw-switch ${s.active ? 'on' : ''}`} aria-hidden><i /></span>
+                      <span className="mw-shift-day">{s.day}{isTodayRow && <em>сьогодні</em>}</span>
+                      <span className="mw-shift-time">{s.active ? `${s.start} – ${s.end}` : 'Вихідний'}</span>
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            {shiftsChanged && (
-              <button type="button" className="mw-btn" onClick={() => void saveShifts()} disabled={savingShifts}>
-                {savingShifts ? 'Зберігаємо…' : 'Зберегти графік'}
-              </button>
             )}
           </section>
         </div>
@@ -297,7 +282,7 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
                 const mins = minutesBetween(a.start_time, a.end_time);
                 if (a.status === 'time_off') {
                   return (
-                    <div key={a.id} className="mw-item off">
+                    <div key={a.id} className="mw-item off" style={{ ['--dot' as string]: '#C7C7CC' }}>
                       <div className="mw-time">{hhmm(a.start_time)}<small>{a.end_time ? hhmm(a.end_time) : ''}</small></div>
                       <div className="mw-body">
                         <div className="mw-title">{a.client_name || 'Особистий час'}</div>
@@ -309,7 +294,7 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
                 }
                 const st = STATUS[a.status] || STATUS.confirmed;
                 return (
-                  <div key={a.id} className="mw-item">
+                  <div key={a.id} className="mw-item" style={{ ['--dot' as string]: st.fg }}>
                     <div className="mw-time">{hhmm(a.start_time)}<small>{duration(mins)}</small></div>
                     <div className="mw-body">
                       <div className="mw-title">{a.service_name || 'Візит'}</div>
@@ -354,19 +339,27 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
       {notice && <div className={`mw-toast ${notice.ok ? '' : 'err'}`} role="status">{notice.text}</div>}
 
       <style jsx>{`
-        .mw { max-width: 1120px; margin: 0 auto; padding: 2rem 1.5rem 4rem; color: #1D1D1F; }
-        .mw-head h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.035em; margin: 0; }
+        /* На всю ширину сторінки: раніше блоки стискались у колонку 1120px. */
+        .mw { width: 100%; box-sizing: border-box; padding: 2.25rem clamp(1.5rem, 3vw, 3rem) 4rem; color: #1D1D1F; }
+        .mw-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; }
+        .mw-head h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -0.035em; margin: 0; }
         .mw-head p { margin: 0.3rem 0 0; color: #86868B; font-size: 0.975rem; }
 
-        .mw-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem; margin: 1.75rem 0 1.5rem; }
-        .mw-stat { background: #fff; border: 1px solid #EDEDF0; border-radius: 20px; padding: 1.1rem 1.25rem; }
+        .mw-next { display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 1.1rem; border-radius: 18px; background: #fff; border: 1px solid #EDEDF0; }
+        .mw-next-dot { width: 10px; height: 10px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 5px rgba(16,185,129,.14); flex-shrink: 0; }
+        .mw-next-label { font-size: 0.75rem; color: #86868B; }
+        .mw-next-val { font-size: 0.925rem; font-weight: 600; margin-top: 1px; }
+        .mw-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1.75rem 0 1.25rem; }
+        .mw-stat { background: #fff; border: 1px solid #EDEDF0; border-radius: 22px; padding: 1.2rem 1.35rem; transition: box-shadow .25s, transform .25s; }
+        .mw-stat:hover { box-shadow: 0 14px 30px -20px rgba(46,58,48,.35); transform: translateY(-1px); }
+        .mw-stat-ico { width: 36px; height: 36px; border-radius: 11px; background: #F4FAF5; display: flex; align-items: center; justify-content: center; margin-bottom: 0.8rem; }
         .mw-stat-label { font-size: 0.8125rem; color: #86868B; }
-        .mw-stat-value { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.03em; margin-top: 0.25rem; font-variant-numeric: tabular-nums; }
+        .mw-stat-value { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.03em; margin-top: 0.25rem; font-variant-numeric: tabular-nums; }
         .mw-stat-sub { font-size: 0.78rem; color: #AEAEB2; margin-top: 0.1rem; }
 
-        .mw-grid { display: grid; grid-template-columns: 360px 1fr; gap: 1.25rem; align-items: start; }
+        .mw-grid { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; gap: 1.25rem; align-items: start; }
         .mw-col { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
-        .mw-card { background: #fff; border: 1px solid #EDEDF0; border-radius: 22px; padding: 1.25rem 1.35rem; }
+        .mw-card { background: #fff; border: 1px solid #EDEDF0; border-radius: 24px; padding: 1.4rem 1.5rem; }
         .mw-card-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.015em; }
         .mw-card-sub { font-size: 0.85rem; color: #86868B; line-height: 1.5; margin: 0.25rem 0 1rem; }
         .mw-muted { color: #AEAEB2; font-size: 0.85rem; }
@@ -388,18 +381,21 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
         .mw-day.sel i { background: #6F9273; }
         .mw-link { margin-top: 0.6rem; border: none; background: none; color: #5C7A61; font-weight: 600; font-family: inherit; font-size: 0.85rem; cursor: pointer; padding: 0.3rem 0; }
 
-        /* Графік */
+        /* Графік - перемикачі тих самих кольорів і розміру, що в «Команді» */
         .mw-shifts { display: flex; flex-direction: column; }
-        .mw-shift { display: grid; grid-template-columns: 32px 44px 1fr; align-items: center; gap: 0.6rem; padding: 0.45rem 0; border-top: 1px solid #F5F5F7; }
+        .mw-shift { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 0.8rem; padding: 0.6rem 0.5rem; border-top: 1px solid #F5F5F7; border-radius: 10px; }
         .mw-shift:first-child { border-top: none; }
-        .mw-shift-day { font-size: 0.875rem; font-weight: 600; }
-        .mw-shift.off .mw-shift-day { color: #AEAEB2; }
-        .mw-switch { width: 40px; height: 24px; border-radius: 999px; border: none; background: #E5E5EA; position: relative; cursor: pointer; transition: background-color .2s; padding: 0; }
-        .mw-switch i { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .22s cubic-bezier(.16,1,.3,1); }
-        .mw-switch.on { background: #8FAE93; }
-        .mw-switch.on i { transform: translateX(16px); }
-        .mw-times { display: flex; align-items: center; gap: 0.35rem; }
-        .mw-times em, .mw-off-row em { font-style: normal; color: #AEAEB2; }
+        .mw-shift.now { background: #F4FAF5; border-top-color: transparent; }
+        .mw-shift-day { font-size: 0.925rem; font-weight: 600; }
+        .mw-shift-day em { font-style: normal; font-size: 0.72rem; font-weight: 600; color: #5C7A61; margin-left: 0.5rem; }
+        .mw-shift.off .mw-shift-day { color: #64748b; }
+        .mw-shift-time { font-size: 0.9rem; font-variant-numeric: tabular-nums; color: #1D1D1F; }
+        .mw-shift.off .mw-shift-time { color: #AEAEB2; }
+        .mw-switch { width: 40px; height: 22px; border-radius: 12px; background: #e2e8f0; position: relative; display: inline-block; }
+        .mw-switch i { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); transition: left .2s; }
+        .mw-switch.on { background: #10b981; }
+        .mw-switch.on i { left: 20px; }
+        .mw-off-row em { font-style: normal; color: #AEAEB2; }
         input[type='time'] { height: 34px; padding: 0 0.5rem; border-radius: 9px; border: 1px solid #E5E5EA; background: #FAFAFA; font-family: inherit; font-size: 0.875rem; color: #1D1D1F; outline: none; }
         input[type='time']:focus, .mw-note:focus { border-color: #8FAE93; box-shadow: 0 0 0 3px rgba(143,174,147,.18); background: #fff; }
 
@@ -414,10 +410,14 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
         .mw-off-form { padding: 1rem; border-radius: 16px; background: #F7F9F6; margin-bottom: 1rem; }
         .mw-off-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
         .mw-note { flex: 1; min-width: 160px; height: 34px; padding: 0 0.7rem; border-radius: 9px; border: 1px solid #E5E5EA; background: #fff; font-family: inherit; font-size: 0.875rem; outline: none; }
-        .mw-agenda { display: flex; flex-direction: column; gap: 0.5rem; }
-        .mw-item { display: grid; grid-template-columns: 64px 1fr auto; gap: 0.9rem; align-items: center; padding: 0.85rem 1rem; border-radius: 16px; background: #FAFAFA; border: 1px solid #F0F0F2; }
-        .mw-item.off { background: repeating-linear-gradient(135deg, #FAFAFA 0 8px, #F4F4F6 8px 16px); }
-        .mw-time { font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+        /* Часова стрічка: тонка лінія зліва, крапка кольору статусу на кожному записі */
+        .mw-agenda { display: flex; flex-direction: column; gap: 0.6rem; position: relative; padding-left: 20px; }
+        .mw-agenda::before { content: ''; position: absolute; left: 5px; top: 10px; bottom: 10px; width: 2px; border-radius: 1px; background: #F0F0F2; }
+        .mw-item { position: relative; display: grid; grid-template-columns: 70px 1fr auto; gap: 1rem; align-items: center; padding: 1rem 1.15rem; border-radius: 18px; background: #fff; border: 1px solid #EDEDF0; transition: box-shadow .2s, border-color .2s; }
+        .mw-item:hover { border-color: #DCE8DB; box-shadow: 0 10px 24px -18px rgba(46,58,48,.35); }
+        .mw-item::before { content: ''; position: absolute; left: -20px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 3px var(--dot, #8FAE93); }
+        .mw-item.off { background: repeating-linear-gradient(135deg, #FFFFFF 0 8px, #F7F7F9 8px 16px); }
+        .mw-time { font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
         .mw-time small { display: block; font-size: 0.75rem; font-weight: 400; color: #AEAEB2; margin-top: 1px; }
         .mw-title { font-size: 0.95rem; font-weight: 600; }
         .mw-sub { font-size: 0.82rem; color: #86868B; margin-top: 2px; }
@@ -440,7 +440,7 @@ export default function MasterWorkspace({ businessId, userName }: { businessId: 
         .mw-toast.err { color: #B42318; }
         @keyframes mwIn { from { opacity: 0; transform: translate(-50%, 8px); } }
 
-        @media (max-width: 960px) {
+        @media (max-width: 1100px) {
           .mw-grid { grid-template-columns: 1fr; }
           .mw-stats { grid-template-columns: repeat(2, 1fr); }
         }

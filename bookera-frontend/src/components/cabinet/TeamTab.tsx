@@ -476,8 +476,8 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
           const attempts = [
             { url: `${baseUrl}/crm/businesses/${bizId}/staff/${staffIdStr}`, method: 'PATCH' },
             { url: `${baseUrl}/crm/businesses/${bizId}/staff/${staffIdStr}`, method: 'PUT' },
-            { url: `${baseUrl}/crm/staff/${staffIdStr}`, method: 'PATCH' },
-            { url: `${baseUrl}/crm/staff/${staffIdStr}`, method: 'PUT' },
+            { url: `${baseUrl}/crm/staff/${staffIdStr}?business_id=${business?.id ?? ''}`, method: 'PATCH' },
+            { url: `${baseUrl}/crm/staff/${staffIdStr}?business_id=${business?.id ?? ''}`, method: 'PUT' },
           ];
 
           for (const attempt of attempts) {

@@ -337,11 +337,11 @@ async def get_my_shifts(
             "salon"  - години закладу.
     """
     me = str(current_user.id)
-    await _my_membership(db, me, business_id)
-    user = (await db.execute(select(User).where(User.id == me))).scalars().first()
+    membership = await _my_membership(db, me, business_id)
     days = ["Понеділок", "Вівторок", "Середа", "Четвер", "Пʼятниця", "Субота", "Неділя"]
 
-    shifts = user.shifts if user else None
+    # Графік У ЦЬОМУ ЗАКЛАДІ.
+    shifts = membership.shifts
     if isinstance(shifts, str):
         import json
         try:

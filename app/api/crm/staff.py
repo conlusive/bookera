@@ -246,29 +246,57 @@ async def list_staff(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     await assert_business_access(db, current_user, business_id)
-    result = await db.execute(select(User).where(User.business_id == business_id))
-    return result.scalars().all()
+    # За ЧЛЕНСТВОМ: раніше список брав людей, у кого цей заклад -
+    # поточний, і майстер, що перемкнувся в інший салон, зникав із
+    # команди першого. Роль і графік - саме в цьому закладі.
+    rows = (await db.execute(
+        select(User, StaffMembership)
+        .join(StaffMembership, StaffMembership.user_id == User.id)
+        .where(StaffMembership.business_id == business_id, StaffMembership.is_active.is_(True))
+    )).all()
+    seen, out = set(), []
+    for user, m in rows:
+        resp = StaffResponse.model_validate(user, from_attributes=True)
+        resp.role = m.role or resp.role
+        resp.shifts = m.shifts
+        out.append(resp); seen.add(user.id)
+    # Старі записи без членства - як і раніше, за поточним закладом.
+    for user in (await db.execute(select(User).where(User.business_id == business_id))).scalars().all():
+        if user.id not in seen:
+            out.append(StaffResponse.model_validate(user, from_attributes=True))
+    return out
 
 
 @router.patch("/crm/staff/{staff_id}", response_model=StaffResponse)
 async def update_staff(
     staff_id: str,
     payload: StaffUpdate,
+    business_id: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     result = await db.execute(select(User).where(User.id == staff_id))
     staff = result.scalars().first()
-    if not staff or not staff.business_id:
+    if not staff or not (staff.business_id or business_id):
         raise HTTPException(status_code=404, detail="Співробітника не знайдено")
+
+    # Заклад, У ЯКОМУ редагують: із запиту, а не «поточний» заклад майстра.
+    # Інакше адміністратор салону А не міг би змінити майстра, що зараз
+    # перемкнувся в салон Б.
+    ctx_business_id = business_id or staff.business_id
+    membership = (await db.execute(select(StaffMembership).where(
+        StaffMembership.user_id == str(staff.id), StaffMembership.business_id == ctx_business_id,
+    ))).scalars().first()
+    if business_id and not membership and staff.business_id != business_id:
+        raise HTTPException(status_code=404, detail="Співробітника не знайдено в цьому закладі")
 
     # Кожен може редагувати ВЛАСНУ картку (імʼя, телефон, спеціалізація),
     # але змінювати чужі - лише адмін/власник.
     is_self = str(staff.id) == str(current_user.id)
     if is_self:
-        await assert_business_access(db, current_user, staff.business_id)
+        await assert_business_access(db, current_user, ctx_business_id)
     else:
-        await assert_business_admin(db, current_user, staff.business_id)
+        await assert_business_admin(db, current_user, ctx_business_id)
 
     data = payload.model_dump(exclude_unset=True)
 
@@ -278,7 +306,7 @@ async def update_staff(
         level_res = await db.execute(select(User).where(User.id == str(current_user.id)))
         me = level_res.scalars().first()
         from app.core.auth import ADMIN_ROLES
-        biz_res = await db.execute(select(Business).where(Business.id == staff.business_id))
+        biz_res = await db.execute(select(Business).where(Business.id == ctx_business_id))
         biz = biz_res.scalars().first()
         is_admin = (biz and str(biz.owner_id) == str(current_user.id)) or (me and me.role in ADMIN_ROLES)
         if not is_admin:
@@ -286,8 +314,16 @@ async def update_staff(
             for protected in ("role", "commission_rate", "fixed_salary", "tax_rate", "is_active", "shifts"):
                 data.pop(protected, None)
 
+    # Графік - за закладом (членство), не за людиною.
+    new_shifts = data.pop("shifts", None) if "shifts" in data else ...
     for field, value in data.items():
         setattr(staff, field, value)
+    if new_shifts is not ...:
+        if membership is None:
+            membership = StaffMembership(user_id=str(staff.id), business_id=ctx_business_id,
+                                         role=str(getattr(staff.role, "value", staff.role) or "master"), is_active=True)
+            db.add(membership)
+        membership.shifts = new_shifts
 
     # Перше налаштування оплати - точка відліку для зарплати. Достатньо
     # ставки (відсоток чи фіксована): платити можна й вручну, без
@@ -297,7 +333,11 @@ async def update_staff(
         staff.pay_configured_at = utc_now()
     await db.commit()
     await db.refresh(staff)
-    return staff
+    resp = StaffResponse.model_validate(staff, from_attributes=True)
+    if membership is not None:
+        resp.shifts = membership.shifts
+        resp.role = membership.role or resp.role
+    return resp
 
 
 @router.delete("/crm/staff/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -43,7 +43,7 @@ async def test_day_off_closes_booking(client, auth_headers):
     week = [{"active": True, "start": "09:00", "end": "20:00"} for _ in range(7)]
     week[day.weekday()] = {"active": False, "start": "09:00", "end": "20:00"}
     # Графік виставляє САЛОН у «Команді» - тим самим маршрутом, що кабінет.
-    assert (await client.patch(f"/crm/staff/{m}", json={"shifts": week}, headers=owner)).status_code == 200
+    assert (await client.patch(f"/crm/staff/{m}?business_id={bid}", json={"shifts": week}, headers=owner)).status_code == 200
     assert await _free(client, bid, sid, m, day) == set(), "у вихідний - жодної вільної години"
 
 
@@ -51,7 +51,7 @@ async def test_day_off_closes_booking(client, auth_headers):
 async def test_shift_limits_hours(client, auth_headers):
     bid, sid, m, me, day, owner = await _setup(client, auth_headers, "shift")
     week = [{"active": True, "start": "12:00", "end": "16:00"} for _ in range(7)]
-    await client.patch(f"/crm/staff/{m}", json={"shifts": week}, headers=owner)
+    await client.patch(f"/crm/staff/{m}?business_id={bid}", json={"shifts": week}, headers=owner)
     free = await _free(client, bid, sid, m, day)
     assert free and min(free) >= "12:00" and max(free) <= "15:00", "лише в межах зміни, послуга 60 хв"
 
@@ -117,7 +117,7 @@ async def test_master_sees_salon_schedule_but_cannot_change_it(client, auth_head
     """Майстер бачить той самий графік, що виставив салон, але змінити сам не може."""
     bid, sid, m, me, day, owner = await _setup(client, auth_headers, "ro")
     week = [{"active": i < 5, "start": "11:00", "end": "19:00"} for i in range(7)]
-    await client.patch(f"/crm/staff/{m}", json={"shifts": week}, headers=owner)
+    await client.patch(f"/crm/staff/{m}?business_id={bid}", json={"shifts": week}, headers=owner)
 
     r = (await client.get("/work/me/shifts", params={"business_id": bid}, headers=me)).json()
     assert r["source"] == "master"
@@ -138,3 +138,54 @@ async def test_no_own_schedule_shows_salon_hours(client, auth_headers):
     r = (await client.get("/work/me/shifts", params={"business_id": bid}, headers=me)).json()
     assert r["source"] == "salon"
     assert all(s["start"] == "09:00" and s["end"] == "20:00" for s in r["shifts"])
+
+
+@pytest.mark.asyncio
+async def test_two_salons_two_schedules(client, auth_headers):
+    """
+    Майстер у двох салонах - у кожному свій графік. Раніше графік
+    зберігався за людиною, і салони перетирали один одному.
+    """
+    a_bid, a_sid, m, me, day, a_owner = await _setup(client, auth_headers, "twoA")
+    b_owner = auth_headers("mt-owner-twoB")
+    b_bid = (await client.post("/crm/businesses", json={"name": "Other", "city": "Львів"}, headers=b_owner)).json()["id"]
+    await client.put(f"/crm/businesses/{b_bid}/hours", json=[
+        {"weekday": d, "is_closed": False, "is_open": True, "open_time": "09:00", "close_time": "20:00"} for d in range(7)
+    ], headers=b_owner)
+    b_sid = (await client.post("/services", json={"business_id": b_bid, "name": "Стрижка", "duration_minutes": 60, "price": 500},
+                               headers=b_owner)).json()["id"]
+    conn = await asyncpg.connect(DB)
+    try:
+        await conn.execute("INSERT INTO staff_memberships (user_id, business_id, role, is_active, joined_at) VALUES ($1,$2,'master',true,now())", m, b_bid)
+    finally:
+        await conn.close()
+
+    morning = [{"active": True, "start": "09:00", "end": "13:00"} for _ in range(7)]
+    evening = [{"active": True, "start": "15:00", "end": "20:00"} for _ in range(7)]
+    assert (await client.patch(f"/crm/staff/{m}?business_id={a_bid}", json={"shifts": morning}, headers=a_owner)).status_code == 200
+    assert (await client.patch(f"/crm/staff/{m}?business_id={b_bid}", json={"shifts": evening}, headers=b_owner)).status_code == 200
+
+    free_a = await _free(client, a_bid, a_sid, m, day)
+    free_b = await _free(client, b_bid, b_sid, m, day)
+    assert free_a and max(free_a) <= "12:00", "у салоні А - лише ранок"
+    assert free_b and min(free_b) >= "15:00", "у салоні Б - лише вечір"
+
+    ra = (await client.get("/work/me/shifts", params={"business_id": a_bid}, headers=me)).json()
+    rb = (await client.get("/work/me/shifts", params={"business_id": b_bid}, headers=me)).json()
+    assert ra["shifts"][0]["end"] == "13:00" and rb["shifts"][0]["start"] == "15:00"
+
+
+@pytest.mark.asyncio
+async def test_master_stays_in_team_after_switching(client, auth_headers):
+    """Майстер перемкнувся в інший салон - у команді першого він лишається."""
+    a_bid, a_sid, m, me, day, a_owner = await _setup(client, auth_headers, "stay")
+    other = (await client.post("/crm/businesses", json={"name": "Інший", "city": "Львів"},
+                               headers=auth_headers("mt-owner-stay-2"))).json()["id"]
+    conn = await asyncpg.connect(DB)
+    try:
+        await conn.execute("UPDATE users SET business_id = $1 WHERE id = $2", other, m)
+    finally:
+        await conn.close()
+    team = (await client.get(f"/crm/businesses/{a_bid}/staff", headers=a_owner)).json()
+    assert m in {t["id"] for t in team}, "у команді першого салону лишається"
+    assert await _free(client, a_bid, a_sid, m, day), "і до нього можна записатись"

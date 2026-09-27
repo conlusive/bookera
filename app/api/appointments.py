@@ -71,7 +71,7 @@ def format_minutes_to_hhmm(mins: int) -> str:
 
 # === 1. АЛГОРИТМ РОЗРАХУНКУ ВІЛЬНИХ СЛОТІВ ===
 
-def _on_shift(master, day, start_mins: int, end_mins: int) -> bool:
+def _on_shift(shifts, day, start_mins: int, end_mins: int) -> bool:
     """
     Чи працює майстер у цей проміжок за своїм графіком (User.shifts).
 
@@ -80,7 +80,6 @@ def _on_shift(master, day, start_mins: int, end_mins: int) -> bool:
     закладу: так поводилась система раніше, і нічого не зламається для
     тих, хто графік не заповнював.
     """
-    shifts = master.shifts
     if isinstance(shifts, str):
         try:
             import json
@@ -189,9 +188,25 @@ async def get_available_slots(
     occupied_duration = duration + buffer_minutes
 
     # 1.4 Майстри закладу
+    # Майстри закладу - за ЧЛЕНСТВОМ, а не за «поточним закладом»
+    # (User.business_id). Раніше майстер, що перемкнувся в інший салон,
+    # для цього зникав - і до нього неможливо було записатись.
+    from app.models import StaffMembership
+    memberships = {
+        m.user_id: m for m in (await db.execute(
+            select(StaffMembership).where(
+                StaffMembership.business_id == business_id,
+                StaffMembership.is_active.is_(True),
+                StaffMembership.role.in_(["master", "vendor"]),
+            )
+        )).scalars().all()
+    }
     masters_query = select(User).where(
-        User.business_id == business_id,
-        or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)
+        or_(
+            User.id.in_(list(memberships) or [""]),
+            and_(User.business_id == business_id, or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)),
+        ),
+        User.is_active.is_(True),
     )
     if master_id not in ("0", "", None, "null"):
         masters_query = masters_query.where(User.id == master_id)
@@ -282,7 +297,10 @@ async def get_available_slots(
                     # Графік майстра: не на зміні - для клієнта він зайнятий.
                     # Раніше графік на сервері не враховувався зовсім, і до
                     # майстра можна було записатись навіть у його вихідний.
-                    if not _on_shift(m, target_date, current_mins, current_mins + duration):
+                    # Графік У ЦЬОМУ ЗАКЛАДІ (членство); немає - старий особистий.
+                    _mem = memberships.get(str(m.id))
+                    _shifts = _mem.shifts if _mem is not None and _mem.shifts is not None else m.shifts
+                    if not _on_shift(_shifts, target_date, current_mins, current_mins + duration):
                         continue
                     conflict = next(
                         (b for b in existing_bookings if str(b.master_id) == str(m.id) and b.start_time < slot_end_dt and b.end_time > slot_start_dt),

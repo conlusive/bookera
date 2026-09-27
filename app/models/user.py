@@ -147,6 +147,10 @@ class StaffMembership(Base):
     # посилається на майстра, і втратити звʼязок означає зіпсувати
     # звіти за минулі періоди.
     left_at = Column(DateTime, nullable=True)
+    # Графік майстра В ЦЬОМУ ЗАКЛАДІ: 7 днів від понеділка, {active, start, end}.
+    # Раніше графік зберігався за людиною (User.shifts) - майстер у двох
+    # салонах мав один графік на обидва. NULL - години закладу.
+    shifts = Column(JSON, nullable=True)
 
 
 class Favorite(Base):

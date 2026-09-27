@@ -343,8 +343,9 @@ export const api = {
   },
 
   /** «Моя робота»: розклад, заробіток і салони майстра - по всіх салонах разом. */
-  async getMyWork(token: string): Promise<any> {
-    return authFetch('/work/me', token);
+  /** «Моя робота». З businessId - лише один заклад (для кабінету майстра). */
+  async getMyWork(token: string, businessId?: number): Promise<any> {
+    return authFetch(businessId ? `/work/me?business_id=${businessId}` : '/work/me', token);
   },
 
   /** Гаманець: баланс бонусів BookEra, історія й подарункові картки. */

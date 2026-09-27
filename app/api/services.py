@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.models import Business, Service, ServiceAddon
 from app.schemas import ServiceCreate, ServiceResponse, ServiceUpdate
 
@@ -43,7 +43,7 @@ async def create_service(
 
     # business_id приходить у тілі запиту, тому перевірка доступу - вручну
     # (не через FastAPI-залежність, яка читає його лише з query/path).
-    await assert_business_access(db, current_user, service_in.business_id)
+    await assert_business_admin(db, current_user, service_in.business_id)
 
     new_service = Service(
         business_id=service_in.business_id,
@@ -81,7 +81,7 @@ async def update_service(
     service = await _load_with_addons(db, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
-    await assert_business_access(db, current_user, service.business_id)
+    await assert_business_admin(db, current_user, service.business_id)
 
     data = payload.model_dump(exclude_unset=True, exclude={"addon_service_ids"})
     for field, value in data.items():
@@ -104,6 +104,6 @@ async def delete_service(
     service = result.scalars().first()
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
-    await assert_business_access(db, current_user, service.business_id)
+    await assert_business_admin(db, current_user, service.business_id)
     await db.delete(service)
     await db.commit()

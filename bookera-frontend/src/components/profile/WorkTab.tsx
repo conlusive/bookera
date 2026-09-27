@@ -28,7 +28,15 @@ const dayLabel = (iso: string) => {
   return d.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
-export default function WorkTab({ getToken }: { getToken: () => Promise<string | null> }) {
+export default function WorkTab({ getToken, businessId }: {
+  getToken: () => Promise<string | null>;
+  /**
+   * Лише цей заклад - у кабінеті майстра. Тоді ховаємо «Мої салони»:
+   * людина вже в кабінеті цього салону, і список «відкрити кабінет»
+   * тут зайвий.
+   */
+  businessId?: number;
+}) {
   const router = useRouter();
   const [work, setWork] = useState<Work | null>(null);
   const [error, setError] = useState(false);
@@ -40,14 +48,14 @@ export default function WorkTab({ getToken }: { getToken: () => Promise<string |
       try {
         const token = await getToken();
         if (!token) throw new Error();
-        const data = await api.getMyWork(token);
+        const data = await api.getMyWork(token, businessId);
         if (!cancelled) setWork(data);
       } catch {
         if (!cancelled) setError(true);
       }
     })();
     return () => { cancelled = true; };
-  }, [getToken]);
+  }, [getToken, businessId]);
 
   // Перехід у кабінет салону: спершу зробити його поточним, потім відкрити.
   const openCabinet = async (businessId: number) => {
@@ -175,6 +183,7 @@ export default function WorkTab({ getToken }: { getToken: () => Promise<string |
       )}
 
       {/* --- Салони --- */}
+      {!businessId && (
       <section className="wk-block">
         <div className="wk-title">Мої салони</div>
         <div className="wk-places">
@@ -198,6 +207,7 @@ export default function WorkTab({ getToken }: { getToken: () => Promise<string |
           ))}
         </div>
       </section>
+      )}
 
       <style jsx>{`
         .wk { display: flex; flex-direction: column; gap: 1.25rem; }

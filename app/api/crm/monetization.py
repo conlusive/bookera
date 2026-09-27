@@ -29,6 +29,24 @@ POINTS_PER_RADAR_DAY = 15  # скільки балів коштує 1 день �
 
 # === Зведена інформація ===
 
+async def _assert_admin_or_self(db: AsyncSession, current_user: CurrentUser, business_id: int, staff_id: str) -> None:
+    """
+    Власник чи адміністратор - будь-кого в закладі. Майстер - лише себе,
+    і лише на читання: свій заробіток і свої виплати він бачити має,
+    а чужі - ні. Раніше майстер отримував 403 навіть на власну зарплату.
+    """
+    if str(current_user.id) == str(staff_id):
+        from app.models import StaffMembership
+        member = (await db.execute(select(StaffMembership).where(
+            StaffMembership.user_id == str(current_user.id),
+            StaffMembership.business_id == business_id,
+            StaffMembership.is_active.is_(True),
+        ))).scalars().first()
+        if member:
+            return
+    await assert_business_admin(db, current_user, business_id)
+
+
 @router.get("/crm/businesses/{business_id}/monetization", response_model=MonetizationSummaryResponse)
 async def get_monetization_summary(
     business_id: int,
@@ -240,7 +258,7 @@ async def get_payout_preview(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Скільки належить майстру ЗАРАЗ, без фіксації - можна дивитись скільки завгодно раз."""
-    await assert_business_admin(db, current_user, business_id)
+    await _assert_admin_or_self(db, current_user, business_id, staff_id)
     preview = await calculate_payout_preview(db, business_id, staff_id)
     return PayoutPreviewResponse(**preview)
 
@@ -258,6 +276,11 @@ async def create_payout(
     preview почнеться вже звідси, той самий візит не потрапить у виплату
     двічі) і одразу створює пов'язаний запис витрати для обліку.
     """
+
+    await assert_business_admin(db, current_user, business_id)
+
+    # ПІСЛЯ перевірки прав: інакше сторонній дізнавався б про стан
+    # налаштувань оплати, не маючи доступу до закладу.
     # Власнику зарплату не виплачуємо, і без налаштованої оплати - теж:
     # інакше сума бралась би з типових значень, яких ніхто не обирав.
     _biz = (await db.execute(select(Business).where(Business.id == business_id))).scalars().first()
@@ -266,8 +289,6 @@ async def create_payout(
     _staff = (await db.execute(select(User).where(User.id == str(staff_id)))).scalars().first()
     if _staff and not _staff.pay_configured_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Спершу налаштуйте оплату цього майстра")
-
-    await assert_business_admin(db, current_user, business_id)
     preview = await calculate_payout_preview(db, business_id, staff_id)
 
     if preview["payout_amount"] <= 0:
@@ -315,7 +336,7 @@ async def list_payouts(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_admin(db, current_user, business_id)
+    await _assert_admin_or_self(db, current_user, business_id, staff_id)
     result = await db.execute(
         select(StaffPayout).where(StaffPayout.business_id == business_id, StaffPayout.staff_id == staff_id)
         .order_by(StaffPayout.paid_at.desc())

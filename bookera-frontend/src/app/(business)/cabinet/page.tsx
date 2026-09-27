@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
@@ -44,6 +44,7 @@ const TeamTab = dynamic(() => import('@/components/cabinet/TeamTab'), { ssr: fal
 const InventoryTab = dynamic(() => import('@/components/cabinet/InventoryTab'), { ssr: false, loading: TabLoading });
 const MarketingTab = dynamic(() => import('@/components/cabinet/MarketingTab'), { ssr: false, loading: TabLoading });
 const SettingsTab = dynamic(() => import('@/components/cabinet/SettingsTab'), { ssr: false, loading: TabLoading });
+const WorkTab = dynamic(() => import('@/components/profile/WorkTab'), { ssr: false, loading: TabLoading });
 const StorefrontTab = dynamic(() => import('@/components/cabinet/StorefrontTab'), { ssr: false, loading: TabLoading });
 
 function normalizeStaff(list: any[]): any[] {
@@ -84,6 +85,32 @@ export default function BusinessCabinet() {
   const [team, setTeam] = useState<any[]>([]);
 
   const [activeTab, setActiveTab] = useState('Calendar');
+
+  /**
+   * Вкладки за роллю.
+   *
+   * Майстер: календар, клієнти й «Моя робота» - його візити, заробіток
+   * і рейтинг у цьому закладі. Раніше йому показувались «Послуги» й
+   * «Команда»: він міг змінити чи видалити будь-яку послугу, а вкладка
+   * команди одразу тягнула чужі зарплати й отримувала 403.
+   * Адміністратор - робочі вкладки закладу без грошей власника.
+   * Власник - усе; «Моя робота» йому не потрібна: зарплати в нього
+   * немає, а аналітика закладу - у «Статистиці».
+   */
+  const workToken = useCallback(() => getAuthToken().catch(() => null), []);
+
+  const allowedTabs = useMemo(() => {
+    const role = userProfile?.role;
+    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => id !== 'MyWork');
+    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyWork'];
+    return ['Calendar', 'Clients', 'MyWork'];
+  }, [userProfile?.role]);
+
+  // Запамʼятана вкладка, якої для ролі немає (майстер колись відкрив
+  // «Послуги»), - повертаємо на календар замість порожнього екрана.
+  useEffect(() => {
+    if (userProfile?.role && !allowedTabs.includes(activeTab)) setActiveTab('Calendar');
+  }, [allowedTabs, activeTab, userProfile?.role]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isBizMenuOpen, setIsBizMenuOpen] = useState(false);
@@ -1267,14 +1294,7 @@ export default function BusinessCabinet() {
           )}
 
           {navItems
-            .filter(item => {
-              const role = userProfile?.role;
-              if (isOwnerRole(role)) return true;
-              if (role === 'admin') {
-                return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats'].includes(item.id);
-              }
-              return ['Calendar', 'Clients', 'Services', 'Team'].includes(item.id);
-            })
+            .filter(item => allowedTabs.includes(item.id))
             .map(item => {
             const isActive = activeTab === item.id;
             return (
@@ -1496,6 +1516,16 @@ export default function BusinessCabinet() {
         {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 
         {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} />}
+
+        {activeTab === 'MyWork' && business?.id && (
+
+          <div style={{ maxWidth: '980px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+
+            <WorkTab getToken={workToken} businessId={Number(business.id)} />
+
+          </div>
+
+        )}
 
         {activeTab === 'Team' && <TeamTab business={business} team={team} setTeam={setTeam} services={services} userProfile={userProfile} appointments={appointments} setActiveTab={setActiveTab} setFilterMaster={setFilterMaster} globalShifts={shifts} />}
 

@@ -105,6 +105,7 @@ export const navItems = [
   { id: 'Clients', label: 'Клієнти', icon: Icons.Clients },
   { id: 'Services', label: 'Послуги', icon: Icons.Services },
   { id: 'Team', label: 'Команда', icon: Icons.Team },
+  { id: 'MyWork', label: 'Моя робота', icon: Icons.Stats },
   { id: 'Storefront', label: 'Онлайн-вітрина', icon: Icons.Globe },
   { id: 'Inventory', label: 'Склад і Витрати', icon: Icons.Box },
   { id: 'Marketing', label: 'Маркетинг', icon: Icons.Marketing },

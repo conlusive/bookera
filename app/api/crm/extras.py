@@ -65,7 +65,7 @@ async def reply_to_review(
     review = result.scalars().first()
     if not review:
         raise HTTPException(status_code=404, detail="Відгук не знайдено")
-    await assert_business_access(db, current_user, review.business_id)
+    await assert_business_admin(db, current_user, review.business_id)
     review.business_reply = payload.business_reply
     await db.commit()
     await db.refresh(review)
@@ -84,7 +84,7 @@ async def list_inventory(business_id: int = Query(...), db: AsyncSession = Depen
 
 @router.post("/crm/inventory", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
 async def create_inventory_item(item_in: InventoryItemCreate, db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
-    await assert_business_access(db, current_user, item_in.business_id)
+    await assert_business_admin(db, current_user, item_in.business_id)
     item = InventoryItem(**item_in.model_dump())
     db.add(item)
     await db.commit()
@@ -98,7 +98,7 @@ async def update_inventory_item(item_id: int, payload: InventoryItemUpdate, db: 
     item = result.scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Позицію не знайдено")
-    await assert_business_access(db, current_user, item.business_id)
+    await assert_business_admin(db, current_user, item.business_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(item, field, value)
     await db.commit()
@@ -112,7 +112,7 @@ async def delete_inventory_item(item_id: int, db: AsyncSession = Depends(get_db)
     item = result.scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Позицію не знайдено")
-    await assert_business_access(db, current_user, item.business_id)
+    await assert_business_admin(db, current_user, item.business_id)
     await db.delete(item)
     await db.commit()
 

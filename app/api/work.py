@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,9 @@ def _f(v) -> float:
 
 @router.get("/me")
 async def my_work(
+    # Лише один заклад - для вкладки «Моя робота» в кабінеті майстра.
+    # Без параметра - усі салони разом, як у профілі.
+    business_id: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -44,7 +47,11 @@ async def my_work(
     rows = (await db.execute(
         select(StaffMembership, Business)
         .join(Business, Business.id == StaffMembership.business_id)
-        .where(StaffMembership.user_id == me, StaffMembership.is_active.is_(True))
+        .where(
+            StaffMembership.user_id == me,
+            StaffMembership.is_active.is_(True),
+            *([StaffMembership.business_id == business_id] if business_id else []),
+        )
         .order_by(Business.name)
     )).all()
     if not rows:
@@ -115,7 +122,7 @@ async def my_work(
     rating_row = (await db.execute(
         select(func.avg(Review.rating), func.count(Review.id))
         .join(Appointment, Appointment.id == Review.appointment_id)
-        .where(Appointment.master_id == me)
+        .where(Appointment.master_id == me, Appointment.business_id.in_(biz_ids))
     )).one()
 
     # --- Гроші: до виплати (де оплату налаштовано) й останні виплати ---
@@ -131,7 +138,8 @@ async def my_work(
                                "since": preview["period_start"].isoformat() if preview.get("period_start") else None})
 
     payouts = (await db.execute(
-        select(StaffPayout).where(StaffPayout.staff_id == me, StaffPayout.status != "cancelled")
+        select(StaffPayout).where(StaffPayout.staff_id == me, StaffPayout.status != "cancelled",
+                                  StaffPayout.business_id.in_(biz_ids))
         .order_by(StaffPayout.paid_at.desc()).limit(6)
     )).scalars().all()
 

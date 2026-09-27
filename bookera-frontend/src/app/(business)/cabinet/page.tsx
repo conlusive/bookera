@@ -44,6 +44,7 @@ const TeamTab = dynamic(() => import('@/components/cabinet/TeamTab'), { ssr: fal
 const InventoryTab = dynamic(() => import('@/components/cabinet/InventoryTab'), { ssr: false, loading: TabLoading });
 const MarketingTab = dynamic(() => import('@/components/cabinet/MarketingTab'), { ssr: false, loading: TabLoading });
 const SettingsTab = dynamic(() => import('@/components/cabinet/SettingsTab'), { ssr: false, loading: TabLoading });
+const MasterEarnings = dynamic(() => import('@/components/cabinet/MasterEarnings'), { ssr: false, loading: TabLoading });
 const MasterWorkspace = dynamic(() => import('@/components/cabinet/MasterWorkspace'), { ssr: false, loading: TabLoading });
 const StorefrontTab = dynamic(() => import('@/components/cabinet/StorefrontTab'), { ssr: false, loading: TabLoading });
 
@@ -100,9 +101,9 @@ export default function BusinessCabinet() {
 
   const allowedTabs = useMemo(() => {
     const role = userProfile?.role;
-    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => id !== 'MyWork');
-    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyWork'];
-    return ['Calendar', 'Clients', 'MyWork'];
+    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => id !== 'MyWork' && id !== 'MyEarnings');
+    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyWork', 'MyEarnings'];
+    return ['Calendar', 'Clients', 'MyWork', 'MyEarnings'];
   }, [userProfile?.role]);
 
   // Запамʼятана вкладка, якої для ролі немає (майстер колись відкрив
@@ -1519,6 +1520,12 @@ export default function BusinessCabinet() {
         {activeTab === 'MyWork' && business?.id && (
 
           <MasterWorkspace businessId={Number(business.id)} userName={userProfile?.full_name || userProfile?.name} />
+
+        )}
+
+        {activeTab === 'MyEarnings' && business?.id && userProfile?.id && (
+
+          <MasterEarnings businessId={Number(business.id)} userId={String(userProfile.id)} />
 
         )}
 

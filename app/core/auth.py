@@ -139,7 +139,7 @@ async def get_current_user(
         role=metadata.get("role"),
         # Імʼя, вказане при реєстрації акаунта - щоб картка власника в CRM
         # не показувала email замість імені.
-        full_name=metadata.get("full_name"),
+        full_name=(metadata.get("full_name") or metadata.get("name") or "").strip() or None,
     )
 
 
@@ -253,3 +253,25 @@ async def is_limited_to_own_schedule(db: AsyncSession, current_user: CurrentUser
         return False
 
     return user.role not in ADMIN_ROLES
+
+
+def sync_user_from_token(user, current_user: "CurrentUser") -> bool:
+    """
+    Дописати в запис користувача те, що людина вказала при реєстрації.
+
+    Імʼя, введене при реєстрації, лежить у токені входу (user_metadata),
+    але в таблицю users автоматично не переносилось. Кабінет, що читає
+    з таблиці, бачив порожнє імʼя й показував пошту, а сайт - «Користувач».
+    Викликається там, де людина відкриває кабінет чи профіль. Лише
+    ДОПОВНЮЄ порожнє - імʼя, змінене в профілі, не перетирається.
+    Повертає True, якщо щось змінено (треба commit).
+    """
+    changed = False
+    if user is not None:
+        if not (user.full_name or "").strip() and current_user.full_name:
+            user.full_name = current_user.full_name
+            changed = True
+        if not (user.email or "").strip() and current_user.email:
+            user.email = current_user.email
+            changed = True
+    return changed

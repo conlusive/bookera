@@ -18,6 +18,7 @@ import { Icons, navItems, toLocalDateStr } from '@/components/shared';
 import CalendarTab from '@/components/cabinet/CalendarTab';
 import dynamic from 'next/dynamic';
 import SmartImage from '@/components/ui/SmartImage';
+import { resolveDisplayName } from '@/lib/displayName';
 
 /**
  * Вкладки кабінету вантажаться, лише коли їх відкривають.
@@ -53,7 +54,7 @@ const StorefrontTab = dynamic(() => import('@/components/cabinet/StorefrontTab')
 function normalizeStaff(list: any[]): any[] {
   return (list || []).map((s: any) => ({
     ...s,
-    name: s.full_name || s.name || s.email || 'Без імені',
+    name: resolveDisplayName(s),
   }));
 }
 
@@ -1414,7 +1415,7 @@ export default function BusinessCabinet() {
                 pointerEvents: isSidebarCollapsed ? 'none' : 'auto',
               }}>
                 <div style={{ color: '#0f172a', fontSize: '0.92rem', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {userProfile?.full_name || 'Користувач'}
+                  {resolveDisplayName(userProfile)}
                 </div>
                 <div style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {userRoleDisplay}

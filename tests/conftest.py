@@ -16,13 +16,13 @@ JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
 DB_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/bookera_test")
 
 
-def make_token(user_id: str, role: str = "business_owner", email: str = None) -> str:
+def make_token(user_id: str, role: str = "business_owner", email: str = None, full_name: str = None) -> str:
     return jwt.encode(
         {
             "sub": user_id,
             "aud": "authenticated",
             "email": email or f"{user_id}@test.com",
-            "user_metadata": {"role": role},
+            "user_metadata": {"role": role, **({"full_name": full_name} if full_name else {})},
             "exp": 9999999999,
         },
         JWT_SECRET,

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.services.business_profile import default_booking_settings
 from app.services.subscription import STATUS_TRIAL, subscription_state, trial_until
-from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, sync_user_from_token
 from pydantic import BaseModel
 from app.core.logging_config import logger
 from app.models import Business, RoleEnum, BusinessHours, User
@@ -120,6 +120,9 @@ async def get_my_profile(
     """
     user_res = await db.execute(select(User).where(User.id == current_user.id))
     user = user_res.scalars().first()
+    # Імʼя з реєстрації - в таблицю, якщо там порожньо.
+    if sync_user_from_token(user, current_user):
+        await db.commit()
 
     if not user:
         return {"id": current_user.id, "email": current_user.email, "role": None, "business_id": None, "business": None}

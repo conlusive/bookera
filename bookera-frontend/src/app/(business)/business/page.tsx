@@ -12,6 +12,7 @@ import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import SmartImage from '@/components/ui/SmartImage';
 import ProfileMenu from '@/components/ui/ProfileMenu';
+import { resolveDisplayName } from '@/lib/displayName';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
@@ -66,7 +67,7 @@ export default function BusinessLandingPage() {
 
       if (storedName) {
         setIsLoggedIn(true);
-        const displayName = storedName.includes('@') ? 'Користувач' : storedName;
+        const displayName = resolveDisplayName({ full_name: storedName, email: storedName });
         setUserName(displayName);
         setUserRole(storedRole);
 
@@ -196,12 +197,7 @@ export default function BusinessLandingPage() {
         const loginToken = data.session?.access_token;
         const profile: any = loginToken ? await api.getMe(loginToken).catch(() => null) : null;
 
-        const metadataName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name;
-        let finalName = profile?.full_name || metadataName || 'Користувач';
-
-        if (finalName.includes('@')) {
-          finalName = 'Користувач';
-        }
+        const finalName = resolveDisplayName(profile, data.user as any);
 
         const finalRole = profile?.role || 'client';
 

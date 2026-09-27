@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser, get_current_user
+from app.core.auth import CurrentUser, get_current_user, sync_user_from_token
 from app.core.database import get_db
 from app.models import User
 
@@ -44,8 +44,11 @@ async def _get_or_create(db: AsyncSession, current_user: CurrentUser) -> User:
     user = res.scalars().first()
     if not user:
         # Клієнт, що увійшов уперше й ще не має запису на бекенді.
-        user = User(id=str(current_user.id), email=current_user.email, role="client", is_active=True)
+        user = User(id=str(current_user.id), email=current_user.email, full_name=current_user.full_name,
+                    role="client", is_active=True)
         db.add(user)
+        await db.flush()
+    elif sync_user_from_token(user, current_user):
         await db.flush()
     return user
 

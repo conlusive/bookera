@@ -23,6 +23,7 @@ import HowItWorks from '@/components/home/HowItWorks';
 import BusinessShowcase from '@/components/home/BusinessShowcase';
 import SmartImage from '@/components/ui/SmartImage';
 import ProfileMenu from '@/components/ui/ProfileMenu';
+import { resolveDisplayName } from '@/lib/displayName';
 
 
 // Категорії - з єдиного списку (lib/categories). Раніше тут був власний,
@@ -595,13 +596,28 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
       if (storedName) {
         setIsLoggedIn(true);
-        const displayName = storedName.includes('@') ? 'Користувач' : storedName;
+        const displayName = resolveDisplayName({ full_name: storedName, email: storedName });
         setUserName(displayName);
         setUserRole(storedRole);
         const nameParts = displayName.split(' ');
         const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
         setInitials(init.toUpperCase());
       }
+
+      // Імʼя в памʼяті браузера могло застаріти: у тих, хто увійшов
+      // раніше, там лежить пошта чи «Користувач». Звіряємо з сервером за
+      // єдиним правилом (lib/displayName) і оновлюємо.
+      void (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const me: any = await api.getMe(session.access_token).catch(() => null);
+        const fresh = resolveDisplayName(me, session.user as any);
+        localStorage.setItem('userName', fresh);
+        setIsLoggedIn(true);
+        setUserName(fresh);
+        const parts = fresh.split(' ');
+        setInitials((parts.length > 1 ? parts[0][0] + parts[1][0] : parts[0][0]).toUpperCase());
+      })();
 
       const handleStorageUpdate = () => {
         setAvatarUrl(localStorage.getItem('userAvatar') || null);
@@ -749,9 +765,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         }
 
         const profile = data.user?.user_metadata;
-        let finalName = profile?.full_name || 'Користувач';
-        if (finalName.includes('@')) finalName = 'Користувач';
-        const finalRole = profile?.role || 'client';
+        // Імʼя - з сервера (його людина змінює в профілі), а не лише з токена.
+        const me: any = data.session?.access_token ? await api.getMe(data.session.access_token).catch(() => null) : null;
+        const finalName = resolveDisplayName(me, data.user as any);
+        const finalRole = me?.role || profile?.role || 'client';
 
         localStorage.setItem('userName', finalName);
         localStorage.setItem('userRole', finalRole);

@@ -40,6 +40,7 @@ import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { categoryTitle, normalizeCategory } from '@/lib/categories';
 import WalletTab from '@/components/profile/WalletTab';
 import WorkTab from '@/components/profile/WorkTab';
+import { resolveDisplayName } from '@/lib/displayName';
 
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
@@ -202,7 +203,7 @@ function ProfileContent() {
           setPhone(`+380 ${rawDigits}`);
         }
       } else {
-        const storedName = localStorage.getItem('userName') || user.user_metadata?.full_name || 'Користувач';
+        const storedName = resolveDisplayName(null, user as any);
         setFullName(storedName);
       }
 
@@ -936,7 +937,7 @@ function ProfileContent() {
     if (app.status === 'cancelled' || app.status === 'no-show' || app.status === 'completed') return false;
     return new Date(app.start_time) >= new Date();
   }).length;
-  const displayName = fullName || profile?.full_name || 'Користувач';
+  const displayName = fullName.trim() || resolveDisplayName(profile, null);
   const nameParts = displayName.split(' ');
   const initials = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
 

@@ -71,6 +71,35 @@ def format_minutes_to_hhmm(mins: int) -> str:
 
 # === 1. АЛГОРИТМ РОЗРАХУНКУ ВІЛЬНИХ СЛОТІВ ===
 
+def _on_shift(master, day, start_mins: int, end_mins: int) -> bool:
+    """
+    Чи працює майстер у цей проміжок за своїм графіком (User.shifts).
+
+    Формат - 7 днів від понеділка: {active, start "HH:MM", end "HH:MM"}.
+    Графіка немає чи він зіпсований - вважаємо, що майстер працює в години
+    закладу: так поводилась система раніше, і нічого не зламається для
+    тих, хто графік не заповнював.
+    """
+    shifts = master.shifts
+    if isinstance(shifts, str):
+        try:
+            import json
+            shifts = json.loads(shifts)
+        except Exception:
+            return True
+    if not isinstance(shifts, list) or len(shifts) != 7:
+        return True
+    shift = shifts[day.weekday()] or {}
+    if not shift.get("active", True):
+        return False
+    try:
+        s = parse_hhmm_to_minutes(shift.get("start") or "00:00")
+        e = parse_hhmm_to_minutes(shift.get("end") or "23:59")
+    except Exception:
+        return True
+    return s <= start_mins and end_mins <= e
+
+
 @router.get("/available-slots", response_model=AvailableSlotsResponse)
 async def get_available_slots(
     business_id: int = Query(...),
@@ -179,7 +208,10 @@ async def get_available_slots(
         Appointment.start_time >= day_start,
         Appointment.start_time <= day_end,
         or_(
-            Appointment.status == "confirmed",
+            # Запис, що чекає підтвердження власника, теж тримає час:
+            # раніше на нього можна було записатись удруге.
+            # time_off - особистий час майстра (перерва, справи).
+            Appointment.status.in_(["confirmed", "pending_approval", "time_off"]),
             and_(
                 Appointment.status == "blocked",
                 # Постійні блокування (обід, перерва) не мають expires_at,
@@ -247,6 +279,11 @@ async def get_available_slots(
                 locked_by_others = 0
 
                 for m in active_masters:
+                    # Графік майстра: не на зміні - для клієнта він зайнятий.
+                    # Раніше графік на сервері не враховувався зовсім, і до
+                    # майстра можна було записатись навіть у його вихідний.
+                    if not _on_shift(m, target_date, current_mins, current_mins + duration):
+                        continue
                     conflict = next(
                         (b for b in existing_bookings if str(b.master_id) == str(m.id) and b.start_time < slot_end_dt and b.end_time > slot_start_dt),
                         None

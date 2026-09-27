@@ -44,7 +44,7 @@ const TeamTab = dynamic(() => import('@/components/cabinet/TeamTab'), { ssr: fal
 const InventoryTab = dynamic(() => import('@/components/cabinet/InventoryTab'), { ssr: false, loading: TabLoading });
 const MarketingTab = dynamic(() => import('@/components/cabinet/MarketingTab'), { ssr: false, loading: TabLoading });
 const SettingsTab = dynamic(() => import('@/components/cabinet/SettingsTab'), { ssr: false, loading: TabLoading });
-const WorkTab = dynamic(() => import('@/components/profile/WorkTab'), { ssr: false, loading: TabLoading });
+const MasterWorkspace = dynamic(() => import('@/components/cabinet/MasterWorkspace'), { ssr: false, loading: TabLoading });
 const StorefrontTab = dynamic(() => import('@/components/cabinet/StorefrontTab'), { ssr: false, loading: TabLoading });
 
 function normalizeStaff(list: any[]): any[] {
@@ -97,7 +97,6 @@ export default function BusinessCabinet() {
    * Власник - усе; «Моя робота» йому не потрібна: зарплати в нього
    * немає, а аналітика закладу - у «Статистиці».
    */
-  const workToken = useCallback(() => getAuthToken().catch(() => null), []);
 
   const allowedTabs = useMemo(() => {
     const role = userProfile?.role;
@@ -1519,11 +1518,7 @@ export default function BusinessCabinet() {
 
         {activeTab === 'MyWork' && business?.id && (
 
-          <div style={{ maxWidth: '980px', margin: '0 auto', padding: '2rem 1.5rem' }}>
-
-            <WorkTab getToken={workToken} businessId={Number(business.id)} />
-
-          </div>
+          <MasterWorkspace businessId={Number(business.id)} userName={userProfile?.full_name || userProfile?.name} />
 
         )}
 

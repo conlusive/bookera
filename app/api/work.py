@@ -11,8 +11,10 @@
 from collections import defaultdict
 from datetime import datetime, time, timedelta
 from typing import Optional
+from pydantic import BaseModel, Field
+import re
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -180,3 +182,192 @@ async def my_work(
             "appointments": p.appointments_count,
         } for p in payouts],
     }
+
+
+
+# --- Календар і особистий час майстра ---------------------------------
+
+async def _my_membership(db: AsyncSession, me: str, business_id: int):
+    from app.models import StaffMembership
+    m = (await db.execute(select(StaffMembership).where(
+        StaffMembership.user_id == me, StaffMembership.business_id == business_id,
+        StaffMembership.is_active.is_(True),
+    ))).scalars().first()
+    if not m:
+        raise HTTPException(status_code=403, detail="Ви не працюєте в цьому закладі")
+    return m
+
+
+@router.get("/me/calendar")
+async def my_calendar(
+    business_id: int = Query(...),
+    month: str = Query(..., description="YYYY-MM"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Скільки моїх записів у кожен день місяця - для крапок у календарику."""
+    me = str(current_user.id)
+    await _my_membership(db, me, business_id)
+    try:
+        y, mo = (int(x) for x in month.split("-"))
+        first = datetime(y, mo, 1)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Місяць у форматі YYYY-MM")
+    nxt = datetime(y + (mo == 12), 1 if mo == 12 else mo + 1, 1)
+    rows = (await db.execute(
+        select(func.date(Appointment.start_time), func.count(Appointment.id))
+        .where(Appointment.master_id == me, Appointment.business_id == business_id,
+               Appointment.start_time >= first, Appointment.start_time < nxt,
+               Appointment.status.notin_(["cancelled", "no-show", "blocked", "time_off"]))
+        .group_by(func.date(Appointment.start_time))
+    )).all()
+    return {str(d): n for d, n in rows}
+
+
+@router.get("/me/agenda")
+async def my_agenda(
+    business_id: int = Query(...),
+    date_: str = Query(..., alias="date", description="YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Мої записи й особистий час на день - по порядку."""
+    me = str(current_user.id)
+    await _my_membership(db, me, business_id)
+    try:
+        day = datetime.strptime(date_, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Дата у форматі YYYY-MM-DD")
+    items = (await db.execute(
+        select(Appointment).where(
+            Appointment.master_id == me, Appointment.business_id == business_id,
+            Appointment.start_time >= day, Appointment.start_time < day + timedelta(days=1),
+            Appointment.status.notin_(["cancelled", "blocked"]),
+        ).order_by(Appointment.start_time)
+    )).scalars().all()
+    srv_ids = {a.service_id for a in items if a.service_id}
+    names = {}
+    if srv_ids:
+        names = {s.id: s.name for s in (await db.execute(select(Service).where(Service.id.in_(srv_ids)))).scalars().all()}
+    return [{
+        "id": a.id, "status": a.status,
+        "start_time": a.start_time.isoformat(), "end_time": a.end_time.isoformat() if a.end_time else None,
+        "service_name": names.get(a.service_id), "client_name": a.client_name,
+        "client_phone": a.client_phone, "price": float(a.price) if a.price is not None else None,
+        "note": a.notes if hasattr(a, "notes") else None,
+    } for a in items]
+
+
+class TimeOffIn(BaseModel):
+    business_id: int
+    start_time: datetime
+    end_time: datetime
+    note: Optional[str] = Field(default=None, max_length=120)
+
+
+@router.post("/me/time-off")
+async def add_time_off(
+    payload: TimeOffIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Особистий час майстра: перерва, справи, лікар. Для клієнтів цей час
+    зайнятий, у календарі закладу - видно, чому.
+
+    Не перекриває записи клієнтів: якщо на цей час уже хтось записаний,
+    спершу треба домовитись із клієнтом і перенести запис.
+    """
+    me = str(current_user.id)
+    await _my_membership(db, me, payload.business_id)
+    start = payload.start_time.replace(tzinfo=None, second=0, microsecond=0)
+    end = payload.end_time.replace(tzinfo=None, second=0, microsecond=0)
+    if end <= start:
+        raise HTTPException(status_code=400, detail="Кінець має бути пізніше за початок")
+    if end - start > timedelta(days=14):
+        raise HTTPException(status_code=400, detail="Не більше двох тижнів за раз")
+
+    clash = (await db.execute(select(Appointment).where(
+        Appointment.master_id == me, Appointment.business_id == payload.business_id,
+        Appointment.status.in_(["confirmed", "pending_approval"]),
+        Appointment.start_time < end, Appointment.end_time > start,
+    ))).scalars().first()
+    if clash:
+        raise HTTPException(status_code=409, detail=f"На цей час уже є запис о {clash.start_time.strftime('%H:%M')} - спершу перенесіть його")
+
+    block = Appointment(
+        business_id=payload.business_id, master_id=me, start_time=start, end_time=end,
+        status="time_off", client_name=(payload.note or "Особистий час").strip(), source="crm",
+    )
+    db.add(block)
+    await db.commit()
+    await db.refresh(block)
+    return {"id": block.id, "start_time": block.start_time.isoformat(), "end_time": block.end_time.isoformat(), "note": block.client_name}
+
+
+@router.delete("/me/time-off/{block_id}", status_code=204)
+async def remove_time_off(
+    block_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    block = await db.get(Appointment, block_id)
+    if not block or block.status != "time_off" or str(block.master_id) != str(current_user.id):
+        raise HTTPException(status_code=404, detail="Не знайдено")
+    await db.delete(block)
+    await db.commit()
+
+
+class ShiftsIn(BaseModel):
+    shifts: list
+
+
+@router.put("/me/shifts")
+async def set_my_shifts(
+    payload: ShiftsIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Майстер сам виставляє свій тижневий графік: 7 днів від понеділка,
+    {active, start, end}. Клієнти бачать вільні години лише в межах
+    його змін.
+    """
+    shifts = payload.shifts
+    if len(shifts) != 7:
+        raise HTTPException(status_code=400, detail="Графік - сім днів від понеділка")
+    clean = []
+    for d in shifts:
+        start, end = str(d.get("start", "09:00"))[:5], str(d.get("end", "20:00"))[:5]
+        if not re.match(r"^\d{2}:\d{2}$", start) or not re.match(r"^\d{2}:\d{2}$", end):
+            raise HTTPException(status_code=400, detail="Час у форматі ГГ:ХХ")
+        if d.get("active") and end <= start:
+            raise HTTPException(status_code=400, detail="Кінець зміни має бути пізніше за початок")
+        clean.append({"day": d.get("day"), "active": bool(d.get("active")), "start": start, "end": end})
+    user = (await db.execute(select(User).where(User.id == str(current_user.id)))).scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Користувача не знайдено")
+    user.shifts = clean
+    await db.commit()
+    return {"shifts": clean}
+
+
+@router.get("/me/shifts")
+async def get_my_shifts(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Мій тижневий графік. Не заповнений - типовий, як у кабінеті власника."""
+    user = (await db.execute(select(User).where(User.id == str(current_user.id)))).scalars().first()
+    shifts = user.shifts if user else None
+    if isinstance(shifts, str):
+        import json
+        try:
+            shifts = json.loads(shifts)
+        except Exception:
+            shifts = None
+    if not isinstance(shifts, list) or len(shifts) != 7:
+        days = ["Понеділок", "Вівторок", "Середа", "Четвер", "Пʼятниця", "Субота", "Неділя"]
+        shifts = [{"day": d, "active": i < 6, "start": "09:00" if i < 5 else "10:00", "end": "20:00" if i < 5 else "18:00"}
+                  for i, d in enumerate(days)]
+    return {"shifts": shifts}

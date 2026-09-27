@@ -343,6 +343,32 @@ export const api = {
   },
 
   /** «Моя робота»: розклад, заробіток і салони майстра - по всіх салонах разом. */
+  /** Скільки моїх записів у кожен день місяця: {"2026-09-24": 3}. */
+  async getMyCalendar(token: string, businessId: number, month: string): Promise<Record<string, number>> {
+    return authFetch(`/work/me/calendar?business_id=${businessId}&month=${month}`, token);
+  },
+
+  /** Мої записи й особистий час на день. */
+  async getMyAgenda(token: string, businessId: number, date: string): Promise<any[]> {
+    return authFetch(`/work/me/agenda?business_id=${businessId}&date=${date}`, token);
+  },
+
+  async addTimeOff(token: string, payload: { business_id: number; start_time: string; end_time: string; note?: string }): Promise<any> {
+    return authFetch('/work/me/time-off', token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async removeTimeOff(token: string, id: number): Promise<void> {
+    await authFetch(`/work/me/time-off/${id}`, token, { method: 'DELETE' });
+  },
+
+  async getMyShifts(token: string): Promise<{ shifts: { day: string; active: boolean; start: string; end: string }[] }> {
+    return authFetch('/work/me/shifts', token);
+  },
+
+  async setMyShifts(token: string, shifts: any[]): Promise<{ shifts: any[] }> {
+    return authFetch('/work/me/shifts', token, { method: 'PUT', body: JSON.stringify({ shifts }) });
+  },
+
   /** «Моя робота». З businessId - лише один заклад (для кабінету майстра). */
   async getMyWork(token: string, businessId?: number): Promise<any> {
     return authFetch(businessId ? `/work/me?business_id=${businessId}` : '/work/me', token);

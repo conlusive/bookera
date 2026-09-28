@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 
@@ -18,6 +18,13 @@ const MONTHS_GEN = ['січня', 'лютого', 'березня', 'квітн�
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v * 100)}%`);
 const money = (n: number) => `${Math.round(n).toLocaleString('uk-UA')} ₴`;
 const dateOf = (iso?: string | null) => { if (!iso) return ''; const d = new Date(iso); return `${d.getDate()} ${MONTHS_GEN[d.getMonth()]}`; };
+
+function periodLabel(q: any) {
+  if (!q?.date_from) return `За ${q?.days} днів`;
+  const f = new Date(`${q.date_from}T12:00:00`), t = new Date(`${q.date_to}T12:00:00`);
+  const same = f.getFullYear() === t.getFullYear();
+  return `${f.getDate()} ${MONTHS_GEN[f.getMonth()]}${same ? '' : ` ${f.getFullYear()}`} – ${t.getDate()} ${MONTHS_GEN[t.getMonth()]} ${t.getFullYear()}`;
+}
 
 function tone(score: number | null) {
   if (score == null) return { color: '#94a3b8', bg: '#f1f5f9', label: 'Мало даних' };
@@ -38,18 +45,38 @@ function Compare({ mine, team, fmt }: { mine: number | null; team?: number | nul
 }
 
 export default function StaffQuality({ businessId, staffId, canReply = true }: { businessId: number; staffId: string; canReply?: boolean }) {
-  const [days, setDays] = useState(90);
+  // Період: готовий (30/90/180 днів) або свої дати
+  const [preset, setPreset] = useState<number | 'custom'>(90);
+  const today = new Date();
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const [range, setRange] = useState(() => ({ from: iso(new Date(today.getTime() - 29 * 86400000)), to: iso(today) }));
   const [q, setQ] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'low' | 'comment' | 'noreply'>('all');
   const [replying, setReplying] = useState<number | null>(null);
   const [replyText, setReplyText] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Перемикання періоду НЕ стирає звіт: старі дані лишаються й злегка
+  // тьмяніють, поки рахуються нові. Раніше все зникало й зʼявлялось
+  // «Рахуємо показники…», і сторінка стрибала.
+  // Номер запиту: при швидкому перемиканні відповіді можуть прийти не по
+  // черзі - показуємо лише відповідь на ОСТАННІЙ.
+  const reqId = useRef(0);
   const load = useCallback(async () => {
-    setQ(null);
-    const t = await getAuthToken();
-    setQ(await api.getStaffQuality(t, businessId, staffId, days).catch(() => ({ error: true })));
-  }, [businessId, staffId, days]);
+    if (preset === 'custom' && (!range.from || !range.to || range.from > range.to)) return;
+    const my = ++reqId.current;
+    setLoading(true);
+    try {
+      const t = await getAuthToken();
+      const res = await api.getStaffQuality(t, businessId, staffId, preset === 'custom' ? { from: range.from, to: range.to } : { days: preset });
+      if (my === reqId.current) setQ(res);
+    } catch {
+      if (my === reqId.current) setQ((prev: any) => prev || { error: true });
+    } finally {
+      if (my === reqId.current) setLoading(false);
+    }
+  }, [businessId, staffId, preset, range.from, range.to]);
   useEffect(() => { void load(); }, [load]);
 
   const reviews = useMemo(() => (q?.reviews || []).filter((r: any) => {
@@ -73,6 +100,7 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
   };
 
   if (!q) return <div className="sq-empty">Рахуємо показники…</div>;
+  const rangeInvalid = preset === 'custom' && range.from > range.to;
   if (q.error) return <div className="sq-empty">Не вдалося завантажити показники.</div>;
 
   const t = tone(q.score);
@@ -82,7 +110,7 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
   const noReply = (q.reviews || []).filter((r: any) => !r.reply && (r.comment || '').trim()).length;
 
   return (
-    <div className="sq">
+    <div className={`sq ${loading ? 'is-loading' : ''}`} aria-busy={loading}>
       {/* Оцінка */}
       <div className="sq-head">
         <div className="sq-ring" style={{ ['--p' as string]: `${q.score ?? 0}`, ['--c' as string]: t.color }}>
@@ -93,14 +121,25 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
           <h3>Якість роботи</h3>
           <p>
             {q.enough_data
-              ? <>За {days} днів · {q.visits} завершених візитів{q.rank ? <> · <b>{q.rank}-е місце</b> із {q.ranked_of} у команді</> : null}</>
+              ? <>{periodLabel(q)} · {q.visits} завершених візитів{q.rank ? <> · <b>{q.rank}-е місце</b> із {q.ranked_of} у команді</> : null}</>
               : <>Оцінка зʼявиться після {q.min_visits} завершених візитів за період — зараз {q.visits}.</>}
           </p>
         </div>
-        <div className="sq-period">
-          {[30, 90, 180].map(d => (
-            <button key={d} type="button" className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{d} днів</button>
-          ))}
+        <div className="sq-period-wrap">
+          <div className="sq-period">
+            {[30, 90, 180].map(d => (
+              <button key={d} type="button" className={preset === d ? 'on' : ''} onClick={() => setPreset(d)}>{d} днів</button>
+            ))}
+            <button type="button" className={preset === 'custom' ? 'on' : ''} onClick={() => setPreset('custom')}>Свій період</button>
+          </div>
+          {preset === 'custom' && (
+            <div className="sq-range">
+              <input type="date" value={range.from} max={range.to} onChange={e => setRange(r => ({ ...r, from: e.target.value }))} aria-label="Від" />
+              <span>–</span>
+              <input type="date" value={range.to} min={range.from} max={iso(today)} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} aria-label="До" />
+            </div>
+          )}
+          {rangeInvalid && <div className="sq-range-err">Початок має бути раніше за кінець</div>}
         </div>
       </div>
 
@@ -209,6 +248,17 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
         .sq-head-text h3 { font-size: 1.1rem; font-weight: 800; margin: 0.35rem 0 0.15rem; }
         .sq-head-text p { font-size: 0.85rem; color: ${C.sub}; margin: 0; }
         .sq-head-text p b { color: ${C.text}; }
+        .sq > * { transition: opacity .2s; }
+        .sq.is-loading > * { opacity: .55; pointer-events: none; }
+        .sq.is-loading > .sq-head { opacity: 1; pointer-events: auto; }
+        .sq.is-loading .sq-ring { animation: sqPulse 1s ease-in-out infinite alternate; }
+        @keyframes sqPulse { from { opacity: .45; } to { opacity: 1; } }
+        .sq-period-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 0.45rem; margin-left: auto; }
+        .sq-range { display: flex; align-items: center; gap: 0.4rem; }
+        .sq-range span { color: ${C.sub}; }
+        .sq-range input { height: 34px; padding: 0 0.6rem; border-radius: 9px; border: 1px solid ${C.border}; background: #fff; font-family: inherit; font-size: 0.82rem; color: ${C.text}; outline: none; }
+        .sq-range input:focus { border-color: ${C.text}; }
+        .sq-range-err { font-size: 0.75rem; color: #dc2626; }
         .sq-period { display: flex; background: #f1f5f9; border-radius: 10px; padding: 3px; }
         .sq-period button { border: none; background: transparent; padding: 6px 11px; border-radius: 8px; font-family: inherit; font-size: 0.8rem; cursor: pointer; color: ${C.text}; }
         .sq-period button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }

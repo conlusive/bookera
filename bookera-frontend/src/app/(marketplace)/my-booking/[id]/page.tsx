@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import VisitFeedback from '@/components/visit/VisitFeedback';
 
 /**
  * Сторінка запису для клієнта.
@@ -160,10 +161,15 @@ function BookingContent() {
         </p>
       )}
 
-      {isPast && !alreadyCancelled && (
-        <p style={{ fontSize: '0.875rem', color: '#A5AEA3', margin: '1.25rem 0 0', lineHeight: 1.55 }}>
+      {isPast && !alreadyCancelled && booking?.status !== 'completed' && (
+        <p style={{ fontSize: '0.875rem', color: '#A5AEA3', margin: '1.25rem 0 0', textAlign: 'center' }}>
           Цей візит уже відбувся.
         </p>
+      )}
+
+      {/* Оцінка й чайові - сюди веде лист «Як вам візит?» (зірка з листа вже обрана) */}
+      {booking?.status === 'completed' && (
+        <VisitFeedback appointmentId={appointmentId} token={token} initialRate={Number(search?.get('rate')) || undefined} />
       )}
     </>
   );

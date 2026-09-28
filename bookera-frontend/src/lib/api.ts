@@ -349,8 +349,9 @@ export const api = {
   },
 
   // --- Якість роботи майстрів ---
-  async getStaffQuality(token: string, businessId: number, staffId: string, days = 90): Promise<any> {
-    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/quality?days=${days}`, token);
+  async getStaffQuality(token: string, businessId: number, staffId: string, period: { days?: number; from?: string; to?: string } = { days: 90 }): Promise<any> {
+    const q = period.from && period.to ? `date_from=${period.from}&date_to=${period.to}` : `days=${period.days || 90}`;
+    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/quality?${q}`, token);
   },
   async getTeamQuality(token: string, businessId: number, days = 90): Promise<{ staff_id: string; score: number | null; rating: number | null; retention: number | null; tips_share: number | null; visits: number }[]> {
     return authFetch(`/crm/businesses/${businessId}/staff-quality?days=${days}`, token);
@@ -538,6 +539,14 @@ export const api = {
   },
 
   /** Клієнт переглядає своє бронювання за токеном з листа - без логіну. */
+  /** Відгук і чайові за візит - за токеном із листа. */
+  async getVisitFeedback(appointmentId: number, token: string): Promise<any> {
+    return publicFetch(`/appointments/${appointmentId}/feedback?token=${encodeURIComponent(token)}`);
+  },
+  async tipMaster(appointmentId: number, token: string, amount: number): Promise<{ status: string; checkout_url: string | null; amount: number }> {
+    return publicFetch(`/appointments/${appointmentId}/tip`, { method: 'POST', body: JSON.stringify({ token, amount }) });
+  },
+
   async getAppointmentForClient(appointmentId: number, token: string): Promise<Appointment> {
     return publicFetch(`/appointments/${appointmentId}/manage?token=${encodeURIComponent(token)}`);
   },

@@ -274,3 +274,28 @@ async def send_staff_notice(
     body = "".join(info_row(label, value, big=bool(big)) for label, value, big in rows)
     html = layout(business_name=business_name, title=title, body_html=card(body), footer_note=footer_note)
     await asyncio.to_thread(send_email_sync, to_email, f"{title} — {business_name}", html)
+
+
+
+async def send_review_request(to_email: str, business_name: str, master_name: str, service_name: str,
+                              when_str: str, link_base: str):
+    """
+    «Як вам візит?» - через 2 години після візиту. П'ять зірок прямо в
+    листі: натиск відкриває сторінку з уже обраною оцінкою - один дотик
+    замість «перейдіть, знайдіть, оцініть».
+    """
+    who = f"до {master_name}" if master_name else ""
+    stars = "".join(
+        f'<a href="{esc(link_base)}&rate={n}#feedback" style="display:inline-block;width:44px;height:44px;line-height:44px;'
+        f'margin:0 3px;border-radius:12px;background:#FFF7E6;color:#F5A623;font-size:26px;text-decoration:none;text-align:center">&#9733;</a>'
+        for n in range(1, 6)
+    )
+    body = (
+        f'<p style="margin:0 0 6px;font-family:{FONT};font-size:15px;color:{INK}">{esc(service_name)} {esc(who)} · {esc(when_str)}</p>'
+        f'<p style="margin:0 0 18px;font-family:{FONT};font-size:14px;color:#6E6E73">Оцініть візит - це займе секунду й допоможе майстрові.</p>'
+        f'<div style="text-align:center;margin:0 0 6px">{stars}</div>'
+        f'<div style="display:flex;justify-content:space-between;font-family:{FONT};font-size:11px;color:#AEAEB2;margin:0 6px">'
+        f'<span>погано</span><span>чудово</span></div>'
+    )
+    html = layout(business_name=business_name, title="Як вам візит?", body_html=card(body), footer_note="")
+    await asyncio.to_thread(send_email_sync, to_email, f"Як вам візит у {business_name}?", html)

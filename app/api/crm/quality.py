@@ -14,7 +14,7 @@
 візитах вона була б випадковою й несправедливою до нового майстра.
 """
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -48,6 +48,19 @@ def _client_key(a: Appointment) -> Optional[str]:
     return f"nm:{name}" if name else None
 
 
+def _check_range(date_from: Optional[date], date_to: Optional[date]):
+    """Обидві дати або жодної; від не пізніше до; не більше двох років."""
+    if not date_from and not date_to:
+        return None, None
+    if not (date_from and date_to):
+        raise HTTPException(status_code=400, detail="Вкажіть обидві дати періоду")
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="Початок періоду має бути раніше за кінець")
+    if (date_to - date_from).days > 730:
+        raise HTTPException(status_code=400, detail="Не більше двох років за раз")
+    return date_from, date_to
+
+
 async def _assert_admin_or_self(db: AsyncSession, current_user: CurrentUser, business_id: int, staff_id: str) -> None:
     """Власник чи адміністратор - будь-кого; майстер - лише себе."""
     if str(current_user.id) == str(staff_id):
@@ -60,9 +73,17 @@ async def _assert_admin_or_self(db: AsyncSession, current_user: CurrentUser, bus
     await assert_business_admin(db, current_user, business_id)
 
 
-async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, days: int) -> dict:
-    now = local_now().replace(tzinfo=None)
-    since = now - timedelta(days=days)
+async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, days: int,
+                          date_from: Optional[date] = None, date_to: Optional[date] = None) -> dict:
+    # Період - або «останні N днів», або довільні дати (включно з обома).
+    real_now = local_now().replace(tzinfo=None)
+    if date_from and date_to:
+        since = datetime.combine(date_from, datetime.min.time())
+        now = min(real_now, datetime.combine(date_to + timedelta(days=1), datetime.min.time()))
+        days = (date_to - date_from).days + 1
+    else:
+        now = real_now
+        since = now - timedelta(days=days)
 
     # Усі завершені візити майстра в закладі - для повернень потрібна вся
     # історія, а не лише період: клієнт міг уперше прийти рік тому.
@@ -70,7 +91,7 @@ async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, day
         Appointment.business_id == business_id, Appointment.master_id == str(staff_id),
         Appointment.status == "completed",
     ).order_by(Appointment.start_time))).scalars().all()
-    period = [a for a in all_done if a.start_time >= since]
+    period = [a for a in all_done if since <= a.start_time < now]
     period_all = (await db.execute(select(Appointment.status).where(
         Appointment.business_id == business_id, Appointment.master_id == str(staff_id),
         Appointment.start_time >= since, Appointment.start_time <= now,
@@ -97,7 +118,8 @@ async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, day
         if came_back:
             eligible += 1
             returned += 1
-        elif (now - first_in_period).days > RETURN_WINDOW_DAYS:
+        # «Ще може повернутись» - від справжнього сьогодні, а не кінця періоду
+        elif (real_now - first_in_period).days > RETURN_WINDOW_DAYS:
             eligible += 1
     retention = (returned / eligible) if eligible else None
 
@@ -114,7 +136,7 @@ async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, day
         .order_by(Review.created_at.desc())
     )).all()
     ratings = [r.rating for r, _ in rev_rows if r.rating]
-    period_ratings = [r.rating for r, _ in rev_rows if r.rating and r.created_at and r.created_at >= since]
+    period_ratings = [r.rating for r, _ in rev_rows if r.rating and r.created_at and since <= r.created_at < now]
     rating_avg = round(sum(ratings) / len(ratings), 2) if ratings else None
     distribution = {str(i): sum(1 for x in ratings if x == i) for i in range(1, 6)}
     srv_ids = {sid for _, sid in rev_rows if sid}
@@ -137,6 +159,8 @@ async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, day
     cancelled = sum(1 for s in period_all if s == "cancelled")
     return {
         "days": days,
+        "date_from": since.date().isoformat(),
+        "date_to": (now - timedelta(seconds=1)).date().isoformat(),
         "score": score,
         "enough_data": len(period) >= MIN_VISITS,
         "min_visits": MIN_VISITS,
@@ -165,18 +189,21 @@ async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, day
 async def staff_quality(
     business_id: int,
     staff_id: str,
-    days: int = Query(90, ge=7, le=365),
+    days: int = Query(90, ge=1, le=730),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     await _assert_admin_or_self(db, current_user, business_id, staff_id)
-    data = await compute_quality(db, business_id, staff_id, days)
+    date_from, date_to = _check_range(date_from, date_to)
+    data = await compute_quality(db, business_id, staff_id, days, date_from, date_to)
 
     # Порівняння з командою - лише для власника й адміністратора: майстрові
     # чужі показники не відкриваємо навіть у середньому.
     try:
         await assert_business_admin(db, current_user, business_id)
-        team = await _team_scores(db, business_id, days)
+        team = await _team_scores(db, business_id, days, date_from, date_to)
         others = [t for t in team if t["staff_id"] != str(staff_id)]
         def avg(key):
             vals = [t[key] for t in others if t[key] is not None]
@@ -190,7 +217,7 @@ async def staff_quality(
     return data
 
 
-async def _team_scores(db: AsyncSession, business_id: int, days: int) -> list:
+async def _team_scores(db: AsyncSession, business_id: int, days: int, date_from=None, date_to=None) -> list:
     rows = (await db.execute(
         select(User).join(StaffMembership, StaffMembership.user_id == User.id).where(
             StaffMembership.business_id == business_id, StaffMembership.is_active.is_(True),
@@ -198,7 +225,7 @@ async def _team_scores(db: AsyncSession, business_id: int, days: int) -> list:
         ))).scalars().all()
     out = []
     for u in rows:
-        q = await compute_quality(db, business_id, u.id, days)
+        q = await compute_quality(db, business_id, u.id, days, date_from, date_to)
         out.append({
             "staff_id": u.id, "score": q["score"], "rating": q["rating"]["avg"],
             "retention": q["retention"]["rate"], "tips_share": q["tips"]["share"], "visits": q["visits"],
@@ -209,13 +236,16 @@ async def _team_scores(db: AsyncSession, business_id: int, days: int) -> list:
 @router.get("/crm/businesses/{business_id}/staff-quality")
 async def team_quality(
     business_id: int,
-    days: int = Query(90, ge=7, le=365),
+    days: int = Query(90, ge=1, le=730),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Оцінки всієї команди - для значків у списку «Команди»."""
     await assert_business_admin(db, current_user, business_id)
-    return await _team_scores(db, business_id, days)
+    date_from, date_to = _check_range(date_from, date_to)
+    return await _team_scores(db, business_id, days, date_from, date_to)
 
 
 class TipIn(BaseModel):

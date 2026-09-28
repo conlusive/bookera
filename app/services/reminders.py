@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.email import send_booking_reminder_email
 from app.core.logging_config import logger
-from app.core.time_utils import utc_now
+from app.core.time_utils import local_now, utc_now
 from app.models import Appointment, Business, Service, User
 from app.services.subscription import has_access
 
@@ -147,6 +147,7 @@ async def reminder_loop(session_factory, frontend_url: str = "") -> None:
                 # задачі періодичні, і другий фоновий процес заради
                 # одного запиту раз на годину не вартий складності.
                 await complete_past_appointments(db)
+                await send_review_requests(db, frontend_url)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -210,3 +211,53 @@ async def complete_past_appointments(db: AsyncSession) -> int:
         logger.info("Автоматично завершено візитів: %s", completed)
 
     return completed
+
+
+
+REVIEW_DELAY_HOURS = 2
+REVIEW_MAX_AGE_DAYS = 3
+
+
+async def send_review_requests(db: AsyncSession, frontend_url: str = "") -> int:
+    """
+    «Як вам візит?» - один лист через 2 години після завершеного візиту.
+
+    Не одразу: людина ще в дорозі. Не наступного дня: враження стерлись.
+    Лише один раз (review_requested_at) і лише якщо відгуку ще немає.
+    Візити, старші за 3 дні (наприклад, після простою сервера), - не
+    чіпаємо: запізнілий лист дратує більше, ніж його відсутність.
+    """
+    from app.core.email import send_review_request
+    from app.models import Business, Service, User
+    from app.models.extras import Review
+
+    now = local_now().replace(tzinfo=None)
+    rows = (await db.execute(select(Appointment).where(
+        Appointment.status == "completed",
+        Appointment.end_time <= now - timedelta(hours=REVIEW_DELAY_HOURS),
+        Appointment.end_time >= now - timedelta(days=REVIEW_MAX_AGE_DAYS),
+        Appointment.review_requested_at.is_(None),
+        Appointment.client_email.isnot(None),
+        Appointment.manage_token.isnot(None),
+        ~select(Review.id).where(Review.appointment_id == Appointment.id).exists(),
+    ).limit(200))).scalars().all()
+
+    sent = 0
+    base = (frontend_url or "").rstrip("/")
+    for a in rows:
+        a.review_requested_at = utc_now()
+        try:
+            biz = await db.get(Business, a.business_id)
+            srv = await db.get(Service, a.service_id) if a.service_id else None
+            master = (await db.execute(select(User).where(User.id == str(a.master_id)))).scalars().first() if a.master_id else None
+            await send_review_request(
+                a.client_email, biz.name if biz else "BookEra",
+                (master.full_name or "").split(" ")[0] if master and master.full_name else "",
+                srv.name if srv else "Візит", a.start_time.strftime("%d.%m, %H:%M"),
+                f"{base}/my-booking/{a.id}?token={a.manage_token}",
+            )
+            sent += 1
+        except Exception as exc:
+            logger.warning("Лист «Як вам візит?» для %s не надіслано: %s", a.id, exc)
+    await db.commit()
+    return sent

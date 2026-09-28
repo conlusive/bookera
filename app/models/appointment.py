@@ -52,6 +52,8 @@ class Appointment(Base):
     # Чайові за візит. Раніше не записувались ніде - було лише налаштування
     # «майстер забирає всі чайові» (User.tips_full) без самих сум.
     tip_amount = Column(Numeric(10, 2), nullable=True)
+    # Коли клієнтові надіслали «Як вам візит?» - щоб не надсилати двічі.
+    review_requested_at = Column(DateTime, nullable=True)
 
     # Додаткові послуги, обрані при записі.
     #

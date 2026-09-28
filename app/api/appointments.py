@@ -1343,6 +1343,7 @@ class ClientReviewRequest(BaseModel):
 async def create_review_by_client(
     appointment_id: int,
     payload: ClientReviewRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -1397,7 +1398,44 @@ async def create_review_by_client(
         biz.reviews_count = int(count)
 
     await db.commit()
+
+    # Низька оцінка (1-3) - одразу власнику й адміністраторам: поки клієнт
+    # ще памʼятає візит, ситуацію можна виправити дзвінком. Чайові в
+    # такому разі інтерфейс не пропонує.
+    if payload.rating <= 3:
+        await _alert_low_rating(db, background_tasks, appointment, payload.rating, comment)
     return {"ok": True, "rating": biz.rating if biz else None, "reviews_count": biz.reviews_count if biz else None}
+
+
+async def _alert_low_rating(db: AsyncSession, background_tasks: BackgroundTasks, appointment, rating: int, comment) -> None:
+    from app.core.email import send_staff_notice
+    from app.models import StaffMembership
+    biz = await db.get(Business, appointment.business_id)
+    if not biz:
+        return
+    srv = await db.get(Service, appointment.service_id) if appointment.service_id else None
+    master = (await db.execute(select(User).where(User.id == str(appointment.master_id)))).scalars().first() if appointment.master_id else None
+    to = set()
+    if biz.email:
+        to.add(biz.email.lower())
+    elif biz.owner_id:
+        owner = (await db.execute(select(User).where(User.id == str(biz.owner_id)))).scalars().first()
+        if owner and owner.email:
+            to.add(owner.email.lower())
+    admins = (await db.execute(select(User.email).join(StaffMembership, StaffMembership.user_id == User.id).where(
+        StaffMembership.business_id == biz.id, StaffMembership.role == "admin", StaffMembership.is_active.is_(True),
+        User.email.isnot(None)))).scalars().all()
+    to.update(e.lower() for e in admins)
+    rows = [("Оцінка", "★" * rating + "☆" * (5 - rating), True),
+            ("Клієнт", f"{appointment.client_name or 'Клієнт'}{' · ' + appointment.client_phone if appointment.client_phone else ''}", False),
+            ("Візит", f"{srv.name if srv else 'Візит'} · {appointment.start_time:%d.%m, %H:%M}", False)]
+    if master:
+        rows.append(("Майстер", master.full_name or master.email or "", False))
+    if comment:
+        rows.append(("Коментар", comment, False))
+    for email in to:
+        background_tasks.add_task(send_staff_notice, email, biz.name, "Низька оцінка візиту", rows,
+                                  "Зателефонуйте клієнтові, поки він памʼятає візит, - це часто повертає людину.")
 
 
 class ClientRescheduleRequest(BaseModel):

@@ -177,7 +177,8 @@ async def gift_card_payment_callback(payload: dict, db: AsyncSession = Depends(g
     видали б за повну. Повторний виклик - звична річ, картку не чіпає.
     """
     order_id = str(payload.get("orderReference") or payload.get("order_id") or "")
-    if not order_id.startswith("gc-"):
+    # gc- - подарункова картка, tip- - чайові майстрові (app/api/feedback.py)
+    if not order_id.startswith(("gc-", "tip-")):
         raise HTTPException(status_code=400, detail="Невідомий платіж")
     if not verify_callback_signature(payload):
         logger.warning("Callback картки з невірним підписом: %s", order_id)
@@ -198,6 +199,12 @@ async def gift_card_payment_callback(payload: dict, db: AsyncSession = Depends(g
         payment.status = "failed"
         await db.commit()
         return {"status": "failed"}
+
+    if order_id.startswith("tip-"):
+        from app.api.feedback import complete_tip_payment
+        await complete_tip_payment(db, payment)
+        await db.commit()
+        return {"status": "ok"}
 
     cert = (await db.execute(select(GiftCertificate).where(GiftCertificate.payment_id == payment.id))).scalars().first()
     if cert:

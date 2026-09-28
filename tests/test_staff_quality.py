@@ -109,3 +109,20 @@ async def test_team_scores_and_rank(client, auth_headers):
     assert team[m1]["score"] > team[m2]["score"]
     q = (await client.get(f"/crm/businesses/{bid}/staff/{m1}/quality", headers=owner)).json()
     assert q["rank"] == 1 and q["ranked_of"] == 2 and q["team"]["score"] == team[m2]["score"]
+
+
+@pytest.mark.asyncio
+async def test_custom_period(client, auth_headers):
+    """Довільний період: рахуються лише візити в ньому."""
+    bid, sid, owner, m1, m2 = await _setup(client, auth_headers, "rng")
+    for d in (40, 35, 32):
+        await _visit(bid, sid, m1, d, f"+38067300000{d}", rating=5)
+    await _visit(bid, sid, m1, 5, "+380673000099", rating=1)
+    today = local_now().date()
+    q = (await client.get(f"/crm/businesses/{bid}/staff/{m1}/quality",
+                          params={"date_from": (today - timedelta(days=45)).isoformat(), "date_to": (today - timedelta(days=30)).isoformat()},
+                          headers=owner)).json()
+    assert q["visits"] == 3, "візит 5 днів тому - поза періодом"
+    assert q["date_from"] == (today - timedelta(days=45)).isoformat()
+    bad = await client.get(f"/crm/businesses/{bid}/staff/{m1}/quality", params={"date_from": today.isoformat(), "date_to": (today - timedelta(days=1)).isoformat()}, headers=owner)
+    assert bad.status_code == 400

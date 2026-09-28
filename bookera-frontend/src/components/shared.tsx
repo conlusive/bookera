@@ -43,7 +43,8 @@ import {
   ArrowLeft2,
   ArrowRight2,
   ArchiveBox,
-  Instagram
+  Instagram,
+  ClipboardText,
 } from 'iconsax-react';
 
 export const Icons = {
@@ -93,6 +94,7 @@ export const Icons = {
   NavRequests: () => <Send2 size="20" color="currentColor" variant="Linear" />,
   NavMyClients: () => <User size="20" color="currentColor" variant="Linear" />,
   NavEarnings: () => <CardTick size="20" color="currentColor" variant="Linear" />,
+  NavActivity: () => <ClipboardText size="20" color="currentColor" variant="Linear" />,
   CheckCircle: () => <TickCircle size="16" color="currentColor" variant="Bold" />,
   AlertCircle: () => <InfoCircle size="16" color="currentColor" variant="Bold" />,
   XCircle: () => <CloseCircle size="16" color="currentColor" variant="Bold" />,
@@ -119,6 +121,7 @@ export const navItems = [
   { id: 'Inventory', label: 'Склад і Витрати', icon: Icons.Box },
   { id: 'Marketing', label: 'Маркетинг', icon: Icons.Marketing },
   { id: 'Stats', label: 'Аналітика', icon: Icons.Stats },
+  { id: 'Activity', label: 'Журнал дій', icon: Icons.NavActivity },
   { id: 'Settings', label: 'Налаштування', icon: Icons.Settings }
 ];
 

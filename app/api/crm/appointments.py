@@ -189,6 +189,8 @@ async def create_manual_appointment(
     db.add(appointment)
 
     try:
+        from app.services.audit import record as _audit
+        await _audit(db, business.id, str(current_user.id), "bookings", "created", (f"Закрито час {appointment.start_time:%d.%m %H:%M}" if appointment.status == "blocked" else f"Новий запис: {appointment.client_name or 'клієнт'}, {appointment.start_time:%d.%m %H:%M}"))
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
@@ -270,6 +272,9 @@ async def update_crm_appointment_status(
     is_block = appointment.status == "blocked" or (appointment.notes and "перерва" in appointment.notes.lower())
     if new_status == "cancelled" and is_block:
         await db.delete(appointment)
+        # Журнал дій
+        from app.services.audit import record as _audit
+        await _audit(db, appointment.business_id, str(current_user.id), "bookings", "status_changed", f"Запис {appointment.client_name or ''} {appointment.start_time:%d.%m %H:%M}: статус - {new_status}")
         await db.commit()
         appointment.status = "cancelled"
         return appointment
@@ -312,6 +317,9 @@ async def delete_crm_appointment(
     await assert_business_access(db, current_user, appointment.business_id)
 
     await db.delete(appointment)
+    # Журнал дій
+    from app.services.audit import record as _audit
+    await _audit(db, appointment.business_id, str(current_user.id), "bookings", "deleted", f"Видалено запис {appointment.client_name or ''} {appointment.start_time:%d.%m %H:%M}")
     await db.commit()
     return {"ok": True, "id": appointment_id}
 
@@ -339,6 +347,9 @@ async def reschedule_appointment(
     appointment.end_time = new_start + duration
 
     try:
+        # Журнал дій
+        from app.services.audit import record as _audit
+        await _audit(db, appointment.business_id, str(current_user.id), "bookings", "rescheduled", f"Перенесено запис {appointment.client_name or ''}: {old_start:%d.%m %H:%M} → {new_start:%d.%m %H:%M}")
         await db.commit()
     except IntegrityError:
         await db.rollback()

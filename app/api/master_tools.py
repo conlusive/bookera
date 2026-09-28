@@ -83,6 +83,7 @@ def _request_out(r: StaffRequest, name: Optional[str] = None, conflicts: Optiona
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "decided_at": r.decided_at.isoformat() if r.decided_at else None,
         "user_id": r.user_id, "staff_name": name,
+        "stage": r.stage, "escalation_note": r.escalation_note,
         **({"conflicts": conflicts} if conflicts is not None else {}),
     }
 
@@ -104,14 +105,49 @@ async def _conflicts(db: AsyncSession, r: StaffRequest) -> list:
 
 # ---------------------------------------------------------------- Запити
 
+def _kind_label(r: StaffRequest) -> str:
+    if r.kind == "schedule":
+        return "зміна графіка"
+    if r.kind == "access":
+        from app.core.auth import SECTION_LABELS
+        parts = [SECTION_LABELS.get(s, s) for s in (r.payload or {}).get("sections", [])]
+        if (r.payload or {}).get("role") == "admin":
+            parts.insert(0, "підвищення до адміністратора")
+        return "доступ: " + ", ".join(parts) if parts else "доступ"
+    return REASON_LABEL.get((r.payload or {}).get("reason"), "відпустка").lower()
+
+
+async def _handlers_emails(db: AsyncSession, business: Business, stage: str) -> list:
+    """Кому лист про новий чи переданий запит: адміністраторам або власнику."""
+    if stage == "admin":
+        rows = (await db.execute(
+            select(User.email).join(StaffMembership, StaffMembership.user_id == User.id).where(
+                StaffMembership.business_id == business.id, StaffMembership.role == "admin",
+                StaffMembership.is_active.is_(True), User.email.isnot(None),
+            ))).scalars().all()
+        if rows:
+            return list(dict.fromkeys(e.lower() for e in rows))
+    owner = await _owner_email(db, business)
+    return [owner] if owner else []
+
+
+async def _is_business_owner(db: AsyncSession, business_id: int, user_id: str) -> bool:
+    biz = await db.get(Business, business_id)
+    return bool(biz and str(biz.owner_id) == str(user_id))
+
+
+
 class RequestIn(BaseModel):
     business_id: int
-    kind: Literal["schedule", "time_off"]
+    kind: Literal["schedule", "time_off", "access"]
     shifts: Optional[list] = None
     date_from: Optional[date] = None
     date_to: Optional[date] = None
     reason: Optional[Literal["vacation", "sick", "other"]] = "vacation"
     comment: Optional[str] = Field(default=None, max_length=500)
+    # access: які розділи відкрити й чи підвищити до адміністратора
+    sections: Optional[list] = None
+    role: Optional[Literal["admin"]] = None
 
 
 REASON_LABEL = {"vacation": "Відпустка", "sick": "Лікарняний", "other": "Особисті справи"}
@@ -129,6 +165,12 @@ async def create_request(
 
     if payload.kind == "schedule":
         data = {"shifts": _clean_shifts(payload.shifts or [])}
+    elif payload.kind == "access":
+        from app.core.auth import SECTIONS
+        sections = [s for s in (payload.sections or []) if s in SECTIONS]
+        if not sections and not payload.role:
+            raise HTTPException(status_code=400, detail="Оберіть розділ чи підвищення")
+        data = {"sections": sections, "role": payload.role}
     else:
         today = local_now().date()
         if not payload.date_from or not payload.date_to:
@@ -148,7 +190,22 @@ async def create_request(
     if pending and payload.kind == "schedule":
         raise HTTPException(status_code=409, detail="Попередній запит на зміну графіка ще не розглянуто")
 
-    req = StaffRequest(business_id=payload.business_id, user_id=me, kind=payload.kind, status="pending",
+    # Хто розглядає - ієрархія:
+    #   майстер, графік чи відпустка -> адміністратор (якщо він є в салоні);
+    #     той вирішує сам або передає власнику
+    #   запит адміністратора, запит на доступ -> одразу власнику: доступи
+    #     роздає лише він, а адміністратор не розглядає запити про себе
+    my_role = (await _membership(db, me, payload.business_id)).role
+    stage = "owner"
+    if payload.kind in ("schedule", "time_off") and my_role not in ("admin", "business_owner", "owner"):
+        has_admin = (await db.execute(select(StaffMembership).where(
+            StaffMembership.business_id == payload.business_id, StaffMembership.role == "admin",
+            StaffMembership.is_active.is_(True), StaffMembership.user_id != me,
+        ))).scalars().first()
+        if has_admin:
+            stage = "admin"
+
+    req = StaffRequest(business_id=payload.business_id, user_id=me, kind=payload.kind, status="pending", stage=stage,
                        payload=data, comment=(payload.comment or "").strip() or None)
     db.add(req)
     await db.commit()
@@ -157,18 +214,25 @@ async def create_request(
     # Власнику - лист: запит без реакції гірший за відсутність запиту.
     business = await db.get(Business, payload.business_id)
     user = (await db.execute(select(User).where(User.id == me))).scalars().first()
-    to = await _owner_email(db, business) if business else None
-    if to:
+    who_name = (user.full_name if user and user.full_name else None) or (user.email if user else "Майстер")
+    from app.services.audit import record
+    await record(db, payload.business_id, me, "requests", "request_created",
+                 f"{who_name}: запит - {_kind_label(req)}", {"request_id": req.id})
+    await db.commit()
+    recipients = await _handlers_emails(db, business, stage) if business else []
+    for to in recipients:
         who = (user.full_name if user and user.full_name else None) or (user.email if user else "Майстер")
         if req.kind == "schedule":
             rows = [("Від", who, False), ("Що", "Зміна графіка", True)]
+        elif req.kind == "access":
+            rows = [("Від", who, False), ("Що", _kind_label(req), True)]
         else:
             d1, d2 = date.fromisoformat(data["date_from"]), date.fromisoformat(data["date_to"])
             rows = [("Від", who, False), ("Що", REASON_LABEL.get(data["reason"], "Відпустка"), False),
                     ("Коли", f"{_human_date(d1)} – {_human_date(d2)}", True)]
         if req.comment:
             rows.append(("Коментар", req.comment, False))
-        background_tasks.add_task(send_staff_notice, to, business.name, "Новий запит від майстра", rows,
+        background_tasks.add_task(send_staff_notice, to, business.name, "Новий запит від команди", rows,
                                   "Погодити чи відхилити - у кабінеті, розділ «Команда».")
     return _request_out(req)
 
@@ -211,6 +275,10 @@ async def business_requests(
 ):
     await assert_business_admin(db, current_user, business_id)
     q = select(StaffRequest, User).join(User, User.id == StaffRequest.user_id).where(StaffRequest.business_id == business_id)
+    # Адміністратор бачить запити свого рівня й не свої; власник - усі,
+    # і ті, що адміністратор передав йому, позначені.
+    if not await _is_business_owner(db, business_id, str(current_user.id)):
+        q = q.where(StaffRequest.stage == "admin", StaffRequest.user_id != str(current_user.id))
     if status and status != "all":
         q = q.where(StaffRequest.status == status)
     rows = (await db.execute(q.order_by(StaffRequest.created_at.desc()).limit(100))).all()
@@ -247,12 +315,22 @@ async def decide_request(
         raise HTTPException(status_code=404, detail="Запит не знайдено")
     if r.status != "pending":
         raise HTTPException(status_code=409, detail="Запит уже розглянуто")
+    is_owner = await _is_business_owner(db, business_id, str(current_user.id))
+    if not is_owner:
+        # Адміністратор вирішує лише запити свого рівня, не про доступи
+        # і не власні - інакше він міг би погодити сам собі.
+        if r.stage != "admin" or r.kind == "access" or r.user_id == str(current_user.id):
+            raise HTTPException(status_code=403, detail="Цей запит розглядає власник")
 
     conflicts = await _conflicts(db, r)
     if payload.approve:
         if r.kind == "schedule":
             m = await _membership(db, r.user_id, business_id)
             m.shifts = r.payload["shifts"]
+        elif r.kind == "access":
+            from app.api.crm.access import apply_access
+            await apply_access(db, business_id, r.user_id, str(current_user.id),
+                               (r.payload or {}).get("role"), {s: True for s in (r.payload or {}).get("sections", [])})
         else:
             d = date.fromisoformat(r.payload["date_from"])
             end = date.fromisoformat(r.payload["date_to"])
@@ -286,12 +364,17 @@ async def decide_request(
     r.response_note = (payload.note or "").strip() or None
     r.decided_by = str(current_user.id)
     r.decided_at = utc_now()
+    from app.services.audit import record
+    staff_u = (await db.execute(select(User).where(User.id == r.user_id))).scalars().first()
+    staff_name = (staff_u.full_name if staff_u and staff_u.full_name else None) or (staff_u.email if staff_u else "працівник")
+    await record(db, business_id, str(current_user.id), "requests", "request_decided",
+                 f"{'Погоджено' if payload.approve else 'Відхилено'}: {staff_name} - {_kind_label(r)}", {"request_id": r.id})
     await db.commit()
 
     master = (await db.execute(select(User).where(User.id == r.user_id))).scalars().first()
     business = await db.get(Business, business_id)
     if master and master.email and business:
-        what = "зміну графіка" if r.kind == "schedule" else REASON_LABEL.get(r.payload.get("reason"), "відпустку").lower()
+        what = {"schedule": "зміну графіка", "access": "доступ"}.get(r.kind) or REASON_LABEL.get(r.payload.get("reason"), "відпустку").lower()
         title = f"Запит на {what} {'погоджено' if payload.approve else 'відхилено'}"
         rows = [("Рішення", "Погоджено" if payload.approve else "Відхилено", True)]
         if r.kind == "time_off":
@@ -301,6 +384,45 @@ async def decide_request(
         background_tasks.add_task(send_staff_notice, master.email, business.name, title, rows, "")
 
     return _request_out(r, conflicts=conflicts)
+
+
+class EscalateIn(BaseModel):
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+@router.post("/crm/businesses/{business_id}/staff-requests/{request_id}/escalate")
+async def escalate_request(
+    business_id: int,
+    request_id: int,
+    payload: EscalateIn,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Адміністратор передає запит власнику - «це мені не вирішити»."""
+    await assert_business_admin(db, current_user, business_id)
+    r = await db.get(StaffRequest, request_id)
+    if not r or r.business_id != business_id:
+        raise HTTPException(status_code=404, detail="Запит не знайдено")
+    if r.status != "pending" or r.stage != "admin":
+        raise HTTPException(status_code=409, detail="Цей запит уже не на розгляді адміністратора")
+    r.stage = "owner"
+    # Порожній рядок, а не None: так видно, що запит ПЕРЕДАНО, навіть без коментаря.
+    r.escalation_note = (payload.note or "").strip()
+    from app.services.audit import record
+    await record(db, business_id, str(current_user.id), "requests", "request_escalated",
+                 f"Передано власнику: {_kind_label(r)}" + (f" - «{r.escalation_note}»" if r.escalation_note else ""),
+                 {"request_id": r.id})
+    await db.commit()
+    business = await db.get(Business, business_id)
+    to = await _owner_email(db, business) if business else None
+    if to:
+        rows = [("Що", _kind_label(r).capitalize(), True)]
+        if r.escalation_note:
+            rows.append(("Від адміністратора", r.escalation_note, False))
+        background_tasks.add_task(send_staff_notice, to, business.name, "Адміністратор передав вам запит", rows,
+                                  "Розгляньте у кабінеті, розділ «Команда».")
+    return _request_out(r)
 
 
 # ---------------------------------------------------------------- Мої клієнти

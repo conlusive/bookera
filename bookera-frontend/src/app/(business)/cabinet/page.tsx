@@ -45,6 +45,7 @@ const TeamTab = dynamic(() => import('@/components/cabinet/TeamTab'), { ssr: fal
 const InventoryTab = dynamic(() => import('@/components/cabinet/InventoryTab'), { ssr: false, loading: TabLoading });
 const MarketingTab = dynamic(() => import('@/components/cabinet/MarketingTab'), { ssr: false, loading: TabLoading });
 const SettingsTab = dynamic(() => import('@/components/cabinet/SettingsTab'), { ssr: false, loading: TabLoading });
+const AuditLog = dynamic(() => import('@/components/cabinet/AuditLog'), { ssr: false, loading: TabLoading });
 const MasterClients = dynamic(() => import('@/components/cabinet/MasterClients'), { ssr: false, loading: TabLoading });
 const MasterPortfolio = dynamic(() => import('@/components/cabinet/MasterPortfolio'), { ssr: false, loading: TabLoading });
 const MasterRequests = dynamic(() => import('@/components/cabinet/MasterRequests'), { ssr: false, loading: TabLoading });
@@ -103,12 +104,37 @@ export default function BusinessCabinet() {
    * немає, а аналітика закладу - у «Статистиці».
    */
 
+  // Доступи в цьому закладі - з сервера (/me/access): роль і розділи,
+  // які власник відкрив чи закрив цій людині окремо.
+  const [access, setAccess] = useState<{ role: string; sections: Record<string, boolean> } | null>(null);
+  useEffect(() => {
+    if (!business?.id) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const t = await getAuthToken();
+        const a = await api.getMyAccess(t, Number(business.id));
+        if (alive) setAccess(a);
+      } catch { if (alive) setAccess(null); }
+    })();
+    return () => { alive = false; };
+  }, [business?.id]);
+
   const allowedTabs = useMemo(() => {
-    const role = userProfile?.role;
-    if (isOwnerRole(role)) return navItems.map(i => i.id).filter(id => !['MyClients', 'MyPortfolio', 'MyRequests', 'MyEarnings'].includes(id));
-    if (role === 'admin') return ['Calendar', 'Clients', 'Services', 'Team', 'Inventory', 'Stats', 'MyPortfolio', 'MyRequests', 'MyEarnings'];
-    return ['Calendar', 'MyClients', 'MyPortfolio', 'MyRequests', 'MyEarnings'];
-  }, [userProfile?.role]);
+    const role = access?.role || (isOwnerRole(userProfile?.role) ? 'owner' : userProfile?.role);
+    const personal = ['MyClients', 'MyPortfolio', 'MyRequests', 'MyEarnings'];
+    if (role === 'owner' || isOwnerRole(role)) return navItems.map(i => i.id).filter(id => !personal.includes(id));
+    const s = access?.sections || {};
+    // Розділи, які власник може відкрити окремо
+    const extra = [
+      ...(s.clients ? ['Clients'] : []),
+      ...(s.services ? ['Services'] : []),
+      ...(s.inventory ? ['Inventory'] : []),
+      ...(s.analytics ? ['Stats', 'Marketing'] : []),
+    ];
+    if (role === 'admin') return ['Calendar', 'Team', 'Activity', ...extra, 'MyPortfolio', 'MyRequests', 'MyEarnings'];
+    return ['Calendar', 'MyClients', ...extra, 'MyPortfolio', 'MyRequests', 'MyEarnings'];
+  }, [access, userProfile?.role]);
 
   // Запамʼятана вкладка, якої для ролі немає (майстер колись відкрив
   // «Послуги»), - повертаємо на календар замість порожнього екрана.
@@ -1535,7 +1561,9 @@ export default function BusinessCabinet() {
 
         {activeTab === 'MyPortfolio' && business?.id && userProfile?.id && <MasterPortfolio businessId={Number(business.id)} userId={String(userProfile.id)} />}
 
-        {activeTab === 'MyRequests' && business?.id && <MasterRequests businessId={Number(business.id)} />}
+        {activeTab === 'MyRequests' && business?.id && <MasterRequests businessId={Number(business.id)} role={access?.role || 'master'} sections={access?.sections || {}} />}
+
+        {activeTab === 'Activity' && business?.id && <AuditLog businessId={Number(business.id)} />}
 
         {activeTab === 'Team' && <TeamTab business={business} team={team} setTeam={setTeam} services={services} userProfile={userProfile} appointments={appointments} setActiveTab={setActiveTab} setFilterMaster={setFilterMaster} globalShifts={shifts} />}
 

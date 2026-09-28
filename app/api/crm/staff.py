@@ -106,6 +106,9 @@ async def create_invite(
             expires_at=utc_now() + timedelta(days=INVITE_EXPIRY_DAYS),
         )
         db.add(invite)
+    # Журнал дій
+    from app.services.audit import record as _audit
+    await _audit(db, business_id, str(current_user.id), "team", "invited", f"Запрошено {email} ({invite.role})")
     await db.commit()
     await db.refresh(invite)
 
@@ -314,6 +317,16 @@ async def update_staff(
             for protected in ("role", "commission_rate", "fixed_salary", "tax_rate", "is_active", "shifts"):
                 data.pop(protected, None)
 
+    # Роль змінює ЛИШЕ власник - і через членство, як PUT .../access.
+    # Раніше роль тут міг змінити адміністратор: підвищити будь-кого,
+    # зокрема себе, в обхід правила «доступи роздає власник».
+    if "role" in data:
+        _biz = await db.get(Business, ctx_business_id)
+        if not _biz or str(_biz.owner_id) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Змінювати роль може лише власник")
+        if data["role"] in ("master", "admin") and membership is not None:
+            membership.role = data["role"]
+
     # Графік - за закладом (членство), не за людиною.
     new_shifts = data.pop("shifts", None) if "shifts" in data else ...
     for field, value in data.items():
@@ -403,5 +416,11 @@ async def remove_staff(
     else:
         staff.business_id = None
         staff.is_active = False
+
+    # Журнал дій
+
+    from app.services.audit import record as _audit
+
+    await _audit(db, target_business_id, str(current_user.id), "team", "removed", f"Прибрано з команди: {staff.full_name or staff.email}")
 
     await db.commit()

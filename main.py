@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.crm import access as crm_access
 from app.api import businesses, services, appointments, platform, wallet, account, work, master_tools
 from app.services.reminders import reminder_loop
 from app.api.crm import (
@@ -206,6 +207,7 @@ app.include_router(businesses.router)
 app.include_router(wallet.router)
 app.include_router(account.router)
 app.include_router(master_tools.router)
+app.include_router(crm_access.router)
 app.include_router(work.router)
 app.include_router(platform.router)
 app.include_router(services.router)

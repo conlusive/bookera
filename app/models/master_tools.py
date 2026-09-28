@@ -22,7 +22,12 @@ class StaffRequest(Base):
     id = Column(Integer, primary_key=True, index=True)
     business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    kind = Column(String, nullable=False)              # schedule | time_off
+    kind = Column(String, nullable=False)              # schedule | time_off | access
+    # Хто розглядає: admin - адміністратор закладу, owner - власник.
+    # Запити майстра починаються з адміністратора, той може передати
+    # власнику; запити адміністратора й запити на доступ - одразу власнику.
+    stage = Column(String, nullable=False, default="owner")
+    escalation_note = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="pending")  # pending | approved | declined | cancelled
     payload = Column(JSON, nullable=False)
     comment = Column(Text, nullable=True)              # від майстра
@@ -45,3 +50,25 @@ class PortfolioItem(Base):
     image_url = Column(String, nullable=False)
     caption = Column(String, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
+class AuditEvent(Base):
+    """
+    Журнал дій у закладі: хто, що й коли змінив.
+
+    Бачать власник і адміністратор; адміністратор - без дій власника.
+    summary - людський опис («Змінив ціну: Стрижка 450 → 500 ₴»),
+    category - для фільтра, meta - подробиці.
+    """
+    __tablename__ = "audit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    actor_id = Column(String, nullable=True, index=True)
+    actor_name = Column(String, nullable=True)
+    actor_role = Column(String, nullable=True)       # owner | admin | master | client
+    category = Column(String, nullable=False)        # bookings | services | team | money | settings | inventory | requests
+    action = Column(String, nullable=False)
+    summary = Column(Text, nullable=False)
+    meta = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)

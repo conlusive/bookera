@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.services.business_profile import default_booking_settings
 from app.services.subscription import STATUS_TRIAL, subscription_state, trial_until
-from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, sync_user_from_token
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, sync_user_from_token, assert_section
 from pydantic import BaseModel
 from app.core.logging_config import logger
 from app.models import Business, RoleEnum, BusinessHours, User
@@ -304,6 +304,12 @@ async def update_business(
             business.latitude = None
             business.longitude = None
 
+    # Журнал дій
+
+    from app.services.audit import record as _audit
+
+    await _audit(db, business.id, str(current_user.id), "settings", "business_updated", "Змінено налаштування закладу: " + ", ".join(sorted(data.keys()))[:200])
+
     await db.commit()
 
     # Так само явно підвантажуємо services через окремий запит замість
@@ -357,6 +363,12 @@ async def set_business_hours(
             row.close_time = item.close_time
         else:
             db.add(BusinessHours(business_id=business_id, **item.model_dump()))
+
+    # Журнал дій
+
+    from app.services.audit import record as _audit
+
+    await _audit(db, business_id, str(current_user.id), "settings", "hours_changed", "Змінено години роботи закладу")
 
     await db.commit()
     result = await db.execute(
@@ -663,7 +675,7 @@ async def get_direct_link(
 
     Тому лише адміністратори закладу і лише окремим запитом.
     """
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "analytics")
 
     res = await db.execute(select(Business).where(Business.id == business_id))
     business = res.scalars().first()

@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import is_limited_to_own_schedule, CurrentUser, assert_business_access, get_current_user
+from app.core.auth import has_section, is_limited_to_own_schedule, CurrentUser, assert_business_access, get_current_user
 from app.models import Client, ClientLink, Business, PointsLedgerEntry, Appointment
 from app.models.appointment import Appointment
 from app.services.monetization import award_points_for_new_client
@@ -40,7 +40,8 @@ async def list_clients(
     # База клієнтів - головний актив закладу. Майстер, який іде,
     # не має вивантажити контакти всіх відвідувачів, зокрема тих,
     # кого ніколи не бачив.
-    if await is_limited_to_own_schedule(db, current_user, business_id):
+    # Доступ «Всі клієнти салону» (власник вмикає окремо) знімає обмеження.
+    if not await has_section(db, current_user, business_id, "clients"):
         own_clients = select(Appointment.client_id).where(
             Appointment.business_id == business_id,
             Appointment.master_id == str(current_user.id),

@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, assert_section
 from app.models import Business, Service, ServiceAddon
 from app.schemas import ServiceCreate, ServiceResponse, ServiceUpdate
 
@@ -43,7 +43,7 @@ async def create_service(
 
     # business_id приходить у тілі запиту, тому перевірка доступу - вручну
     # (не через FastAPI-залежність, яка читає його лише з query/path).
-    await assert_business_admin(db, current_user, service_in.business_id)
+    await assert_section(db, current_user, service_in.business_id, "services")
 
     new_service = Service(
         business_id=service_in.business_id,
@@ -58,6 +58,12 @@ async def create_service(
 
     if service_in.addon_service_ids:
         await _sync_addons(db, new_service, service_in.addon_service_ids)
+
+    # Журнал дій
+
+    from app.services.audit import record as _audit
+
+    await _audit(db, new_service.business_id, str(current_user.id), "services", "service_created", f"Додано послугу: {new_service.name}, {new_service.price} ₴")
 
     await db.commit()
     return await _load_with_addons(db, new_service.id)
@@ -81,7 +87,7 @@ async def update_service(
     service = await _load_with_addons(db, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
-    await assert_business_admin(db, current_user, service.business_id)
+    await assert_section(db, current_user, service.business_id, "services")
 
     data = payload.model_dump(exclude_unset=True, exclude={"addon_service_ids"})
     for field, value in data.items():
@@ -89,6 +95,12 @@ async def update_service(
 
     if payload.addon_service_ids is not None:
         await _sync_addons(db, service, payload.addon_service_ids)
+
+    # Журнал дій
+
+    from app.services.audit import record as _audit
+
+    await _audit(db, service.business_id, str(current_user.id), "services", "service_updated", f"Змінено послугу: {service.name}" + (f", ціна {data['price']} ₴" if "price" in data else ""))
 
     await db.commit()
     return await _load_with_addons(db, service_id)
@@ -104,6 +116,9 @@ async def delete_service(
     service = result.scalars().first()
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
-    await assert_business_admin(db, current_user, service.business_id)
+    await assert_section(db, current_user, service.business_id, "services")
     await db.delete(service)
+    # Журнал дій
+    from app.services.audit import record as _audit
+    await _audit(db, service.business_id, str(current_user.id), "services", "service_deleted", f"Видалено послугу: {service.name}")
     await db.commit()

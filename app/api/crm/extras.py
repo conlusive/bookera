@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, assert_section
 from app.core.rate_limit import rate_limit
 from app.core.time_utils import utc_now
 from app.models import Review, InventoryItem, Expense
@@ -84,9 +84,12 @@ async def list_inventory(business_id: int = Query(...), db: AsyncSession = Depen
 
 @router.post("/crm/inventory", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
 async def create_inventory_item(item_in: InventoryItemCreate, db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
-    await assert_business_admin(db, current_user, item_in.business_id)
+    await assert_section(db, current_user, item_in.business_id, "inventory")
     item = InventoryItem(**item_in.model_dump())
     db.add(item)
+    # Журнал дій
+    from app.services.audit import record as _audit
+    await _audit(db, item.business_id, str(current_user.id), "inventory", "item_created", f"Додано на склад: {item.name}")
     await db.commit()
     await db.refresh(item)
     return item
@@ -98,7 +101,7 @@ async def update_inventory_item(item_id: int, payload: InventoryItemUpdate, db: 
     item = result.scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Позицію не знайдено")
-    await assert_business_admin(db, current_user, item.business_id)
+    await assert_section(db, current_user, item.business_id, "inventory")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(item, field, value)
     await db.commit()
@@ -112,7 +115,7 @@ async def delete_inventory_item(item_id: int, db: AsyncSession = Depends(get_db)
     item = result.scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Позицію не знайдено")
-    await assert_business_admin(db, current_user, item.business_id)
+    await assert_section(db, current_user, item.business_id, "inventory")
     await db.delete(item)
     await db.commit()
 
@@ -133,7 +136,7 @@ def _generate_future_dates(start_date, recurrence: str, count: int) -> List:
 
 @router.get("/crm/expenses", response_model=List[ExpenseResponse])
 async def list_expenses(business_id: int = Query(...), db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "inventory")
     result = await db.execute(select(Expense).where(Expense.business_id == business_id).order_by(Expense.expense_date.desc()))
     return result.scalars().all()
 
@@ -146,7 +149,7 @@ async def create_expense(expense_in: ExpenseCreate, db: AsyncSession = Depends(g
     у старому фронтенд-коді), усі під одним recurrence_group_id, щоб
     їх можна було надійно знайти й змінити разом пізніше.
     """
-    await assert_business_admin(db, current_user, expense_in.business_id)
+    await assert_section(db, current_user, expense_in.business_id, "inventory")
 
     group_id = str(uuid.uuid4()) if expense_in.recurrence != "none" else None
     expense = Expense(**expense_in.model_dump(), recurrence_group_id=group_id)
@@ -167,6 +170,12 @@ async def create_expense(expense_in: ExpenseCreate, db: AsyncSession = Depends(g
                 recurrence_group_id=group_id,
             ))
 
+    # Журнал дій
+
+    from app.services.audit import record as _audit
+
+    await _audit(db, expense.business_id, str(current_user.id), "inventory", "expense_created", f"Витрата: {expense.amount} ₴" + (f" - {expense.description}" if getattr(expense, "description", None) else ""))
+
     await db.commit()
     await db.refresh(expense)
     return expense
@@ -178,7 +187,7 @@ async def update_expense(expense_id: int, payload: ExpenseUpdate, db: AsyncSessi
     expense = result.scalars().first()
     if not expense:
         raise HTTPException(status_code=404, detail="Витрату не знайдено")
-    await assert_business_admin(db, current_user, expense.business_id)
+    await assert_section(db, current_user, expense.business_id, "inventory")
 
     old_date = expense.expense_date
     apply_to_future = payload.apply_to_future
@@ -217,7 +226,7 @@ async def delete_expense(
     expense = result.scalars().first()
     if not expense:
         raise HTTPException(status_code=404, detail="Витрату не знайдено")
-    await assert_business_admin(db, current_user, expense.business_id)
+    await assert_section(db, current_user, expense.business_id, "inventory")
 
     if delete_future and expense.recurrence_group_id:
         await db.execute(
@@ -300,7 +309,7 @@ async def set_service_materials(
     service = srv_res.scalars().first()
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
-    await assert_business_admin(db, current_user, service.business_id)
+    await assert_section(db, current_user, service.business_id, "services")
 
     # Перевіряємо, що всі позиції належать цьому ж закладу - інакше можна
     # було б підчепити матеріал чужого бізнесу за прямим id.
@@ -503,7 +512,7 @@ async def send_campaign(
     from app.models import Business, Client
     from app.core.email import send_campaign_email
 
-    await assert_business_admin(db, current_user, payload.business_id)
+    await assert_section(db, current_user, payload.business_id, "analytics")
 
     biz_res = await db.execute(select(Business).where(Business.id == payload.business_id))
     business = biz_res.scalars().first()

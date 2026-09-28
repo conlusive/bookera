@@ -151,6 +151,9 @@ class StaffMembership(Base):
     # Раніше графік зберігався за людиною (User.shifts) - майстер у двох
     # салонах мав один графік на обидва. NULL - години закладу.
     shifts = Column(JSON, nullable=True)
+    # Окремі доступи до розділів - лише ВІДМІННОСТІ від типових за роллю
+    # (core/auth.py ROLE_DEFAULTS): {"services": true, "analytics": false}.
+    permissions = Column(JSON, nullable=True)
 
 
 class Favorite(Base):

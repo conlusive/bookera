@@ -343,6 +343,25 @@ export const api = {
   },
 
   /** «Моя робота»: розклад, заробіток і салони майстра - по всіх салонах разом. */
+  // --- Доступи й журнал ---
+  async getMyAccess(token: string, businessId: number): Promise<{ role: string; sections: Record<string, boolean> }> {
+    return authFetch(`/crm/businesses/${businessId}/me/access`, token);
+  },
+  async getStaffAccess(token: string, businessId: number, staffId: string): Promise<{ role: string; sections: Record<string, boolean>; defaults?: Record<string, boolean>; editable: boolean }> {
+    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/access`, token);
+  },
+  async setStaffAccess(token: string, businessId: number, staffId: string, payload: { role?: 'master' | 'admin'; sections?: Record<string, boolean> }): Promise<{ role: string; sections: Record<string, boolean> }> {
+    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/access`, token, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  async escalateStaffRequest(token: string, businessId: number, id: number, note?: string): Promise<any> {
+    return authFetch(`/crm/businesses/${businessId}/staff-requests/${id}/escalate`, token, { method: 'POST', body: JSON.stringify({ note }) });
+  },
+  async getAuditLog(token: string, businessId: number, params: { category?: string; actor_id?: string; before?: string } = {}): Promise<any[]> {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v) q.set(k, v); });
+    return authFetch(`/crm/businesses/${businessId}/audit${q.toString() ? `?${q}` : ''}`, token);
+  },
+
   // --- Інструменти майстра ---
   async listMyRequests(token: string, businessId: number): Promise<any[]> {
     return authFetch(`/work/me/requests?business_id=${businessId}`, token);

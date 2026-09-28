@@ -20,4 +20,4 @@ __all__ = [
     "PointsLedgerEntry", "PointsReasonEnum", "ReferralCommission",
     "RadarBoost", "GiftCertificate", "Payment", "StaffPayout",
 ]
-from app.models.master_tools import StaffRequest, PortfolioItem
+from app.models.master_tools import StaffRequest, PortfolioItem, AuditEvent

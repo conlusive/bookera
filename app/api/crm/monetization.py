@@ -7,7 +7,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_admin, get_current_user
+from app.core.auth import CurrentUser, assert_business_admin, get_current_user, assert_section
 from app.core.time_utils import utc_now
 from app.core.rate_limit import rate_limit
 from app.models import Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
@@ -53,7 +53,7 @@ async def get_monetization_summary(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "analytics")
     biz_res = await db.execute(select(Business).where(Business.id == business_id))
     business = biz_res.scalars().first()
 
@@ -87,7 +87,7 @@ async def get_points_ledger(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "analytics")
     result = await db.execute(
         select(PointsLedgerEntry).where(PointsLedgerEntry.business_id == business_id)
         .order_by(PointsLedgerEntry.created_at.desc()).limit(100)
@@ -101,7 +101,7 @@ async def get_commissions(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "analytics")
     result = await db.execute(
         select(ReferralCommission).where(ReferralCommission.business_id == business_id)
         .order_by(ReferralCommission.created_at.desc()).limit(100)
@@ -117,7 +117,7 @@ async def get_radar_status(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "analytics")
     biz_res = await db.execute(select(Business).where(Business.id == business_id))
     business = biz_res.scalars().first()
 
@@ -146,7 +146,7 @@ async def activate_radar_with_points(
     Оплата реальними грошима - окремий ендпоінт /radar/activate-with-payment,
     коли будуть підключені реквізити WayForPay.
     """
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "analytics")
     biz_res = await db.execute(select(Business).where(Business.id == business_id))
     business = biz_res.scalars().first()
 
@@ -193,7 +193,7 @@ async def create_gift_certificate(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_admin(db, current_user, payload.business_id)
+    await assert_section(db, current_user, payload.business_id, "analytics")
     from datetime import timedelta
 
     code = secrets.token_hex(4).upper()
@@ -219,7 +219,7 @@ async def list_gift_certificates(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    await assert_business_admin(db, current_user, business_id)
+    await assert_section(db, current_user, business_id, "analytics")
     result = await db.execute(
         select(GiftCertificate).where(GiftCertificate.business_id == business_id).order_by(GiftCertificate.created_at.desc())
     )
@@ -324,6 +324,9 @@ async def create_payout(
         expense_id=expense.id,
     )
     db.add(payout)
+    # Журнал дій
+    from app.services.audit import record as _audit
+    await _audit(db, business_id, str(current_user.id), "money", "payout_created", f"Виплата {staff_label}: {payout.payout_amount} ₴")
     await db.commit()
     await db.refresh(payout)
     return payout
@@ -433,6 +436,12 @@ async def cancel_payout(
         if expense:
             await db.delete(expense)
         payout.expense_id = None
+
+    # Журнал дій
+
+    from app.services.audit import record as _audit
+
+    await _audit(db, business_id, str(current_user.id), "money", "payout_cancelled", f"Скасовано виплату #{payout.id}: {payout.payout_amount} ₴")
 
     await db.commit()
     await db.refresh(payout)

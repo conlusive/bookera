@@ -18,7 +18,23 @@ const REASON: Record<string, string> = { vacation: 'Відпустка', sick: '
 const d = (iso: string) => { const x = new Date(`${iso.slice(0, 10)}T12:00:00`); return `${x.getDate()} ${MONTHS_GEN[x.getMonth()]}`; };
 const dt = (iso: string) => { const x = new Date(iso); return `${d(iso)}, ${String(x.getHours()).padStart(2, '0')}:${String(x.getMinutes()).padStart(2, '0')}`; };
 
-export default function TeamRequestsPanel({ businessId, onDecided }: { businessId: number; onDecided?: () => void }) {
+const SECTION_LABEL: Record<string, string> = {
+  services: 'Послуги й ціни', clients: 'Всі клієнти салону', inventory: 'Склад і витрати', analytics: 'Аналітика й маркетинг',
+};
+
+const describe = (r: any) => {
+  if (r.kind === 'schedule') {
+    return `Зміна графіка: ${(r.payload.shifts || []).filter((s: any) => s.active).map((s: any) => `${s.day.slice(0, 2)} ${s.start}–${s.end}`).join(', ') || 'усі дні вихідні'}`;
+  }
+  if (r.kind === 'access') {
+    const parts = (r.payload.sections || []).map((s: string) => SECTION_LABEL[s] || s);
+    if (r.payload.role === 'admin') parts.unshift('підвищення до адміністратора');
+    return `Доступ: ${parts.join(', ')}`;
+  }
+  return `${REASON[r.payload.reason] || 'Відпустка'}: ${r.payload.date_from === r.payload.date_to ? d(r.payload.date_from) : `${d(r.payload.date_from)} – ${d(r.payload.date_to)}`}`;
+};
+
+export default function TeamRequestsPanel({ businessId, isOwner = false, onDecided }: { businessId: number; isOwner?: boolean; onDecided?: () => void }) {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
@@ -29,6 +45,18 @@ export default function TeamRequestsPanel({ businessId, onDecided }: { businessI
     setItems(await api.listStaffRequests(t, businessId).catch(() => []));
   }, [businessId]);
   useEffect(() => { void load(); }, [load]);
+
+  const escalate = async (r: any) => {
+    setBusy(r.id);
+    try {
+      const t = await getAuthToken();
+      await api.escalateStaffRequest(t, businessId, r.id, notes[r.id]?.trim() || undefined);
+      setResult({ text: `${r.staff_name}: передано власнику.`, conflicts: [] });
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const decide = async (r: any, approve: boolean) => {
     setBusy(r.id);
@@ -57,11 +85,11 @@ export default function TeamRequestsPanel({ businessId, onDecided }: { businessI
             <div key={r.id} className="tr-item">
               <div className="tr-main">
                 <b>{r.staff_name}</b>
-                <span className="tr-what">
-                  {r.kind === 'schedule'
-                    ? `Зміна графіка: ${(r.payload.shifts || []).filter((s: any) => s.active).map((s: any) => `${s.day.slice(0, 2)} ${s.start}–${s.end}`).join(', ') || 'усі дні вихідні'}`
-                    : `${REASON[r.payload.reason] || 'Відпустка'}: ${r.payload.date_from === r.payload.date_to ? d(r.payload.date_from) : `${d(r.payload.date_from)} – ${d(r.payload.date_to)}`}`}
-                </span>
+                <span className="tr-what">{describe(r)}</span>
+                {/* Власникові - що запит передав адміністратор і чому */}
+                {isOwner && r.stage === 'owner' && typeof r.escalation_note === 'string' && (
+                  <span className="tr-esc">Передав адміністратор{r.escalation_note ? `: «${r.escalation_note}»` : ''}</span>
+                )}
                 {r.comment && <span className="tr-quote">«{r.comment}»</span>}
                 {r.conflicts?.length > 0 && (
                   <span className="tr-warn">
@@ -69,9 +97,13 @@ export default function TeamRequestsPanel({ businessId, onDecided }: { businessI
                     {r.conflicts.length > 3 ? '…' : ''}. Після погодження їх треба буде перенести.
                   </span>
                 )}
-                <input className="tr-note" value={notes[r.id] || ''} onChange={e => setNotes(n => ({ ...n, [r.id]: e.target.value.slice(0, 500) }))} placeholder="Коментар майстрові (необовʼязково)" />
+                <input className="tr-note" value={notes[r.id] || ''} onChange={e => setNotes(n => ({ ...n, [r.id]: e.target.value.slice(0, 500) }))} placeholder={isOwner ? "Коментар (необовʼязково)" : "Коментар майстрові чи власнику (необовʼязково)"} />
               </div>
               <div className="tr-actions">
+                {/* Адміністратор може передати власнику те, що йому не вирішити */}
+                {!isOwner && r.stage === 'admin' && (
+                  <button type="button" className="tr-btn ghost" disabled={busy === r.id} onClick={() => void escalate(r)}>Передати власнику</button>
+                )}
                 <button type="button" className="tr-btn ghost" disabled={busy === r.id} onClick={() => void decide(r, false)}>Відхилити</button>
                 <button type="button" className="tr-btn" disabled={busy === r.id} onClick={() => void decide(r, true)}>Погодити</button>
               </div>
@@ -98,6 +130,7 @@ export default function TeamRequestsPanel({ businessId, onDecided }: { businessI
         .tr-main { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1; }
         .tr-main b { font-size: 0.95rem; }
         .tr-what { font-size: 0.875rem; color: ${C.text}; }
+        .tr-esc { font-size: 0.82rem; color: #3730a3; background: #eef2ff; border-radius: 8px; padding: 0.4rem 0.6rem; }
         .tr-quote { font-size: 0.85rem; color: ${C.sub}; font-style: italic; }
         .tr-warn { font-size: 0.82rem; color: #8A6516; background: #FBF7EE; border-radius: 8px; padding: 0.45rem 0.6rem; line-height: 1.45; }
         .tr-note { margin-top: 0.3rem; height: 34px; padding: 0 0.7rem; border-radius: 9px; border: 1px solid ${C.border}; font-family: inherit; font-size: 0.85rem; outline: none; max-width: 420px; }

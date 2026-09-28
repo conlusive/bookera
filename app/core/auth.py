@@ -275,3 +275,73 @@ def sync_user_from_token(user, current_user: "CurrentUser") -> bool:
             user.email = current_user.email
             changed = True
     return changed
+
+
+# --- Доступ до розділів -----------------------------------------------
+
+# Розділи, які власник вмикає чи вимикає окремій людині.
+SECTIONS = ("services", "clients", "inventory", "analytics")
+SECTION_LABELS = {
+    "services": "Послуги й ціни",
+    "clients": "Всі клієнти салону",
+    "inventory": "Склад і витрати",
+    "analytics": "Аналітика й маркетинг",
+}
+# Типові доступи за роллю. Власник може змінити їх кожній людині окремо
+# (staff_memberships.permissions - лише відмінності від типових).
+ROLE_DEFAULTS = {
+    "admin": {s: True for s in SECTIONS},
+    "master": {s: False for s in SECTIONS},
+}
+
+
+def effective_permissions(role: Optional[str], overrides: Optional[dict]) -> dict:
+    base = dict(ROLE_DEFAULTS.get(role or "master", ROLE_DEFAULTS["master"]))
+    for k, v in (overrides or {}).items():
+        if k in base:
+            base[k] = bool(v)
+    return base
+
+
+async def has_section(db: AsyncSession, current_user: CurrentUser, business_id: int, section: str) -> bool:
+    """
+    Чи має людина доступ до розділу в цьому закладі.
+      власник - завжди
+      працівник - за роллю й окремими доступами в членстві
+      без членства (старі записи) - як раніше: лише адміністратор
+    """
+    from app.models import Business, StaffMembership
+    biz = await db.get(Business, business_id)
+    if biz and str(biz.owner_id) == str(current_user.id):
+        return True
+    m = (await db.execute(select(StaffMembership).where(
+        StaffMembership.user_id == str(current_user.id),
+        StaffMembership.business_id == business_id,
+        StaffMembership.is_active.is_(True),
+    ))).scalars().first()
+    if m is not None:
+        if m.role in ("business_owner", "owner"):
+            return True
+        return effective_permissions(m.role, m.permissions).get(section, False)
+    try:
+        await assert_business_admin(db, current_user, business_id)
+        return True
+    except HTTPException:
+        return False
+
+
+async def assert_section(db: AsyncSession, current_user: CurrentUser, business_id: int, section: str) -> None:
+    """Те саме, що has_section, але з 403 і зрозумілим поясненням."""
+    # Спершу підписка - як і в assert_business_admin: прострочена закриває
+    # платні розділи навіть власнику (402 «продовжіть підписку»).
+    from app.models import Business
+    from app.services.subscription import assert_has_access
+    biz = await db.get(Business, business_id)
+    if not biz:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заклад не знайдено")
+    assert_has_access(biz)
+    if not await has_section(db, current_user, business_id, section):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Немає доступу до розділу «{SECTION_LABELS.get(section, section)}». Попросіть доступ у власника через «Запити».",
+        )

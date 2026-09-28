@@ -25,9 +25,17 @@ const d = (iso: string) => { const x = new Date(`${iso.slice(0, 10)}T12:00:00`);
 const pad = (n: number) => String(n).padStart(2, '0');
 const todayIso = () => { const t = new Date(); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; };
 
-export default function MasterRequests({ businessId }: { businessId: number }) {
+const SECTIONS = [
+  { id: 'services', label: 'Послуги й ціни' },
+  { id: 'clients', label: 'Всі клієнти салону' },
+  { id: 'inventory', label: 'Склад і витрати' },
+  { id: 'analytics', label: 'Аналітика й маркетинг' },
+];
+
+export default function MasterRequests({ businessId, role = 'master', sections: have = {} }: { businessId: number; role?: string; sections?: Record<string, boolean> }) {
   const [list, setList] = useState<any[] | null>(null);
-  const [mode, setMode] = useState<null | 'schedule' | 'time_off'>(null);
+  const [mode, setMode] = useState<null | 'schedule' | 'time_off' | 'access'>(null);
+  const [want, setWant] = useState<{ sections: string[]; admin: boolean }>({ sections: [], admin: false });
   const [shifts, setShifts] = useState<any[] | null>(null);
   const [off, setOff] = useState({ from: todayIso(), to: todayIso(), reason: 'vacation' });
   const [comment, setComment] = useState('');
@@ -40,7 +48,7 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
   }, [businessId]);
   useEffect(() => { void load(); }, [load]);
 
-  const open = async (m: 'schedule' | 'time_off') => {
+  const open = async (m: 'schedule' | 'time_off' | 'access') => {
     setError(''); setComment('');
     if (mode === m) { setMode(null); return; }
     setMode(m);
@@ -57,7 +65,10 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
       const t = await getAuthToken();
       await api.createStaffRequest(t, mode === 'schedule'
         ? { business_id: businessId, kind: 'schedule', shifts, comment: comment.trim() || undefined }
-        : { business_id: businessId, kind: 'time_off', date_from: off.from, date_to: off.to, reason: off.reason, comment: comment.trim() || undefined });
+        : mode === 'access'
+          ? { business_id: businessId, kind: 'access', sections: want.sections, role: want.admin ? 'admin' : undefined, comment: comment.trim() || undefined }
+          : { business_id: businessId, kind: 'time_off', date_from: off.from, date_to: off.to, reason: off.reason, comment: comment.trim() || undefined });
+      setWant({ sections: [], admin: false });
       setMode(null);
       await load();
     } catch (e: any) {
@@ -81,12 +92,13 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
         <h2>Запити</h2>
         {pending > 0 && <div className="rq-pill">{pending} очікує рішення</div>}
       </div>
-      <p className="rq-lead">Попросіть салон змінити графік чи дати вільні дні. Щойно власник погодить — зміни застосуються самі, а ви отримаєте лист.</p>
+      <p className="rq-lead">Попросіть змінити графік, дати вільні дні чи відкрити доступ. Щойно запит погодять — зміни застосуються самі, а ви отримаєте лист.</p>
 
       <div className="rq-actions">
         {([
           { id: 'schedule', title: 'Змінити графік', text: 'Інші дні чи години роботи', icon: 'M8 2.5v4M16 2.5v4M3 9.5h18M5 4.5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-12a2 2 0 0 1 2-2z' },
           { id: 'time_off', title: 'Відпустка чи лікарняний', text: 'Закрити дні для запису', icon: 'M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z' },
+          { id: 'access', title: 'Доступ до розділу', text: 'Послуги, клієнти, склад, аналітика', icon: 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zM9 12l2 2 4-4' },
         ] as const).map(a => (
           <button key={a.id} type="button" className={`rq-action ${mode === a.id ? 'on' : ''}`} onClick={() => void open(a.id)}>
             <span className="rq-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d={a.icon} /></svg></span>
@@ -116,6 +128,29 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
                 </div>
               ))}
             </>
+          ) : mode === 'access' ? (
+            <>
+              <div className="rq-card-title">Який доступ потрібен</div>
+              <div className="rq-sub">Запит на доступ розглядає власник закладу.</div>
+              {SECTIONS.map(s => {
+                const already = !!have[s.id];
+                const on = already || want.sections.includes(s.id);
+                return (
+                  <label key={s.id} className={`rq-check ${already ? 'has' : ''}`}>
+                    <input type="checkbox" checked={on} disabled={already}
+                      onChange={() => setWant(w => ({ ...w, sections: on ? w.sections.filter(x => x !== s.id) : [...w.sections, s.id] }))} />
+                    <span>{s.label}</span>
+                    {already && <em>вже є</em>}
+                  </label>
+                );
+              })}
+              {role === 'master' && (
+                <label className="rq-check">
+                  <input type="checkbox" checked={want.admin} onChange={() => setWant(w => ({ ...w, admin: !w.admin }))} />
+                  <span>Стати адміністратором</span>
+                </label>
+              )}
+            </>
           ) : (
             <>
               <div className="rq-card-title">Вільні дні</div>
@@ -134,7 +169,7 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
           {error && <div className="rq-err">{error}</div>}
           <div className="rq-form-actions">
             <button type="button" className="rq-btn ghost" onClick={() => setMode(null)}>Скасувати</button>
-            <button type="button" className="rq-btn" disabled={busy} onClick={() => void send()}>{busy ? 'Надсилаємо…' : 'Надіслати запит'}</button>
+            <button type="button" className="rq-btn" disabled={busy || (mode === 'access' && !want.sections.length && !want.admin)} onClick={() => void send()}>{busy ? 'Надсилаємо…' : 'Надіслати запит'}</button>
           </div>
         </section>
       )}
@@ -145,8 +180,10 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
           <div className="rq-sub">Запитів ще не було.</div>
         ) : list.map(r => {
           const st = STATUS[r.status] || STATUS.pending;
-          const title = r.kind === 'schedule' ? 'Зміна графіка' : (REASONS.find(x => x.id === r.payload?.reason)?.label || 'Відпустка');
-          const detail = r.kind === 'time_off'
+          const title = r.kind === 'schedule' ? 'Зміна графіка' : r.kind === 'access' ? 'Доступ' : (REASONS.find(x => x.id === r.payload?.reason)?.label || 'Відпустка');
+          const detail = r.kind === 'access'
+            ? [r.payload?.role === 'admin' ? 'Підвищення до адміністратора' : null, ...(r.payload?.sections || []).map((s: string) => SECTIONS.find(x => x.id === s)?.label || s)].filter(Boolean).join(', ')
+            : r.kind === 'time_off'
             ? (r.payload.date_from === r.payload.date_to ? d(r.payload.date_from) : `${d(r.payload.date_from)} – ${d(r.payload.date_to)}`)
             : (r.payload.shifts || []).filter((s: any) => s.active).map((s: any) => `${s.day.slice(0, 2)} ${s.start}–${s.end}`).join(', ') || 'Усі дні вихідні';
           return (
@@ -159,6 +196,7 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
               </div>
               <div className="rq-row-side">
                 <span className="rq-chip" style={{ background: st.bg, color: st.fg }}>{st.label}</span>
+                {r.status === 'pending' && <span className="rq-date">{r.stage === 'admin' ? 'у адміністратора' : 'у власника'}</span>}
                 <span className="rq-date">{d(r.created_at)}</span>
                 {r.status === 'pending' && <button type="button" className="rq-link" onClick={() => void withdraw(r.id)}>Відкликати</button>}
               </div>
@@ -173,7 +211,7 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
         .rq-header h2 { font-size: 1.6rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
         .rq-pill { font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #FBF3E4; color: #8A6516; }
         .rq-lead { color: ${C.sub}; font-size: 0.95rem; margin: 0 0 1.5rem; max-width: 640px; line-height: 1.5; }
-        .rq-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 360px)); gap: 1rem; margin-bottom: 1.25rem; }
+        .rq-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 320px)); gap: 1rem; margin-bottom: 1.25rem; }
         .rq-action { display: flex; align-items: center; gap: 0.9rem; text-align: left; padding: 1.1rem 1.2rem; border-radius: 16px; border: 1px solid ${C.border}; background: #fff; cursor: pointer; font-family: inherit; transition: border-color .15s, background-color .15s; }
         .rq-action:hover { background: #f8fafc; }
         .rq-action.on { border-color: ${C.text}; }
@@ -199,6 +237,10 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
         .rq-seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }
         .rq-dates { display: flex; gap: 1rem; flex-wrap: wrap; }
         .rq-dates label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; color: ${C.sub}; }
+        .rq-check { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0; border-top: 1px solid #f1f5f9; font-size: 0.9rem; cursor: pointer; }
+        .rq-check input { width: 16px; height: 16px; accent-color: #0f172a; }
+        .rq-check.has { color: #64748b; cursor: default; }
+        .rq-check em { font-style: normal; font-size: 0.75rem; color: #64748b; margin-left: auto; }
         .rq-note { width: 100%; box-sizing: border-box; margin-top: 1rem; padding: 0.7rem 0.8rem; border-radius: 10px; border: 1px solid ${C.border}; font-family: inherit; font-size: 0.9rem; resize: vertical; outline: none; }
         .rq-err { color: #d70015; font-size: 0.85rem; margin-top: 0.6rem; }
         .rq-form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
@@ -216,6 +258,7 @@ export default function MasterRequests({ businessId }: { businessId: number }) {
         .rq-date { font-size: 0.75rem; color: ${C.sub}; }
         .rq-link { border: none; background: none; color: ${C.sub}; font-family: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; padding: 0; }
         .rq-link:hover { color: #d70015; }
+        @media (max-width: 1000px) { .rq-actions { grid-template-columns: 1fr 1fr; } }
         @media (max-width: 760px) { .rq { padding: 1.25rem 1rem; } .rq-actions { grid-template-columns: 1fr; } .rq-shift { grid-template-columns: 40px 1fr; } .rq-times { grid-column: 2; } }
       `}</style>
     </div>

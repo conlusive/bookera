@@ -10,6 +10,7 @@ import Button from '@/components/ui/AppButton';
 import { Icons } from '@/components/shared';
 import Avatar from '@/components/ui/Avatar';
 import TeamRequestsPanel from '@/components/cabinet/TeamRequestsPanel';
+import StaffAccessPanel from '@/components/cabinet/StaffAccessPanel';
 
 // Локальні іконки
 const WalletIcon = () => (
@@ -828,7 +829,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             {/* Запити команди (графік, відпустка) - лише коли є що розглянути.
                 Погоджений графік одразу зʼявиться в картці майстра. */}
             {hasAdminRights && business?.id && (
-              <TeamRequestsPanel businessId={Number(business.id)} onDecided={async () => { try { const t = await getAuthToken(); setTeam(await api.listStaff(t, Number(business.id))); } catch { /* лишаємо як є */ } }} />
+              <TeamRequestsPanel businessId={Number(business.id)} isOwner={isSystemOwner} onDecided={async () => { try { const t = await getAuthToken(); setTeam(await api.listStaff(t, Number(business.id))); } catch { /* лишаємо як є */ } }} />
             )}
 
             {/* ХЕДЕР ПРОФІЛЮ */}
@@ -1691,37 +1692,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             {activeStaffTab === 'security' && hasAdminRights && (
               <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
-                {!isOwnerProfile && (
-                  <div>
-                    <div style={{ marginBottom: '1.5rem' }}>
-                       <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: colors.textPrimary, margin: '0 0 0.5rem 0' }}>Системна роль</h3>
-                       <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0 }}>Визначає рівень доступу співробітника до панелі керування та звітів.</p>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                      <div onClick={() => {
-                         handleUpdateLocalStaff({ role: 'master' });
-                         handleSaveSettingsDB({ role: 'master' });
-                      }} style={{ padding: '1.25rem', border: `1.5px solid ${currentStaff.role !== 'admin' ? colors.blue : colors.border}`, borderRadius: '12px', cursor: 'pointer', background: currentStaff.role !== 'admin' ? colors.blueLight : '#fff', transition: '0.2s' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-                           <input type="radio" checked={currentStaff.role !== 'admin'} readOnly style={{ accentColor: colors.blue }} />
-                           <span style={{ fontWeight: '600', color: colors.textPrimary, fontSize: '1rem' }}>Спеціаліст</span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: colors.textSecondary, paddingLeft: '1.8rem', lineHeight: '1.4' }}>Має доступ лише до свого календаря та записів. Не бачить фінанси салону та аналітику.</div>
-                      </div>
-
-                      <div onClick={() => {
-                         handleUpdateLocalStaff({ role: 'admin' });
-                         handleSaveSettingsDB({ role: 'admin' });
-                      }} style={{ padding: '1.25rem', border: `1.5px solid ${currentStaff.role === 'admin' ? colors.blue : colors.border}`, borderRadius: '12px', cursor: 'pointer', background: currentStaff.role === 'admin' ? colors.blueLight : '#fff', transition: '0.2s' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-                           <input type="radio" checked={currentStaff.role === 'admin'} readOnly style={{ accentColor: colors.blue }} />
-                           <span style={{ fontWeight: '600', color: colors.textPrimary, fontSize: '1rem' }}>Адміністратор</span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: colors.textSecondary, paddingLeft: '1.8rem', lineHeight: '1.4' }}>Має повний доступ до клієнтської бази, розкладу всіх майстрів, зарплат та налаштувань.</div>
-                      </div>
-                    </div>
-                  </div>
+                {/* Роль і доступи до розділів - змінює лише власник (сервер
+                    перевіряє те саме). Адміністратор бачить, але не змінює. */}
+                {!isOwnerProfile && business?.id && (
+                  <StaffAccessPanel businessId={Number(business.id)} staffId={String(currentStaff.id)}
+                    onChanged={(role) => handleUpdateLocalStaff({ role })} />
                 )}
 
                 <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -198,3 +198,23 @@ async def test_calendar_route_also_sends_right_away(client, auth_headers, monkey
     assert sent == ["cal@example.com"]
     log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()
     assert any("завершено" in e["summary"] for e in log)
+
+
+@pytest.mark.asyncio
+async def test_client_deletes_own_review(client, auth_headers):
+    """Свій відгук - видалити можна; рейтинг перераховується; чужий - ні."""
+    bid, sid, owner, m = await _setup(client, auth_headers, "del")
+    a1, t1 = await _done(bid, sid, m, 3)
+    a2, t2 = await _done(bid, sid, m, 4)
+    await client.post(f"/appointments/{a1}/review", json={"token": t1, "master_rating": 5, "salon_rating": 1})
+    await client.post(f"/appointments/{a2}/review", json={"token": t2, "master_rating": 5, "salon_rating": 5})
+
+    assert (await client.delete(f"/appointments/{a1}/review", params={"token": t2})).status_code == 404, "чужий токен"
+    r = await client.delete(f"/appointments/{a1}/review", params={"token": t1})
+    assert r.status_code == 204
+    reviews = (await client.get("/public/reviews", params={"business_id": bid})).json()
+    assert [x["appointment_id"] for x in reviews] == [a2] and reviews[0]["salon_rating"] == 5
+    slug_biz = (await client.get(f"/businesses/{bid}")).json()
+    assert float(slug_biz["rating"]) == 5.0 and slug_biz["reviews_count"] == 1, "рейтинг без видаленого відгуку"
+    # оцінити знову - можна
+    assert (await client.post(f"/appointments/{a1}/review", json={"token": t1, "master_rating": 4, "salon_rating": 4})).status_code == 200

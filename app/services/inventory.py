@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import Optional
 
+from app.core.time_utils import to_local
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,8 +131,9 @@ async def materials_cost_for_period(
             InventoryMovement.business_id == business_id,
             InventoryMovement.reason == "service_usage",
             Appointment.master_id == staff_id,
-            Appointment.start_time >= period_start,
-            Appointment.start_time <= period_end,
+            # Межі - UTC, час візитів - місцевий (див. calculate_payout_preview)
+            Appointment.start_time >= to_local(period_start),
+            Appointment.start_time <= to_local(period_end),
         )
     )
     return sum((Decimal(str(c or 0)) for c in res.scalars().all()), Decimal("0"))

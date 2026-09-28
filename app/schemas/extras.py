@@ -21,6 +21,8 @@ class ReviewResponse(BaseModel):
     appointment_id: Optional[int] = None
     author_name: Optional[str] = None
     rating: int
+    master_rating: Optional[int] = None
+    salon_rating: Optional[int] = None
     comment: Optional[str] = None
     business_reply: Optional[str] = None
     created_at: Optional[datetime] = None

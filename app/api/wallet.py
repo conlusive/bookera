@@ -134,7 +134,8 @@ async def buy_gift_card(
     amount = Decimal(payload.amount)
     order_id = f"gc-{uuid.uuid4().hex[:16]}"
 
-    intent = create_payment_intent(amount, order_id, f"Подарункова картка {biz.name}")
+    intent = create_payment_intent(amount, order_id, f"Подарункова картка {biz.name}",
+                                   return_url="/account/profile?tab=wallet&paid=1", client_email=email)
 
     payment = Payment(
         business_id=biz.id, purpose="gift_certificate_purchase", amount=amount,
@@ -164,7 +165,7 @@ async def buy_gift_card(
 
     await db.commit()
     await db.refresh(cert)
-    return {"card": _card_out(cert, biz, email, str(current_user.id)), "checkout_url": intent.checkout_url}
+    return {"card": _card_out(cert, biz, email, str(current_user.id)), "checkout_url": intent.checkout_url, "checkout": intent.checkout}
 
 
 @router.post("/gift-cards/callback")

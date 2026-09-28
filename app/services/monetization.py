@@ -129,12 +129,18 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
 
     rate = (staff.commission_rate if staff and staff.commission_rate is not None else Decimal("0"))
 
+    # Межі періоду зберігаються в UTC, а час візитів - у поясі закладу
+    # (Київ, +3 год). Порівнювати їх напряму не можна: візити за останні
+    # 3 години не потрапляли у виплату, а візит за 3 години до попередньої
+    # виплати потрапляв і в неї, і в наступну - двічі. Переводимо межі в
+    # місцевий час перед порівнянням.
+    from app.core.time_utils import to_local
     appts_stmt = select(Appointment).where(
         Appointment.business_id == business_id,
         Appointment.master_id == staff_id,
         Appointment.status == "completed",
-        Appointment.start_time >= period_start,
-        Appointment.start_time <= period_end,
+        Appointment.start_time >= to_local(period_start),
+        Appointment.start_time <= to_local(period_end),
     )
     appts_res = await db.execute(appts_stmt)
     appointments = appts_res.scalars().all()

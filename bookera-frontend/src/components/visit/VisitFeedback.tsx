@@ -37,7 +37,7 @@ function Stars({ value, onChange, label }: { value: number; onChange: (v: number
         .vf-row { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: center; gap: 0.1rem 0.75rem; padding: 0.75rem 0; border-top: 1px solid ${C.line}; text-align: left; }
         .vf-row:first-child { border-top: none; }
         .vf-row-label { font-size: 0.95rem; font-weight: 600; color: ${C.ink}; }
-        .vf-row-hint { grid-column: 2; text-align: right; font-size: 0.75rem; color: ${C.sub}; min-height: 1em; }
+        .vf-row-hint { grid-column: 2; text-align: right; font-size: 0.75rem; color: ${C.sub}; height: 1.1em; line-height: 1.1em; }
         .vf-stars { display: flex; gap: 0.2rem; grid-row: 1 / span 2; grid-column: 2; align-self: start; }
         .vf-stars button { width: 40px; height: 40px; border: none; border-radius: 10px; background: #F7F7F5; color: #D8D8D2; font-size: 1.45rem; cursor: pointer; transition: transform .12s, color .12s, background-color .12s; }
         .vf-stars button.on { color: #F5A623; background: #FFF7E6; }
@@ -137,14 +137,15 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
             {hasMaster && <Stars label={`Майстер · ${info.master_name}`} value={masterR} onChange={setMasterR} />}
             <Stars label={`Заклад${info.business_name ? ` · ${info.business_name}` : ''}`} value={salonR} onChange={setSalonR} />
           </div>
-          {canSend && (
-            <>
-              <textarea value={comment} onChange={e => setComment(e.target.value.slice(0, 500))}
-                placeholder={Math.min(salonR, hasMaster ? masterR : 5) <= 3 ? 'Що пішло не так? Заклад прочитає й звʼяжеться з вами' : 'Що сподобалось? (необовʼязково)'} />
-              {error && <div className="vf-err">{error}</div>}
-              <button type="button" className="vf-btn" disabled={busy} onClick={() => void sendReview()}>{busy ? 'Зберігаємо…' : 'Надіслати оцінку'}</button>
-            </>
-          )}
+          {/* Поле й кнопка - одразу, а не після вибору зірок: інакше вони
+              зʼявлялись раптово й штовхали вікно вниз. Кнопка неактивна,
+              доки не обрано обидві оцінки, і підказує, чого бракує. */}
+          <textarea value={comment} onChange={e => setComment(e.target.value.slice(0, 500))}
+            placeholder={canSend && Math.min(salonR, hasMaster ? masterR : 5) <= 3 ? 'Що пішло не так? Заклад прочитає й звʼяжеться з вами' : 'Коментар (необовʼязково)'} />
+          <div className="vf-err" style={{ minHeight: '1.1em' }}>{error || ' '}</div>
+          <button type="button" className="vf-btn" disabled={busy || !canSend} onClick={() => void sendReview()}>
+            {busy ? 'Зберігаємо…' : canSend ? 'Надіслати оцінку' : hasMaster && !masterR && !salonR ? 'Оцініть майстра й заклад' : hasMaster && !masterR ? 'Оцініть майстра' : 'Оцініть заклад'}
+          </button>
         </>
       )}
 
@@ -211,11 +212,11 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
         .vf-amounts button small { font-size: 0.78rem; color: ${C.sub}; }
         .vf-amounts button.on { border: 2px solid ${C.green}; background: ${C.soft}; }
         .vf-custom { width: 100%; box-sizing: border-box; height: 44px; padding: 0 0.8rem; border-radius: 12px; border: 1px solid ${C.line}; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center; }
-        .vf-btn { display: block; width: 100%; height: 48px; margin-top: 0.9rem; border-radius: 12px; border: none; background: ${C.ink}; color: #fff; font-family: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+        .vf-btn { display: block; width: 100%; height: 48px; margin-top: 0.5rem; border-radius: 12px; border: none; background: ${C.ink}; color: #fff; font-family: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
         .vf-btn:disabled { opacity: .45; cursor: default; }
         .vf-link { line-height: 48px; text-decoration: none; }
         .vf-skip { margin-top: 0.5rem; border: none; background: none; font-family: inherit; font-size: 0.85rem; color: ${C.sub}; cursor: pointer; padding: 0.4rem; }
-        .vf-err { font-size: 0.85rem; color: #A83934; margin-top: 0.6rem; }
+        .vf-err { font-size: 0.85rem; color: #A83934; margin-top: 0.4rem; }
       `}</style>
     </section>
   );

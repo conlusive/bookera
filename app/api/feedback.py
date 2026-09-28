@@ -29,7 +29,7 @@ from app.core.time_utils import local_now, utc_now
 from app.models import Appointment, Business, Service, User
 from app.models.extras import Review
 from app.models.monetization import Payment
-from app.services.payments import create_payment_intent
+from app.services.payments import create_payment_intent, is_live
 
 router = APIRouter(tags=["Client feedback"])
 
@@ -62,6 +62,11 @@ async def feedback_info(appointment_id: int, token: str, db: AsyncSession = Depe
     master = (await db.execute(select(User).where(User.id == str(a.master_id)))).scalars().first() if a.master_id else None
     review = (await db.execute(select(Review).where(Review.appointment_id == a.id))).scalars().first()
     tipped = await _online_tip(db, a.id)
+    # Платіж, що ще чекає підтвердження від WayForPay (клієнт щойно повернувся)
+    pending = (await db.execute(select(Payment).where(
+        Payment.purpose == "tip", Payment.provider_ref.like(f"tip-{a.id}-%"), Payment.status == "pending",
+        Payment.created_at >= utc_now() - timedelta(minutes=30),
+    ))).scalars().first() if not tipped else None
     now = local_now().replace(tzinfo=None)
     in_window = bool(a.end_time and now - a.end_time <= timedelta(days=TIP_WINDOW_DAYS))
     return {
@@ -79,6 +84,8 @@ async def feedback_info(appointment_id: int, token: str, db: AsyncSession = Depe
         } if review else None,
         "tip": {
             "paid": float(tipped.amount) if tipped else None,
+            "pending": float(pending.amount) if pending else None,
+            "live": is_live(),
             "can_tip": a.status == "completed" and in_window and not tipped and bool(a.master_id),
             "min": TIP_MIN, "max": TIP_MAX, "percents": TIP_PERCENTS,
         },
@@ -111,7 +118,10 @@ async def tip_master(appointment_id: int, payload: TipIn, db: AsyncSession = Dep
     amount = Decimal(payload.amount)
     master = (await db.execute(select(User).where(User.id == str(a.master_id)))).scalars().first()
     order_id = f"tip-{a.id}-{uuid.uuid4().hex[:10]}"
-    intent = create_payment_intent(amount, order_id, f"Чайові майстру {(master.full_name or '') if master else ''}".strip())
+    # Повернути клієнта туди ж - на сторінку візиту, до блоку чайових
+    return_url = f"/my-booking/{a.id}?token={payload.token}&paid=1#feedback"
+    intent = create_payment_intent(amount, order_id, f"Чайові майстру {(master.full_name or '') if master else ''}".strip(),
+                                   return_url=return_url, client_email=a.client_email)
     payment = Payment(business_id=a.business_id, purpose="tip", amount=amount,
                       provider=intent.provider, provider_ref=order_id, status="pending")
     db.add(payment)
@@ -124,7 +134,7 @@ async def tip_master(appointment_id: int, payload: TipIn, db: AsyncSession = Dep
         await record(db, a.business_id, None, "money", "tip_online",
                      f"Чайові онлайн {payload.amount} ₴ від {a.client_name or 'клієнта'} для {(master.full_name if master else '') or 'майстра'}")
     await db.commit()
-    return {"status": payment.status, "checkout_url": intent.checkout_url, "amount": payload.amount}
+    return {"status": payment.status, "checkout_url": intent.checkout_url, "checkout": intent.checkout, "amount": payload.amount}
 
 
 async def complete_tip_payment(db: AsyncSession, payment: Payment) -> None:

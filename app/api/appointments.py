@@ -1440,6 +1440,47 @@ async def create_review_by_client(
     return {"ok": True, "rating": biz.rating if biz else None, "reviews_count": biz.reviews_count if biz else None}
 
 
+
+async def _recount_business_rating(db: AsyncSession, business_id: int) -> None:
+    """Рейтинг закладу - середнє оцінок ЗАКЛАДУ (старі відгуки - загальна)."""
+    from app.models.extras import Review
+    avg, count = (await db.execute(
+        select(func.avg(func.coalesce(Review.salon_rating, Review.rating)), func.count(Review.id))
+        .where(Review.business_id == business_id)
+    )).one()
+    biz = await db.get(Business, business_id)
+    if biz:
+        biz.rating = round(float(avg), 1) if avg is not None else None
+        biz.reviews_count = int(count)
+
+
+@router.delete("/{appointment_id}/review", status_code=204)
+async def delete_review_by_client(
+    appointment_id: int,
+    token: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Клієнт видаляє СВІЙ відгук - за токеном свого візиту, як і залишав.
+    Рейтинг закладу перераховується; оцінку можна поставити знову.
+    Чужий відгук так не видалити: без токена того візиту - 404.
+    """
+    from app.models.extras import Review
+    a = await db.get(Appointment, appointment_id)
+    if not a or not a.manage_token or a.manage_token != token:
+        raise HTTPException(status_code=404, detail="Відгук не знайдено")
+    review = (await db.execute(select(Review).where(Review.appointment_id == a.id))).scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Відгук не знайдено")
+    await db.delete(review)
+    await db.flush()
+    await _recount_business_rating(db, a.business_id)
+    from app.services.audit import record as _audit
+    await _audit(db, a.business_id, None, "bookings", "review_deleted",
+                 f"Клієнт {a.client_name or ''} видалив свій відгук про візит {a.start_time:%d.%m}")
+    await db.commit()
+
+
 async def _alert_low_rating(db: AsyncSession, background_tasks: BackgroundTasks, appointment, master_r, salon_r, comment) -> None:
     from app.core.email import send_staff_notice
     from app.models import StaffMembership

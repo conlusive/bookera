@@ -42,6 +42,7 @@ import WalletTab from '@/components/profile/WalletTab';
 import WorkTab from '@/components/profile/WorkTab';
 import { resolveDisplayName } from '@/lib/displayName';
 import { formatDuration } from '@/lib/duration';
+import VisitFeedback from '@/components/visit/VisitFeedback';
 
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
@@ -459,30 +460,8 @@ function ProfileContent() {
 
   // --- Відгук ---
   const [reviewAppt, setReviewAppt] = useState<any | null>(null);
-  const [reviewRating, setReviewRating] = useState(0);
-  const [reviewText, setReviewText] = useState('');
-  const [isSendingReview, setIsSendingReview] = useState(false);
-  // Оцінені в цій сесії - щоб кнопка зникла одразу, без перезавантаження.
+  // Оцінені в цій сесії - щоб кнопка змінилась одразу, без перезавантаження.
   const [reviewedIds, setReviewedIds] = useState<number[]>([]);
-
-  const submitReview = async () => {
-    if (!reviewAppt || reviewRating < 1) return;
-    if (!reviewAppt.manage_token) {
-      showToast('Не вдалося надіслати відгук', 'error');
-      return;
-    }
-    setIsSendingReview(true);
-    try {
-      await api.createVisitReview(reviewAppt.id, reviewAppt.manage_token, reviewRating, reviewText.trim() || undefined);
-      setReviewedIds(prev => [...prev, reviewAppt.id]);
-      setReviewAppt(null);
-      showToast('Дякуємо за відгук!', 'success');
-    } catch (err: any) {
-      showToast(err?.message || 'Не вдалося надіслати відгук', 'error');
-    } finally {
-      setIsSendingReview(false);
-    }
-  };
 
   /**
    * «Час повторити» - на основі вашого ж ритму.
@@ -990,46 +969,24 @@ function ProfileContent() {
       <BusinessCardStyles />
 
       {/* Вікно оцінки візиту */}
+      {/* Оцінка й чайові - той самий блок, що на сторінці візиту (куди веде
+          лист): майстер і заклад окремо, чайові відсотком від вартості. */}
       {reviewAppt && (
-        <div
-          onClick={() => !isSendingReview && setReviewAppt(null)}
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem' }}
-        >
+        <div onClick={() => setReviewAppt(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem' }}>
           <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Оцінити візит"
-            style={{ width: '100%', maxWidth: '420px', background: '#fff', borderRadius: '20px', padding: '1.75rem', boxShadow: '0 30px 60px -20px rgba(0,0,0,.35)' }}>
-            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.02em' }}>Як усе пройшло?</div>
-            <div style={{ fontSize: '0.9rem', color: '#86868B', marginTop: '0.3rem' }}>
-              {reviewAppt.service_name || 'Візит'} · {reviewAppt.business_name}
+            style={{ position: 'relative', width: '100%', maxWidth: '460px', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: '20px', padding: '1.5rem 1.4rem 1.3rem', boxShadow: '0 30px 80px -20px rgba(15,23,42,.45)' }}>
+            <button type="button" aria-label="Закрити" onClick={() => setReviewAppt(null)}
+              style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#64748b', fontSize: '1rem', cursor: 'pointer' }}>✕</button>
+            <div style={{ fontSize: '0.8rem', color: '#6B756A', marginBottom: '0.8rem', textAlign: 'center', padding: '0 2rem' }}>
+              {reviewAppt.service_name || 'Візит'}{reviewAppt.business_name ? ` · ${reviewAppt.business_name}` : ''}
             </div>
-
-            <div style={{ display: 'flex', gap: '0.35rem', margin: '1.25rem 0 1rem' }} role="radiogroup" aria-label="Оцінка">
-              {[1, 2, 3, 4, 5].map(n => (
-                <button key={n} type="button" role="radio" aria-checked={reviewRating === n} aria-label={`${n} з 5`}
-                  onClick={() => setReviewRating(n)}
-                  style={{ fontSize: '2rem', lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem', color: n <= reviewRating ? '#F5A623' : '#E5E5EA', transition: 'color .15s ease, transform .15s ease', transform: n <= reviewRating ? 'scale(1.05)' : 'none' }}>
-                  ★
-                </button>
-              ))}
-            </div>
-
-            <textarea
-              value={reviewText}
-              onChange={e => setReviewText(e.target.value.slice(0, 1000))}
-              placeholder="Що сподобалось? Необовʼязково"
-              rows={3}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '0.75rem 0.85rem', borderRadius: '12px', border: '1px solid #E5E5EA', fontFamily: 'inherit', fontSize: '0.9rem', resize: 'vertical', outline: 'none' }}
-            />
-
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.1rem' }}>
-              <button type="button" onClick={() => setReviewAppt(null)} disabled={isSendingReview}
-                style={{ height: '40px', padding: '0 1rem', borderRadius: '10px', border: 'none', background: '#F5F5F7', color: '#1D1D1F', fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 500, cursor: 'pointer' }}>
-                Скасувати
-              </button>
-              <button type="button" onClick={() => void submitReview()} disabled={reviewRating < 1 || isSendingReview}
-                style={{ height: '40px', padding: '0 1.2rem', borderRadius: '10px', border: 'none', background: '#1D1D1F', color: '#fff', fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 600, cursor: reviewRating < 1 ? 'default' : 'pointer', opacity: reviewRating < 1 || isSendingReview ? 0.4 : 1 }}>
-                {isSendingReview ? 'Надсилаємо…' : 'Надіслати'}
-              </button>
-            </div>
+            {reviewAppt.manage_token ? (
+              <VisitFeedback compact appointmentId={Number(reviewAppt.id)} token={reviewAppt.manage_token}
+                onReviewed={() => setReviewedIds(prev => [...prev, reviewAppt.id])} />
+            ) : (
+              <p style={{ textAlign: 'center', color: '#6B756A' }}>Не вдалося відкрити оцінку цього візиту.</p>
+            )}
           </div>
         </div>
       )}
@@ -1528,12 +1485,12 @@ function ProfileContent() {
                                           </button>
                                         </>
                                       )}
-                                      {isDone && !app.has_review && !reviewedIds.includes(app.id) && (
+                                      {isDone && (!(app.has_review || reviewedIds.includes(app.id)) || (Date.now() - new Date(app.end_time || app.start_time).getTime() < 14 * 86400000)) && (
                                         <button
-                                          onClick={() => { setReviewAppt(app); setReviewRating(0); setReviewText(''); }}
+                                          onClick={() => setReviewAppt(app)}
                                           style={{ ...visitActionStyle, background: '#1D1D1F', color: '#fff', borderColor: '#1D1D1F' }}
                                         >
-                                          Оцінити
+                                          {app.has_review || reviewedIds.includes(app.id) ? 'Чайові' : 'Оцінити'}
                                         </button>
                                       )}
                                       {app.business_slug && app.service_id && (

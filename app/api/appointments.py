@@ -1057,6 +1057,7 @@ async def get_booked_appointments(
 async def update_appointment_status(
     appointment_id: int,
     payload: AppointmentStatusUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -1094,7 +1095,21 @@ async def update_appointment_status(
         # інакше залишки на складі зникали б безслідно.
         await revert_materials_for_appointment(db, appointment)
 
+    # Цим маршрутом статус змінює КАЛЕНДАР кабінету - тож тут те саме, що
+    # в /crm/appointments/{id}: журнал дій і миттєвий «Як вам візит?».
+    new_status = str(getattr(payload.status, "value", payload.status))
+    if _old_status != new_status:
+        from app.services.audit import record as _audit
+        _labels = {"completed": "завершено", "no-show": "не прийшов", "confirmed": "підтверджено",
+                   "cancelled": "скасовано", "late": "запізнення", "pending_approval": "очікує підтвердження"}
+        await _audit(db, appointment.business_id, str(current_user.id), "bookings", "status_changed",
+                     f"Запис {appointment.client_name or ''} {appointment.start_time:%d.%m %H:%M}: {_labels.get(new_status, new_status)}")
+    from app.services.reminders import request_review_now
+    _review_args = await request_review_now(db, appointment) if new_status == "completed" and _old_status != "completed" else None
     await db.commit()
+    if _review_args:
+        from app.core.email import send_review_request
+        background_tasks.add_task(send_review_request, *_review_args)
     await db.refresh(appointment)
     return appointment
 

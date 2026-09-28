@@ -168,3 +168,33 @@ async def test_review_email_immediately_when_master_completes(client, auth_heade
 
     log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()
     assert any("завершено" in e["summary"] for e in log), "зміна статусу - у журналі дій"
+
+
+@pytest.mark.asyncio
+async def test_calendar_route_also_sends_right_away(client, auth_headers, monkeypatch):
+    """
+    Календар кабінету змінює статус через /appointments/{id}/status - інший
+    маршрут. Лист і журнал мають працювати й тут.
+    """
+    sent = []
+
+    async def fake(to, *a):
+        sent.append(to)
+    import app.core.email as em
+    monkeypatch.setattr(em, "send_review_request", fake)
+
+    bid, sid, owner, m = await _setup(client, auth_headers, "cal")
+    end = local_now().replace(tzinfo=None, microsecond=0) - timedelta(minutes=5)
+    conn = await asyncpg.connect(DB)
+    try:
+        aid = await conn.fetchval(
+            "INSERT INTO appointments (business_id, service_id, master_id, start_time, end_time, status, price, client_name, client_email, manage_token, source) "
+            "VALUES ($1,$2,$3,$4,$5,'confirmed',500,'Марія','cal@example.com','tok-cal','online') RETURNING id",
+            bid, sid, m, end - timedelta(hours=1), end)
+    finally:
+        await conn.close()
+    r = await client.patch(f"/appointments/{aid}/status", json={"status": "completed"}, headers=owner)
+    assert r.status_code == 200, r.text
+    assert sent == ["cal@example.com"]
+    log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()
+    assert any("завершено" in e["summary"] for e in log)

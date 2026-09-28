@@ -456,10 +456,10 @@ export const api = {
   },
 
   /** Відгук на власний завершений візит - за токеном керування записом. */
-  async createVisitReview(appointmentId: number, token: string, rating: number, comment?: string): Promise<{ ok: boolean }> {
+  async createVisitReview(appointmentId: number, token: string, payload: { master_rating?: number; salon_rating: number; comment?: string }): Promise<{ ok: boolean }> {
     return publicFetch(`/appointments/${appointmentId}/review`, {
       method: 'POST',
-      body: JSON.stringify({ token, rating, comment }),
+      body: JSON.stringify({ token, ...payload }),
     });
   },
 

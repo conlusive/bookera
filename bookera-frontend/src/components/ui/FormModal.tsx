@@ -128,7 +128,31 @@ export default function FormModal({
         .fm-error { font-size: 0.75rem; color: #dc2626; }
         .fm-input { width: 100%; box-sizing: border-box; height: 42px; padding: 0 0.85rem; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff;
           font-family: inherit; font-size: 0.925rem; color: #0f172a; outline: none; transition: border-color .15s, box-shadow .15s; }
-        textarea.fm-input { height: auto; min-height: 84px; padding: 0.7rem 0.85rem; resize: vertical; line-height: 1.5; }
+        /* Опис - фіксованої висоти: поле не розтягується й не ламає вікно */
+        textarea.fm-input { height: 96px; padding: 0.7rem 0.85rem; resize: none; line-height: 1.5; overflow-y: auto; }
+        /* Без стрілочок браузера в числових полях */
+        .fm-input[type='number']::-webkit-outer-spin-button, .fm-input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .fm-input[type='number'] { -moz-appearance: textfield; }
+        .fm-counter { font-size: 0.72rem; color: #94a3b8; text-align: right; margin-top: -0.2rem; }
+        .fm-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .fm-chip { height: 30px; padding: 0 0.75rem; border-radius: 999px; border: 1px solid #e2e8f0; background: #fff; font-family: inherit; font-size: 0.8rem; color: #334155; cursor: pointer; transition: all .15s; }
+        .fm-chip:hover { border-color: #cbd5e1; background: #f8fafc; }
+        .fm-chip.on { background: #0f172a; border-color: #0f172a; color: #fff; }
+        .fm-check { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid #cbd5e1; background: #fff; cursor: pointer; flex-shrink: 0; display: inline-grid; place-content: center; transition: all .15s; margin: 0; }
+        .fm-check:checked { background: #0f172a; border-color: #0f172a; }
+        .fm-check:checked::after { content: ''; width: 9px; height: 5px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px, -1px); }
+
+        /* Розгортний блок - для необовʼязкових розділів форми */
+        .fm-disc { border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; }
+        .fm-disc > button { width: 100%; display: flex; align-items: center; gap: 0.75rem; padding: 0.9rem 1rem; border: none; background: none; cursor: pointer; font-family: inherit; text-align: left; border-radius: 14px; }
+        .fm-disc > button:hover { background: #f8fafc; }
+        .fm-disc-ico { width: 34px; height: 34px; border-radius: 10px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; color: #0f172a; flex-shrink: 0; }
+        .fm-disc-text { flex: 1; min-width: 0; }
+        .fm-disc-text b { display: block; font-size: 0.9rem; font-weight: 700; color: #0f172a; }
+        .fm-disc-text small { display: block; font-size: 0.78rem; color: #64748b; margin-top: 1px; }
+        .fm-disc-chev { color: #94a3b8; transition: transform .2s; }
+        .fm-disc.open .fm-disc-chev { transform: rotate(180deg); }
+        .fm-disc-body { padding: 0 1rem 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
         .fm-input:focus { border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15,23,42,.08); }
         .fm-input.invalid { border-color: #dc2626; }
         .fm-affix { position: relative; }
@@ -164,5 +188,26 @@ export function Field({ label, required, hint, error, children }: { label: strin
       {children}
       {error ? <span className="fm-error">{error}</span> : hint ? <span className="fm-hint">{hint}</span> : null}
     </label>
+  );
+}
+
+
+/**
+ * Розгортний блок для необовʼязкових розділів форми (додаткові послуги,
+ * матеріали): згорнутий показує підсумок, щоб вікно не було перевантажене.
+ */
+export function FormDisclosure({ title, summary, icon, defaultOpen = false, children }: {
+  title: string; summary?: string; icon?: ReactNode; defaultOpen?: boolean; children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`fm-disc ${open ? 'open' : ''}`}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        {icon && <span className="fm-disc-ico">{icon}</span>}
+        <span className="fm-disc-text"><b>{title}</b>{summary && <small>{summary}</small>}</span>
+        <svg className="fm-disc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {open && <div className="fm-disc-body">{children}</div>}
+    </div>
   );
 }

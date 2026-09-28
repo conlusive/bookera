@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
-import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
+import FormModal, { Field, FormDisclosure, FormSection } from '@/components/ui/FormModal';
 import DurationPicker from '@/components/ui/DurationPicker';
 import { formatDuration } from '@/lib/duration';
 
@@ -828,13 +828,20 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
             <input className="fm-input" value={serviceForm.name} maxLength={80} autoFocus placeholder="Напр., Чоловіча стрижка"
               onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} />
           </Field>
-          <Field label="Категорія" hint="Група в прайсі. Оберіть наявну або впишіть нову.">
-            <input className="fm-input" list="service-categories" value={serviceForm.category} maxLength={60} placeholder="Напр., Стрижки"
+          <Field label="Категорія" hint={existingCategories.length ? 'Оберіть наявну або впишіть нову' : 'Група в прайсі: «Стрижки», «Фарбування»'}>
+            <input className="fm-input" value={serviceForm.category} maxLength={60} placeholder="Напр., Стрижки"
               onChange={e => setServiceForm({ ...serviceForm, category: e.target.value })} />
-            <datalist id="service-categories">
-              {existingCategories.map(cat => <option key={cat} value={cat} />)}
-            </datalist>
           </Field>
+          {existingCategories.length > 0 && (
+            <div className="fm-chips" style={{ marginTop: '-0.35rem' }}>
+              {existingCategories.map(cat => (
+                <button key={cat} type="button" className={`fm-chip ${serviceForm.category.trim() === cat ? 'on' : ''}`}
+                  onClick={() => setServiceForm({ ...serviceForm, category: serviceForm.category.trim() === cat ? '' : cat })}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
         </FormSection>
 
         <FormSection title="Тривалість" hint="Скільки часу займає послуга - стільки й буде зайнято в календарі.">
@@ -845,8 +852,8 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
           <div className="fm-row">
             <Field label="Ціна" required>
               <span className="fm-affix">
-                <input className="fm-input" type="number" inputMode="numeric" min={0} step={10} value={serviceForm.price === 0 && !priceTouched ? '' : serviceForm.price}
-                  placeholder="0" onChange={e => { setPriceTouched(true); setServiceForm({ ...serviceForm, price: Math.max(0, Number(e.target.value)) }); }} />
+                <input className="fm-input" type="text" inputMode="numeric" value={serviceForm.price === 0 && !priceTouched ? '' : String(serviceForm.price)}
+                  placeholder="0" onChange={e => { const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 7); setPriceTouched(true); setServiceForm({ ...serviceForm, price: v ? Number(v) : 0 }); }} />
                 <span>₴</span>
               </span>
             </Field>
@@ -860,12 +867,18 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         </FormSection>
 
         <FormSection title="Опис" hint="Що входить у послугу - клієнти бачать це під назвою.">
-          <textarea className="fm-input" rows={3} maxLength={1000} value={serviceForm.description} placeholder="Напр., стрижка машинкою й ножицями, миття голови, укладка"
+          <textarea className="fm-input" maxLength={500} value={serviceForm.description} placeholder="Напр., стрижка машинкою й ножицями, миття голови, укладка"
             onChange={e => setServiceForm({ ...serviceForm, description: e.target.value })} />
+          <div className="fm-counter">{serviceForm.description.length} / 500</div>
         </FormSection>
 
         {services.filter(s => s.id !== editingService?.id).length > 0 && (
-          <FormSection title="Пропонувати додатково" hint="Клієнт побачить ці послуги як доповнення під час запису - це збільшує середній чек.">
+          <FormDisclosure
+            title="Пропонувати додатково"
+            summary={serviceForm.addon_services.length ? `Обрано: ${selectedAddons.map(a => a.name).join(', ')}` : 'Клієнт побачить їх як доповнення під час запису'}
+            defaultOpen={serviceForm.addon_services.length > 0}
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
+          >
             <div ref={addonDropdownRef} style={{ position: 'relative' }}>
                      {selectedAddons.length > 0 && (
                        <div className="custom-scroll" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1rem', maxHeight: '80px', overflowY: 'auto' }}>
@@ -936,10 +949,16 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                        )}
                      </div>
             </div>
-          </FormSection>
+          </FormDisclosure>
         )}
 
-        <FormSection title="Матеріали зі складу" hint={`Списуються автоматично, коли візит позначають завершеним.${materialsCost > 0 ? ` Собівартість: ${materialsCost.toLocaleString('uk-UA')} ₴.` : ''}`}>
+        <FormDisclosure
+          title="Матеріали зі складу"
+          summary={serviceMaterials.length
+            ? `${serviceMaterials.length} ${serviceMaterials.length === 1 ? 'матеріал' : serviceMaterials.length < 5 ? 'матеріали' : 'матеріалів'}${materialsCost > 0 ? ` · собівартість ${materialsCost.toLocaleString('uk-UA')} ₴` : ''}`
+            : 'Списуються автоматично, коли візит позначають завершеним'}
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z" /><path d="M3 8l9 5 9-5M12 13v8" /></svg>}
+        >
                 {inventoryItems.length === 0 ? (
                   <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '10px', fontSize: '0.85rem', color: '#64748b', textAlign: 'center' }}>
                     Спочатку додайте позиції у вкладці «Склад і Витрати».
@@ -952,6 +971,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                         <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.6rem 0.9rem', background: linked ? '#f0f9ff' : '#fff', border: `1px solid ${linked ? '#bae6fd' : '#e2e8f0'}`, borderRadius: '10px' }}>
                           <input
                             type="checkbox"
+                            className="fm-check"
                             checked={Boolean(linked)}
                             onChange={e => {
                               setServiceMaterials(prev => e.target.checked
@@ -967,16 +987,16 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                           {linked && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
                               <input
-                                type="number"
-                                min="0"
-                                step="0.1"
+                                type="text"
+                                inputMode="decimal"
+                                className="fm-input"
                                 value={linked.quantity_per_use}
                                 onChange={e => {
-                                  const val = Number(e.target.value);
+                                  const val = Number(e.target.value.replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
                                   setServiceMaterials(prev => prev.map(m =>
                                     m.inventory_item_id === item.id ? { ...m, quantity_per_use: val } : m));
                                 }}
-                                style={{ width: '80px', padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', textAlign: 'right' }}
+                                style={{ width: 84, height: 34, textAlign: 'right' }}
                               />
                               <span style={{ fontSize: '0.85rem', color: '#64748b', minWidth: '30px' }}>{item.unit}</span>
                             </div>
@@ -986,7 +1006,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                     })}
                   </div>
                 )}
-        </FormSection>
+        </FormDisclosure>
       </FormModal>
 
       <style jsx>{`

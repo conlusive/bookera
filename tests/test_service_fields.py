@@ -51,3 +51,35 @@ async def test_new_service_goes_last_and_reorder_in_one_call(client, auth_header
     assert by[ids[2]] < by[ids[0]] < by[ids[1]]
     other = auth_headers("sf-stranger")
     assert (await client.put("/services/reorder", json={"business_id": bid, "ids": ids}, headers=other)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_save_with_same_addons_no_conflict(client, auth_headers):
+    """
+    Ваш випадок: «Зберегти» з тими самими додатковими послугами падало 409
+    (uq_service_addon) - старі зв'язки видалялись і вставлялись знову.
+    """
+    h = auth_headers("sf-owner4")
+    bid = (await client.post("/crm/businesses", json={"name": "Addons", "city": "Львів"}, headers=h)).json()["id"]
+    a1 = (await client.post("/services", json={"business_id": bid, "name": "Борода", "duration_minutes": 30, "price": 300}, headers=h)).json()["id"]
+    a2 = (await client.post("/services", json={"business_id": bid, "name": "Камуфляж", "duration_minutes": 30, "price": 400}, headers=h)).json()["id"]
+    main = (await client.post("/services", json={"business_id": bid, "name": "Стрижка", "duration_minutes": 60, "price": 600, "addon_service_ids": [a1]}, headers=h)).json()["id"]
+
+    r = await client.patch(f"/services/{main}", json={"name": "Стрижка", "addon_service_ids": [a1]}, headers=h)
+    assert r.status_code == 200, r.text
+    r = await client.patch(f"/services/{main}", json={"addon_service_ids": [a1, a2]}, headers=h)
+    assert sorted(r.json()["addon_service_ids"]) == sorted([a1, a2])
+    r = await client.patch(f"/services/{main}", json={"addon_service_ids": [a2]}, headers=h)
+    assert r.json()["addon_service_ids"] == [a2]
+
+
+@pytest.mark.asyncio
+async def test_addon_from_other_business_rejected(client, auth_headers):
+    h = auth_headers("sf-owner5")
+    bid = (await client.post("/crm/businesses", json={"name": "Mine", "city": "Львів"}, headers=h)).json()["id"]
+    main = (await client.post("/services", json={"business_id": bid, "name": "Стрижка", "duration_minutes": 60, "price": 600}, headers=h)).json()["id"]
+    o = auth_headers("sf-other")
+    obid = (await client.post("/crm/businesses", json={"name": "Other", "city": "Львів"}, headers=o)).json()["id"]
+    foreign = (await client.post("/services", json={"business_id": obid, "name": "Чужа", "duration_minutes": 30, "price": 1}, headers=o)).json()["id"]
+    r = await client.patch(f"/services/{main}", json={"addon_service_ids": [foreign]}, headers=h)
+    assert r.status_code == 400

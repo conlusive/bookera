@@ -15,19 +15,40 @@ router = APIRouter(prefix="/services", tags=["Services"])
 
 
 async def _sync_addons(db: AsyncSession, service: Service, addon_ids: List[int]) -> None:
-    """Перезаписує зв'язки service_addons під новий список id."""
-    existing = await db.execute(select(ServiceAddon).where(ServiceAddon.service_id == service.id))
-    for row in existing.scalars().all():
-        await db.delete(row)
-    for addon_id in set(addon_ids or []):
-        if addon_id == service.id:
-            continue  # послуга не може бути допослугою сама для себе
+    """
+    Приводить звʼязки service_addons до нового списку - лише РІЗНИЦЮ.
+
+    Раніше: видалити всі старі й додати нові в одній транзакції. Але база
+    виконує вставку раніше за видалення, тож той самий звʼязок
+    (2 -> 1) опинявся двічі й падав на uq_service_addon - 409 на
+    звичайному «Зберегти». Тепер: прибираємо зниклі, додаємо нові,
+    незмінні не чіпаємо.
+
+    Додаткова послуга - лише з того самого закладу: інакше можна було б
+    привʼязати чужу.
+    """
+    wanted = {i for i in (addon_ids or []) if i != service.id}  # сама собі - ні
+    if wanted:
+        own = set((await db.execute(select(Service.id).where(
+            Service.id.in_(wanted), Service.business_id == service.business_id,
+        ))).scalars().all())
+        if wanted - own:
+            raise HTTPException(status_code=400, detail="Додаткова послуга має бути з цього ж закладу")
+    rows = (await db.execute(select(ServiceAddon).where(ServiceAddon.service_id == service.id))).scalars().all()
+    current = {r.addon_service_id: r for r in rows}
+    for addon_id, row in current.items():
+        if addon_id not in wanted:
+            await db.delete(row)
+    for addon_id in wanted - set(current):
         db.add(ServiceAddon(service_id=service.id, addon_service_id=addon_id))
 
 
 async def _load_with_addons(db: AsyncSession, service_id: int) -> Service:
     result = await db.execute(
         select(Service).where(Service.id == service_id).options(selectinload(Service.addons))
+        # Перечитати з бази, а не взяти вже завантажений обʼєкт: інакше
+        # після зміни додаткових послуг відповідь несла СТАРИЙ список.
+        .execution_options(populate_existing=True)
     )
     return result.scalars().first()
 

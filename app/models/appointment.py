@@ -49,6 +49,9 @@ class Appointment(Base):
     source = Column(String, default="direct", nullable=False)
 
     price = Column(Numeric(10, 2), nullable=True)
+    # Чайові за візит. Раніше не записувались ніде - було лише налаштування
+    # «майстер забирає всі чайові» (User.tips_full) без самих сум.
+    tip_amount = Column(Numeric(10, 2), nullable=True)
 
     # Додаткові послуги, обрані при записі.
     #

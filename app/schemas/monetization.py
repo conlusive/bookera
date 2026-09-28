@@ -85,6 +85,7 @@ class PayoutPreviewResponse(BaseModel):
     period_start: datetime
     period_end: datetime
     gross_revenue: Decimal          # виручка за виконані візити
+    tips_amount: Decimal = Decimal("0")  # чайові майстрові за період
     commission_rate: Decimal        # % майстра
     commission_part: Decimal = Decimal("0")   # скільки з цього відсотка
     fixed_part: Decimal = Decimal("0")        # фіксована ставка

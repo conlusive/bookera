@@ -348,6 +348,17 @@ export const api = {
     await authFetch('/services/reorder', token, { method: 'PUT', body: JSON.stringify({ business_id: businessId, ids }) });
   },
 
+  // --- Якість роботи майстрів ---
+  async getStaffQuality(token: string, businessId: number, staffId: string, days = 90): Promise<any> {
+    return authFetch(`/crm/businesses/${businessId}/staff/${staffId}/quality?days=${days}`, token);
+  },
+  async getTeamQuality(token: string, businessId: number, days = 90): Promise<{ staff_id: string; score: number | null; rating: number | null; retention: number | null; tips_share: number | null; visits: number }[]> {
+    return authFetch(`/crm/businesses/${businessId}/staff-quality?days=${days}`, token);
+  },
+  async setAppointmentTip(token: string, appointmentId: number, amount: number): Promise<{ id: number; tip_amount: number | null }> {
+    return authFetch(`/crm/appointments/${appointmentId}/tip`, token, { method: 'PATCH', body: JSON.stringify({ amount }) });
+  },
+
   // --- Доступи й журнал ---
   async getMyAccess(token: string, businessId: number): Promise<{ role: string; sections: Record<string, boolean> }> {
     return authFetch(`/crm/businesses/${businessId}/me/access`, token);

@@ -107,6 +107,7 @@ class AppointmentResponse(BaseModel):
     status: str
     source: Optional[str] = "direct"
     price: Optional[float] = None
+    tip_amount: Optional[float] = None
     client_name: Optional[str] = None
     client_phone: Optional[str] = None
     client_email: Optional[str] = None

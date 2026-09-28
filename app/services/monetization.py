@@ -163,6 +163,12 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
     if payout_amount < 0:
         payout_amount = Decimal("0.00")
 
+    # Чайові - майстрові повністю, якщо так налаштовано (tips_full, типово
+    # так). Після податку: це не дохід закладу, а подяка клієнта майстрові.
+    tips_amount = sum((Decimal(str(a.tip_amount)) for a in appointments if a.tip_amount), Decimal("0"))
+    if staff is not None and getattr(staff, "tips_full", True) and tips_amount > 0:
+        payout_amount = (payout_amount + tips_amount).quantize(Decimal("0.01"))
+
     return {
         "staff_id": staff_id,
         "period_start": period_start,
@@ -174,6 +180,7 @@ async def calculate_payout_preview(db: AsyncSession, business_id: int, staff_id:
         "materials_cost": materials_cost,
         "materials_deducted": bool(staff and staff.deduct_materials),
         "gross_revenue": gross_revenue,
+        "tips_amount": tips_amount,
         "commission_rate": rate,
         "payout_amount": payout_amount,
         "completed_appointments_count": len(appointments),

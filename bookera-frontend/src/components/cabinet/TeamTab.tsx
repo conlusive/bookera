@@ -11,6 +11,7 @@ import { Icons } from '@/components/shared';
 import Avatar from '@/components/ui/Avatar';
 import TeamRequestsPanel from '@/components/cabinet/TeamRequestsPanel';
 import StaffAccessPanel from '@/components/cabinet/StaffAccessPanel';
+import StaffQuality from '@/components/cabinet/StaffQuality';
 
 // Локальні іконки
 const WalletIcon = () => (
@@ -42,7 +43,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   // --- СТАНИ КОМАНДИ ---
   const [selectedStaffId, setSelectedStaffId] = useState<string | number | null>(null);
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
-  const [staffActiveTab, setStaffActiveTab] = useState<'general' | 'services' | 'schedule' | 'finance' | 'security'>('general');
+  const [staffActiveTab, setStaffActiveTab] = useState<'general' | 'services' | 'schedule' | 'finance' | 'security' | 'quality'>('general');
 
   useEffect(() => {
     const savedTab = localStorage.getItem('bookera_staff_active_tab');
@@ -172,6 +173,21 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   // Картка власника: зарплати в нього немає - вкладку «Зарплата» не
   // показуємо зовсім.
+  // Оцінки якості всієї команди - для значків у списку
+  const [qualityById, setQualityById] = useState<Record<string, any>>({});
+  useEffect(() => {
+    if (!hasAdminRights || !business?.id) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const t = await getAuthToken();
+        const rows = await api.getTeamQuality(t, Number(business.id));
+        if (alive) setQualityById(Object.fromEntries(rows.map(r => [String(r.staff_id), r])));
+      } catch { /* значки - необовʼязкові */ }
+    })();
+    return () => { alive = false; };
+  }, [hasAdminRights, business?.id]);
+
   const isOwnerCard = !!currentStaff && (
     currentStaff.role === 'owner' || currentStaff.role === 'business_owner'
     || (business?.owner_id && String(currentStaff.id) === String(business.owner_id))
@@ -790,6 +806,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     ) : (
                       member.specialization || member.title || badge.label
                     )}
+                    {/* Оцінка якості роботи - лише для тих, хто бачить команду */}
+                    {hasAdminRights && !isPending && qualityById[String(member.id)]?.score != null && (
+                      <span title="Оцінка якості за 90 днів" style={{
+                        marginLeft: 'auto', flexShrink: 0, fontSize: '0.7rem', fontWeight: 700, padding: '1px 7px', borderRadius: '999px',
+                        ...(qualityById[String(member.id)].score >= 80 ? { background: '#ecfdf5', color: '#059669' }
+                          : qualityById[String(member.id)].score >= 60 ? { background: '#fffbeb', color: '#d97706' }
+                          : { background: '#fef2f2', color: '#dc2626' }),
+                      }}>{qualityById[String(member.id)].score}</span>
+                    )}
                   </div>
                 </div>
 
@@ -864,6 +889,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 { id: 'services', label: 'Послуги' },
                 { id: 'schedule', label: 'Графік роботи' },
                 ...(isOwnerCard ? [] : [{ id: 'finance', label: 'Зарплата' }]),
+                ...(isOwnerCard || !hasAdminRights ? [] : [{ id: 'quality', label: 'Якість' }]),
                 ...(hasAdminRights ? [{ id: 'security', label: 'Доступ та Безпека' }] : [])
               ].map(tab => (
                 <div
@@ -1239,6 +1265,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             )}
 
             {/* --- 4. ЗАРПЛАТА ТА КОМІСІЙНІ --- */}
+            {activeStaffTab === 'quality' && !isOwnerCard && hasAdminRights && business?.id && (
+              <StaffQuality businessId={Number(business.id)} staffId={String(currentStaff.id)} />
+            )}
+
             {activeStaffTab === 'finance' && !isOwnerCard && (
               <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 

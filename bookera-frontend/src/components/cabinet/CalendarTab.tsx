@@ -533,6 +533,21 @@ const handleSaveShifts = async () => {
     }
   };
 
+  // Чайові за завершений візит - зберігаємо, коли поле втрачає фокус
+  const handleSaveTip = async (amount: number) => {
+    if (!selectedBooking) return;
+    if (amount === Number(selectedBooking.tip_amount || 0)) return;
+    try {
+      const token = await getAuthToken();
+      const r = await api.setAppointmentTip(token, Number(selectedBooking.id), amount);
+      setSelectedBooking((b: any) => b && { ...b, tip_amount: r.tip_amount });
+      setAppointments((prev: any[]) => prev.map(a => (a.id === selectedBooking.id ? { ...a, tip_amount: r.tip_amount } : a)));
+      showToast(amount ? `Чайові ${amount} ₴ збережено` : 'Чайові прибрано', 'success');
+    } catch (e: any) {
+      showToast(e?.message || 'Не вдалося зберегти чайові', 'error');
+    }
+  };
+
   const handleUpdateBookingTime = async (newStartTime: string) => {
      if (!selectedBooking || !newStartTime || newStartTime.length !== 5 || !newStartTime.includes(':')) return;
      const [h, m] = newStartTime.split(':').map(Number);
@@ -2268,6 +2283,28 @@ const handleSaveShifts = async () => {
                       );
                     })}
                   </div>
+
+                  {/* Чайові - лише за завершений візит. Потрапляють у заробіток
+                      майстра й в оцінку якості його роботи («Команда» → «Якість»). */}
+                  {selectedBooking.status === 'completed' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 0.85rem', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', flex: 1 }}>Чайові</span>
+                      <span style={{ position: 'relative' }}>
+                        <input
+                          key={selectedBooking.id}
+                          type="text"
+                          inputMode="numeric"
+                          defaultValue={selectedBooking.tip_amount ? String(Math.round(selectedBooking.tip_amount)) : ''}
+                          placeholder="0"
+                          onChange={e => { e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6); }}
+                          onBlur={e => void handleSaveTip(Number(e.target.value || 0))}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                          style={{ width: '96px', height: '34px', padding: '0 1.6rem 0 0.6rem', borderRadius: '9px', border: '1px solid #e2e8f0', fontFamily: 'inherit', fontSize: '0.9rem', textAlign: 'right', outline: 'none' }}
+                        />
+                        <span style={{ position: 'absolute', right: '0.55rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.85rem' }}>₴</span>
+                      </span>
+                    </div>
+                  )}
 
                   <button
                     onClick={() => { setClipboardApp(selectedBooking); setIsBookingDetailsModalOpen(false); showToast('Запис скопійовано — оберіть вільний час', 'info'); }}

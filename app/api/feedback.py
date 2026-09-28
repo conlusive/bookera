@@ -10,7 +10,8 @@
 подякувати й сам.
 
 Правила: лише завершений візит; не пізніше 14 днів після нього; один
-раз онлайн; 20 - 10 000 ₴. 100% - майстрові (tip_amount -> виплата).
+раз онлайн; 10 - 10 000 ₴. Пропонуємо як у ресторані: 5 / 10 / 15% від
+вартості візиту або своя сума. 100% - майстрові (tip_amount -> виплата).
 """
 import uuid
 from datetime import timedelta
@@ -32,7 +33,10 @@ from app.services.payments import create_payment_intent
 
 router = APIRouter(tags=["Client feedback"])
 
-TIP_MIN, TIP_MAX = 20, 10000
+# Мінімум 10 ₴: 5% від недорогої послуги (200 ₴) - це 10 ₴, і вони мають пройти.
+TIP_MIN, TIP_MAX = 10, 10000
+# Як у ресторані - відсоток від вартості візиту
+TIP_PERCENTS = [5, 10, 15]
 TIP_WINDOW_DAYS = 14
 
 
@@ -68,11 +72,15 @@ async def feedback_info(appointment_id: int, token: str, db: AsyncSession = Depe
         "master_avatar": master.avatar_url if master else None,
         "service_name": srv.name if srv else None,
         "start_time": a.start_time.isoformat() if a.start_time else None,
-        "review": {"rating": review.rating, "comment": review.comment} if review else None,
+        "price": float(a.price) if a.price else None,
+        "review": {
+            "rating": review.rating, "master_rating": review.master_rating or review.rating,
+            "salon_rating": review.salon_rating or review.rating, "comment": review.comment,
+        } if review else None,
         "tip": {
             "paid": float(tipped.amount) if tipped else None,
             "can_tip": a.status == "completed" and in_window and not tipped and bool(a.master_id),
-            "min": TIP_MIN, "max": TIP_MAX,
+            "min": TIP_MIN, "max": TIP_MAX, "percents": TIP_PERCENTS,
         },
     }
 

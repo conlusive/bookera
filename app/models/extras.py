@@ -15,6 +15,12 @@ class Review(Base):
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
     author_name = Column(String, nullable=True)
     rating = Column(SmallInteger, nullable=False)  # 1-5
+    # Окремо майстер і заклад - щоб оцінювати обʼєктивно: майстер міг
+    # зробити чудово, а в салоні було брудно й довелось чекати, - і навпаки.
+    # master_rating іде в якість майстра, salon_rating - у рейтинг закладу.
+    # rating - загальна (середня), для списків і старих відгуків.
+    master_rating = Column(Integer, nullable=True)
+    salon_rating = Column(Integer, nullable=True)
     comment = Column(Text, nullable=True)
     business_reply = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utc_now)

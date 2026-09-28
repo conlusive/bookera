@@ -15,6 +15,7 @@
 """
 import asyncio
 from datetime import timedelta
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -214,15 +215,18 @@ async def complete_past_appointments(db: AsyncSession) -> int:
 
 
 
-REVIEW_DELAY_HOURS = 2
+# Лист - одразу після завершення візиту: враження найсвіжіші, а людина
+# ще памʼятає і майстра, і салон окремо.
+REVIEW_DELAY_HOURS = 0
 REVIEW_MAX_AGE_DAYS = 3
 
 
 async def send_review_requests(db: AsyncSession, frontend_url: str = "") -> int:
     """
-    «Як вам візит?» - один лист через 2 години після завершеного візиту.
+    «Як вам візит?» - один лист одразу після завершеного візиту.
 
-    Не одразу: людина ще в дорозі. Не наступного дня: враження стерлись.
+    Цей цикл - запасний шлях: для візитів, завершених автоматично за
+    часом. Коли візит позначає майстер, лист іде миттєво (request_review_now).
     Лише один раз (review_requested_at) і лише якщо відгуку ще немає.
     Візити, старші за 3 дні (наприклад, після простою сервера), - не
     чіпаємо: запізнілий лист дратує більше, ніж його відсутність.
@@ -261,3 +265,37 @@ async def send_review_requests(db: AsyncSession, frontend_url: str = "") -> int:
             logger.warning("Лист «Як вам візит?» для %s не надіслано: %s", a.id, exc)
     await db.commit()
     return sent
+
+
+
+async def request_review_now(db: AsyncSession, appointment, frontend_url: str = "") -> Optional[tuple]:
+    """
+    Миттєвий «Як вам візит?» - коли майстер позначив візит завершеним.
+
+    Повертає аргументи для фонового листа (або None) і ставить
+    review_requested_at у поточну транзакцію, щоб цикл не надіслав удруге.
+    Викликати ДО commit, лист - через background_tasks ПІСЛЯ.
+    """
+    import os
+    from app.models import Business, Service, User
+    from app.models.extras import Review
+
+    a = appointment
+    if a.status != "completed" or a.review_requested_at or not a.client_email or not a.manage_token:
+        return None
+    now = local_now().replace(tzinfo=None)
+    if a.end_time and now - a.end_time > timedelta(days=REVIEW_MAX_AGE_DAYS):
+        return None  # старий візит, позначений заднім числом, - без листа
+    if (await db.execute(select(Review.id).where(Review.appointment_id == a.id))).first():
+        return None
+    a.review_requested_at = utc_now()
+    biz = await db.get(Business, a.business_id)
+    srv = await db.get(Service, a.service_id) if a.service_id else None
+    master = (await db.execute(select(User).where(User.id == str(a.master_id)))).scalars().first() if a.master_id else None
+    base = (frontend_url or os.getenv("FRONTEND_URL", "")).rstrip("/")
+    return (
+        a.client_email, biz.name if biz else "BookEra",
+        (master.full_name or "").split(" ")[0] if master and master.full_name else "",
+        srv.name if srv else "Візит", a.start_time.strftime("%d.%m, %H:%M"),
+        f"{base}/my-booking/{a.id}?token={a.manage_token}",
+    )

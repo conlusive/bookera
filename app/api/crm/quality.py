@@ -135,8 +135,10 @@ async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, day
         .where(Review.business_id == business_id, Appointment.master_id == str(staff_id))
         .order_by(Review.created_at.desc())
     )).all()
-    ratings = [r.rating for r, _ in rev_rows if r.rating]
-    period_ratings = [r.rating for r, _ in rev_rows if r.rating and r.created_at and since <= r.created_at < now]
+    # Оцінка МАЙСТРА; у старих відгуках - загальна
+    mr = lambda r: r.master_rating or r.rating
+    ratings = [mr(r) for r, _ in rev_rows if mr(r)]
+    period_ratings = [mr(r) for r, _ in rev_rows if mr(r) and r.created_at and since <= r.created_at < now]
     rating_avg = round(sum(ratings) / len(ratings), 2) if ratings else None
     distribution = {str(i): sum(1 for x in ratings if x == i) for i in range(1, 6)}
     srv_ids = {sid for _, sid in rev_rows if sid}
@@ -178,7 +180,7 @@ async def compute_quality(db: AsyncSession, business_id: int, staff_id: str, day
         "no_show_rate": round(no_show / len(period_all), 3) if period_all else None,
         "cancel_rate": round(cancelled / len(period_all), 3) if period_all else None,
         "reviews": [{
-            "id": r.id, "rating": r.rating, "comment": r.comment, "author": r.author_name,
+            "id": r.id, "rating": mr(r), "salon_rating": r.salon_rating, "comment": r.comment, "author": r.author_name,
             "reply": r.business_reply, "service": srv_names.get(sid),
             "created_at": r.created_at.isoformat() if r.created_at else None,
         } for r, sid in rev_rows[:50]],

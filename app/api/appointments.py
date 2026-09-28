@@ -1335,7 +1335,11 @@ async def get_today_slots(
 
 class ClientReviewRequest(BaseModel):
     token: str
-    rating: int
+    # Окремо майстер і заклад. rating - для старих клієнтів (одна оцінка
+    # на все): тоді вона стає обома.
+    master_rating: Optional[int] = None
+    salon_rating: Optional[int] = None
+    rating: Optional[int] = None
     comment: Optional[str] = None
 
 
@@ -1361,8 +1365,13 @@ async def create_review_by_client(
     """
     from app.models.extras import Review
 
-    if not 1 <= payload.rating <= 5:
-        raise HTTPException(status_code=400, detail="Оцінка має бути від 1 до 5")
+    master_r = payload.master_rating or payload.rating
+    salon_r = payload.salon_rating or payload.rating
+    for v in (master_r, salon_r):
+        if v is not None and not 1 <= v <= 5:
+            raise HTTPException(status_code=400, detail="Оцінка має бути від 1 до 5")
+    if salon_r is None:
+        raise HTTPException(status_code=400, detail="Оцініть заклад")
 
     comment = (payload.comment or "").strip()[:1000] or None
 
@@ -1378,18 +1387,27 @@ async def create_review_by_client(
     if existing.scalars().first():
         raise HTTPException(status_code=409, detail="Ви вже оцінили цей візит")
 
+    if appointment.master_id and master_r is None:
+        raise HTTPException(status_code=400, detail="Оцініть майстра")
+    if not appointment.master_id:
+        master_r = None
+    # Загальна - середня з двох, для списків відгуків
+    overall = round((master_r + salon_r) / 2) if master_r else salon_r
+
     db.add(Review(
         business_id=appointment.business_id,
         appointment_id=appointment.id,
         author_name=appointment.client_name,
-        rating=payload.rating,
+        rating=overall,
+        master_rating=master_r,
+        salon_rating=salon_r,
         comment=comment,
     ))
     await db.flush()
 
     # Рейтинг - середнє всіх відгуків закладу, з одним знаком.
     stats = await db.execute(
-        select(func.avg(Review.rating), func.count(Review.id)).where(Review.business_id == appointment.business_id)
+        select(func.avg(func.coalesce(Review.salon_rating, Review.rating)), func.count(Review.id)).where(Review.business_id == appointment.business_id)
     )
     avg, count = stats.one()
     biz = await db.get(Business, appointment.business_id)
@@ -1402,12 +1420,12 @@ async def create_review_by_client(
     # Низька оцінка (1-3) - одразу власнику й адміністраторам: поки клієнт
     # ще памʼятає візит, ситуацію можна виправити дзвінком. Чайові в
     # такому разі інтерфейс не пропонує.
-    if payload.rating <= 3:
-        await _alert_low_rating(db, background_tasks, appointment, payload.rating, comment)
+    if min(r for r in (master_r, salon_r) if r) <= 3:
+        await _alert_low_rating(db, background_tasks, appointment, master_r, salon_r, comment)
     return {"ok": True, "rating": biz.rating if biz else None, "reviews_count": biz.reviews_count if biz else None}
 
 
-async def _alert_low_rating(db: AsyncSession, background_tasks: BackgroundTasks, appointment, rating: int, comment) -> None:
+async def _alert_low_rating(db: AsyncSession, background_tasks: BackgroundTasks, appointment, master_r, salon_r, comment) -> None:
     from app.core.email import send_staff_notice
     from app.models import StaffMembership
     biz = await db.get(Business, appointment.business_id)
@@ -1426,11 +1444,15 @@ async def _alert_low_rating(db: AsyncSession, background_tasks: BackgroundTasks,
         StaffMembership.business_id == biz.id, StaffMembership.role == "admin", StaffMembership.is_active.is_(True),
         User.email.isnot(None)))).scalars().all()
     to.update(e.lower() for e in admins)
-    rows = [("Оцінка", "★" * rating + "☆" * (5 - rating), True),
+    stars = lambda n: "★" * n + "☆" * (5 - n)
+    rows = [("Заклад", stars(salon_r), True)]
+    if master_r:
+        rows.append(("Майстер", stars(master_r), True))
+    rows += [
             ("Клієнт", f"{appointment.client_name or 'Клієнт'}{' · ' + appointment.client_phone if appointment.client_phone else ''}", False),
             ("Візит", f"{srv.name if srv else 'Візит'} · {appointment.start_time:%d.%m, %H:%M}", False)]
     if master:
-        rows.append(("Майстер", master.full_name or master.email or "", False))
+        rows.append(("Хто працював", master.full_name or master.email or "", False))
     if comment:
         rows.append(("Коментар", comment, False))
     for email in to:

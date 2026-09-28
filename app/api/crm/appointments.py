@@ -254,6 +254,7 @@ async def create_manual_appointment(
 @router.patch("/{appointment_id}/status", response_model=AppointmentResponse)
 @router.patch("/{appointment_id}", response_model=AppointmentResponse)
 async def update_crm_appointment_status(
+    background_tasks: BackgroundTasks,
     appointment_id: int,
     payload: StatusUpdatePayload,
     db: AsyncSession = Depends(get_db),
@@ -272,9 +273,6 @@ async def update_crm_appointment_status(
     is_block = appointment.status == "blocked" or (appointment.notes and "перерва" in appointment.notes.lower())
     if new_status == "cancelled" and is_block:
         await db.delete(appointment)
-        # Журнал дій
-        from app.services.audit import record as _audit
-        await _audit(db, appointment.business_id, str(current_user.id), "bookings", "status_changed", f"Запис {appointment.client_name or ''} {appointment.start_time:%d.%m %H:%M}: статус - {new_status}")
         await db.commit()
         appointment.status = "cancelled"
         return appointment
@@ -287,11 +285,29 @@ async def update_crm_appointment_status(
     await sync_visit_bonus(db, appointment, _old_status)
     appointment.updated_at = to_naive_utc(utc_now())
 
+    # Журнал дій - саме тут, на ГОЛОВНОМУ шляху зміни статусу. Раніше запис
+    # помилково стояв у гілці скасування перерви: журнал фіксував лише її,
+    # а «завершено» чи «не прийшов» не записувались.
+    if _old_status != new_status:
+        from app.services.audit import record as _audit
+        _labels = {"completed": "завершено", "no-show": "не прийшов", "confirmed": "підтверджено",
+                   "cancelled": "скасовано", "late": "запізнення", "pending_approval": "очікує підтвердження"}
+        await _audit(db, appointment.business_id, str(current_user.id), "bookings", "status_changed",
+                     f"Запис {appointment.client_name or ''} {appointment.start_time:%d.%m %H:%M}: {_labels.get(new_status, new_status)}")
+
+    # «Як вам візит?» - одразу, щойно майстер позначив візит завершеним
+    from app.services.reminders import request_review_now
+    _review_args = await request_review_now(db, appointment) if new_status == "completed" and _old_status != "completed" else None
+
     try:
         await db.commit()
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Не вдалося оновити статус: {str(e)}")
+
+    if _review_args:
+        from app.core.email import send_review_request
+        background_tasks.add_task(send_review_request, *_review_args)
 
     await db.refresh(appointment)
 

@@ -122,7 +122,7 @@ async def my_work(
 
     # --- Рейтинг: відгуки на мої візити ---
     rating_row = (await db.execute(
-        select(func.avg(Review.rating), func.count(Review.id))
+        select(func.avg(func.coalesce(Review.master_rating, Review.rating)), func.count(Review.id))
         .join(Appointment, Appointment.id == Review.appointment_id)
         .where(Appointment.master_id == me, Appointment.business_id.in_(biz_ids))
     )).one()

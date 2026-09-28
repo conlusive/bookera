@@ -37,7 +37,7 @@ async def _done(bid, sid, m, hours_ago, email="client@example.com", token=None):
 
 
 @pytest.mark.asyncio
-async def test_review_request_sent_once_and_on_time(client, auth_headers, monkeypatch):
+async def test_review_request_sent_once_right_after(client, auth_headers, monkeypatch):
     sent = []
 
     async def fake(to, business_name, master_name, service_name, when_str, link_base):
@@ -46,15 +46,17 @@ async def test_review_request_sent_once_and_on_time(client, auth_headers, monkey
     monkeypatch.setattr(em, "send_review_request", fake)
 
     bid, sid, owner, m = await _setup(client, auth_headers, "req")
-    ready, _ = await _done(bid, sid, m, 3)          # 3 год тому - час
-    await _done(bid, sid, m, 1)                     # 1 год тому - ще рано
+    # Лист - одразу після завершення (раніше чекали 2 години)
+    ready, _ = await _done(bid, sid, m, 3)          # 3 год тому - так
+    just, _ = await _done(bid, sid, m, 0)           # щойно - так, одразу
     await _done(bid, sid, m, 24 * 5)                # 5 днів тому - запізно
 
     from app.core.database import AsyncSessionLocal
     from app.services.reminders import send_review_requests
     async with AsyncSessionLocal() as db:
-        assert await send_review_requests(db, "https://bookera.test") == 1
-    assert len(sent) == 1 and sent[0][1] == "Олена" and f"/my-booking/{ready}?token=" in sent[0][2]
+        assert await send_review_requests(db, "https://bookera.test") == 2
+    assert {s[2].split("?")[0] for s in sent} == {f"https://bookera.test/my-booking/{ready}", f"https://bookera.test/my-booking/{just}"}
+    assert all(s[1] == "Олена" for s in sent)
     async with AsyncSessionLocal() as db:
         assert await send_review_requests(db, "https://bookera.test") == 0, "другий раз - не надсилаємо"
 
@@ -106,3 +108,63 @@ async def test_low_rating_alerts_owner(client, auth_headers, monkeypatch):
     aid2, token2 = await _done(bid, sid, m, 4)
     await client.post(f"/appointments/{aid2}/review", json={"token": token2, "rating": 5})
     assert sent == [], "за добру оцінку - без тривоги"
+
+
+@pytest.mark.asyncio
+async def test_separate_master_and_salon_ratings(client, auth_headers):
+    """
+    Майстер і заклад - окремо: майстер у свою якість, заклад - у рейтинг
+    закладу. Тривога - якщо ХОЧ ОДНА низька.
+    """
+    bid, sid, owner, m = await _setup(client, auth_headers, "split")
+    aid, token = await _done(bid, sid, m, 3)
+    r = await client.post(f"/appointments/{aid}/review", json={"token": token, "master_rating": 5, "salon_rating": 2, "comment": "Майстер супер, але брудно"})
+    assert r.status_code == 200, r.text
+    assert r.json()["rating"] == 2.0, "рейтинг закладу - з оцінки закладу"
+
+    q = (await client.get(f"/crm/businesses/{bid}/staff/{m}/quality", headers=owner)).json()
+    assert q["rating"]["avg"] == 5, "якість майстра - з оцінки майстра"
+    info = (await client.get(f"/appointments/{aid}/feedback", params={"token": token})).json()
+    assert info["review"]["master_rating"] == 5 and info["review"]["salon_rating"] == 2
+    assert info["price"] == 500 and info["tip"]["percents"] == [5, 10, 15]
+
+
+@pytest.mark.asyncio
+async def test_master_rating_required_when_master(client, auth_headers):
+    bid, sid, owner, m = await _setup(client, auth_headers, "req2")
+    aid, token = await _done(bid, sid, m, 3)
+    r = await client.post(f"/appointments/{aid}/review", json={"token": token, "salon_rating": 5})
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_review_email_immediately_when_master_completes(client, auth_headers, monkeypatch):
+    """«Як вам візит?» - одразу, щойно майстер позначив завершеним, і лише раз."""
+    sent = []
+
+    async def fake(to, business_name, master_name, service_name, when_str, link_base):
+        sent.append(to)
+    import app.core.email as em
+    monkeypatch.setattr(em, "send_review_request", fake)
+
+    bid, sid, owner, m = await _setup(client, auth_headers, "now")
+    end = local_now().replace(tzinfo=None, microsecond=0) - timedelta(minutes=5)
+    conn = await asyncpg.connect(DB)
+    try:
+        aid = await conn.fetchval(
+            "INSERT INTO appointments (business_id, service_id, master_id, start_time, end_time, status, price, client_name, client_email, manage_token, source) "
+            "VALUES ($1,$2,$3,$4,$5,'confirmed',500,'Марія','now@example.com','tok-now','online') RETURNING id",
+            bid, sid, m, end - timedelta(hours=1), end)
+    finally:
+        await conn.close()
+    r = await client.patch(f"/crm/appointments/{aid}", json={"status": "completed"}, headers=owner)
+    assert r.status_code == 200, r.text
+    assert sent == ["now@example.com"]
+
+    from app.core.database import AsyncSessionLocal
+    from app.services.reminders import send_review_requests
+    async with AsyncSessionLocal() as db:
+        assert await send_review_requests(db, "https://bookera.test") == 0, "цикл не надсилає вдруге"
+
+    log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()
+    assert any("завершено" in e["summary"] for e in log), "зміна статусу - у журналі дій"

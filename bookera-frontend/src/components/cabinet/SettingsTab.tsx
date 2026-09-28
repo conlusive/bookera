@@ -8,6 +8,7 @@ import { useToast } from '@/context/ToastContext';
 import AppSelect from '@/components/ui/AppSelect';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { categoryTitle } from '@/lib/categories';
+import { formatDuration } from '@/lib/duration';
 
 interface SettingsTabProps {
   onNavigate?: (tab: string) => void;
@@ -571,7 +572,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {[
                   ['Крок сітки', `${bookingSettings.time_step} хв`],
-                  ['Тривалість візиту', `${bookingSettings.default_duration} хв`],
+                  ['Тривалість візиту', formatDuration(bookingSettings.default_duration)],
                   ['Буфер після візиту', bookingSettings.buffer_minutes ? `${bookingSettings.buffer_minutes} хв` : 'без буфера'],
                   ['Мінімум часу до візиту', bookingSettings.min_advance_hours ? `${bookingSettings.min_advance_hours} год` : 'без обмежень'],
                   ['Горизонт планування', `${bookingSettings.max_advance_days} днів`],

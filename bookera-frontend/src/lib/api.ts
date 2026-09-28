@@ -343,6 +343,11 @@ export const api = {
   },
 
   /** «Моя робота»: розклад, заробіток і салони майстра - по всіх салонах разом. */
+  /** Порядок послуг у прайсі - одним запитом. */
+  async reorderServices(token: string, businessId: number, ids: number[]): Promise<void> {
+    await authFetch('/services/reorder', token, { method: 'PUT', body: JSON.stringify({ business_id: businessId, ids }) });
+  },
+
   // --- Доступи й журнал ---
   async getMyAccess(token: string, businessId: number): Promise<{ role: string; sections: Record<string, boolean> }> {
     return authFetch(`/crm/businesses/${businessId}/me/access`, token);

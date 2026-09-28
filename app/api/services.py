@@ -1,5 +1,6 @@
 from typing import List
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -45,13 +46,21 @@ async def create_service(
     # (не через FastAPI-залежність, яка читає його лише з query/path).
     await assert_section(db, current_user, service_in.business_id, "services")
 
+    # Нова послуга - в КІНЕЦЬ прайсу. Раніше order_index був 0 для всіх
+    # нових, і нова послуга ставала першою, штовхаючи налаштований порядок.
+    from sqlalchemy import func as _f
+    max_order = (await db.execute(select(_f.max(Service.order_index)).where(Service.business_id == service_in.business_id))).scalar()
     new_service = Service(
+        order_index=(max_order or 0) + 1,
         business_id=service_in.business_id,
         name=service_in.name,
         duration_minutes=service_in.duration_minutes,
         price=service_in.price,
         is_group=service_in.is_group,
         max_participants=service_in.max_participants,
+        description=service_in.description,
+        category=service_in.category,
+        is_active=service_in.is_active,
     )
     db.add(new_service)
     await db.flush()
@@ -75,6 +84,39 @@ async def get_business_services(business_id: int, db: AsyncSession = Depends(get
         select(Service).where(Service.business_id == business_id).options(selectinload(Service.addons))
     )
     return result.scalars().all()
+
+
+class ReorderIn(BaseModel):
+    business_id: int
+    ids: List[int]
+
+
+@router.put("/reorder")
+async def reorder_services(
+    payload: ReorderIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Порядок послуг у прайсі - одним запитом і однією транзакцією.
+    Раніше кабінет надсилав окремий запит на КОЖНУ послугу: 20 послуг -
+    20 запитів, і обрив посередині лишав порядок наполовину старим.
+    """
+    await assert_section(db, current_user, payload.business_id, "services")
+    rows = (await db.execute(select(Service).where(Service.business_id == payload.business_id))).scalars().all()
+    by_id = {s.id: s for s in rows}
+    if set(payload.ids) - set(by_id):
+        raise HTTPException(status_code=400, detail="У списку є чужі послуги")
+    for i, sid in enumerate(payload.ids):
+        by_id[sid].order_index = i
+    # Послуги, яких немає в списку, - після них, у колишньому порядку
+    rest = sorted((s for s in rows if s.id not in set(payload.ids)), key=lambda s: s.order_index or 0)
+    for j, s in enumerate(rest, start=len(payload.ids)):
+        s.order_index = j
+    from app.services.audit import record as _audit
+    await _audit(db, payload.business_id, str(current_user.id), "services", "reordered", "Змінено порядок послуг у прайсі")
+    await db.commit()
+    return {"status": "ok"}
 
 
 @router.patch("/{service_id}", response_model=ServiceResponse)

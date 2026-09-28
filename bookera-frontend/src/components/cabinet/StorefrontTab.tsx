@@ -8,6 +8,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import { ALL_AMENITIES } from '@/lib/amenities';
 import SmartImage from '@/components/ui/SmartImage';
+import { formatDuration } from '@/lib/duration';
 
 interface StorefrontTabProps {
   onNavigate?: (tab: string, view?: string) => void;
@@ -281,8 +282,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
   const formatServiceDuration = (minutes?: number) => {
     if (!minutes) return '30 хв';
     if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60} год`;
-    if (minutes > 60) return `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
-    return `${minutes} хв`;
+    return formatDuration(minutes);
   };
 
   const activeAmenitiesList = useMemo(() => {

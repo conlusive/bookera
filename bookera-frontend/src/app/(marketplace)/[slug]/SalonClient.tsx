@@ -20,6 +20,7 @@ import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import SmartImage from '@/components/ui/SmartImage';
 import GiftCardModal from '@/components/salon/GiftCardModal';
 import { resolveDisplayName } from '@/lib/displayName';
+import { formatDuration } from '@/lib/duration';
 
 // === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
@@ -2014,7 +2015,7 @@ const formatRole = (role?: string) => {
                               <div style={{ fontWeight: '700', fontSize: '1.15rem', color: '#1D1D1F', marginBottom: '0.35rem' }}>{service.name}</div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                                 <div style={{ color: '#64748b', fontSize: '0.88rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                  <div style={{ display: 'flex', width: '14px', height: '14px' }}><Icons.Clock /></div> {service.duration_minutes || service.duration || 60} хв
+                                  <div style={{ display: 'flex', width: '14px', height: '14px' }}><Icons.Clock /></div> {formatDuration(service.duration_minutes || service.duration || 60)}
                                 </div>
                                 <div style={{
                                   display: 'inline-flex',
@@ -2973,7 +2974,7 @@ const formatRole = (role?: string) => {
                                         </span>
                                         {addon.duration_minutes > 0 && (
                                           <span style={{ fontSize: '0.74rem', color: '#5C6B5E', background: '#F2F6F1', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                                            +{addon.duration_minutes} хв
+                                            +{formatDuration(addon.duration_minutes)}
                                           </span>
                                         )}
                                       </div>

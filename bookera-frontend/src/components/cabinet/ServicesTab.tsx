@@ -4,6 +4,9 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
+import DurationPicker from '@/components/ui/DurationPicker';
+import { formatDuration } from '@/lib/duration';
 
 // Локальні іконки
 const CopyIcon = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>);
@@ -54,9 +57,12 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
   const [serviceForm, setServiceForm] = useState({
-    name: '', duration: 30, price: 0, category: 'Основні', description: '', is_active: true, addon_services: [] as number[]
+    name: '', duration: 60, price: 0, category: '', description: '', is_active: true, addon_services: [] as number[]
   });
+  const [priceTouched, setPriceTouched] = useState(false);
   const [isServiceSaving, setIsServiceSaving] = useState(false);
+
+  const formValid = serviceForm.name.trim().length >= 2 && serviceForm.duration >= 5 && serviceForm.duration <= 480 && serviceForm.price >= 0;
 
   // Спеціальні стани для Розумного пошуку додаткових послуг (Upsell)
   const [addonSearch, setAddonSearch] = useState('');
@@ -92,16 +98,21 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   // --- ЛОГІКА КАТЕГОРІЙ ---
   const uniqueCategories = useMemo(() => {
     const cats = new Set<string>();
-    services.forEach(s => cats.add(s.category || 'Основні'));
+    services.forEach(s => cats.add(s.category || 'Без категорії'));
     return Array.from(cats);
   }, [services]);
 
   // --- ЛОГІКА ВІДОБРАЖЕННЯ ТА СОРТУВАННЯ ---
+  const orderedServices = useMemo(
+    () => [...services].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)),
+    [services],
+  );
+
   const displayedServices = useMemo(() => {
     let result = [...services];
 
     if (selectedCategory) {
-      result = result.filter(s => (s.category || 'Основні') === selectedCategory);
+      result = result.filter(s => (s.category || 'Без категорії') === selectedCategory);
     }
 
     if (debouncedSearch) {
@@ -114,8 +125,10 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     if (sortMode === 'view' && activeSort) {
        const { column, dir } = activeSort;
        result.sort((a, b) => {
-          let valA = a[column];
-          let valB = b[column];
+          // «duration» у заголовку таблиці - це duration_minutes на сервері
+          const key = column === 'duration' ? 'duration_minutes' : column;
+          let valA = a[key];
+          let valB = b[key];
           if (column === 'name') {
              return dir === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
           } else {
@@ -132,12 +145,19 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   const groupedServices = useMemo(() => {
     const groups: { [key: string]: any[] } = {};
     displayedServices.forEach(s => {
-      const cat = s.category || 'Основні';
+      const cat = s.category || 'Без категорії';
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(s);
     });
     return groups;
   }, [displayedServices]);
+
+  // Категорії, що вже є, - підказки в полі «Категорія»: одна назва для
+  // групи, без «Стрижки» й «стрижки» поруч.
+  const existingCategories = useMemo(
+    () => Array.from(new Set(services.map(s => (s.category || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'uk')),
+    [services],
+  );
 
   // --- ЛОГІКА UPSELL (ДОДАТКОВІ ПОСЛУГИ) ---
   const selectedAddons = useMemo(() => {
@@ -183,8 +203,9 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     if (sortMode === 'custom') {
       let newServices = [...services];
       newServices.sort((a, b) => {
-        let valA = a[column];
-        let valB = b[column];
+        const key = column === 'duration' ? 'duration_minutes' : column;
+        let valA = a[key];
+        let valB = b[key];
         if (column === 'name') {
           return newDir === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
         } else {
@@ -199,9 +220,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       if (business) {
         try {
           const token = await getAuthToken();
-          await Promise.all(updatedServices.map(srv =>
-            api.updateService(token, Number(srv.id), { order_index: srv.order_index })
-          ));
+          await api.reorderServices(token, Number(business.id), updatedServices.map((s: any) => Number(s.id)));
         } catch (error) {
           showToast("Помилка збереження порядку в БД", "error");
         }
@@ -219,22 +238,20 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   // --- DRAG & DROP ---
   const handleDragStart = (e: React.DragEvent, id: number) => {
     if (sortMode !== 'custom' || debouncedSearch || selectedCategory) return;
-    const index = services.findIndex(s => s.id === id);
-    setDraggedIndex(index);
+    // Індекс - у впорядкованому списку, як і в handleDragEnd. Раніше брався
+    // з сирого масиву в іншому порядку, і послуга «стрибала» не туди.
+    setDraggedIndex(orderedServices.findIndex(s => s.id === id));
   };
 
   const handleDragEnter = (e: React.DragEvent, id: number) => {
     if (sortMode !== 'custom' || debouncedSearch || selectedCategory) return;
     e.preventDefault();
-    const index = services.findIndex(s => s.id === id);
-    setDragOverIndex(index);
+    setDragOverIndex(orderedServices.findIndex(s => s.id === id));
   };
 
   const handleDragEnd = async () => {
     if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
-      const newServices = [...services];
-      newServices.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
-
+      const newServices = [...orderedServices];
       const [draggedItem] = newServices.splice(draggedIndex, 1);
       newServices.splice(dragOverIndex, 0, draggedItem);
 
@@ -243,11 +260,10 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       setActiveSort(null);
 
       if (business) {
-        getAuthToken().then(token =>
-          Promise.all(updatedServices.map(srv =>
-            api.updateService(token, Number(srv.id), { order_index: srv.order_index })
-          ))
-        ).catch(() => showToast("Помилка збереження порядку", "error"));
+        // Одним запитом: раніше - окремий запит на кожну послугу.
+        getAuthToken()
+          .then(token => api.reorderServices(token, Number(business.id), updatedServices.map(s => Number(s.id))))
+          .catch(() => showToast("Не вдалося зберегти порядок", "error"));
       }
     }
     setDraggedIndex(null);
@@ -275,13 +291,16 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         const token = await getAuthToken();
         const created = await api.createService(token, {
           business_id: business.id,
-          name: `${service.name} (Копія)`,
+          name: `${service.name} (копія)`,
           duration_minutes: service.duration_minutes,
           price: service.price,
+          description: service.description,
+          category: service.category,
+          is_active: false,
           addon_service_ids: service.addon_service_ids || [],
-        });
+        } as any);
         setServices(prev => [...prev, created]);
-        showToast("Послугу здубльовано", "success");
+        showToast("Копію створено - вона прихована, поки не перевірите", "success");
     } catch (error: any) {
         showToast(error?.message || "Не вдалося здублювати", "error");
     }
@@ -291,19 +310,29 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     if (e) e.stopPropagation();
     if (service) {
       setEditingService(service);
+      // Поля - ТАК, як їх віддає сервер. Раніше форма читала duration й
+      // addon_services, яких у відповіді немає: відкрити й зберегти послугу
+      // означало тривалість 30 хв і стерті додаткові послуги.
       setServiceForm({
-        name: service.name || '', duration: service.duration || 30, price: service.price || 0,
-        category: service.category || 'Основні', description: service.description || '',
-        is_active: service.is_active !== false, addon_services: service.addon_services || []
+        name: service.name || '', duration: Number(service.duration_minutes) || 60, price: Number(service.price) || 0,
+        category: service.category || '', description: service.description || '',
+        is_active: service.is_active !== false, addon_services: service.addon_service_ids || []
       });
+      setPriceTouched(true);
     } else {
       setEditingService(null);
-      setServiceForm({ name: '', duration: 30, price: 0, category: 'Основні', description: '', is_active: true, addon_services: [] });
+      setServiceForm({ name: '', duration: 60, price: 0, category: selectedCategory || '', description: '', is_active: true, addon_services: [] });
+      setPriceTouched(false);
     }
     setAddonSearch('');
     setIsAddonDropdownOpen(false);
     setIsServiceModalOpen(true);
   };
+
+  const materialsCost = serviceMaterials.reduce((sum, m) => {
+    const item = inventoryItems.find((i: any) => i.id === m.inventory_item_id);
+    return sum + Number(item?.cost_per_unit || 0) * Number(m.quantity_per_use || 0);
+  }, 0);
 
   useEffect(() => {
     if (!isServiceModalOpen || !business?.id) return;
@@ -328,8 +357,8 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   }, [isServiceModalOpen, editingService?.id, business?.id]);
 
   const handleSaveService = async () => {
-    if (!serviceForm.name || serviceForm.price < 0 || serviceForm.duration <= 0) {
-      return showToast("Перевірте правильність заповнення полів", "error");
+    if (!formValid) {
+      return showToast("Вкажіть назву (від 2 символів), тривалість і ціну", "error");
     }
 
     setIsServiceSaving(true);
@@ -338,24 +367,28 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
       if (editingService) {
         const updated = await api.updateService(token, editingService.id, {
-          name: serviceForm.name,
+          name: serviceForm.name.trim(),
           duration_minutes: serviceForm.duration,
           price: serviceForm.price,
           description: serviceForm.description,
+          category: serviceForm.category,
           is_active: serviceForm.is_active,
           addon_service_ids: serviceForm.addon_services,
-        });
+        } as any);
         setServices(prev => prev.map(s => s.id === editingService.id ? updated : s));
         await api.setServiceMaterials(token, editingService.id, serviceMaterials.filter(m => m.quantity_per_use > 0));
         showToast("Послугу оновлено", "success");
       } else {
         const created = await api.createService(token, {
           business_id: business.id,
-          name: serviceForm.name,
+          name: serviceForm.name.trim(),
           duration_minutes: serviceForm.duration,
           price: serviceForm.price,
+          description: serviceForm.description,
+          category: serviceForm.category,
+          is_active: serviceForm.is_active,
           addon_service_ids: serviceForm.addon_services,
-        });
+        } as any);
         setServices(prev => [...prev, created]);
         if (serviceMaterials.length > 0) {
           await api.setServiceMaterials(token, created.id, serviceMaterials.filter(m => m.quantity_per_use > 0));
@@ -370,9 +403,10 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     }
   };
 
-  const handleDeleteService = async (id: number, e?: React.MouseEvent) => {
+  const handleDeleteService = async (id: number, e?: React.MouseEvent, confirmed = false) => {
     if (e) e.stopPropagation();
-    if (!confirm("Ви впевнені, що хочете видалити цю послугу?")) return;
+    // З вікна - уже підтверджено в самій кнопці; зі списку - як раніше.
+    if (!confirmed && !confirm("Видалити цю послугу назавжди?")) return;
     try {
       const token = await getAuthToken();
       await api.deleteService(token, id);
@@ -385,13 +419,19 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     }
   };
 
+  // Підказка - перевірки саме цього прайсу, від найважливішої.
+  // Раніше звалась «AI Insight», хоча це були заготовлені фрази.
   const getSmartAdvice = () => {
-    if (!services || services.length === 0) return { title: "Прайс порожній", text: "Додайте базові послуги (стрижка, манікюр тощо)." };
-    const inactive = services.filter(s => s.is_active === false).length;
-    if (services.length < 4) return { title: "Розширте асортимент", text: "Додайте супутні сервіси (наприклад, 'Миття голови'), щоб збільшити середній чек." };
-    if (inactive > 0) return { title: "Увага до прихованих", text: `У вас ${inactive} прихованих послуг. Вони не доступні для клієнтів.` };
-    if (!services.some(s => String(s?.name ?? '').toLowerCase().includes('комплекс'))) return { title: "Створіть комбо", text: "Об'єднайте декілька послуг у 'Комплекс' зі знижкою." };
-    return { title: "Ідеальний баланс", text: "Ваш прайс-лист відмінно налаштований!" };
+    if (!services.length) return { title: 'Прайс порожній', text: 'Додайте послуги - без них клієнти не зможуть записатись онлайн.' };
+    const noDesc = services.filter(s => !String(s.description || '').trim()).length;
+    const hidden = services.filter(s => s.is_active === false).length;
+    const noCat = services.filter(s => !String(s.category || '').trim()).length;
+    const noPrice = services.filter(s => !Number(s.price)).length;
+    if (noPrice) return { title: `${noPrice} без ціни`, text: 'Послуга за 0 ₴ відлякує: клієнт не розуміє, скільки заплатить. Вкажіть ціну або «від».' };
+    if (noDesc) return { title: `${noDesc} без опису`, text: 'Клієнти частіше записуються, коли бачать, що входить у послугу. Додайте короткий опис.' };
+    if (services.length > 6 && noCat === services.length) return { title: 'Згрупуйте прайс', text: 'Понад 6 послуг без категорій важко переглядати. Додайте категорії: «Стрижки», «Фарбування».' };
+    if (hidden) return { title: `${hidden} прихованих`, text: 'Приховані послуги не видно для онлайн-запису. Перевірте, чи це навмисно.' };
+    return { title: 'Прайс у порядку', text: 'Усі послуги мають ціну, опис і доступні для запису.' };
   };
 
   const stats = useMemo(() => {
@@ -678,7 +718,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                                          </div>
                                       </td>
                                       <td style={{ color: '#64748b', fontSize: '0.92rem', fontWeight: '500' }}>
-                                         {service.duration ?? service.duration_minutes ?? 0} хв
+                                         {formatDuration(service.duration_minutes)}
                                       </td>
                                       <td style={{ color: '#0f172a', fontSize: '0.98rem', fontWeight: '700' }}>
                                          {service.price} ₴
@@ -741,7 +781,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
            <div style={{ background: '#f5f3ff', border: '1px dashed #c4b5fd', borderRadius: '12px', padding: '1rem', marginBottom: '0.8rem', cursor: 'pointer', transition: 'all 0.2s ease' }} onClick={() => setIsAiOpen(!isAiOpen)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#7c3aed' }}>
                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    <Icons.Sparkles width="14" height="14" /> AI Insight
+                    <Icons.Sparkles width="14" height="14" /> Підказка
                  </span>
                  <span style={{ transform: isAiOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s', display: 'flex' }}>
                    <Icons.ChevronDown width="16" height="16" />
@@ -774,66 +814,59 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       </div>
 
       {/* --- МОДАЛЬНЕ ВІКНО ПОСЛУГИ --- */}
-      {isServiceModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.3)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setIsServiceModalOpen(false)}>
-          <div className="toast-animate" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '520px', height: '85vh', minHeight: '600px', maxHeight: '800px', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+      {/* Вікно послуги - єдиний шаблон FormModal (components/ui/FormModal) */}
+      <FormModal
+        open={isServiceModalOpen}
+        onClose={() => setIsServiceModalOpen(false)}
+        title={editingService ? 'Редагувати послугу' : 'Нова послуга'}
+        subtitle={editingService ? `${editingService.name} · ${formatDuration(editingService.duration_minutes)} · ${Number(editingService.price).toLocaleString('uk-UA')} ₴` : 'Клієнти побачать її на сторінці закладу'}
+        primary={{ label: editingService ? 'Зберегти' : 'Додати послугу', onClick: () => void handleSaveService(), loading: isServiceSaving, disabled: !formValid }}
+        danger={editingService ? { label: 'Видалити послугу', confirmLabel: 'Видалити назавжди?', onClick: () => void handleDeleteService(editingService.id, undefined, true) } : undefined}
+      >
+        <FormSection>
+          <Field label="Назва" required error={serviceForm.name && serviceForm.name.trim().length < 2 ? 'Щонайменше 2 символи' : undefined}>
+            <input className="fm-input" value={serviceForm.name} maxLength={80} autoFocus placeholder="Напр., Чоловіча стрижка"
+              onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} />
+          </Field>
+          <Field label="Категорія" hint="Група в прайсі. Оберіть наявну або впишіть нову.">
+            <input className="fm-input" list="service-categories" value={serviceForm.category} maxLength={60} placeholder="Напр., Стрижки"
+              onChange={e => setServiceForm({ ...serviceForm, category: e.target.value })} />
+            <datalist id="service-categories">
+              {existingCategories.map(cat => <option key={cat} value={cat} />)}
+            </datalist>
+          </Field>
+        </FormSection>
 
-            {/* Хедер модалки */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
-                {editingService ? 'Редагувати послугу' : 'Нова послуга'}
-              </h2>
-              <button onClick={() => setIsServiceModalOpen(false)} style={{ background: '#f8fafc', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.background='#e2e8f0'} onMouseOut={e=>e.currentTarget.style.background='#f8fafc'}>
-                <XIcon />
-              </button>
-            </div>
+        <FormSection title="Тривалість" hint="Скільки часу займає послуга - стільки й буде зайнято в календарі.">
+          <DurationPicker value={serviceForm.duration} onChange={v => setServiceForm({ ...serviceForm, duration: v })} />
+        </FormSection>
 
-            {/* Скролиме тіло модалки */}
-            <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 1rem 1.5rem 2rem', marginRight: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', paddingRight: '0.5rem' }}>
+        <FormSection title="Ціна й видимість">
+          <div className="fm-row">
+            <Field label="Ціна" required>
+              <span className="fm-affix">
+                <input className="fm-input" type="number" inputMode="numeric" min={0} step={10} value={serviceForm.price === 0 && !priceTouched ? '' : serviceForm.price}
+                  placeholder="0" onChange={e => { setPriceTouched(true); setServiceForm({ ...serviceForm, price: Math.max(0, Number(e.target.value)) }); }} />
+                <span>₴</span>
+              </span>
+            </Field>
+            <Field label="Клієнти бачать послугу" hint={serviceForm.is_active ? 'Доступна для онлайн-запису' : 'Прихована - лише для запису з кабінету'}>
+              <span className="svc-seg">
+                <button type="button" className={serviceForm.is_active ? 'on' : ''} onClick={() => setServiceForm({ ...serviceForm, is_active: true })}>Так</button>
+                <button type="button" className={!serviceForm.is_active ? 'on' : ''} onClick={() => setServiceForm({ ...serviceForm, is_active: false })}>Приховано</button>
+              </span>
+            </Field>
+          </div>
+        </FormSection>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Назва послуги *</label>
-                  <input type="text" value={serviceForm.name} onChange={(e) => setServiceForm({...serviceForm, name: e.target.value})} className="clean-input" placeholder="Наприклад: Чоловіча стрижка" autoFocus />
-                </div>
+        <FormSection title="Опис" hint="Що входить у послугу - клієнти бачать це під назвою.">
+          <textarea className="fm-input" rows={3} maxLength={1000} value={serviceForm.description} placeholder="Напр., стрижка машинкою й ножицями, миття голови, укладка"
+            onChange={e => setServiceForm({ ...serviceForm, description: e.target.value })} />
+        </FormSection>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Категорія</label>
-                  <input type="text" value={serviceForm.category} onChange={(e) => setServiceForm({...serviceForm, category: e.target.value})} className="clean-input" placeholder="Наприклад: Стрижки, Борода..." />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Тривалість (хв) *</label>
-                    <input type="number" value={serviceForm.duration || ''} onChange={(e) => setServiceForm({...serviceForm, duration: Number(e.target.value)})} className="clean-input" placeholder="60" />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Ціна (₴) *</label>
-                    <input type="number" value={serviceForm.price || ''} onChange={(e) => setServiceForm({...serviceForm, price: Number(e.target.value)})} className="clean-input" placeholder="500" />
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Опис (необов'язково)</label>
-                  <textarea
-                    value={serviceForm.description}
-                    onChange={(e) => setServiceForm({...serviceForm, description: e.target.value})}
-                    className="clean-input custom-scroll"
-                    placeholder="Що входить у цю послугу?"
-                    style={{ minHeight: '80px', resize: 'none' }}
-                  />
-                </div>
-
-                {/* БЛОК UPSELL */}
-                {services.length > 0 && (
-                  <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '16px', border: '1px solid #e2e8f0', marginTop: '0.5rem' }} ref={addonDropdownRef}>
-                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.4rem' }}>
-                        <Icons.Sparkles width="16" height="16" color="#7c3aed" /> Пропонувати додатково
-                     </label>
-                     <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 1rem 0', lineHeight: '1.4' }}>
-                        Збільшуйте середній чек. Виберіть послуги, які клієнт побачить як рекомендацію під час запису.
-                     </p>
-
+        {services.filter(s => s.id !== editingService?.id).length > 0 && (
+          <FormSection title="Пропонувати додатково" hint="Клієнт побачить ці послуги як доповнення під час запису - це збільшує середній чек.">
+            <div ref={addonDropdownRef} style={{ position: 'relative' }}>
                      {selectedAddons.length > 0 && (
                        <div className="custom-scroll" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1rem', maxHeight: '80px', overflowY: 'auto' }}>
                          {selectedAddons.map(addon => (
@@ -902,29 +935,11 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                           </div>
                        )}
                      </div>
-                  </div>
-                )}
-              </div>
             </div>
+          </FormSection>
+        )}
 
-            {/* Матеріали зі складу */}
-            <div style={{ padding: '0 2rem 1.5rem 2rem' }}>
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.3rem' }}>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f172a' }}>Матеріали зі складу</label>
-                  {serviceMaterials.length > 0 && (
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
-                      {serviceMaterials.reduce((sum, m) => {
-                        const item = inventoryItems.find((i: any) => i.id === m.inventory_item_id);
-                        return sum + (Number(item?.cost_per_unit || 0) * Number(m.quantity_per_use || 0));
-                      }, 0).toLocaleString('uk-UA')} ₴ собівартість
-                    </span>
-                  )}
-                </div>
-                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 1rem 0' }}>
-                  Списуються автоматично, коли візит позначають виконаним.
-                </p>
-
+        <FormSection title="Матеріали зі складу" hint={`Списуються автоматично, коли візит позначають завершеним.${materialsCost > 0 ? ` Собівартість: ${materialsCost.toLocaleString('uk-UA')} ₴.` : ''}`}>
                 {inventoryItems.length === 0 ? (
                   <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '10px', fontSize: '0.85rem', color: '#64748b', textAlign: 'center' }}>
                     Спочатку додайте позиції у вкладці «Склад і Витрати».
@@ -971,20 +986,14 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                     })}
                   </div>
                 )}
-              </div>
-            </div>
+        </FormSection>
+      </FormModal>
 
-            {/* Футер модалки */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.8rem', padding: '1.2rem 2rem', borderTop: '1px solid #f1f5f9', flexShrink: 0, background: '#fff' }}>
-              <button onClick={() => setIsServiceModalOpen(false)} className="clean-btn-ghost">Скасувати</button>
-              <button onClick={handleSaveService} disabled={isServiceSaving} className="clean-btn" style={{ opacity: isServiceSaving ? 0.7 : 1 }}>
-                {isServiceSaving ? 'Збереження...' : 'Зберегти'}
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
+      <style jsx>{`
+        .svc-seg { display: flex; background: #f1f5f9; border-radius: 10px; padding: 3px; height: 42px; box-sizing: border-box; }
+        .svc-seg button { flex: 1; border: none; background: transparent; border-radius: 8px; font-family: inherit; font-size: 0.875rem; color: #0f172a; cursor: pointer; }
+        .svc-seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }
+      `}</style>
 
       {/* ТОСТИ */}
       {toast.show && (

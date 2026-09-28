@@ -1,5 +1,5 @@
 from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class ServiceBase(BaseModel):
@@ -8,6 +8,18 @@ class ServiceBase(BaseModel):
     price: float = Field(..., ge=0.0)
     is_group: bool = False
     max_participants: int = 1
+    # Опис і категорія: форма їх показувала, але сервер не приймав -
+    # і не зберігав ніколи.
+    description: Optional[str] = Field(default=None, max_length=1000)
+    category: Optional[str] = Field(default=None, max_length=60)
+
+    @field_validator("category", "description", mode="before")
+    @classmethod
+    def _blank_to_none(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            return v or None
+        return v
 
 
 class ServiceCreate(ServiceBase):
@@ -15,6 +27,7 @@ class ServiceCreate(ServiceBase):
     # Список id інших послуг цього ж бізнесу як "додаткові" (upsell).
     # Зберігається в окремій таблиці service_addons, а не JSON-полем.
     addon_service_ids: Optional[List[int]] = None
+    is_active: bool = True
 
 
 class ServiceUpdate(BaseModel):
@@ -26,6 +39,16 @@ class ServiceUpdate(BaseModel):
     is_active: Optional[bool] = None
     order_index: Optional[int] = None
     addon_service_ids: Optional[List[int]] = None
+    description: Optional[str] = Field(default=None, max_length=1000)
+    category: Optional[str] = Field(default=None, max_length=60)
+
+    @field_validator("category", "description", mode="before")
+    @classmethod
+    def _blank_to_none(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            return v or None
+        return v
 
 
 class AddonOut(BaseModel):

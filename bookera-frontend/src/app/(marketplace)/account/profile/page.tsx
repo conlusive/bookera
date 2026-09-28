@@ -41,6 +41,7 @@ import { categoryTitle, normalizeCategory } from '@/lib/categories';
 import WalletTab from '@/components/profile/WalletTab';
 import WorkTab from '@/components/profile/WorkTab';
 import { resolveDisplayName } from '@/lib/displayName';
+import { formatDuration } from '@/lib/duration';
 
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
@@ -1391,10 +1392,7 @@ function ProfileContent() {
                               const minutes = start && end
                                 ? Math.round((end.getTime() - start.getTime()) / 60000)
                                 : null;
-                              const durationLabel = !minutes ? null
-                                : minutes < 60 ? `${minutes} хв`
-                                : minutes % 60 === 0 ? `${minutes / 60} год`
-                                : `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
+                              const durationLabel = !minutes ? null : formatDuration(minutes);
 
                               const days = start ? Math.ceil((start.getTime() - Date.now()) / 86400000) : null;
                               const countdown = !isUpcoming || days === null ? null

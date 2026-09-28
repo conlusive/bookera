@@ -7,6 +7,7 @@ import { isOwnerRole } from '@/lib/roles';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
+import { formatDuration } from '@/lib/duration';
 
 // Іконка для чекбоксу в стилі Apple
 const CheckIcon = () => (
@@ -2037,7 +2038,7 @@ const handleSaveShifts = async () => {
                               />
                               <span>{addon.name}</span>
                               <span style={{ marginLeft: 'auto', color: '#64748b' }}>
-                                +{addon.price} ₴ · {addon.duration_minutes} хв
+                                +{addon.price} ₴ · {formatDuration(addon.duration_minutes)}
                               </span>
                             </label>
                           ))}

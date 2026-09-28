@@ -14,6 +14,10 @@ class Service(Base):
     business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    # Група в прайсі: «Стрижки», «Фарбування». Інтерфейс групував послуги
+    # за категорією, але поля на сервері не було - усі потрапляли в
+    # «Основні», що б власник не вписав.
+    category = Column(String(60), nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     duration_minutes = Column(Integer, default=60)
     is_group = Column(Boolean, default=False)

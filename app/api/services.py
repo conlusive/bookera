@@ -103,6 +103,7 @@ async def create_service(
 async def get_business_services(business_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Service).where(Service.business_id == business_id).options(selectinload(Service.addons))
+        .order_by(Service.order_index, Service.id)
     )
     return result.scalars().all()
 

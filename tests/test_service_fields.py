@@ -83,3 +83,23 @@ async def test_addon_from_other_business_rejected(client, auth_headers):
     foreign = (await client.post("/services", json={"business_id": obid, "name": "Чужа", "duration_minutes": 30, "price": 1}, headers=o)).json()["id"]
     r = await client.patch(f"/services/{main}", json={"addon_service_ids": [foreign]}, headers=h)
     assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_salon_page_shows_services_in_owner_order(client, auth_headers):
+    """
+    Порядок, налаштований власником, - той, що бачать клієнти. Раніше
+    список ішов без впорядкування, і налаштування ні на що не впливало.
+    """
+    h = auth_headers("sf-owner6")
+    r = await client.post("/crm/businesses", json={"name": "Order Salon", "city": "Львів"}, headers=h)
+    bid, slug = r.json()["id"], r.json()["slug"]
+    ids = [(await client.post("/services", json={"business_id": bid, "name": n, "duration_minutes": 30, "price": 100}, headers=h)).json()["id"]
+           for n in ("Альфа", "Бета", "Гамма")]
+    await client.put("/services/reorder", json={"business_id": bid, "ids": [ids[2], ids[0], ids[1]]}, headers=h)
+
+    cab = [s["id"] for s in (await client.get(f"/services/business/{bid}", headers=h)).json()]
+    assert cab == [ids[2], ids[0], ids[1]], "кабінет - у порядку власника"
+    pub = await client.get(f"/businesses/{slug}")
+    assert pub.status_code == 200, pub.text
+    assert [s["id"] for s in pub.json()["services"]] == [ids[2], ids[0], ids[1]], "сторінка салону - так само"

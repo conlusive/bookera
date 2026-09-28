@@ -34,7 +34,6 @@ interface ServicesTabProps {
 
 export default function ServicesTab({ business, services, setServices, Icons }: ServicesTabProps) {
   const supabase = useMemo(() => createClient(), []);
-  const sortMenuRef = useRef<HTMLDivElement>(null);
   const addonDropdownRef = useRef<HTMLDivElement>(null);
 
   // --- СТАНИ ---
@@ -42,16 +41,11 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  const [sortMode, setSortMode] = useState<'custom' | 'view'>('custom');
-  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const [activeSort, setActiveSort] = useState<{column: string, dir: 'asc'|'desc'} | null>(null);
 
   const [isAiOpen, setIsAiOpen] = useState(false);
-  const [isAdviceOpen, setIsAdviceOpen] = useState(false);
 
   const [selectedServices, setSelectedServices] = useState<number[]>([]);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Модалка послуги
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
@@ -84,9 +78,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (sortMenuRef.current && !sortMenuRef.current.contains(event.target as Node)) {
-        setIsSortDropdownOpen(false);
-      }
       if (addonDropdownRef.current && !addonDropdownRef.current.contains(event.target as Node)) {
         setIsAddonDropdownOpen(false);
       }
@@ -122,7 +113,9 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       );
     }
 
-    if (sortMode === 'view' && activeSort) {
+    // Клік по колонці сортує ЛИШЕ на екрані власника. Порядок для клієнтів -
+    // окремий режим («Порядок для клієнтів») і зберігається лише кнопкою.
+    if (activeSort) {
        const { column, dir } = activeSort;
        result.sort((a, b) => {
           // «duration» у заголовку таблиці - це duration_minutes на сервері
@@ -140,7 +133,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     }
 
     return result;
-  }, [services, debouncedSearch, sortMode, activeSort, selectedCategory]);
+  }, [services, debouncedSearch, activeSort, selectedCategory]);
 
   const groupedServices = useMemo(() => {
     const groups: { [key: string]: any[] } = {};
@@ -189,85 +182,77 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
     setServiceForm(prev => ({ ...prev, addon_services: prev.addon_services.filter(aId => aId !== id) }));
   };
 
-  const handleSortMenuClick = (mode: 'custom' | 'view') => {
-    setSortMode(mode);
-    setActiveSort(null);
-    setIsSortDropdownOpen(false);
-    showToast(mode === 'custom' ? 'Увімкнено Свій порядок' : 'Увімкнено Режим перегляду', 'info');
+  // Колонка: за зростанням -> за спаданням -> як у вас (скинути)
+  const applyHeaderSort = (column: 'name' | 'duration' | 'price') => {
+    setActiveSort(prev => {
+      if (prev?.column !== column) return { column, dir: 'asc' };
+      if (prev.dir === 'asc') return { column, dir: 'desc' };
+      return null;
+    });
   };
 
-  const applyHeaderSort = async (column: 'name' | 'duration' | 'price') => {
-    const newDir = (activeSort?.column === column && activeSort.dir === 'asc') ? 'desc' : 'asc';
-    setActiveSort({ column, dir: newDir });
+  const getSortIndicator = (columnName: string) =>
+    activeSort?.column === columnName ? (activeSort.dir === 'asc' ? '↑' : '↓') : '';
 
-    if (sortMode === 'custom') {
-      let newServices = [...services];
-      newServices.sort((a, b) => {
-        const key = column === 'duration' ? 'duration_minutes' : column;
-        let valA = a[key];
-        let valB = b[key];
-        if (column === 'name') {
-          return newDir === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
-        } else {
-          return newDir === 'asc' ? (Number(valA) || 0) - (Number(valB) || 0) : (Number(valB) || 0) - (Number(valA) || 0);
-        }
-      });
+  const SORT_LABEL: Record<string, string> = { name: 'назвою', duration: 'тривалістю', price: 'ціною' };
 
-      const updatedServices = newServices.map((srv, idx) => ({ ...srv, order_index: idx }));
-      setServices(updatedServices);
-      showToast(`Порядок збережено для клієнтів`, 'success');
+  // --- ПОРЯДОК ДЛЯ КЛІЄНТІВ ---
+  // Окремий режим: чернетка порядку, яка НЕ зберігається, доки власник не
+  // натисне «Зберегти порядок». Раніше клік по колонці в «Своєму порядку»
+  // одразу переставляв прайс для всіх клієнтів - легко було зробити це
+  // випадково, бо зовні режими не відрізнялись.
+  const [reorderMode, setReorderMode] = useState(false);
+  const [draftIds, setDraftIds] = useState<number[]>([]);
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-      if (business) {
-        try {
-          const token = await getAuthToken();
-          await api.reorderServices(token, Number(business.id), updatedServices.map((s: any) => Number(s.id)));
-        } catch (error) {
-          showToast("Помилка збереження порядку в БД", "error");
-        }
-      }
-    }
+  const startReorder = () => {
+    setDraftIds(orderedServices.map(s => Number(s.id)));
+    setReorderMode(true);
   };
+  const orderChanged = reorderMode && draftIds.join(',') !== orderedServices.map(s => Number(s.id)).join(',');
 
-  const getSortIndicator = (columnName: string) => {
-    if (activeSort?.column === columnName) {
-      return activeSort.dir === 'asc' ? '↑' : '↓';
-    }
-    return '';
+  const moveDraft = (id: number, delta: number) => {
+    setDraftIds(ids => {
+      const i = ids.indexOf(id), j = i + delta;
+      if (i < 0 || j < 0 || j >= ids.length) return ids;
+      const next = [...ids];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
   };
-
-  // --- DRAG & DROP ---
-  const handleDragStart = (e: React.DragEvent, id: number) => {
-    if (sortMode !== 'custom' || debouncedSearch || selectedCategory) return;
-    // Індекс - у впорядкованому списку, як і в handleDragEnd. Раніше брався
-    // з сирого масиву в іншому порядку, і послуга «стрибала» не туди.
-    setDraggedIndex(orderedServices.findIndex(s => s.id === id));
+  const dropDraft = (overId: number) => {
+    if (dragId === null || dragId === overId) return;
+    setDraftIds(ids => {
+      const next = ids.filter(x => x !== dragId);
+      next.splice(next.indexOf(overId), 0, dragId);
+      return next;
+    });
   };
-
-  const handleDragEnter = (e: React.DragEvent, id: number) => {
-    if (sortMode !== 'custom' || debouncedSearch || selectedCategory) return;
-    e.preventDefault();
-    setDragOverIndex(orderedServices.findIndex(s => s.id === id));
+  const presetDraft = (kind: 'name' | 'price' | 'duration') => {
+    const byId = new Map(services.map(s => [Number(s.id), s]));
+    setDraftIds(ids => [...ids].sort((a, b) => {
+      const x = byId.get(a), y = byId.get(b);
+      if (kind === 'name') return String(x?.name).localeCompare(String(y?.name), 'uk');
+      if (kind === 'price') return Number(x?.price || 0) - Number(y?.price || 0);
+      return Number(x?.duration_minutes || 0) - Number(y?.duration_minutes || 0);
+    }));
   };
-
-  const handleDragEnd = async () => {
-    if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
-      const newServices = [...orderedServices];
-      const [draggedItem] = newServices.splice(draggedIndex, 1);
-      newServices.splice(dragOverIndex, 0, draggedItem);
-
-      const updatedServices = newServices.map((srv, idx) => ({ ...srv, order_index: idx }));
-      setServices(updatedServices);
+  const saveReorder = async () => {
+    setIsSavingOrder(true);
+    try {
+      const token = await getAuthToken();
+      await api.reorderServices(token, Number(business.id), draftIds);
+      const pos = new Map(draftIds.map((id, i) => [id, i]));
+      setServices(prev => prev.map(s => ({ ...s, order_index: pos.get(Number(s.id)) ?? s.order_index })));
+      setReorderMode(false);
       setActiveSort(null);
-
-      if (business) {
-        // Одним запитом: раніше - окремий запит на кожну послугу.
-        getAuthToken()
-          .then(token => api.reorderServices(token, Number(business.id), updatedServices.map(s => Number(s.id))))
-          .catch(() => showToast("Не вдалося зберегти порядок", "error"));
-      }
+      showToast('Порядок збережено - так послуги бачать клієнти', 'success');
+    } catch {
+      showToast('Не вдалося зберегти порядок', 'error');
+    } finally {
+      setIsSavingOrder(false);
     }
-    setDraggedIndex(null);
-    setDragOverIndex(null);
   };
 
   // --- ДІЇ З ПОСЛУГАМИ ---
@@ -590,26 +575,13 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
          </div>
 
          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-            <div style={{ position: 'relative' }} ref={sortMenuRef}>
-               <div className="clean-select-trigger" onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}>
-                  <span style={{ color: '#94a3b8' }}>Сортування:</span>
-                  <span style={{ fontWeight: 600 }}>
-                    {sortMode === 'custom' ? 'Свій порядок' : 'Режим перегляду'}
-                  </span>
-                  <div style={{ color: '#cbd5e1', display: 'flex', transform: 'scale(0.8)' }}><Icons.ChevronDown /></div>
-               </div>
-
-               {isSortDropdownOpen && (
-                   <div className="clean-select-dropdown">
-                      <div onClick={() => handleSortMenuClick('custom')} className={`clean-select-option ${sortMode === 'custom' ? 'selected' : ''}`}>
-                         Свій порядок
-                      </div>
-                      <div onClick={() => handleSortMenuClick('view')} className={`clean-select-option ${sortMode === 'view' ? 'selected' : ''}`}>
-                         Режим перегляду
-                      </div>
-                   </div>
-                )}
-            </div>
+            {/* Порядок для клієнтів - окремий режим. Сортування колонок нижче - лише
+                для перегляду й нічого не змінює на сторінці салону. */}
+            <button type="button" className="clean-btn-ghost" onClick={startReorder} disabled={services.length < 2}
+              title="Порядок, у якому клієнти бачать послуги на сторінці салону">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4" /></svg>
+              Порядок для клієнтів
+            </button>
 
             <div style={{ width: '1px', height: '16px', background: '#e2e8f0', margin: '0 0.2rem' }}></div>
 
@@ -620,7 +592,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       </div>
 
       {/* ФІЛЬТР КАТЕГОРІЙ */}
-      {uniqueCategories.length > 0 && (
+      {!reorderMode && uniqueCategories.length > 0 && (
         <div className="hide-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '1rem 2rem', background: '#fff', borderBottom: '1px solid #f1f5f9' }}>
            <button
              className={`category-pill ${!selectedCategory ? 'active' : ''}`}
@@ -645,11 +617,61 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
         <div className="custom-scroll" style={{ overflowY: 'auto', borderRight: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center' }}>
             <div style={{ width: '100%', maxWidth: '1200px', padding: '0 1.25rem' }}>
+              {reorderMode ? (
+                <div className="ro">
+                  <div className="ro-banner">
+                    <div>
+                      <b>Порядок на сторінці салону</b>
+                      <span>Перетягніть послуги або скористайтесь стрілками. Клієнти побачать зміни лише після збереження.</span>
+                    </div>
+                    <div className="ro-actions">
+                      <button type="button" className="clean-btn-ghost" onClick={() => setReorderMode(false)} disabled={isSavingOrder}>Скасувати</button>
+                      <button type="button" className="clean-btn" onClick={() => void saveReorder()} disabled={!orderChanged || isSavingOrder}>
+                        {isSavingOrder ? 'Зберігаємо…' : 'Зберегти порядок'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="ro-presets">
+                    <span>Швидко впорядкувати:</span>
+                    <button type="button" onClick={() => presetDraft('name')}>За назвою</button>
+                    <button type="button" onClick={() => presetDraft('price')}>Дешевші спершу</button>
+                    <button type="button" onClick={() => presetDraft('duration')}>Коротші спершу</button>
+                  </div>
+                  <ol className="ro-list">
+                    {draftIds.map((id, i) => {
+                      const s = services.find(x => Number(x.id) === id);
+                      if (!s) return null;
+                      return (
+                        <li key={id} draggable className={dragId === id ? 'dragging' : ''}
+                          onDragStart={() => setDragId(id)} onDragOver={e => { e.preventDefault(); dropDraft(id); }} onDragEnd={() => setDragId(null)}>
+                          <span className="ro-grip" aria-hidden><GripDotsIcon /></span>
+                          <span className="ro-num">{i + 1}</span>
+                          <span className="ro-name">
+                            <b>{s.name}</b>
+                            <small>{s.category || 'Без категорії'} · {formatDuration(s.duration_minutes)}{s.is_active === false ? ' · прихована' : ''}</small>
+                          </span>
+                          <span className="ro-price">{Number(s.price).toLocaleString('uk-UA')} ₴</span>
+                          <span className="ro-arrows">
+                            <button type="button" aria-label="Вище" disabled={i === 0} onClick={() => moveDraft(id, -1)}>↑</button>
+                            <button type="button" aria-label="Нижче" disabled={i === draftIds.length - 1} onClick={() => moveDraft(id, 1)}>↓</button>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              ) : (
+              <>
+              {activeSort && (
+                <div className="svc-sortnote">
+                  <span>Відсортовано за {SORT_LABEL[activeSort.column]} - <b>лише для вас</b>. Клієнти бачать послуги у вашому порядку.</span>
+                  <button type="button" onClick={() => setActiveSort(null)}>Скинути</button>
+                </div>
+              )}
               {displayedServices.length > 0 ? (
                  <table className="service-table">
                     <thead>
                        <tr>
-                          <th style={{ width: '44px', paddingLeft: '1.25rem' }}></th>
 
                           <th className="sortable" style={{ width: 'auto', whiteSpace: 'nowrap' }} onClick={() => applyHeaderSort('name')}>
                             Назва послуги <span style={{ color: '#0f172a', display: 'inline-block', width: '12px', textAlign: 'center' }}>{getSortIndicator('name')}</span>
@@ -670,34 +692,20 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                           <React.Fragment key={category}>
                              {!selectedCategory && (
                                <tr className="category-header">
-                                  <td colSpan={6}>{category}</td>
+                                  <td colSpan={5}>{category}</td>
                                </tr>
                              )}
                              {groupedServices[category].map(service => {
-                                const originalIndex = services.findIndex(s => s.id === service.id);
-                                const isDragDisabled = sortMode !== 'custom' || debouncedSearch.length > 0 || selectedCategory !== null;
-                                const hasAddons = service.addon_services && service.addon_services.length > 0;
+                                // addon_service_ids - так поле зветься на сервері; раніше перевірялось
+                                // addon_services, і значок додаткових не показувався ніколи.
+                                const hasAddons = (service.addon_service_ids || []).length > 0;
 
                                 return (
                                    <tr
                                       key={service.id}
-                                      className={`service-row ${draggedIndex === originalIndex ? 'dragging' : ''} ${dragOverIndex === originalIndex && draggedIndex !== originalIndex ? 'drag-over' : ''}`}
-                                      draggable={!isDragDisabled}
-                                      onDragStart={(e) => handleDragStart(e, service.id)}
-                                      onDragEnter={(e) => handleDragEnter(e, service.id)}
-                                      onDragEnd={handleDragEnd}
-                                      onDragOver={(e) => e.preventDefault()}
+                                      className="service-row"
                                       onClick={() => openServiceModal(service)}
                                    >
-                                      <td style={{ width: '44px' }}>
-                                         <div
-                                           className={`drag-handle ${!isDragDisabled ? 'active' : 'disabled'}`}
-                                           title={isDragDisabled ? "Перетягування доступне лише у 'Своєму порядку' без фільтрів" : "Потягніть, щоб змінити порядок"}
-                                           style={{ cursor: !isDragDisabled ? 'grab' : 'not-allowed', display: 'inline-flex' }}
-                                         >
-                                            <GripDotsIcon />
-                                         </div>
-                                      </td>
                                       <td>
                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -754,6 +762,8 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                     <p style={{ fontSize: '0.85rem' }}>Змініть параметри пошуку або додайте нову послугу.</p>
                  </div>
               )}
+              </>
+              )}
             </div>
         </div>
 
@@ -795,21 +805,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
               )}
            </div>
 
-           <div style={{ background: '#fff', border: '1px dashed #cbd5e1', borderRadius: '12px', padding: '1rem', marginBottom: '0.8rem', cursor: 'pointer', transition: 'all 0.2s ease' }} onClick={() => setIsAdviceOpen(!isAdviceOpen)}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748b' }}>
-                 <span style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Порада</span>
-                 <span style={{ transform: isAdviceOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.2s', display: 'flex' }}>
-                   <Icons.ChevronDown width="16" height="16" />
-                 </span>
-              </div>
-              {isAdviceOpen && (
-                 <div style={{ marginTop: '0.8rem', animation: 'fadeIn 0.2s ease', borderTop: '1px dashed #e2e8f0', paddingTop: '0.8rem' }}>
-                    <p style={{ fontSize: '0.75rem', color: '#475569', lineHeight: '1.4', margin: 0 }}>
-                       В <b>"Своєму порядку"</b> клік по колонках зберігає обране сортування для клієнтів.<br/><br/> У <b>"Режимі перегляду"</b> клік по колонках лише візуально сортує список для вас.
-                    </p>
-                 </div>
-              )}
-           </div>
         </div>
       </div>
 
@@ -1010,6 +1005,30 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       </FormModal>
 
       <style jsx>{`
+        .svc-sortnote { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.65rem 0.9rem; margin-bottom: 0.75rem; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 0.85rem; color: #475569; }
+        .svc-sortnote b { color: #0f172a; }
+        .svc-sortnote button { border: none; background: none; font-family: inherit; font-size: 0.85rem; font-weight: 600; color: #0f172a; cursor: pointer; white-space: nowrap; }
+        .ro-banner { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 1.2rem; border-radius: 14px; background: #eef6ef; border: 1px solid #cfe3d1; flex-wrap: wrap; }
+        .ro-banner b { display: block; font-size: 0.975rem; color: #0f172a; }
+        .ro-banner span { display: block; font-size: 0.85rem; color: #3f5f45; margin-top: 2px; }
+        .ro-actions { display: flex; gap: 0.5rem; }
+        .ro-presets { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0.9rem 0 0.6rem; font-size: 0.8rem; color: #64748b; }
+        .ro-presets button { height: 30px; padding: 0 0.8rem; border-radius: 999px; border: 1px solid #e2e8f0; background: #fff; font-family: inherit; font-size: 0.8rem; color: #0f172a; cursor: pointer; }
+        .ro-presets button:hover { background: #f8fafc; }
+        .ro-list { list-style: none; margin: 0; padding: 0; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; background: #fff; }
+        .ro-list li { display: grid; grid-template-columns: 22px 28px 1fr auto auto; align-items: center; gap: 0.75rem; padding: 0.7rem 1rem; border-top: 1px solid #f1f5f9; cursor: grab; background: #fff; transition: background-color .15s; }
+        .ro-list li:first-child { border-top: none; }
+        .ro-list li:hover { background: #f8fafc; }
+        .ro-list li.dragging { opacity: .5; background: #eef6ef; }
+        .ro-grip { color: #94a3b8; display: flex; }
+        .ro-num { font-size: 0.8rem; font-weight: 700; color: #94a3b8; font-variant-numeric: tabular-nums; }
+        .ro-name b { display: block; font-size: 0.9rem; color: #0f172a; font-weight: 600; }
+        .ro-name small { display: block; font-size: 0.78rem; color: #64748b; margin-top: 1px; }
+        .ro-price { font-size: 0.9rem; font-weight: 600; color: #0f172a; font-variant-numeric: tabular-nums; }
+        .ro-arrows { display: flex; gap: 0.25rem; }
+        .ro-arrows button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.9rem; color: #0f172a; }
+        .ro-arrows button:hover:not(:disabled) { background: #f1f5f9; }
+        .ro-arrows button:disabled { color: #cbd5e1; cursor: default; }
         .svc-seg { display: flex; background: #f1f5f9; border-radius: 10px; padding: 3px; height: 42px; box-sizing: border-box; }
         .svc-seg button { flex: 1; border: none; background: transparent; border-radius: 8px; font-family: inherit; font-size: 0.875rem; color: #0f172a; cursor: pointer; }
         .svc-seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }

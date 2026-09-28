@@ -87,7 +87,11 @@ class Business(Base):
 
     owner = relationship("User", back_populates="owned_businesses", foreign_keys=[owner_id])
     staff = relationship("User", back_populates="business", foreign_keys="User.business_id")
-    services = relationship("Service", back_populates="business", cascade="all, delete-orphan")
+    # Порядок, який власник налаштовує в кабінеті («Порядок для клієнтів»).
+    # Раніше порядку не було зовсім: сторінка салону показувала послуги так,
+    # як їх віддасть база, і налаштування порядку ні на що не впливало.
+    services = relationship("Service", back_populates="business", cascade="all, delete-orphan",
+                            order_by="(Service.order_index, Service.id)")
     appointments = relationship("Appointment", back_populates="business", cascade="all, delete-orphan")
     hours = relationship("BusinessHours", back_populates="business", cascade="all, delete-orphan")
     clients = relationship("Client", back_populates="business", cascade="all, delete-orphan")

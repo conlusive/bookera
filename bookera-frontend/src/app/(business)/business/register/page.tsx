@@ -8,6 +8,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import { OWNER_ROLE } from '@/lib/roles';
 import { MAIN_CATEGORIES, MORE_CATEGORIES } from '@/lib/categories';
+import { formatDuration } from '@/lib/duration';
 
 export default function BusinessRegisterWizard() {
   const { showToast } = useToast();
@@ -602,7 +603,7 @@ export default function BusinessRegisterWizard() {
                   <div key={service.id} className="booksy-row" style={{ padding: '1rem 1.25rem' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1rem', marginBottom: '0.2rem' }}>{service.name}</div>
-                      <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>{service.duration} хв • <span style={{ color: '#0f172a', fontWeight: '700' }}>{service.price} ₴</span></div>
+                      <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>{formatDuration(service.duration)} • <span style={{ color: '#0f172a', fontWeight: '700' }}>{service.price} ₴</span></div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.3rem' }}>
                       <button onClick={() => openServiceModal(service)} className="action-icon">✎</button>

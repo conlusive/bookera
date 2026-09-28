@@ -543,7 +543,7 @@ const handleSaveShifts = async () => {
      if (duration < 0) duration += 24 * 60;
      if (isNaN(duration) || duration <= 0) {
         const srv = services.find((s: any) => String(s.id) === String(selectedBooking.service_id));
-        duration = srv ? srv.duration : 60;
+        duration = Number(srv?.duration_minutes) || 60; // поле сервера - duration_minutes
      }
      const totalEnd = h * 60 + m + duration;
      const newEndStr = `${String(Math.floor(totalEnd / 60) % 24).padStart(2, '0')}:${String(totalEnd % 60).padStart(2, '0')}:00`;
@@ -618,7 +618,7 @@ const handleSaveShifts = async () => {
     if (duration < 0) duration += 24 * 60;
     if (isNaN(duration) || duration <= 0) {
         const srv = services.find((s: any) => String(s.id) === String(app.service_id));
-        duration = srv ? srv.duration : 60;
+        duration = Number(srv?.duration_minutes) || 60; // поле сервера - duration_minutes
     }
 
     const totalNewStartMins = newStartH * 60 + newStartM;

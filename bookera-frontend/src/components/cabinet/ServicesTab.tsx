@@ -714,7 +714,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
                                               </span>
                                               {hasAddons && (
                                                 <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 7px', borderRadius: '5px', fontSize: '0.7rem', fontWeight: '700' }}>
-                                                  +{service.addon_services.length} Upsell
+                                                  +{(service.addon_service_ids || []).length} додатково
                                                 </span>
                                               )}
                                             </div>

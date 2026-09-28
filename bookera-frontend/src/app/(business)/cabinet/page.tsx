@@ -758,7 +758,7 @@ export default function BusinessCabinet() {
 
      if (isNaN(duration) || duration <= 0) {
         const srv = services.find(s => String(s.id) === String(selectedBooking.service_id));
-        duration = srv ? srv.duration : 60;
+        duration = Number(srv?.duration_minutes) || 60; // поле сервера - duration_minutes
      }
 
      const totalEnd = h * 60 + m + duration;

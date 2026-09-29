@@ -73,7 +73,7 @@ const STEP_TEXT: Record<StepId, { title: string; desc: string }> = {
   name: { title: 'Як називається ваш заклад?', desc: 'Цю назву клієнти бачитимуть у пошуку й на сторінці запису.' },
   category: { title: 'Чим ви займаєтесь?', desc: 'Оберіть основну сферу — за нею вас шукатимуть клієнти.' },
   type: { title: 'Як ви працюєте?', desc: 'Від цього залежать налаштування календаря й команди.' },
-  contacts: { title: 'Контакти закладу', desc: 'Саме закладу — не ваші особисті. Змінити можна будь-коли в налаштуваннях.' },
+  contacts: { title: 'Контакти закладу', desc: 'Саме закладу — не ваші особисті. Змінити можна будь-коли.' },
   workspace: { title: 'Де ви приймаєте клієнтів?', desc: 'Так клієнти знатимуть, куди йти або куди вас кликати.' },
   address: { title: 'Адреса закладу', desc: 'Вкажіть адресу й перевірте мітку на мапі.' },
   hours: { title: 'Коли ви працюєте?', desc: 'Клієнти зможуть записатись лише в ці години.' },
@@ -139,7 +139,8 @@ export default function BusinessRegisterPage() {
     const e: Record<string, string> = {};
     if (form.name.trim().length < 2) e.name = 'Щонайменше 2 символи';
     if (!isEmail(form.email)) e.email = form.email ? 'Перевірте адресу пошти' : 'Потрібна пошта закладу';
-    if (digits9(form.phone).length !== 9) e.phone = form.phone ? 'Не вистачає цифр' : 'Потрібен робочий номер';
+    // Телефон - необовʼязковий; але якщо почали вводити - повний номер
+    if (form.phone && digits9(form.phone).length !== 9) e.phone = 'Не вистачає цифр';
     if (form.city.trim().length < 2) e.city = 'Вкажіть місто';
     if (form.workspace === 'my_place' && form.street.trim().length < 3) e.street = 'Вкажіть вулицю й будинок';
     if (!form.hours.some(h => h.open)) e.hours = 'Оберіть хоча б один робочий день';
@@ -199,7 +200,7 @@ export default function BusinessRegisterPage() {
         city: form.city.trim(),
         address: form.workspace === 'my_place' ? [form.street.trim(), form.details.trim()].filter(Boolean).join(', ') : undefined,
         email: form.email.trim(),
-        phone: `+380${digits9(form.phone)}`,
+        phone: digits9(form.phone).length === 9 ? `+380${digits9(form.phone)}` : undefined,
         show_phone_publicly: form.showPhone,
         hours: form.hours.map((h, i) => ({ weekday: i, is_open: h.open, open_time: h.from, close_time: h.to })),
         ...(form.coords ? { latitude: form.coords.lat, longitude: form.coords.lng } : {}),
@@ -250,7 +251,14 @@ export default function BusinessRegisterPage() {
 
   return (
     <div className="rg" onKeyDown={onKey}>
-      <Link href="/business" className="rg-logo">Book<span>Era</span><em>Business</em></Link>
+      {/* Лого - точно як на бізнес-лендингу: «BookEra» одним словом, «Business» поруч.
+          Раніше контейнер був гнучким із проміжком, і «Book» та «Era» розʼїжджались. */}
+      <Link href="/business" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', marginBottom: '2rem' }}>
+        <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#111827', letterSpacing: '-0.04em' }}>
+          Book<span style={{ color: '#8fae92' }}>Era</span>
+        </div>
+        <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 700, marginLeft: '6px' }}>Business</span>
+      </Link>
 
       <div className="rg-card">
         <div className="rg-progress"><i style={{ width: `${Math.min(progress, 100)}%` }} /></div>
@@ -331,24 +339,24 @@ export default function BusinessRegisterPage() {
                       className={err('email') ? 'bad' : ''} onChange={e => set('email', e.target.value)} onBlur={() => setBlurred(b => ({ ...b, email: true }))} />
                     {err('email') ? <em>{err('email')}</em> : <small>Сюди приходитимуть нові записи, скасування й відгуки клієнтів.</small>}
                   </label>
-                  <label className="rg-field">
-                    <span>Робочий телефон закладу</span>
+                  {/* Телефон - окремим блоком, а не всередині <label>: разом із
+                      поясненням і перемикачем у мітці текст налазив на сусідні
+                      елементи. Необовʼязковий. */}
+                  <div className="rg-field">
+                    <span>Робочий телефон <i>необовʼязково</i></span>
                     <div className={`rg-phone ${err('phone') ? 'bad' : ''}`}>
                       <b>+380</b>
-                      <input inputMode="numeric" autoComplete="off" value={prettyPhone(digits9(form.phone))} placeholder="67 123 45 67"
+                      <input inputMode="numeric" autoComplete="off" aria-label="Робочий телефон закладу" value={prettyPhone(digits9(form.phone))} placeholder="67 123 45 67"
                         onChange={e => set('phone', digits9(e.target.value))} onBlur={() => setBlurred(b => ({ ...b, phone: true }))} />
                     </div>
-                    {err('phone') ? <em>{err('phone')}</em> : (
-                      <div className="rg-info">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 8h.01M11 12h1v4h1" /></svg>
-                        Номер <b>салону чи адміністратора</b>, а не ваш особистий — за ним клієнти дзвонитимуть із питаннями.
-                      </div>
-                    )}
-                  </label>
-                  <button type="button" className="rg-toggle" role="switch" aria-checked={form.showPhone} onClick={() => set('showPhone', !form.showPhone)}>
-                    <span className={`sw ${form.showPhone ? 'on' : ''}`}><i /></span>
-                    <span><b>Показувати номер на сторінці</b><small>{form.showPhone ? 'Клієнти бачать номер закладу' : 'Номер прихований від клієнтів'}</small></span>
-                  </button>
+                    {err('phone') ? <em>{err('phone')}</em> : <small>Номер салону чи адміністратора — не ваш особистий.</small>}
+                  </div>
+                  {digits9(form.phone).length === 9 && (
+                    <button type="button" className="rg-toggle" role="switch" aria-checked={form.showPhone} onClick={() => set('showPhone', !form.showPhone)}>
+                      <span className={`sw ${form.showPhone ? 'on' : ''}`}><i /></span>
+                      <span className="rg-toggle-text"><b>Показувати номер на сторінці</b><small>{form.showPhone ? 'Клієнти бачать номер закладу' : 'Номер прихований від клієнтів'}</small></span>
+                    </button>
+                  )}
                 </>
               )}
 
@@ -460,7 +468,7 @@ export default function BusinessRegisterPage() {
                   {[
                     { s: 'name' as StepId, t: 'Заклад', v: `${form.name} · ${categoryTitle(form.category)}` },
                     { s: 'type' as StepId, t: 'Формат', v: form.type === 'individual' ? 'Приватний майстер' : 'Салон / компанія' },
-                    { s: 'contacts' as StepId, t: 'Контакти', v: `${form.email} · +380 ${prettyPhone(digits9(form.phone))}` },
+                    { s: 'contacts' as StepId, t: 'Контакти', v: digits9(form.phone).length === 9 ? `${form.email} · +380 ${prettyPhone(digits9(form.phone))}` : form.email },
                     { s: 'address' as StepId, t: 'Адреса', v: form.workspace === 'client_place' ? `${form.city} · виїзд до клієнта` : [form.city, form.street, form.details].filter(Boolean).join(', ') },
                     { s: 'hours' as StepId, t: 'Графік', v: form.hours.map((h, i) => (h.open ? `${DAYS[i].slice(0, 2)} ${h.from}–${h.to}` : null)).filter(Boolean).join(', ') },
                     { s: 'services' as StepId, t: 'Послуги', v: `${form.services.length}: ${form.services.map(x => x.name).join(', ')}` },
@@ -534,11 +542,8 @@ export default function BusinessRegisterPage() {
       <style jsx>{`
         .rg { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2.5rem 1rem 4rem; box-sizing: border-box;
           background: radial-gradient(60% 40% at 50% 0%, #EEF3EE 0%, rgba(238,243,238,0) 70%), #F8FAFC; color: #0f172a;
-          /* Системний шрифт - як і було на цій сторінці */
-          font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
-        .rg :global(.rg-logo) { display: flex; align-items: baseline; gap: 0.4rem; margin-bottom: 2rem; text-decoration: none; font-size: 1.8rem; font-weight: 900; color: #111827; letter-spacing: -0.04em; }
-        .rg :global(.rg-logo span) { color: #8fae92; }
-        .rg :global(.rg-logo em) { font-style: normal; font-size: 0.9rem; font-weight: 700; color: #64748b; letter-spacing: 0; }
+          /* Шрифт - той самий, що на бізнес-лендингу */
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
 
         .rg-card { width: 100%; max-width: 520px; background: #fff; border-radius: 26px; border: 1px solid #e2e8f0; padding: 2.6rem 2.5rem 2.2rem; position: relative; overflow: hidden;
           box-shadow: 0 1px 2px rgba(15,23,42,.03), 0 24px 60px -30px rgba(15,23,42,.18); box-sizing: border-box; }
@@ -565,18 +570,16 @@ export default function BusinessRegisterPage() {
         .rg-field input:focus, .rg-modal input:focus { border-color: #0f172a; box-shadow: 0 0 0 4px rgba(15,23,42,.06); }
         .rg-field input::placeholder { color: #94a3b8; font-weight: 400; }
         .rg-field input.bad, .rg-phone.bad { border-color: #ef4444; }
-        .rg-field small { font-size: 0.82rem; color: #94a3b8; line-height: 1.45; }
+        .rg-field small { display: block; font-size: 0.82rem; color: #94a3b8; line-height: 1.45; }
         .rg-field em, .rg-err { font-style: normal; font-size: 0.82rem; color: #ef4444; font-weight: 500; }
-        .rg-info { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.83rem; color: #475569; background: #f1f5f9; border-radius: 12px; padding: 0.65rem 0.8rem; line-height: 1.45; }
-        .rg-info svg { flex-shrink: 0; margin-top: 2px; color: #64748b; }
-        .rg-info b { color: #0f172a; }
 
         .rg-phone { display: flex; align-items: center; height: 52px; border: 1px solid #cbd5e1; border-radius: 14px; background: #fff; overflow: hidden; transition: border-color .2s, box-shadow .2s; }
         .rg-phone:focus-within { border-color: #0f172a; box-shadow: 0 0 0 4px rgba(15,23,42,.06); }
         .rg-phone b { padding: 0 0.9rem; color: #64748b; font-weight: 700; }
-        .rg-phone input { border: none !important; box-shadow: none !important; height: 100% !important; padding: 0 1rem 0 0 !important; }
+        .rg-phone input { border: none !important; box-shadow: none !important; height: 100% !important; padding: 0 1rem 0 0 !important; width: auto !important; flex: 1; min-width: 0; }
 
         .rg-toggle { display: flex; align-items: center; gap: 0.85rem; width: 100%; padding: 0.9rem 1rem; border-radius: 14px; border: 1.5px solid #e2e8f0; background: #fff; font-family: inherit; text-align: left; cursor: pointer; }
+        .rg-toggle-text { flex: 1; min-width: 0; }
         .rg-toggle b { display: block; font-size: 0.93rem; color: #0f172a; }
         .rg-toggle small { display: block; font-size: 0.8rem; color: #64748b; margin-top: 1px; }
         .sw { width: 42px; height: 24px; border-radius: 12px; border: none; background: #e2e8f0; position: relative; flex-shrink: 0; padding: 0; cursor: pointer; transition: background-color .25s; display: inline-block; }
@@ -648,10 +651,10 @@ export default function BusinessRegisterPage() {
         .rg-outline:hover { border-color: #0f172a; background: #f8fafc; }
         .rg-owner { font-size: 0.87rem; color: #3F5F45; background: #EEF5EE; border-radius: 12px; padding: 0.75rem 0.95rem; margin-bottom: 0.9rem; line-height: 1.45; }
 
-        .rg-continue { width: 100%; height: 54px; margin-top: 1.6rem; border-radius: 15px; border: none; background: #0f172a; color: #fff; font-family: inherit; font-size: 1.02rem; font-weight: 700; cursor: pointer; transition: transform .15s, opacity .2s, background-color .2s; }
-        .rg-continue:hover:not(:disabled) { background: #1e293b; }
+        .rg-continue { width: 100%; height: 54px; margin-top: 1.6rem; border-radius: 15px; border: none; background: #111; color: #fff; font-family: inherit; font-size: 1.02rem; font-weight: 700; cursor: pointer; transition: transform .15s, opacity .2s, background-color .2s; }
+        .rg-continue:hover:not(:disabled) { background: #000; }
         .rg-continue:active:not(:disabled) { transform: scale(.985); }
-        .rg-continue:disabled { opacity: .35; cursor: default; }
+        .rg-continue:disabled { background: #e5e7eb; color: #9ca3af; cursor: default; }
         .rg-error { margin-top: 1rem; padding: 0.75rem 0.9rem; border-radius: 12px; background: #fef2f2; color: #b91c1c; font-size: 0.9rem; }
         .rg-warn { margin-top: 1rem; padding: 0.75rem 0.9rem; border-radius: 12px; background: #fffbeb; color: #92400e; font-size: 0.87rem; text-align: left; }
 
@@ -671,7 +674,7 @@ export default function BusinessRegisterPage() {
         .rg-modal .rg-continue { margin-top: 0.6rem; }
         .rg-durs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }
         .rg-durs button { height: 38px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; font-family: inherit; font-size: 0.82rem; font-weight: 600; color: #0f172a; cursor: pointer; white-space: nowrap; }
-        .rg-durs button.on { background: #0f172a; border-color: #0f172a; color: #fff; }
+        .rg-durs button.on { background: #111; border-color: #111; color: #fff; }
         .rg-seg { display: flex; background: #f1f5f9; border-radius: 12px; padding: 3px; }
         .rg-seg button { flex: 1; height: 40px; border: none; border-radius: 10px; background: transparent; font-family: inherit; font-size: 0.9rem; font-weight: 600; color: #475569; cursor: pointer; }
         .rg-seg button.on { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,.1); }

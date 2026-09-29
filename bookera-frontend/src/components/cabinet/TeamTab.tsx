@@ -357,7 +357,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
   const handleInviteStaff = async () => {
     const targetEmail = inviteForm.email.trim().toLowerCase();
-    if (!targetEmail) return showToast('Введіть електронну пошту співробітника', 'error');
+    if (!targetEmail) return showToast('Введіть електронну пошту співробітника', 'error', { field: 'invite-email' });
     if (!business?.id) return showToast('Заклад не обрано', 'error');
 
     setIsInvitingStaff(true);
@@ -550,7 +550,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   };
 
   const handleTransferOwnership = async () => {
-    if (!newOwnerId) return showToast('Оберіть співробітника зі списку', 'error');
+    if (!newOwnerId) return showToast('Оберіть співробітника зі списку', 'error', { field: 'new-owner' });
     if (!transferConfirmed) return showToast('Підтвердіть передачу прав галочкою', 'error');
 
     setIsTransferring(true);
@@ -1895,7 +1895,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Електронна пошта *</label>
-                <input
+                <input data-field="invite-email"
                   type="email"
                   value={inviteForm.email}
                   onChange={e => setInviteForm({...inviteForm, email: e.target.value})}

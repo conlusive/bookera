@@ -856,12 +856,12 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <div style={{ flex: '1 1 130px' }}>
                     <label className="setting-label" style={{ fontSize: '0.8rem' }}>Від</label>
-                    <input type="date" className="setting-input" value={newPeriod.start}
+                    <input data-field="period-start" type="date" className="setting-input" value={newPeriod.start}
                       onChange={e => setNewPeriod({ ...newPeriod, start: e.target.value })} />
                   </div>
                   <div style={{ flex: '1 1 130px' }}>
                     <label className="setting-label" style={{ fontSize: '0.8rem' }}>До</label>
-                    <input type="date" className="setting-input" value={newPeriod.end}
+                    <input data-field="period-end" type="date" className="setting-input" value={newPeriod.end}
                       onChange={e => setNewPeriod({ ...newPeriod, end: e.target.value })} />
                   </div>
                   <div style={{ flex: '2 1 180px' }}>
@@ -872,7 +872,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                   </div>
                   <button
                     onClick={() => {
-                      if (!newPeriod.start || !newPeriod.end) return showToast('Вкажіть обидві дати', 'error');
+                      if (!newPeriod.start || !newPeriod.end) return showToast('Вкажіть обидві дати', 'error', { field: !newPeriod.start ? 'period-start' : 'period-end' });
                       if (newPeriod.end < newPeriod.start) return showToast('Дата «до» раніша за «від»', 'error');
                       setBookingSettings({
                         ...bookingSettings,

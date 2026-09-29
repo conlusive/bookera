@@ -214,13 +214,13 @@ export default function BusinessCabinet() {
 
   const handleSaveNewClient = async () => {
     if (!business) return showToast('Заклад не обрано', 'error');
-    if (!newClientForm.name.trim()) return showToast("Введіть ім'я клієнта", 'error');
+    if (!newClientForm.name.trim()) return showToast("Введіть ім'я клієнта", 'error', { field: 'client-name' });
 
     let finalPhone = '';
     if (newClientForm.phone && newClientForm.phone !== '+380') {
       const phoneStripped = newClientForm.phone.replace(/\D/g, '');
       if (phoneStripped.length !== 12) {
-        return showToast('Некоректний номер: потрібно 9 цифр після +380', 'error');
+        return showToast('Некоректний номер: потрібно 9 цифр після +380', 'error', { field: 'client-phone' });
       }
       finalPhone = '+' + phoneStripped;
     }
@@ -644,7 +644,7 @@ export default function BusinessCabinet() {
     if (!isBlockMode && apptForm.client_phone && apptForm.client_phone !== '+380') {
       const phoneStripped = apptForm.client_phone.replace(/\D/g, '');
       if (phoneStripped.length !== 12) {
-        return showToast('Некоректний номер: потрібно 9 цифр після +380', 'error');
+        return showToast('Некоректний номер: потрібно 9 цифр після +380', 'error', { field: 'appt-phone' });
       }
       finalPhone = '+' + phoneStripped;
     }
@@ -653,7 +653,7 @@ export default function BusinessCabinet() {
       const token = await getAuthToken();
 
       const selectedService = services.find(s => String(s.id) === String(apptForm.service_id));
-      if (!isBlockMode && !selectedService) return showToast('Оберіть послугу', 'error');
+      if (!isBlockMode && !selectedService) return showToast('Оберіть послугу', 'error', { field: 'appt-service' });
 
       const [hours, minutes] = apptForm.time.split(':').map(Number);
       const startDateTime = new Date(`${apptForm.date}T00:00:00`);
@@ -1651,7 +1651,7 @@ export default function BusinessCabinet() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div>
                 <label className="modal-label">Ім'я та прізвище *</label>
-                <input
+                <input data-field="client-name"
                   type="text"
                   value={newClientForm.name}
                   onChange={e => setNewClientForm({...newClientForm, name: e.target.value})}
@@ -1662,7 +1662,7 @@ export default function BusinessCabinet() {
               </div>
               <div>
                 <label className="modal-label">Номер телефону</label>
-                <input
+                <input data-field="client-phone"
                   type="text"
                   value={newClientForm.phone}
                   onChange={e => setNewClientForm({...newClientForm, phone: e.target.value})}
@@ -1918,7 +1918,7 @@ export default function BusinessCabinet() {
                   </div>
                   <div>
                     <label className="modal-label">Номер телефону</label>
-                    <input
+                    <input data-field="appt-phone"
                       type="text"
                       value={apptForm.client_phone}
                       onChange={e => {
@@ -1933,11 +1933,11 @@ export default function BusinessCabinet() {
                   <div>
                     <label className="modal-label">Послуга</label>
                     <div className="modal-select-wrapper">
-                      <select
+                      <select data-field="appt-service"
                         value={apptForm.service_id}
                         onChange={e => {
                           const selectedService = services.find(s => String(s.id) === e.target.value);
-                          setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? selectedService.duration : apptForm.duration });
+                          setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? Number(selectedService.duration_minutes) || apptForm.duration : apptForm.duration });
                         }}
                       >
                         <option value="" disabled>Оберіть послугу...</option>

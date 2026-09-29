@@ -410,20 +410,20 @@ const handleSaveShifts = async () => {
     if (!isBlockMode && apptForm.client_phone && apptForm.client_phone !== '+380') {
       const phoneStripped = apptForm.client_phone.replace(/\D/g, '');
       if (phoneStripped.length !== 12) {
-        showToast("Некоректний номер! Введіть 9 цифр після +380", "error");
+        showToast("Некоректний номер! Введіть 9 цифр після +380", 'error', { field: 'appt-phone' });
         return;
       }
       finalPhone = '+' + phoneStripped;
     }
 
     if (!isBlockMode && !apptForm.client_name.trim()) {
-      showToast("Введіть ім'я клієнта", "error");
+      showToast("Введіть ім'я клієнта", 'error', { field: 'appt-name' });
       return;
     }
 
     const selectedService = services.find((s: any) => String(s.id) === String(apptForm.service_id));
     if (!isBlockMode && !selectedService) {
-      showToast("Оберіть послугу зі списку", "error");
+      showToast("Оберіть послугу зі списку", 'error', { field: 'appt-service' });
       return;
     }
 
@@ -443,7 +443,7 @@ const handleSaveShifts = async () => {
         business_id: business.id,
         service_id: isBlockMode || !apptForm.service_id ? undefined : Number(apptForm.service_id),
         start_time: startDateTime.toISOString(),
-        duration_minutes: isBlockMode ? (Number(apptForm.duration) || 60) : (selectedService?.duration || 60),
+        duration_minutes: isBlockMode ? (Number(apptForm.duration) || 60) : (Number(selectedService?.duration_minutes) || 60),
         master_id: apptForm.staff_id ? String(apptForm.staff_id) : undefined,
         client_name: isBlockMode ? blockTitle : apptForm.client_name.trim(),
         client_phone: isBlockMode || !finalPhone ? undefined : finalPhone,
@@ -455,7 +455,7 @@ const handleSaveShifts = async () => {
       if (!isBlockMode && refreshClients) refreshClients();
 
       const pad = (n: number) => String(n).padStart(2, '0');
-      const durationVal = isBlockMode ? (Number(apptForm.duration) || 60) : (selectedService?.duration || 60);
+      const durationVal = isBlockMode ? (Number(apptForm.duration) || 60) : (Number(selectedService?.duration_minutes) || 60);
       const totalEndMinutes = hours * 60 + minutes + durationVal;
       const endH = Math.floor(totalEndMinutes / 60) % 24;
       const endM = totalEndMinutes % 60;
@@ -1987,11 +1987,11 @@ const handleSaveShifts = async () => {
                 <>
                   <div>
                     <label className="modal-label">Ім'я клієнта</label>
-                    <input type="text" value={apptForm.client_name} onChange={e => setApptForm({...apptForm, client_name: e.target.value})} className="modal-input" placeholder="Наприклад: Іван Іванов" />
+                    <input data-field="appt-name" type="text" value={apptForm.client_name} onChange={e => setApptForm({...apptForm, client_name: e.target.value})} className="modal-input" placeholder="Наприклад: Іван Іванов" />
                   </div>
                   <div>
                     <label className="modal-label">Номер телефону</label>
-                    <input
+                    <input data-field="appt-phone"
                       type="text"
                       value={apptForm.client_phone}
                       onChange={e => {
@@ -2006,12 +2006,12 @@ const handleSaveShifts = async () => {
                   <div>
                     <label className="modal-label">Послуга</label>
                     <div className="modal-select-wrapper">
-                      <select
+                      <select data-field="appt-service"
                         value={apptForm.service_id}
                         onChange={e => {
                           const selectedService = services.find((s:any) => String(s.id) === e.target.value);
                           setApptAddonIds([]);
-                          setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? selectedService.duration : apptForm.duration });
+                          setApptForm({ ...apptForm, service_id: e.target.value, duration: selectedService ? Number(selectedService.duration_minutes) || apptForm.duration : apptForm.duration });
                         }}
                       >
                         <option value="" disabled>Оберіть послугу...</option>

@@ -427,3 +427,60 @@
     animation: none !important;
   }
 }
+
+/* ------------------------------------------------------------------
+   Відгук на дії - на місці, без спливаючих сповіщень (lib/feedback.ts)
+   !important - бо багато полів мають вбудовані стилі (style={{...}}).
+   ------------------------------------------------------------------ */
+.bk-invalid, .bk-invalid-wrap {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+.bk-invalid-wrap .bk-invalid { box-shadow: none !important; border-color: transparent !important; }
+.bk-field-error {
+  color: #dc2626;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 0.35rem;
+  text-align: left;
+  animation: bk-in 0.2s ease;
+}
+.bk-action-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 0.6rem;
+  text-align: left;
+  animation: bk-in 0.2s ease;
+}
+.bk-copied {
+  position: absolute;
+  z-index: 3000;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: bk-pop 1.4s ease forwards;
+}
+.bk-shake { animation: bk-shake 0.35s ease; }
+@keyframes bk-in { from { opacity: 0; transform: translateY(-3px); } }
+@keyframes bk-shake {
+  20% { transform: translateX(-4px); } 40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); } 80% { transform: translateX(2px); }
+}
+@keyframes bk-pop {
+  0% { opacity: 0; transform: translate(-50%, 4px); }
+  15%, 75% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); }
+}

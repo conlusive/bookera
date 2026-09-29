@@ -211,7 +211,7 @@ export default function MarketingTab({
   };
 
   const handleSavePromo = () => {
-    if (!newPromo.code || !newPromo.discount) return showToast('Заповніть код і відсоток знижки', 'error');
+    if (!newPromo.code || !newPromo.discount) return showToast('Заповніть код і відсоток знижки', 'error', { field: !newPromo.code ? 'promo-code' : 'promo-discount' });
     const formattedDiscount = newPromo.discount.includes('%') ? newPromo.discount : `${newPromo.discount}%`;
     const cleanCode = newPromo.code.toUpperCase().replace(/\s+/g, '');
     const maxUsesVal = newPromo.maxUses ? parseInt(newPromo.maxUses) : null;
@@ -242,7 +242,7 @@ export default function MarketingTab({
 
   const handleSendMarketing = async () => {
     const text = (marketingForm.message || '').trim();
-    if (!text) return showToast('Введіть текст перед відправкою', 'error');
+    if (!text) return showToast('Введіть текст перед відправкою', 'error', { field: 'mkt-message' });
     if (text.length < 10) return showToast('Текст закороткий — напишіть хоча б кілька слів', 'error');
     if (!business?.id) return showToast('Заклад не обрано', 'error');
     if (clientsList?.length === 0) return showToast('У вас ще немає клієнтів', 'error');
@@ -931,7 +931,7 @@ export default function MarketingTab({
                       <SvgSparkles size={16} /> {isGenerating ? 'AI працює...' : 'Згенерувати з AI'}
                     </button>
                   </div>
-                  <textarea className="form-input" value={marketingForm.message} onChange={e => setMarketingForm({...marketingForm, message: e.target.value})} style={{ minHeight: '140px', resize: 'vertical', fontSize: '1rem', lineHeight: '1.5' }} placeholder="Напишіть текст розсилки..." />
+                  <textarea data-field="mkt-message" className="form-input" value={marketingForm.message} onChange={e => setMarketingForm({...marketingForm, message: e.target.value})} style={{ minHeight: '140px', resize: 'vertical', fontSize: '1rem', lineHeight: '1.5' }} placeholder="Напишіть текст розсилки..." />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
                   <button onClick={handleSendMarketing} disabled={isSendingPromo || clientsList?.length === 0} className="primary-btn" style={{ padding: '0.8rem 1.5rem', fontSize: '1rem' }}>
@@ -957,11 +957,11 @@ export default function MarketingTab({
               </div>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' }}>Унікальний код</label>
-                <input type="text" className="form-input" style={{ textTransform: 'uppercase', letterSpacing: '1px' }} value={newPromo.code} onChange={e => setNewPromo({...newPromo, code: e.target.value.toUpperCase().replace(/\s+/g, '')})} placeholder="Напр. SUMMER20" />
+                <input data-field="promo-code" type="text" className="form-input" style={{ textTransform: 'uppercase', letterSpacing: '1px' }} value={newPromo.code} onChange={e => setNewPromo({...newPromo, code: e.target.value.toUpperCase().replace(/\s+/g, '')})} placeholder="Напр. SUMMER20" />
               </div>
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' }}>Знижка (%)</label>
-                <input type="number" className="form-input" value={newPromo.discount} onChange={e => setNewPromo({...newPromo, discount: e.target.value})} placeholder="15" />
+                <input data-field="promo-discount" type="number" className="form-input" value={newPromo.discount} onChange={e => setNewPromo({...newPromo, discount: e.target.value})} placeholder="15" />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                 <div>

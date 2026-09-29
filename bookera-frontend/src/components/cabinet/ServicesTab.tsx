@@ -7,6 +7,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import FormModal, { Field, FormDisclosure, FormSection } from '@/components/ui/FormModal';
 import DurationPicker from '@/components/ui/DurationPicker';
 import { formatDuration } from '@/lib/duration';
+import { notify } from '@/lib/feedback';
 
 // Локальні іконки
 const CopyIcon = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>);
@@ -65,11 +66,8 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
   const [isAddonDropdownOpen, setIsAddonDropdownOpen] = useState(false);
 
   // Тости
-  const [toast, setToast] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'success' });
-  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ show: true, msg, type });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
-  };
+  // Відгук на місці замість сповіщень (lib/feedback.ts)
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success', opts?: { field?: string }) => notify(msg, type, opts);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(serviceSearchQuery), 300);
@@ -1035,12 +1033,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       `}</style>
 
       {/* ТОСТИ */}
-      {toast.show && (
-        <div className="toast-animate" style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: toast.type === 'error' ? '#ef4444' : (toast.type === 'info' ? '#6F9273' : '#0f172a'), color: '#fff', padding: '0.8rem 1.2rem', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.6rem', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', zIndex: 9999, fontWeight: '600', fontSize: '0.85rem' }}>
-           {toast.type === 'error' ? <Icons.AlertCircle /> : <Icons.CheckCircle />}
-           {toast.msg}
-        </div>
-      )}
 
     </div>
   );

@@ -24,6 +24,7 @@ import BusinessShowcase from '@/components/home/BusinessShowcase';
 import SmartImage from '@/components/ui/SmartImage';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import { resolveDisplayName } from '@/lib/displayName';
+import { actionError } from '@/lib/feedback';
 
 
 // Категорії - з єдиного списку (lib/categories). Раніше тут був власний,
@@ -760,7 +761,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         });
 
         if (error) {
-          alert(`Помилка входу: ${error.message}`);
+          actionError(`Не вдалося увійти: ${error.message}`);
           return;
         }
 
@@ -800,7 +801,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         });
 
         if (error) {
-          alert(`Помилка реєстрації: ${error.message}`);
+          actionError(`Не вдалося зареєструватись: ${error.message}`);
           return;
         }
 
@@ -817,7 +818,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         setIsAuthModalOpen(false);
       }
     } catch {
-      alert("Відбулася помилка при з'єднанні з сервером.");
+      actionError("Немає зʼєднання із сервером. Спробуйте ще раз.");
     }
   };
 
@@ -1833,7 +1834,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
               <button type="submit" style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: '#fff', borderRadius: '12px', fontWeight: '700', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', marginTop: '0.5rem', fontSize: '1rem', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#0f172a'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>{isLoginView ? 'Продовжити' : 'Зареєструватись'}</button>
             </form>
             <div style={{ display: 'flex', alignItems: 'center', margin: '1rem 0', color: '#94a3b8', fontSize: '0.85rem' }}><div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div><span style={{ padding: '0 1rem' }}>АБО</span><div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }}></div></div>
-            <button className="social-btn" onClick={() => alert('Ця функція з\'явиться пізніше')}>Google</button>
+            <button className="social-btn" onClick={() => actionError('Вхід через Google зʼявиться згодом - поки що увійдіть через пошту')}>Google</button>
             <p style={{ textAlign: 'center', fontSize: '0.9rem', color: '#64748b', marginTop: '1.5rem' }}>{isLoginView ? (<>Немає акаунту? <span onClick={() => setIsLoginView(false)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Створити</span></>) : (<>Вже маєте акаунт? <span onClick={() => setIsLoginView(true)} style={{ color: '#111827', fontWeight: '700', cursor: 'pointer' }}>Увійти</span></>)}</p>
           </div>
         </div>

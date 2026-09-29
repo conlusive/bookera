@@ -536,7 +536,7 @@ function ProfileContent() {
     const formattedEmail = newEmail.trim().toLowerCase();
 
     if (!formattedEmail || !formattedEmail.includes('@')) {
-      showToast('Введіть коректну адресу Email', 'error');
+      showToast('Введіть коректну адресу Email', 'error', { field: 'new-email' });
       return;
     }
     if (formattedEmail === email.toLowerCase()) {
@@ -560,7 +560,7 @@ function ProfileContent() {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      showToast('Пароль повинен містити щонайменше 6 символів', 'error');
+      showToast('Пароль повинен містити щонайменше 6 символів', 'error', { field: 'new-password' });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -585,7 +585,7 @@ function ProfileContent() {
   // Повне видалення акаунта через RPC
   const handleDeleteAccount = async () => {
     if (deleteConfirmInput !== 'ВИДАЛИТИ') {
-      showToast('Введіть слово ВИДАЛИТИ для підтвердження', 'error');
+      showToast('Введіть слово ВИДАЛИТИ для підтвердження', 'error', { field: 'delete-confirm' });
       return;
     }
 
@@ -1759,7 +1759,7 @@ function ProfileContent() {
                         <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#374151', marginBottom: '0.4rem' }}>
                           Нова адреса Email
                         </label>
-                        <input
+                        <input data-field="new-email"
                           type="email"
                           value={newEmail}
                           onChange={e => setNewEmail(e.target.value)}
@@ -1808,7 +1808,7 @@ function ProfileContent() {
                           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#374151', marginBottom: '0.4rem' }}>
                             Новий пароль
                           </label>
-                          <input
+                          <input data-field="new-password"
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
@@ -2053,7 +2053,7 @@ function ProfileContent() {
             </p>
 
             <div style={{ marginBottom: '1.25rem' }}>
-              <input
+              <input data-field="delete-confirm"
                 type="text"
                 value={deleteConfirmInput}
                 onChange={e => setDeleteConfirmInput(e.target.value)}

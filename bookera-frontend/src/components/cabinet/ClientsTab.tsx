@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
 import HelpTip from '@/components/ui/HelpTip';
+import { notify } from '@/lib/feedback';
 
 export default function ClientsTab({ business, clientsList, setClientsList, fetchClientsFromDB, onBookAgain }: any) {
   const supabase = createClient();
@@ -52,13 +53,10 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- КАСТОМНИЙ UI ---
-  const [toast, setToast] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'success' });
   const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean, title: string, text: string, onConfirm: () => void } | null>(null);
 
-  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ show: true, msg, type });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3500);
-  };
+  // Відгук на місці замість сповіщень (lib/feedback.ts)
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success', opts?: { field?: string }) => notify(msg, type, opts);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && clientsList && clientsList.length > 0 && !viewingClient) {
@@ -128,12 +126,12 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   useEffect(() => { setClientCurrentPage(1); }, [debouncedSearch, sortConfig, activeSegment]);
 
   const handleSaveNewClient = async () => {
-    if (!newClientForm.name.trim()) return showToast("Введіть ім'я клієнта!", 'error');
+    if (!newClientForm.name.trim()) return showToast("Введіть ім'я клієнта!", 'error', { field: 'client-name' });
     let finalPhone = '';
 
     if (newClientForm.phone && newClientForm.phone !== '+380') {
       const phoneStripped = newClientForm.phone.replace(/\D/g, '');
-      if (phoneStripped.length !== 12) return showToast("Некоректний номер телефону!", 'error');
+      if (phoneStripped.length !== 12) return showToast("Некоректний номер телефону!", 'error', { field: 'client-phone' });
       finalPhone = '+' + phoneStripped;
     }
 
@@ -283,7 +281,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     const newStatus = !viewingClient.is_blacklisted;
     setViewingClient({ ...viewingClient, is_blacklisted: newStatus });
     setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, is_blacklisted: newStatus } : c));
-    showToast(newStatus ? "Додано до чорного списку" : "Видалено з чорного списку", newStatus ? 'error' : 'success');
+    showToast(newStatus ? "Додано до чорного списку" : "Видалено з чорного списку", 'success');
     try {
       await api.updateClient(await getAuthToken(), viewingClient.id, { is_blacklisted: newStatus });
     } catch (error: any) { showToast(error?.message || "Помилка сервера", 'error'); }
@@ -291,7 +289,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
   const handleUpdateBalance = async () => {
      const amount = parseFloat(balanceAmount);
-     if (isNaN(amount) || amount <= 0) return showToast("Введіть коректну суму", 'error');
+     if (isNaN(amount) || amount <= 0) return showToast("Введіть коректну суму", 'error', { field: 'balance-amount' });
 
      const currentBalance = viewingClient.balance || 0;
      const newBalance = balanceOperation === 'add' ? currentBalance + amount : currentBalance - amount;
@@ -871,7 +869,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
               <div style={{ marginBottom: '1.5rem' }}>
                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.4rem' }}>Сума (₴)</label>
-                 <input type="number" value={balanceAmount} onChange={e => setBalanceAmount(e.target.value)} className="light-input" placeholder="Наприклад: 500" style={{ fontSize: '1.1rem', padding: '0.8rem 1rem' }} autoFocus />
+                 <input data-field="balance-amount" type="number" value={balanceAmount} onChange={e => setBalanceAmount(e.target.value)} className="light-input" placeholder="Наприклад: 500" style={{ fontSize: '1.1rem', padding: '0.8rem 1rem' }} autoFocus />
               </div>
 
               <button onClick={handleUpdateBalance} className="light-btn" style={{ width: '100%', padding: '0.8rem', fontSize: '0.95rem' }}>Підтвердити</button>
@@ -923,11 +921,11 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                  <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Ім'я та прізвище *</label>
-                    <input type="text" value={newClientForm.name} onChange={e => setNewClientForm({...newClientForm, name: e.target.value})} className="light-input" placeholder="Олена Коваленко" autoFocus />
+                    <input data-field="client-name" type="text" value={newClientForm.name} onChange={e => setNewClientForm({...newClientForm, name: e.target.value})} className="light-input" placeholder="Олена Коваленко" autoFocus />
                  </div>
                  <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Телефон</label>
-                    <input type="text" value={newClientForm.phone} onChange={e => setNewClientForm({...newClientForm, phone: e.target.value})} className="light-input" placeholder="+380..." />
+                    <input data-field="client-phone" type="text" value={newClientForm.phone} onChange={e => setNewClientForm({...newClientForm, phone: e.target.value})} className="light-input" placeholder="+380..." />
                  </div>
                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
                     <div>
@@ -949,12 +947,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         </div>
       )}
 
-      {toast.show && (
-        <div className="toast-animate" style={{ position: 'fixed', bottom: '2rem', right: '2rem', background: toast.type === 'error' ? '#ef4444' : '#0f172a', color: '#fff', padding: '0.7rem 1.2rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '0.6rem', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 9999, fontWeight: '600', fontSize: '0.85rem' }}>
-           {toast.type === 'error' ? <Icons.AlertCircle /> : <Icons.CheckCircle />}
-           {toast.msg}
-        </div>
-      )}
 
       {confirmDialog && (
          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.3)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }} onClick={() => setConfirmDialog(null)}>

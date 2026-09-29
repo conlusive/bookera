@@ -289,7 +289,7 @@ export default function InventoryTab({ business, team }: any) {
   });
 
   const handleSaveExpense = async () => {
-    if (!expForm.amount || Number(expForm.amount) <= 0) return showToast('Введіть коректну суму більше нуля', 'error');
+    if (!expForm.amount || Number(expForm.amount) <= 0) return showToast('Введіть коректну суму більше нуля', 'error', { field: 'exp-amount' });
     setIsSaving(true);
     try {
       const token = await getAuthToken();
@@ -343,7 +343,7 @@ export default function InventoryTab({ business, team }: any) {
   };
 
   const handleSaveInventory = async () => {
-    if (!invForm.name.trim()) return showToast('Введіть назву товару', 'error');
+    if (!invForm.name.trim()) return showToast('Введіть назву товару', 'error', { field: 'inv-name' });
     setIsSaving(true);
     try {
       const token = await getAuthToken();
@@ -1090,7 +1090,7 @@ export default function InventoryTab({ business, team }: any) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label className="modal-label" style={{ fontWeight: '600' }}>Сума (₴) *</label>
-                <input type="number" autoFocus value={expForm.amount} onChange={e=>setExpForm({...expForm, amount: e.target.value})} className="modal-input" placeholder="Наприклад: 1500" />
+                <input data-field="exp-amount" type="number" autoFocus value={expForm.amount} onChange={e=>setExpForm({...expForm, amount: e.target.value})} className="modal-input" placeholder="Наприклад: 1500" />
               </div>
               <div>
                 <label className="modal-label" style={{ fontWeight: '600' }}>Категорія *</label>
@@ -1194,7 +1194,7 @@ export default function InventoryTab({ business, team }: any) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label className="modal-label" style={{ fontWeight: '600' }}>Назва</label>
-                <input type="text" autoFocus value={invForm.name} onChange={e=>setInvForm({...invForm, name: e.target.value})} className="modal-input" placeholder="Окисник 6% 1000мл" />
+                <input data-field="inv-name" type="text" autoFocus value={invForm.name} onChange={e=>setInvForm({...invForm, name: e.target.value})} className="modal-input" placeholder="Окисник 6% 1000мл" />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>

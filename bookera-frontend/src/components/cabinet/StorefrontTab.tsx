@@ -9,7 +9,6 @@ import { useToast } from '@/context/ToastContext';
 import { ALL_AMENITIES } from '@/lib/amenities';
 import SmartImage from '@/components/ui/SmartImage';
 import { formatDuration } from '@/lib/duration';
-import HelpTip from '@/components/ui/HelpTip';
 
 interface StorefrontTabProps {
   onNavigate?: (tab: string, view?: string) => void;
@@ -669,7 +668,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
             <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '440px', borderRadius: '20px', padding: '1.75rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 20px 45px rgba(0,0,0,0.18)', animation: 'slideInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.85rem' }}>
                 <div>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Порядок майстрів <HelpTip>У такому порядку майстри показуються на сторінці закладу й під час вибору, до кого записатись.</HelpTip></h3>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Порядок майстрів</h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '2px 0 0 0' }}>Налаштуйте черговість відображення на сторінці</p>
                 </div>
                 <button onClick={() => setIsTeamOrderModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -872,7 +871,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
               {/* Відображення блоків на сторінці */}
               <div>
-                <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '12px' }}>Відображення блоків <HelpTip>Які розділи показувати на сторінці закладу: команда, відгуки, фото, зручності.</HelpTip></h3>
+                <h3 style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: '#64748b', marginBottom: '12px' }}>Відображення блоків</h3>
                 <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '6px 18px', border: '1px solid #e2e8f0' }}>
 
                   {/* Тогл Команда */}

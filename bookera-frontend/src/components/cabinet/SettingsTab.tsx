@@ -832,7 +832,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
             {/* Закриті періоди */}
             <div className="clean-panel">
-              <h3 className="panel-title">Закриті періоди <HelpTip>Дні, коли заклад не працює: відпустка, ремонт, свята. Клієнти не зможуть записатись на ці дати, навіть якщо за графіком це робочий день.</HelpTip></h3>
+              <h3 className="panel-title">Закриті періоди</h3>
               <p className="panel-subtitle">Відпустка, санітарні дні, ремонт. У ці дати клієнти не зможуть записатись.</p>
               <div style={{ padding: '1.5rem 2rem' }}>
                 {(bookingSettings.closed_periods || []).length > 0 && (
@@ -900,7 +900,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             </div>
 
             <div className="clean-panel">
-              <h3 className="panel-title">Умови скасування <HelpTip>До якого часу клієнт може сам скасувати чи перенести запис. Пізніше - лише через заклад.</HelpTip></h3>
+              <h3 className="panel-title">Умови скасування</h3>
               <p className="panel-subtitle">Клієнт побачить цей текст перед підтвердженням.</p>
               <div style={{ padding: '1.5rem 2rem' }}>
                 <textarea
@@ -920,12 +920,12 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         {settingsView === 'security' && (
           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <h3 className="panel-title">Захист від фейків <HelpTip>Перевірки, що відсіюють ненастоящі записи: підтвердження номера кодом, блок тих, хто не приходить.</HelpTip></h3>
+              <h3 className="panel-title">Захист від фейків</h3>
               <p className="panel-subtitle">Запобігайте спаму та порожнім записам.</p>
 
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Верифікація номеру (OTP) <HelpTip>Клієнт підтверджує номер кодом з SMS перед записом. Відсікає вигадані номери й записи «для жарту».</HelpTip> <span className="badge" style={{color: '#f59e0b', borderColor: '#fde68a', background: '#fffbeb'}}>В розробці</span></h4>
+                  <h4>Верифікація номеру (OTP) <span className="badge" style={{color: '#f59e0b', borderColor: '#fde68a', background: '#fffbeb'}}>В розробці</span></h4>
                   <p>Клієнти повинні підтвердити свій телефон по SMS перед записом.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" disabled checked={securitySettings.require_phone_verification} onChange={e => setSecuritySettings({...securitySettings, require_phone_verification: e.target.checked})} /><span className="ios-slider"></span></label>
@@ -933,7 +933,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Авто-блокування неявок <HelpTip>Клієнт, який кілька разів не прийшов без попередження, більше не зможе записатись онлайн - лише через адміністратора.</HelpTip> <span className="badge">Рекомендовано</span></h4>
+                  <h4>Авто-блокування неявок <span className="badge">Рекомендовано</span></h4>
                   <p>Система заборонить онлайн-запис клієнтам, які мають 2+ неявки.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={securitySettings.block_no_shows} onChange={e => setSecuritySettings({...securitySettings, block_no_shows: e.target.checked})} /><span className="ios-slider"></span></label>
@@ -946,18 +946,18 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         {settingsView === 'notifications' && (
           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <h3 className="panel-title">Робота з клієнтами <HelpTip>Як поводитись із записами: підтверджувати вручну чи автоматично, які нагадування надсилати клієнтові.</HelpTip></h3>
+              <h3 className="panel-title">Робота з клієнтами</h3>
               <p className="panel-subtitle">Автоматичні повідомлення для збільшення явки.</p>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Авто-підтвердження записів <HelpTip>Увімкнено - онлайн-запис одразу підтверджений. Вимкнено - кожен новий запис чекає, поки ви його підтвердите в календарі.</HelpTip> <span className="badge">Система</span></h4>
+                  <h4>Авто-підтвердження записів <span className="badge">Система</span></h4>
                   <p>Нові записи з онлайну будуть автоматично підтверджені.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.auto_approve} onChange={e => setNotificationSettings({...notificationSettings, auto_approve: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Підтвердження візиту (SMS) <HelpTip>Клієнт отримує SMS із деталями запису одразу після бронювання.</HelpTip></h4>
+                  <h4>Підтвердження візиту (SMS)</h4>
                   <p>Відправляти повідомлення з деталями одразу після бронювання.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.notify_client_booking} onChange={e => setNotificationSettings({...notificationSettings, notify_client_booking: e.target.checked})} /><span className="ios-slider"></span></label>
@@ -971,7 +971,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               </div>
             </div>
             <div className="clean-panel">
-              <h3 className="panel-title">Сповіщення команди <HelpTip>Кому й про що приходять листи: новий запис, перенесення, скасування.</HelpTip></h3>
+              <h3 className="panel-title">Сповіщення команди</h3>
               <div className="list-row">
                 <div className="list-row-info">
                   <h4>Сповіщати майстра про новий запис</h4>
@@ -997,10 +997,10 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             </div>
 
             <div className="clean-panel">
-              <h3 className="panel-title">Захист від неявок (Онлайн-оплата) <HelpTip>Передоплата при онлайн-записі. Клієнт, який заплатив, приходить значно частіше - а якщо ні, гроші лишаються закладу за умовами скасування.</HelpTip></h3>
+              <h3 className="panel-title">Захист від неявок (Онлайн-оплата)</h3>
               <div className="list-row" style={{ background: paymentsSettings.require_deposit ? '#f8fafc' : '#fff' }}>
                 <div className="list-row-info">
-                  <h4>Брати передоплату (Депозит) <HelpTip>Частина вартості сплачується під час онлайн-запису. Потім вона зараховується в оплату візиту.</HelpTip></h4>
+                  <h4>Брати передоплату (Депозит)</h4>
                   <p>Клієнти повинні будуть оплатити частину вартості онлайн.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={paymentsSettings.require_deposit} onChange={e => setPaymentsSettings({...paymentsSettings, require_deposit: e.target.checked})} /><span className="ios-slider"></span></label>

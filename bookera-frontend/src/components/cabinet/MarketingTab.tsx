@@ -717,7 +717,7 @@ export default function MarketingTab({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
                    <div style={{ background: '#fef3c7', color: '#f59e0b', padding: '0.8rem', borderRadius: '12px' }}><SvgLink size={20} /></div>
                    <div>
-                      <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>Smart Link для шапки профілю <HelpTip>Одне посилання на запис до вашого закладу: вставте в шапку Instagram чи TikTok.</HelpTip></h3>
+                      <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>Smart Link для шапки профілю</h3>
                       <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Єдине посилання для Instagram, TikTok чи Telegram.</p>
                    </div>
                 </div>
@@ -775,13 +775,13 @@ export default function MarketingTab({
             </div>
 
             {/* 3. ІНТЕГРАЦІЇ (ОПУЩЕНО ВНИЗ) */}
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: '0.5rem 0 0 0' }}>Інтеграції на сторонні платформи <HelpTip>Звʼязок із Google, Instagram та іншими сервісами, щоб записи йшли звідти одразу у ваш календар.</HelpTip></h3>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: '0.5rem 0 0 0' }}>Інтеграції на сторонні платформи</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
 
               <div className="static-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
                    <div style={{ color: '#e1306c', background: '#fdf2f8', padding: '0.8rem', borderRadius: '12px' }}><SvgInstagram size={20} /></div>
-                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>Кнопка в Instagram <HelpTip>Кнопка «Записатись» у профілі Instagram, що веде одразу на ваш запис у BookEra.</HelpTip></h4>
+                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>Кнопка в Instagram</h4>
                  </div>
                  <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem', flex: 1, lineHeight: '1.5' }}>Додайте офіційну кнопку "Забронювати" (Book Now) у ваш бізнес-профіль Instagram.</p>
                  <button onClick={() => setActiveSmmModal('instagram')} className="secondary-btn" style={{ width: '100%', justifyContent: 'center' }}>Як підключити?</button>
@@ -791,7 +791,7 @@ export default function MarketingTab({
               <div className="static-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
                    <div style={{ color: '#0ea5e9', background: '#e0f2fe', padding: '0.8rem', borderRadius: '12px' }}><SvgCode size={20} /></div>
-                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>Віджет для сайту <HelpTip>Шматок коду для вашого сайту: клієнти записуються прямо на ньому, без переходу на BookEra.</HelpTip></h4>
+                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>Віджет для сайту</h4>
                  </div>
                  <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem', flex: 1, lineHeight: '1.5' }}>Вбудуйте форму онлайн-запису на власний вебсайт (Wix, WordPress тощо).</p>
                  <button onClick={() => { copyToClipboard(`<iframe src="https://${businessLink}" width="100%" height="600" frameborder="0"></iframe>`); }} className="secondary-btn" style={{ width: '100%', justifyContent: 'center' }}>

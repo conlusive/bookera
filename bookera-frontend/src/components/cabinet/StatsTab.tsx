@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
-import HelpTip from '@/components/ui/HelpTip';
 
 export default function StatsTab({ services, team, business }: any) {
   const [statsTab, setStatsTab] = useState<'overview' | 'appointments' | 'clients' | 'revenue' | 'services' | 'staff' | 'archive'>('overview');
@@ -990,7 +989,7 @@ export default function StatsTab({ services, team, business }: any) {
                   {/* 1. Показник повернення */}
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '1.5rem', background: '#fafafa' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 0.5rem 0' }}>
-                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Показник повернення <HelpTip>Частка клієнтів, які прийшли знову. Найчесніший показник якості: задоволені повертаються.</HelpTip></h4>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Показник повернення</h4>
                       <InfoTooltip text="Відсоток клієнтів, які здійснили більше одного візиту. Найважливіший показник лояльності." />
                     </div>
                     <p style={{ fontSize: '0.8rem', color: colors.textSecondary, lineHeight: '1.4', margin: '0 0 1.5rem 0' }}>Наскільки ефективно ми утримуємо аудиторію.</p>
@@ -1009,7 +1008,7 @@ export default function StatsTab({ services, team, business }: any) {
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '1.5rem', background: '#fafafa', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem'}}>
                        <div style={{ color: colors.textPrimary, display: 'flex' }}><Icons.TrendingUp /></div>
-                       <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>LTV (Lifetime Value) <HelpTip>Скільки в середньому приносить один клієнт за весь час, поки ходить до вас. Показує, скільки можна витратити на залучення нового.</HelpTip></h4>
+                       <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>LTV (Lifetime Value)</h4>
                        <InfoTooltip text="Загальна сума доходу поділена на загальну кількість унікальних клієнтів. Показує скільки грошей приносить 1 клієнт." />
                     </div>
                     <p style={{ fontSize: '0.8rem', color: colors.textSecondary, lineHeight: '1.4', margin: '0 0 1.5rem 0' }}>Середній прибуток з одного клієнта за весь час.</p>
@@ -1022,7 +1021,7 @@ export default function StatsTab({ services, team, business }: any) {
                 {/* 2. Динаміка бази */}
                 <div style={{ border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '1.5rem', background: '#fafafa' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 0.5rem 0' }}>
-                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Динаміка бази (Когортний аналіз) <HelpTip>Клієнти, згруповані за місяцем першого візиту: скільки з кожної групи продовжують ходити через місяць, два, три.</HelpTip></h4>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Динаміка бази (Когортний аналіз)</h4>
                     <InfoTooltip text="Нові: перший візит у цьому місяці. Постійні: були раніше і за останні 3 міс. Втрачені: не були понад 3 міс." />
                   </div>
                   <p style={{ fontSize: '0.8rem', color: colors.textSecondary, lineHeight: '1.4', margin: '0 0 1.25rem 0' }}>Міграція клієнтів між статусами.</p>
@@ -1048,7 +1047,7 @@ export default function StatsTab({ services, team, business }: any) {
                   {/* 3. Частота візитів */}
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '1.5rem', background: '#fafafa' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 0.5rem 0' }}>
-                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Частота візитів <HelpTip>Як часто в середньому клієнт приходить знову. Допомагає вчасно нагадати про себе.</HelpTip></h4>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Частота візитів</h4>
                       <InfoTooltip text="Вираховується як середня кількість днів між візитами для клієнтів, які були у вас більше 1 разу." />
                     </div>
                     <p style={{ fontSize: '0.8rem', color: colors.textSecondary, lineHeight: '1.4', margin: '0 0 1.5rem 0' }}>Як часто в середньому ходять клієнти.</p>
@@ -1094,7 +1093,7 @@ export default function StatsTab({ services, team, business }: any) {
                   {/* 4. Джерела залучення */}
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '1.5rem', background: '#fafafa' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 0.5rem 0' }}>
-                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Джерела залучення <HelpTip>Звідки прийшли записи: пошук BookEra, пряме посилання, Instagram, записи з кабінету.</HelpTip></h4>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Джерела залучення</h4>
                       <InfoTooltip text="Береться з поля 'Джерело' при створенні запису, або автоматично з UTM-міток онлайн-віджета." />
                     </div>
                     <p style={{ fontSize: '0.8rem', color: colors.textSecondary, lineHeight: '1.4', margin: '0 0 1.5rem 0' }}>Звідки приходять нові клієнти.</p>
@@ -1207,7 +1206,7 @@ export default function StatsTab({ services, team, business }: any) {
 
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '1.5rem', background: '#fafafa' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 0.5rem 0' }}>
-                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Найприбутковіші послуги <HelpTip>Послуги з найбільшою сумарною виручкою - не обовʼязково найпопулярніші.</HelpTip></h4>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Найприбутковіші послуги</h4>
                       <InfoTooltip text="Топ-5 послуг за загальною сумою згенерованого доходу." />
                     </div>
                     <p style={{ fontSize: '0.8rem', color: colors.textSecondary, lineHeight: '1.4', margin: '0 0 1.5rem 0' }}>Що приносить найбільше грошей.</p>
@@ -1284,7 +1283,7 @@ export default function StatsTab({ services, team, business }: any) {
 
                 <div style={{ border: `1px solid ${colors.border}`, borderRadius: '16px', padding: '1.5rem', background: '#fafafa' }}>
                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '1.5rem' }}>
-                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Частка доходу майстрів <HelpTip>Яку частину виручки закладу приносить кожен майстер.</HelpTip></h4>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: colors.textPrimary }}>Частка доходу майстрів</h4>
                       <InfoTooltip text="Хто з команди генерує найбільшу частину прибутку у відсотковому співвідношенні." />
                    </div>
 

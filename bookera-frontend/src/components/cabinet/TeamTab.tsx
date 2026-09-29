@@ -1118,7 +1118,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem' }}>
                       <div>
-                         <h3 style={{ fontSize: '1rem', fontWeight: '700', color: colors.textPrimary, margin: '0 0 0.4rem 0' }}>Регулярні робочі години <HelpTip>Тижневий графік цього майстра. Клієнти бачать вільні години лише в межах його змін.</HelpTip></h3>
+                         <h3 style={{ fontSize: '1rem', fontWeight: '700', color: colors.textPrimary, margin: '0 0 0.4rem 0' }}>Регулярні робочі години</h3>
                          <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0 }}>Зміни зберігаються автоматично.</p>
                       </div>
                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -1745,7 +1745,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     приховування з вітрини. */}
                 <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                   <div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Показувати на сторінці закладу <HelpTip>Чи видно майстра в блоці «Наша команда» на сторінці салону. Записи це не зупиняє.</HelpTip></h3>
+                    <h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Показувати на сторінці закладу</h3>
                     <p style={{ fontSize: '0.82rem', color: colors.textSecondary, margin: 0 }}>Блок «Наша команда». На запис це не впливає.</p>
                   </div>
                   <div onClick={() => {
@@ -1767,7 +1767,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 ) : (
                   <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                     <div>
-                      <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#991b1b', margin: '0 0 0.4rem 0' }}>Передача прав власника <HelpTip>Інша людина стане власником закладу з усіма правами, а ви - адміністратором. Скасувати сам не зможете.</HelpTip></h3>
+                      <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#991b1b', margin: '0 0 0.4rem 0' }}>Передача прав власника</h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0, maxWidth: '400px', lineHeight: 1.4, opacity: 0.9 }}>Щоб звільнити цей профіль, потрібно спочатку передати права власності на бізнес іншому адміністратору.</p>
                     </div>
                     {isSystemOwner ? (

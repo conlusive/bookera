@@ -1050,7 +1050,7 @@ export default function InventoryTab({ business, team }: any) {
                 <div style={{ background: '#fff', border: `1px solid ${theme.border}`, padding: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.2rem', color: theme.red }}>
                      <Icons.AlertCircle />
-                     <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '700' }}>Потрібно замовити <HelpTip>Матеріали, яких лишилось менше мінімального запасу. Списуються автоматично, коли візит завершено.</HelpTip></h4>
+                     <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '700' }}>Потрібно замовити</h4>
                    </div>
                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                      {outOfStockItems.map(i => (

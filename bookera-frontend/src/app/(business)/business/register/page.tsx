@@ -241,7 +241,10 @@ export default function BusinessRegisterPage() {
   };
 
   const err = (k: string) => (blurred[k] ? errors[k] : undefined);
-  const progress = created ? 100 : Math.round((idx / steps.length) * 100) + (valid(step) ? Math.round(100 / steps.length) : 0);
+  // Смуга - лише за позицією, як було: рухається тільки при переході й рівно
+  // на один крок. Раніше вона додавала крок наперед, щойно поля ставали
+  // заповненими, а після «Продовжити» стрибала одразу на два.
+  const progress = created ? 100 : Math.round(((idx + 1) / steps.length) * 100);
   const text = STEP_TEXT[step];
   const autoAdvance = step === 'category' || step === 'type' || step === 'workspace';
 
@@ -530,7 +533,9 @@ export default function BusinessRegisterPage() {
 
       <style jsx>{`
         .rg { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2.5rem 1rem 4rem; box-sizing: border-box;
-          background: radial-gradient(60% 40% at 50% 0%, #EEF3EE 0%, rgba(238,243,238,0) 70%), #F8FAFC; font-family: inherit; color: #0f172a; }
+          background: radial-gradient(60% 40% at 50% 0%, #EEF3EE 0%, rgba(238,243,238,0) 70%), #F8FAFC; color: #0f172a;
+          /* Системний шрифт - як і було на цій сторінці */
+          font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
         .rg :global(.rg-logo) { display: flex; align-items: baseline; gap: 0.4rem; margin-bottom: 2rem; text-decoration: none; font-size: 1.8rem; font-weight: 900; color: #111827; letter-spacing: -0.04em; }
         .rg :global(.rg-logo span) { color: #8fae92; }
         .rg :global(.rg-logo em) { font-style: normal; font-size: 0.9rem; font-weight: 700; color: #64748b; letter-spacing: 0; }

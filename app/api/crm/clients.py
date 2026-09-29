@@ -73,6 +73,15 @@ async def create_client(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     await assert_business_access(db, current_user, client_in.business_id)
+    # Той самий номер - той самий клієнт. Інакше візити розпадались на дві
+    # картки, і жодна не показувала правди.
+    tail = phone_tail(client_in.phone)
+    if tail:
+        same = (await db.execute(select(Client).where(
+            Client.business_id == client_in.business_id, Client.phone.like(f"%{tail}"),
+        ))).scalars().first()
+        if same:
+            raise HTTPException(status_code=409, detail=f"Клієнт із цим номером уже є: {same.name}")
     client = Client(**client_in.model_dump())
     db.add(client)
     await db.flush()

@@ -360,6 +360,11 @@ export const api = {
     return authFetch(`/crm/appointments/${appointmentId}/tip`, token, { method: 'PATCH', body: JSON.stringify({ amount }) });
   },
 
+  /** Справжня історія клієнта: візити, послуги, майстри, статуси, оцінки. */
+  async getClientHistory(token: string, clientId: number): Promise<{ id: number; start_time: string; status: string; service: string | null; master: string | null; price: number | null; tip: number | null; rating: number | null; comment: string | null; notes: string | null }[]> {
+    return authFetch(`/crm/clients/${clientId}/history`, token);
+  },
+
   // --- Доступи й журнал ---
   async getMyAccess(token: string, businessId: number): Promise<{ role: string; sections: Record<string, boolean> }> {
     return authFetch(`/crm/businesses/${businessId}/me/access`, token);

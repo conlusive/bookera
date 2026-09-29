@@ -7,6 +7,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
 import HelpTip from '@/components/ui/HelpTip';
 import { notify } from '@/lib/feedback';
+import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
 
 export default function ClientsTab({ business, clientsList, setClientsList, fetchClientsFromDB, onBookAgain }: any) {
   const supabase = createClient();
@@ -14,10 +15,19 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   // --- СТАНИ ---
   const [viewingClient, setViewingClient] = useState<any>(null);
   const [activeCardTab, setActiveCardTab] = useState<'info' | 'medical' | 'timeline' | 'gallery'>('info');
+  // Історія візитів відкритого клієнта - з сервера, при відкритті вкладки
+  const [history, setHistory] = useState<any[] | null>(null);
+  useEffect(() => {
+    if (!viewingClient?.id || activeCardTab !== 'timeline') return;
+    let alive = true;
+    setHistory(null);
+    void getAuthToken().then(t => api.getClientHistory(t, Number(viewingClient.id))).then(r => { if (alive) setHistory(r); }).catch(() => { if (alive) setHistory([]); });
+    return () => { alive = false; };
+  }, [viewingClient?.id, activeCardTab]);
 
   const [clientSearch, setClientSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [activeSegment, setActiveSegment] = useState<'all' | 'new' | 'vip' | 'lost'>('all');
+  const [activeSegment, setActiveSegment] = useState<'all' | 'new' | 'regular' | 'vip' | 'lost' | 'blacklist'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'recent', direction: 'desc' });
 
   // Дані для редагування
@@ -94,30 +104,45 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     });
   };
 
+  // 9 цифр після +380 з будь-якого запису номера
+  const phoneDigits = (v: string) => String(v || '').replace(/\D/g, '').replace(/^380/, '').slice(-9);
+  // Хто в якому сегменті - одне правило і для фільтра, і для лічильників
+  const DAY = 86400000;
+  const segmentOf = (seg: string, c: any) => {
+    const now = Date.now();
+    if (seg === 'new') return (c.visits_count || 0) <= 1 && c.created_at && now - new Date(c.created_at).getTime() < 30 * DAY;
+    if (seg === 'regular') return (c.visits_count || 0) >= 3;
+    if (seg === 'vip') return (c.tags || []).some((t: string) => String(t).toLowerCase().includes('vip'));
+    if (seg === 'lost') return !!c.last_visit_at && !c.next_visit_at && now - new Date(c.last_visit_at).getTime() > 60 * DAY;
+    if (seg === 'blacklist') return !!c.is_blacklisted;
+    return true;
+  };
+  const segmentCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const s of ['all', 'new', 'regular', 'vip', 'lost', 'blacklist']) out[s] = clientsList.filter((c: any) => segmentOf(s, c)).length;
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientsList]);
+
   const filteredAndSortedClients = useMemo(() => {
     let filtered = clientsList.filter((c: any) => {
       const searchLower = String(debouncedSearch ?? '').toLowerCase();
       return (c.name || '').toLowerCase().includes(searchLower) || (c.phone || '').includes(debouncedSearch);
     });
 
-    if (activeSegment === 'new') {
-        const thisMonth = new Date().getMonth();
-        filtered = filtered.filter((c: any) => c.last_visit && new Date(c.last_visit).getMonth() === thisMonth);
-    } else if (activeSegment === 'vip') {
-        filtered = filtered.filter((c: any) => c.tags?.some((t: string) => t.toLowerCase().includes('vip')));
-    } else if (activeSegment === 'lost') {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        filtered = filtered.filter((c: any) => !c.last_visit || new Date(c.last_visit) < thirtyDaysAgo);
-    }
+    // Сегменти - із даних, порахованих на сервері із записів.
+    // Раніше «Давно не були» зараховував усіх без жодного візиту (щойно
+    // доданий клієнт одразу ставав «втраченим»), а «Нові» - за місяцем
+    // останнього візиту, тож торішній візит у тому ж місяці теж давав «нового».
+    filtered = filtered.filter((c: any) => segmentOf(activeSegment, c));
 
     return filtered.sort((a: any, b: any) => {
       const { key, direction } = sortConfig;
       const modifier = direction === 'asc' ? 1 : -1;
       if (key === 'name') return modifier * (a.name || '').localeCompare(b.name || '');
-      if (key === 'recent') return modifier * (new Date(a.last_visit || 0).getTime() - new Date(b.last_visit || 0).getTime());
-      if (key === 'visits') return modifier * ((a.visits || 0) - (b.visits || 0));
-      if (key === 'spent') return modifier * ((a.spent || 0) - (b.spent || 0));
+      if (key === 'recent') return modifier * (new Date(a.last_visit_at || 0).getTime() - new Date(b.last_visit_at || 0).getTime());
+      if (key === 'visits') return modifier * ((a.visits_count || 0) - (b.visits_count || 0));
+      if (key === 'spent') return modifier * ((a.total_spent || 0) - (b.total_spent || 0));
       if (key === 'balance') return modifier * ((a.balance || 0) - (b.balance || 0));
       return 0;
     });
@@ -126,13 +151,19 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   useEffect(() => { setClientCurrentPage(1); }, [debouncedSearch, sortConfig, activeSegment]);
 
   const handleSaveNewClient = async () => {
-    if (!newClientForm.name.trim()) return showToast("Введіть ім'я клієнта!", 'error', { field: 'client-name' });
+    if (!newClientForm.name.trim()) return showToast("Вкажіть імʼя клієнта", 'error', { field: 'client-name' });
     let finalPhone = '';
-
-    if (newClientForm.phone && newClientForm.phone !== '+380') {
-      const phoneStripped = newClientForm.phone.replace(/\D/g, '');
-      if (phoneStripped.length !== 12) return showToast("Некоректний номер телефону!", 'error', { field: 'client-phone' });
-      finalPhone = '+' + phoneStripped;
+    const digits = phoneDigits(newClientForm.phone);
+    if (digits) {
+      if (digits.length !== 9) return showToast('Ще кілька цифр: потрібно 9 після +380', 'error', { field: 'client-phone' });
+      finalPhone = '+380' + digits;
+      // Той самий номер - той самий клієнт (сервер теж перевіряє)
+      const same = clientsList.find((c: any) => phoneDigits(c.phone || '') === digits);
+      if (same) return showToast(`Такий клієнт уже є: ${same.name}`, 'error', { field: 'client-phone' });
+    }
+    const email = newClientForm.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      return showToast('Перевірте адресу пошти', 'error', { field: 'client-email' });
     }
 
     setIsSavingClient(true);
@@ -142,7 +173,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         business_id: business.id,
         name: newClientForm.name.trim(),
         phone: finalPhone,
-        email: newClientForm.email.trim() || undefined,
+        email: email || undefined,
         birthday: newClientForm.birthday || undefined,
         tags: ['Новий'],
       });
@@ -150,9 +181,9 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
       setClientsList((prev: any) => [...prev, created]);
       setIsAddClientModalOpen(false);
       setNewClientForm({ name: '', phone: '+380', email: '', birthday: '' });
-      showToast("Клієнта додано", 'success');
     } catch (err: any) {
-      showToast(err?.message || "Критична помилка сервера", 'error');
+      const msg = err?.message || 'Не вдалося додати клієнта';
+      showToast(msg, 'error', /номер/i.test(msg) ? { field: 'client-phone' } : undefined);
     } finally {
       setIsSavingClient(false);
     }
@@ -361,11 +392,11 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   };
 
   const loyaltyTarget = 10;
-  const loyaltyProgress = viewingClient ? Math.min((viewingClient.visits || 0) / loyaltyTarget, 1) : 0;
+  const loyaltyProgress = viewingClient ? Math.min((viewingClient.visits_count || 0) / loyaltyTarget, 1) : 0;
   const ringRadius = 20;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference - loyaltyProgress * ringCircumference;
-  const isClientLost = viewingClient?.last_visit && (new Date().getTime() - new Date(viewingClient.last_visit).getTime() > 30 * 24 * 60 * 60 * 1000);
+  const isClientLost = !!viewingClient && segmentOf('lost', viewingClient);
 
   return (
     <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
@@ -423,6 +454,100 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
         .gallery-placeholder { aspect-ratio: 1; background: #f8fafc; border: 2px dashed #e2e8f0; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; color: #94a3b8; cursor: pointer; transition: 0.2s; }
         .gallery-placeholder:hover { background: #f1f5f9; border-color: #cbd5e1; color: #64748b; }
+      
+        /* ---- Стиль «Послуг»: ті самі кнопки, пошук, пігулки й таблиця ---- */
+        .clean-input { width: 100%; padding: 0.5rem 0.8rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fafafa; font-size: 0.85rem; color: #0f172a; outline: none; transition: all 0.2s; }
+        .clean-input:focus { border-color: #436b49; background: #fff; }
+        .clean-btn { background: #0f172a; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+        .clean-btn:hover { background: #1e293b; }
+        .clean-btn-ghost { background: transparent; color: #64748b; border: 1px solid #e2e8f0; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+        .clean-btn-ghost:hover { background: #f8fafc; color: #0f172a; }
+        .category-pill { padding: 0.4rem 1.2rem; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0; }
+        .category-pill:hover { background: #f8fafc; color: #0f172a; }
+        .category-pill.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+        /* Таблиця з м'якими заокругленими рядками без гострих кутів */
+        .service-table { 
+          width: 100%; 
+          border-collapse: separate; 
+          border-spacing: 0 4px; 
+          text-align: left; 
+        }
+        .service-table th { 
+          padding: 0.75rem 1rem; 
+          color: #94a3b8; 
+          font-size: 0.7rem; 
+          font-weight: 700; 
+          text-transform: uppercase; 
+          letter-spacing: 0.05em; 
+          border-bottom: 1px solid #f1f5f9; 
+          position: sticky; 
+          top: 0; 
+          background: #fff; 
+          z-index: 10; 
+          transition: color 0.2s; 
+        }
+        .service-table th.sortable:hover { color: #0f172a; cursor: pointer; }
+        
+        .service-table td { 
+          padding: 0.95rem 1rem; 
+          border-bottom: 1px solid #f8fafc; 
+          border-top: 1px solid transparent;
+          vertical-align: middle; 
+          transition: background 0.15s ease; 
+        }
+        .service-table tr { cursor: pointer; transition: 0.15s; }
+        .service-table tr.service-row:hover td { background: #f8fafc; }
+
+        /* Плавні заокруглення лівого та правого краю рядка */
+        .service-table tr.service-row td:first-child {
+          border-top-left-radius: 12px;
+          border-bottom-left-radius: 12px;
+          padding-left: 1.25rem;
+        }
+        .service-table tr.service-row td:last-child {
+          border-top-right-radius: 12px;
+          border-bottom-right-radius: 12px;
+          padding-right: 1.25rem;
+        }
+        .clean-btn-ghost:disabled { opacity: .4; cursor: default; }
+        .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+        .cl-search { position: relative; width: 280px; max-width: 100%; }
+        .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }
+        .cl-search .clean-input { padding-left: 2.2rem; }
+        .cl-pills { display: flex; gap: 8px; overflow-x: auto; padding: 1rem 2rem; }
+        .cl-count { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
+        .cl-who { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+        .cl-who b { display: block; font-size: 0.9rem; font-weight: 600; color: #0f172a; }
+        .cl-who small { display: block; font-size: 0.78rem; color: #94a3b8; margin-top: 1px; }
+        .cl-ava { width: 34px; height: 34px; border-radius: 50%; background: #f1f5f9; color: #475569; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+        .cl-ava.bad { background: #fef2f2; color: #dc2626; }
+        .cl-date { font-size: 0.875rem; color: #334155; }
+        .cl-next { display: block; font-size: 0.72rem; color: #059669; font-weight: 600; margin-top: 1px; }
+        .cl-pager { padding: 1rem 0; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #64748b; }
+        .cl-pager div { display: flex; gap: 0.4rem; }
+        .cl-empty { text-align: center; padding: 5rem 2rem; color: #64748b; display: flex; flex-direction: column; gap: 0.4rem; }
+        .cl-empty b { font-size: 1.05rem; color: #0f172a; }
+        .cl-empty span { font-size: 0.9rem; }
+        .cl-hist { display: flex; flex-direction: column; }
+        .cl-hist-empty { padding: 2rem 0; text-align: center; color: #94a3b8; font-size: 0.9rem; }
+        .cl-hist-row { display: grid; grid-template-columns: 10px 1fr auto; gap: 0.8rem; padding: 0.85rem 0; border-top: 1px solid #f1f5f9; align-items: start; }
+        .cl-hist-row:first-child { border-top: none; }
+        .cl-hist-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; }
+        .cl-hist-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .cl-hist-top b { font-size: 0.92rem; color: #0f172a; }
+        .cl-hist-chip { font-size: 0.68rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+        .cl-hist-meta { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+        .cl-hist-review { font-size: 0.8rem; color: #475569; margin-top: 4px; }
+        .cl-hist-review span { color: #f59e0b; letter-spacing: 1px; }
+        .cl-hist-review i { font-style: normal; color: #e2e8f0; }
+        .cl-hist-sum { text-align: right; }
+        .cl-hist-sum b { display: block; font-size: 0.9rem; color: #0f172a; font-variant-numeric: tabular-nums; }
+        .cl-hist-sum small { display: block; font-size: 0.72rem; color: #059669; font-weight: 600; }
+        /* Телефон із префіксом +380 у вікні нового клієнта */
+        .cl-phone { display: flex; align-items: stretch; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+        .cl-phone:focus-within { border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15,23,42,.08); }
+        .cl-phone b { display: flex; align-items: center; padding: 0 0.75rem; color: #64748b; font-weight: 600; font-size: 0.925rem; background: #f8fafc; border-right: 1px solid #e2e8f0; }
+        .cl-phone .fm-input { border: none !important; box-shadow: none !important; border-radius: 0; }
       `}</style>
 
       {viewingClient ? (
@@ -582,15 +707,15 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                                 <circle cx="30" cy="30" r={ringRadius} stroke="#10b981" strokeWidth="4" fill="none" strokeDasharray={ringCircumference} strokeDashoffset={ringOffset} style={{ transition: 'stroke-dashoffset 1s ease-out' }} strokeLinecap="round" />
                              </svg>
                              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: '800', color: '#0f172a' }}>
-                                {viewingClient.visits || 0}
+                                {viewingClient.visits_count || 0}
                              </div>
                           </div>
-                          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.5rem' }}>{loyaltyTarget - (viewingClient.visits || 0)} до VIP</div>
+                          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.5rem' }}>{loyaltyTarget - (viewingClient.visits_count || 0)} до VIP</div>
                        </div>
 
                        <div style={{ background: '#fff', padding: '1.25rem 1rem', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                           <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>LTV</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>{viewingClient.spent || 0}₴</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>{viewingClient.total_spent || 0}₴</div>
                        </div>
 
                        <div style={{ background: '#fff', padding: '1.25rem 1rem', borderRadius: '16px', border: '1px solid #e2e8f0', position: 'relative' }}>
@@ -706,39 +831,44 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
               </div>
            )}
 
+           {/* Справжня історія з сервера. Раніше тут була заготовка «Візит успішно
+               завершено. Послуга виконана. Оплачено» без жодних даних. */}
            {activeCardTab === 'timeline' && (
-              <div style={{ background: '#fff', padding: '2rem', borderRadius: '16px', border: '1px solid #e2e8f0', maxWidth: '800px' }}>
-                 <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', marginBottom: '2rem' }}>Хронологія подій</div>
-
-                 <div className="timeline-wrapper">
-                    {viewingClient.last_visit && (
-                       <div className="timeline-item">
-                          <div className="timeline-dot success"></div>
-                          <div>
-                             <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '0.2rem' }}>
-                                {new Date(viewingClient.last_visit).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
-                             </div>
-                             <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '0.5rem' }}>
-                                <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#0f172a' }}>Візит успішно завершено</div>
-                                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.3rem' }}>Послуга виконана.</div>
-                                <div style={{ display: 'inline-block', marginTop: '0.8rem', padding: '0.2rem 0.6rem', background: '#d1fae5', color: '#065f46', fontSize: '0.75rem', fontWeight: '600', borderRadius: '6px' }}>
-                                   Оплачено
-                                </div>
-                             </div>
-                          </div>
+             <div className="cl-hist">
+               {history === null ? (
+                 <div className="cl-hist-empty">Завантаження…</div>
+               ) : history.length === 0 ? (
+                 <div className="cl-hist-empty">Візитів ще не було.</div>
+               ) : history.map(h => {
+                 const st = ({
+                   completed: ['Завершено', '#059669', '#ecfdf5'], confirmed: ['Заплановано', '#2563eb', '#eff6ff'],
+                   pending_approval: ['Чекає підтвердження', '#b45309', '#fffbeb'], 'no-show': ['Не прийшов', '#dc2626', '#fef2f2'],
+                   cancelled: ['Скасовано', '#64748b', '#f1f5f9'], late: ['Запізнився', '#b45309', '#fffbeb'],
+                 } as Record<string, string[]>)[h.status] || [h.status, '#64748b', '#f1f5f9'];
+                 return (
+                   <div key={h.id} className="cl-hist-row">
+                     <span className="cl-hist-dot" style={{ background: st[1] }} />
+                     <div className="cl-hist-main">
+                       <div className="cl-hist-top">
+                         <b>{h.service || 'Візит'}</b>
+                         <span className="cl-hist-chip" style={{ color: st[1], background: st[2] }}>{st[0]}</span>
                        </div>
-                    )}
-
-                    <div className="timeline-item">
-                       <div className="timeline-dot system"></div>
-                       <div>
-                          <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#0f172a' }}>Створення профілю</div>
-                          <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.2rem' }}>Клієнт доданий до бази CRM</div>
+                       <div className="cl-hist-meta">
+                         {new Date(h.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}, {new Date(h.start_time).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+                         {h.master ? ` · ${h.master}` : ''}
                        </div>
-                    </div>
-                 </div>
-              </div>
+                       {h.rating ? <div className="cl-hist-review"><span>{'★'.repeat(h.rating)}<i>{'★'.repeat(5 - h.rating)}</i></span>{h.comment ? ` «${h.comment}»` : ''}</div> : null}
+                     </div>
+                     <div className="cl-hist-sum">
+                       {h.price != null && <b>{Math.round(h.price).toLocaleString('uk-UA')} ₴</b>}
+                       {h.tip ? <small>+ {Math.round(h.tip)} ₴ чайові</small> : null}
+                     </div>
+                   </div>
+                 );
+               })}
+             </div>
            )}
+
 
            {activeCardTab === 'gallery' && (
               <div style={{ background: '#fff', padding: '2rem', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
@@ -765,87 +895,96 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
         </div>
       ) : (
-        <div className="page-transition" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%' }}>
-           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-              <div style={{ background: '#f1f5f9', padding: '3px', borderRadius: '10px', display: 'flex', gap: '2px' }}>
-                 <button className={`seg-tab ${activeSegment === 'all' ? 'active' : ''}`} onClick={() => setActiveSegment('all')}>Усі</button>
-                 <button className={`seg-tab ${activeSegment === 'new' ? 'active' : ''}`} onClick={() => setActiveSegment('new')}>Нові</button>
-                 <button className={`seg-tab ${activeSegment === 'vip' ? 'active' : ''}`} onClick={() => setActiveSegment('vip')}>VIP</button>
-                 <button className={`seg-tab ${activeSegment === 'lost' ? 'active' : ''}`} onClick={() => setActiveSegment('lost')}>Втрачені</button>
+        <div className="page-transition" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+           {/* Панель - як у «Послугах»: пошук ліворуч, дія праворуч */}
+           <div className="cl-toolbar">
+              <div className="cl-search">
+                 <span className="cl-search-ico"><Icons.Search /></span>
+                 <input type="text" className="clean-input" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Імʼя чи телефон…" />
               </div>
-
-              <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
-                 <div style={{ width: '240px' }}>
-                    <input type="text" value={clientSearch} onChange={e => setClientSearch(e.target.value)} className="light-input" placeholder="Пошук клієнта..." />
-                 </div>
-                 <button onClick={() => setIsAddClientModalOpen(true)} className="light-btn">
-                    <Icons.Plus /> Додати
-                 </button>
-              </div>
+              <button type="button" onClick={() => setIsAddClientModalOpen(true)} className="clean-btn"><Icons.Plus /> Додати</button>
            </div>
 
-           <div style={{ flex: 1, overflowY: 'auto' }} className="custom-scroll">
+           {/* Сегменти - із лічильниками, щоб одразу було видно, скільки кого */}
+           <div className="hide-scrollbar cl-pills">
+              {([
+                ['all', 'Усі', 'Уся база закладу'],
+                ['new', 'Нові', 'Додані за останні 30 днів, не більше одного візиту'],
+                ['regular', 'Постійні', 'Три й більше завершених візитів'],
+                ['vip', 'VIP', 'З тегом VIP'],
+                ['lost', 'Давно не були', 'Понад 60 днів без візиту й без майбутнього запису - час нагадати про себе'],
+                ['blacklist', 'Чорний список', 'Не можуть записатись онлайн'],
+              ] as const).filter(([id]) => id === 'all' || segmentCounts[id] > 0 || activeSegment === id).map(([id, label, hint]) => (
+                <button key={id} type="button" title={hint} className={`category-pill ${activeSegment === id ? 'active' : ''}`} onClick={() => setActiveSegment(id)}>
+                  {label} <span className="cl-count">{segmentCounts[id] || 0}</span>
+                </button>
+              ))}
+           </div>
+
+           <div style={{ flex: 1, overflowY: 'auto', padding: '0 2rem 1rem' }} className="custom-scroll">
               {(() => {
                 const indexOfLastClient = clientCurrentPage * clientsPerPage;
                 const indexOfFirstClient = indexOfLastClient - clientsPerPage;
                 const currentClients = filteredAndSortedClients.slice(indexOfFirstClient, indexOfLastClient);
                 const totalClientPages = Math.ceil(filteredAndSortedClients.length / clientsPerPage);
+                const fmtDate = (d: string) => new Date(d).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
 
                 return currentClients.length > 0 ? (
                   <>
-                    <table className="minimal-table">
-                      <thead style={{ position: 'sticky', top: 0, background: '#fafafa', zIndex: 10 }}>
+                    <table className="service-table">
+                      <thead>
                         <tr>
                           <th className="sortable" onClick={() => handleSortClick('name')}>Клієнт <SortIcon columnKey="name" /></th>
-                          <th>Контакти</th>
                           <th className="sortable" onClick={() => handleSortClick('recent')}>Останній візит <SortIcon columnKey="recent" /></th>
-                          <th className="sortable" onClick={() => handleSortClick('balance')}>Депозит <SortIcon columnKey="balance" /></th>
-                          <th className="sortable" onClick={() => handleSortClick('visits')}>Візити <SortIcon columnKey="visits" /></th>
-                          <th className="sortable" onClick={() => handleSortClick('spent')}>Дохід <SortIcon columnKey="spent" /></th>
+                          <th className="sortable" onClick={() => handleSortClick('visits')} style={{ textAlign: 'right' }}>Візити <SortIcon columnKey="visits" /></th>
+                          <th className="sortable" onClick={() => handleSortClick('spent')} style={{ textAlign: 'right' }}>Витратили <SortIcon columnKey="spent" /></th>
+                          <th className="sortable" onClick={() => handleSortClick('balance')} style={{ textAlign: 'right' }}>Депозит <SortIcon columnKey="balance" /></th>
                         </tr>
                       </thead>
                       <tbody>
                         {currentClients.map((client: any) => (
-                          <tr key={client.id} onClick={() => openViewingClient(client)} style={{ opacity: client.is_blacklisted ? 0.5 : 1 }}>
-                            <td data-label="Клієнт">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: client.is_blacklisted ? '#fee2e2' : '#f1f5f9', color: client.is_blacklisted ? '#ef4444' : '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.75rem' }}>
-                                   {client.is_blacklisted ? <Icons.XCircle /> : getUserInitials(client.name)}
-                                </div>
-                                <span style={{ fontWeight: '600', color: client.is_blacklisted ? '#ef4444' : '#0f172a' }}>
-                                   {client.name} {isBirthdaySoon(client.birthday) && '🎂'}
+                          <tr key={client.id} className="service-row" onClick={() => openViewingClient(client)} style={{ opacity: client.is_blacklisted ? 0.55 : 1 }}>
+                            <td>
+                              <div className="cl-who">
+                                <span className={`cl-ava ${client.is_blacklisted ? 'bad' : ''}`}>{client.is_blacklisted ? '✕' : getUserInitials(client.name)}</span>
+                                <span>
+                                  <b>{client.name}{isBirthdaySoon(client.birthday) ? ' 🎂' : ''}</b>
+                                  <small>{client.phone || client.email || 'без контактів'}</small>
                                 </span>
                               </div>
                             </td>
-                            <td style={{ color: '#64748b' }}>{client.phone || '—'}</td>
-                            <td style={{ color: '#64748b' }}>{client.last_visit ? new Date(client.last_visit).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }) : '—'}</td>
-                            <td style={{ fontWeight: '700', color: (client.balance || 0) < 0 ? '#ef4444' : (client.balance > 0 ? '#6F9273' : '#64748b') }}>{client.balance || 0} ₴</td>
-                            <td><span style={{ fontWeight: '600' }}>{client.visits || 0}</span></td>
-                            <td style={{ fontWeight: '700', color: '#0f172a' }}>{client.spent || 0} ₴</td>
+                            <td>
+                              <span className="cl-date">{client.last_visit_at ? fmtDate(client.last_visit_at) : '—'}</span>
+                              {client.next_visit_at && <small className="cl-next">наступний {fmtDate(client.next_visit_at)}</small>}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 600 }}>{client.visits_count || 0}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 700 }}>{Math.round(client.total_spent || 0).toLocaleString('uk-UA')} ₴</td>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: (client.balance || 0) > 0 ? '#059669' : (client.balance || 0) < 0 ? '#dc2626' : '#94a3b8' }}>{client.balance || 0} ₴</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
 
                     {totalClientPages > 1 && (
-                      <div style={{ padding: '1rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
-                        <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Сторінка {clientCurrentPage} з {totalClientPages}</span>
-                        <div style={{ display: 'flex', gap: '0.4rem' }}>
-                          <button onClick={() => setClientCurrentPage(prev => Math.max(prev - 1, 1))} disabled={clientCurrentPage === 1} className="light-btn-sec" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}>Назад</button>
-                          <button onClick={() => setClientCurrentPage(prev => Math.min(prev + 1, totalClientPages))} disabled={clientCurrentPage === totalClientPages} className="light-btn-sec" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}>Вперед</button>
+                      <div className="cl-pager">
+                        <span>Сторінка {clientCurrentPage} з {totalClientPages}</span>
+                        <div>
+                          <button type="button" className="clean-btn-ghost" onClick={() => setClientCurrentPage(prev => Math.max(prev - 1, 1))} disabled={clientCurrentPage === 1}>Назад</button>
+                          <button type="button" className="clean-btn-ghost" onClick={() => setClientCurrentPage(prev => Math.min(prev + 1, totalClientPages))} disabled={clientCurrentPage === totalClientPages}>Далі</button>
                         </div>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '5rem 2rem', color: '#64748b', margin: 'auto' }}>
-                     <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.3rem' }}>Клієнтів не знайдено</h3>
-                     <p style={{ fontSize: '0.9rem' }}>Спробуйте змінити запит у пошуку.</p>
+                  <div className="cl-empty">
+                    <b>{clientsList.length === 0 ? 'Клієнтів ще немає' : 'Нікого не знайдено'}</b>
+                    <span>{clientsList.length === 0 ? 'Вони зʼявляться тут після першого запису - або додайте вручну.' : 'Змініть запит або оберіть інший сегмент.'}</span>
                   </div>
                 );
               })()}
            </div>
         </div>
+
       )}
 
       {/* МОДАЛКА БАЛАНСУ */}
@@ -909,43 +1048,41 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         </div>
       )}
 
-      {isAddClientModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.3)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setIsAddClientModalOpen(false)}>
-           <div className="toast-animate custom-scroll" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '400px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                 <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Новий клієнт</h3>
-                 <button onClick={() => setIsAddClientModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                 <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Ім'я та прізвище *</label>
-                    <input data-field="client-name" type="text" value={newClientForm.name} onChange={e => setNewClientForm({...newClientForm, name: e.target.value})} className="light-input" placeholder="Олена Коваленко" autoFocus />
-                 </div>
-                 <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Телефон</label>
-                    <input data-field="client-phone" type="text" value={newClientForm.phone} onChange={e => setNewClientForm({...newClientForm, phone: e.target.value})} className="light-input" placeholder="+380..." />
-                 </div>
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
-                    <div>
-                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>Email</label>
-                       <input type="email" value={newClientForm.email} onChange={e => setNewClientForm({...newClientForm, email: e.target.value})} className="light-input" placeholder="mail@..." />
-                    </div>
-                    <div>
-                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.3rem' }}>День народження</label>
-                       <input type="date" value={newClientForm.birthday} onChange={e => setNewClientForm({...newClientForm, birthday: e.target.value})} className="light-input" />
-                    </div>
-                 </div>
-              </div>
-
-              <button onClick={handleSaveNewClient} disabled={isSavingClient} className="light-btn" style={{ width: '100%', justifyContent: 'center', padding: '0.7rem' }}>
-                 {isSavingClient ? 'Збереження...' : 'Зберегти клієнта'}
-              </button>
-
-           </div>
-        </div>
-      )}
+      {/* Новий клієнт - той самий шаблон вікна, що в «Послугах» (FormModal):
+          поля з рамкою, тож і червоне підсвічування помилки справді видно. */}
+      <FormModal
+        open={isAddClientModalOpen}
+        onClose={() => setIsAddClientModalOpen(false)}
+        title="Новий клієнт"
+        subtitle="Візити з цим номером підтягнуться в картку самі"
+        primary={{ label: 'Додати клієнта', onClick: () => void handleSaveNewClient(), loading: isSavingClient }}
+        width={520}
+      >
+        <FormSection>
+          <Field label="Імʼя та прізвище" required>
+            <input className="fm-input" data-field="client-name" autoFocus maxLength={80} placeholder="Марія Коваль"
+              value={newClientForm.name} onChange={e => setNewClientForm({ ...newClientForm, name: e.target.value })} />
+          </Field>
+          <div className="fm-row">
+            <Field label="Телефон" hint="За номером знайдемо записи клієнта">
+              <span className="cl-phone" data-error-anchor>
+                <b>+380</b>
+                <input className="fm-input" data-field="client-phone" inputMode="numeric" placeholder="67 123 45 67"
+                  value={phoneDigits(newClientForm.phone).replace(/(\d{2})(\d{0,3})(\d{0,2})(\d{0,2})/, (_m, a, b, c2, d) => [a, b, c2, d].filter(Boolean).join(' '))}
+                  onChange={e => setNewClientForm({ ...newClientForm, phone: '+380' + phoneDigits(e.target.value) })} />
+              </span>
+            </Field>
+            <Field label="День народження">
+              <input className="fm-input" type="date" value={newClientForm.birthday} max={new Date().toISOString().slice(0, 10)}
+                onChange={e => setNewClientForm({ ...newClientForm, birthday: e.target.value })} />
+            </Field>
+          </div>
+          <Field label="Пошта" hint="Для нагадувань про записи й листа «Як вам візит?»">
+            <input className="fm-input" data-field="client-email" type="email" inputMode="email" placeholder="maria@example.com"
+              value={newClientForm.email} onChange={e => setNewClientForm({ ...newClientForm, email: e.target.value })} />
+          </Field>
+        </FormSection>
+      </FormModal>
 
 
       {confirmDialog && (

@@ -77,3 +77,12 @@ async def test_campaign_audiences_find_people(client, auth_headers):
     r = await client.post("/crm/campaigns", json={**base, "audience": "lapsed"}, headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["queued"] == 1
+
+
+@pytest.mark.asyncio
+async def test_duplicate_phone_rejected(client, auth_headers):
+    """Той самий номер - той самий клієнт: другий раз - 409 з імʼям наявного."""
+    bid, sid, h = await _setup(client, auth_headers, "dup")
+    assert (await client.post("/crm/clients", json={"business_id": bid, "name": "Марія", "phone": "+380671234567"}, headers=h)).status_code == 201
+    r = await client.post("/crm/clients", json={"business_id": bid, "name": "Маша", "phone": "+38 067 123 45 67"}, headers=h)
+    assert r.status_code == 409 and "Марія" in r.json()["detail"]

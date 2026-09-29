@@ -290,17 +290,6 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         .custom-select { appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 12 15 18 9"></polyline></svg>'); background-repeat: no-repeat; background-position: right 1rem center; background-size: 18px; padding-right: 2.5rem; cursor: pointer; }
         .custom-select:disabled { opacity: 0.7; }
 
-        .tooltip-wrap { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: help; }
-        .tooltip-icon { color: #94a3b8; transition: 0.2s; }
-        .tooltip-wrap:hover .tooltip-icon { color: #436b49; }
-        .tooltip-content {
-          visibility: hidden; opacity: 0; position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%) translateY(5px);
-          background: #1e293b; color: #fff; padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.75rem; font-weight: 500;
-          white-space: normal; width: 220px; text-align: center; z-index: 10; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.15); pointer-events: none;
-        }
-        .tooltip-wrap:hover .tooltip-content { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
-        .tooltip-content::after { content: ''; position: absolute; top: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: #1e293b transparent transparent transparent; }
-
         .ios-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
         .ios-toggle input { opacity: 0; width: 0; height: 0; }
         .ios-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #e2e8f0; transition: .3s; border-radius: 34px; }

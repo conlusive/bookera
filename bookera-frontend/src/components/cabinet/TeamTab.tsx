@@ -681,7 +681,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
           position: absolute;
           top: calc(100% + 8px);
           right: 0;
-          background-color: #0f172a;
+          background: #475569;
           color: #ffffff;
           font-size: 0.75rem;
           font-weight: 600;
@@ -700,7 +700,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
           right: 4px;
           border-width: 5px;
           border-style: solid;
-          border-color: transparent transparent #0f172a transparent;
+          border-color: transparent transparent #475569 transparent;
         }
         .payout-indicator-wrap:hover .payout-due-tooltip {
           visibility: visible;

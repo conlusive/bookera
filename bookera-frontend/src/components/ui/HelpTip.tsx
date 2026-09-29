@@ -5,7 +5,7 @@ import { ReactNode, useEffect, useRef, useState } from 'react';
 /**
  * HelpTip - кружечок «?» із поясненням. Стиль - ТОЧНО як у підказок, що
  * вже були в кабінеті («Доступність вікон для запису», «Аналітика»):
- * темна бульбашка 220px над значком, 0.75rem, текст по центру, радіус 8px.
+ * сіра бульбашка 220px над значком, 0.75rem, текст по центру, радіус 8px.
  *
  * Бульбашка лежить поруч зі значком (а не поверх сторінки), тож бере
  * шрифт того місця, де стоїть, - як і старі підказки.
@@ -50,13 +50,13 @@ export default function HelpTip({ children }: { children: ReactNode }) {
         style={{
           visibility: shown ? 'visible' : 'hidden', opacity: shown ? 1 : 0,
           position: 'absolute', bottom: '130%', left: '50%', transform: `translateX(-50%) translateY(${shown ? 0 : 5}px)`,
-          background: '#1e293b', color: '#fff', padding: '0.6rem 0.8rem', borderRadius: 8, fontSize: '0.75rem', fontWeight: 500,
+          background: '#475569', color: '#fff', padding: '0.6rem 0.8rem', borderRadius: 8, fontSize: '0.75rem', fontWeight: 500,
           lineHeight: 1.4, whiteSpace: 'normal', width: 220, textAlign: 'center', zIndex: 100, transition: 'all 0.2s',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)', pointerEvents: 'none', textTransform: 'none', letterSpacing: 'normal',
         }}
       >
         {children}
-        <span aria-hidden style={{ position: 'absolute', top: '100%', left: '50%', marginLeft: -5, borderWidth: 5, borderStyle: 'solid', borderColor: '#1e293b transparent transparent transparent' }} />
+        <span aria-hidden style={{ position: 'absolute', top: '100%', left: '50%', marginLeft: -5, borderWidth: 5, borderStyle: 'solid', borderColor: '#475569 transparent transparent transparent' }} />
       </span>
     </span>
   );

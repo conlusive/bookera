@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
+import HelpTip from '@/components/ui/HelpTip';
 
 export default function StatsTab({ services, team, business }: any) {
   const [statsTab, setStatsTab] = useState<'overview' | 'appointments' | 'clients' | 'revenue' | 'services' | 'staff' | 'archive'>('overview');
@@ -243,24 +244,9 @@ export default function StatsTab({ services, team, business }: any) {
     wCliBg: '#f8fafc', wCliBorder: '#cbd5e1', wCliText: '#1e293b',
   };
 
-  const InfoTooltip = ({ text }: { text: string }) => {
-    const [show, setShow] = useState(false);
-    return (
-      <div
-        style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'help', color: colors.textSecondary }}
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-      >
-        <div style={{ display: 'flex', opacity: 0.7 }}><Icons.AlertCircle /></div>
-        <div
-          style={{ position: 'absolute', bottom: '140%', left: '50%', transform: 'translateX(-50%)', width: '220px', padding: '8px 10px', background: colors.accent, color: '#fff', fontSize: '0.75rem', borderRadius: '8px', textAlign: 'center', opacity: show ? 1 : 0, visibility: show ? 'visible' : 'hidden', transition: '0.2s', pointerEvents: 'none', zIndex: 100, fontWeight: '500', lineHeight: '1.4', boxShadow: '0 8px 20px rgba(0,0,0,0.15)' }}
-        >
-          {text}
-          <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', borderWidth: '5px', borderStyle: 'solid', borderColor: `${colors.accent} transparent transparent transparent` }}></div>
-        </div>
-      </div>
-    );
-  };
+  // Та сама підказка, що скрізь у кабінеті: значок «?» і сірий фон.
+  // Раніше тут був свій варіант зі значком «!» - виглядало як попередження.
+  const InfoTooltip = ({ text }: { text: string }) => <HelpTip>{text}</HelpTip>;
 
   const fontFamily = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 

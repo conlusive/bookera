@@ -149,9 +149,15 @@ async def test_campaign_audience_filters(client, auth_headers):
             "business_id": business_id, "name": f"К{i}",
             "email": f"c{i}@test.com", "phone": f"+38067111000{i}",
         }, headers=owner)
+        # Візити - справжні завершені записи: лічильник visits_count більше
+        # не використовується, кількість рахується із записів.
         conn = await asyncpg.connect(DB_URL_RAW)
         try:
-            await conn.execute("UPDATE clients SET visits_count=$1 WHERE id=$2", visits, r.json()["id"])
+            for d in range(visits):
+                await conn.execute(
+                    "INSERT INTO appointments (business_id, client_id, client_name, start_time, end_time, status, price, source) "
+                    "VALUES ($1,$2,'К',now() - make_interval(days => $3), now() - make_interval(days => $3) + interval '1 hour','completed',100,'crm')",
+                    business_id, r.json()["id"], 10 + d)
         finally:
             await conn.close()
 

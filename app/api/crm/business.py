@@ -225,7 +225,8 @@ async def register_business(
     # новий заклад лишався без координат і не потрапляв у пошук
     # «поруч зі мною», поки власник не зайшов би й не перезберіг
     # адресу - про що він, звісно, не здогадався б.
-    if business.address or business.city:
+    # Точку поставив власник на мапі - її й беремо; інакше - за адресою.
+    if business.latitude is None and (business.address or business.city):
         from app.services.geocoding import geocode_address
 
         found = await geocode_address(business.city, business.address)

@@ -35,7 +35,9 @@ class BusinessBase(BaseModel):
     workspace_type: Optional[str] = None
     description: Optional[str] = None
     address: Optional[str] = None
-    city: Optional[str] = "Львів"
+    # Без підстановки «Львів»: реєстрація не надсилала місто окремо, і
+    # кожен новий заклад, звідки б він не був, ставав львівським.
+    city: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     cover_photo: Optional[str] = None
@@ -50,8 +52,54 @@ class BusinessBase(BaseModel):
         return normalize_category(v) if v is not None else v
 
 class BusinessCreate(BusinessBase):
-    # slug генерується на бекенді (унікальність гарантована тут, а не хаотично на фронті)
+    # slug генерується на бекенді (унікальність гарантована там же)
     hours: Optional[List[BusinessHoursItem]] = None
+    # Точка з мапи на кроці адреси. Є - не геокодуємо: власник сам поставив
+    # мітку туди, де заклад справді є.
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    show_phone_publicly: Optional[bool] = True
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email(cls, v):
+        """Пошта ЗАКЛАДУ: сюди приходять записи й сповіщення - має бути справжньою."""
+        if v is None or str(v).strip() == "":
+            return None
+        from email_validator import EmailNotValidError, validate_email
+        try:
+            return validate_email(str(v).strip(), check_deliverability=False).normalized.lower()
+        except EmailNotValidError:
+            raise ValueError("Невірна адреса пошти закладу")
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def _phone(cls, v):
+        """Робочий телефон закладу у форматі +380XXXXXXXXX."""
+        if v is None or str(v).strip() == "":
+            return None
+        digits = "".join(ch for ch in str(v) if ch.isdigit())
+        if len(digits) == 9:
+            digits = "380" + digits
+        elif len(digits) == 10 and digits.startswith("0"):
+            digits = "38" + digits
+        if not (len(digits) == 12 and digits.startswith("380")):
+            raise ValueError("Телефон закладу - український номер: +380 XX XXX XX XX")
+        return "+" + digits
+
+    @field_validator("latitude")
+    @classmethod
+    def _lat(cls, v):
+        if v is not None and not -90 <= v <= 90:
+            raise ValueError("Невірна широта")
+        return v
+
+    @field_validator("longitude")
+    @classmethod
+    def _lng(cls, v):
+        if v is not None and not -180 <= v <= 180:
+            raise ValueError("Невірна довгота")
+        return v
 
 
 class BusinessUpdate(BaseModel):

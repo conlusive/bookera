@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { goToCheckout } from '@/lib/checkout';
 
 /**
  * «Як вам візит?» і чайові - спільний блок для сторінки візиту (куди веде
@@ -56,23 +57,44 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
   const [masterR, setMasterR] = useState(start);
   const [salonR, setSalonR] = useState(start);
   const [comment, setComment] = useState('');
-  const [step, setStep] = useState<'rate' | 'tip' | 'sorry' | 'done'>('rate');
+  const [step, setStep] = useState<'rate' | 'tip' | 'sorry' | 'done' | 'waiting'>('rate');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [salonLow, setSalonLow] = useState(false);
   const [pick, setPick] = useState<{ kind: 'pct'; v: number } | { kind: 'custom' }>({ kind: 'pct', v: 10 });
   const [custom, setCustom] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  const applyInfo = (r: any) => {
+    setInfo(r);
+    if (r.tip?.pending && !r.tip?.paid) { setStep('waiting'); return; }
+    if (r.review) {
+      // Уже оцінено - одразу наступний крок
+      setStep((r.review.master_rating || r.review.rating) >= 4 && r.tip.can_tip ? 'tip' : 'done');
+      setSalonLow((r.review.salon_rating || r.review.rating) <= 3);
+    } else {
+      setStep('rate');
+    }
+  };
+  const reload = () => api.getVisitFeedback(appointmentId, token).then(applyInfo).catch(() => setInfo(null));
+  useEffect(() => { void reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [appointmentId, token]);
+
+  // Повернулись зі сторінки оплати: WayForPay підтверджує оплату окремим
+  // запитом на сервер, інколи на кілька секунд пізніше. Перевіряємо кожні
+  // 3 с до хвилини - і показуємо «Дякуємо», щойно гроші зараховано.
   useEffect(() => {
-    void api.getVisitFeedback(appointmentId, token).then(r => {
-      setInfo(r);
-      if (r.review) {
-        // Уже оцінено - одразу наступний крок
-        setStep((r.review.master_rating || r.review.rating) >= 4 && r.tip.can_tip ? 'tip' : 'done');
-        setSalonLow((r.review.salon_rating || r.review.rating) <= 3);
-      }
-    }).catch(() => setInfo(null));
-  }, [appointmentId, token]);
+    if (step !== 'waiting') return;
+    let n = 0;
+    const t = setInterval(() => {
+      n += 1;
+      void api.getVisitFeedback(appointmentId, token).then(r => {
+        if (r.tip?.paid) { setInfo(r); setStep('done'); clearInterval(t); }
+        else if (!r.tip?.pending || n >= 20) { applyInfo({ ...r, tip: { ...r.tip, pending: null } }); clearInterval(t); }
+      }).catch(() => {});
+    }, 3000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   useEffect(() => {
     if (info && !compact && typeof window !== 'undefined' && window.location.hash === '#feedback') {
@@ -112,12 +134,40 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
     }
   };
 
+  const deleteReview = async () => {
+    setBusy(true); setError('');
+    try {
+      await api.deleteVisitReview(appointmentId, token);
+      setConfirmDelete(false);
+      setMasterR(0); setSalonR(0); setComment('');
+      onReviewed?.();
+      await reload();
+    } catch (e: any) {
+      setError(e?.message || 'Не вдалося видалити відгук');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteLink = info?.review ? (
+    confirmDelete ? (
+      <div className="vf-del">
+        <span>Видалити ваш відгук?</span>
+        <button type="button" className="danger" disabled={busy} onClick={() => void deleteReview()}>Так, видалити</button>
+        <button type="button" onClick={() => setConfirmDelete(false)}>Ні</button>
+      </div>
+    ) : (
+      <button type="button" className="vf-skip" onClick={() => setConfirmDelete(true)}>Видалити мій відгук</button>
+    )
+  ) : null;
+
   const sendTip = async () => {
     if (!valid) return;
     setBusy(true); setError('');
     try {
       const r = await api.tipMaster(appointmentId, token, Math.round(value));
-      if (r.checkout_url) { window.location.href = r.checkout_url; return; }
+      // Справжня оплата - перехід на сторінку WayForPay; повернемось сюди ж
+      if (goToCheckout(r)) return;
       setInfo((i: any) => ({ ...i, tip: { ...i.tip, paid: r.amount, can_tip: false } }));
       setStep('done');
     } catch (e: any) {
@@ -155,6 +205,7 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
           {salonLow && <div className="vf-note">Заклад отримав ваш відгук і звʼяжеться з вами.</div>}
           <h2>Подякувати {master} чайовими?</h2>
           <p className="vf-sub">{usePercents ? `Від вартості візиту ${Math.round(price).toLocaleString('uk-UA')} ₴. ` : ''}Уся сума — майстрові, без комісії закладу.</p>
+          {!info.tip.live && <div className="vf-test">Тестовий режим: гроші поки не списуються</div>}
           <div className="vf-amounts">
             {(usePercents ? info.tip.percents : fixed).map((v: number) => {
               const on = pick.kind === 'pct' && pick.v === v;
@@ -174,6 +225,15 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
             {busy ? 'Надсилаємо…' : valid ? `Залишити ${Math.round(value)} ₴` : 'Вкажіть суму'}
           </button>
           <button type="button" className="vf-skip" onClick={() => setStep(salonLow ? 'sorry' : 'done')}>Ні, дякую</button>
+          {deleteLink}
+        </>
+      )}
+
+      {step === 'waiting' && (
+        <>
+          <div className="vf-spin" aria-hidden />
+          <h2>Чекаємо підтвердження оплати</h2>
+          <p className="vf-sub">Платіжна система повідомляє про оплату окремо — зазвичай це кілька секунд.</p>
         </>
       )}
 
@@ -182,6 +242,7 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
           <h2>Дякуємо за чесність</h2>
           <p className="vf-sub">Шкода, що не все пройшло добре. Заклад уже отримав вашу оцінку й звʼяжеться з вами, щоб виправити.</p>
           {info.tip.paid ? <p className="vf-sub">Ваші {Math.round(info.tip.paid)} ₴ уже в {master}.</p> : null}
+          {deleteLink}
         </>
       )}
 
@@ -193,6 +254,7 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
             Чекаємо на вас знову{info.business_name ? ` у ${info.business_name}` : ''}.
           </p>
           {info.business_slug && !compact && <a className="vf-btn vf-link" href={`/${info.business_slug}`}>Записатись знову</a>}
+          {deleteLink}
         </>
       )}
 
@@ -216,6 +278,12 @@ export default function VisitFeedback({ appointmentId, token, initialRate, onRev
         .vf-btn:disabled { opacity: .45; cursor: default; }
         .vf-link { line-height: 48px; text-decoration: none; }
         .vf-skip { margin-top: 0.5rem; border: none; background: none; font-family: inherit; font-size: 0.85rem; color: ${C.sub}; cursor: pointer; padding: 0.4rem; }
+        .vf-test { font-size: 0.75rem; color: #8A6516; background: #FBF6EC; border-radius: 8px; padding: 0.35rem 0.6rem; margin: -0.4rem 0 0.8rem; display: inline-block; }
+        .vf-spin { width: 34px; height: 34px; margin: 0.4rem auto 0.9rem; border-radius: 50%; border: 3px solid ${C.line}; border-top-color: ${C.green}; animation: vfSpin .8s linear infinite; }
+        @keyframes vfSpin { to { transform: rotate(360deg); } }
+        .vf-del { display: flex; align-items: center; justify-content: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.6rem; font-size: 0.85rem; color: #A83934; }
+        .vf-del button { height: 32px; padding: 0 0.8rem; border-radius: 9px; border: 1px solid ${C.line}; background: #fff; font-family: inherit; font-size: 0.82rem; cursor: pointer; color: ${C.ink}; }
+        .vf-del button.danger { background: #A83934; border-color: #A83934; color: #fff; }
         .vf-err { font-size: 0.85rem; color: #A83934; margin-top: 0.4rem; }
       `}</style>
     </section>

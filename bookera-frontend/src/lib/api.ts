@@ -451,7 +451,7 @@ export const api = {
   /** Купівля подарункової картки. checkout_url - куди вести на оплату (null, якщо вже оплачено). */
   async buyGiftCard(token: string, payload: {
     business_id: number; amount: number; recipient_name?: string; recipient_email?: string; message?: string;
-  }): Promise<{ card: any; checkout_url: string | null }> {
+  }): Promise<{ card: any; checkout_url: string | null; checkout?: { action: string; fields: Record<string, string> } | null }> {
     return authFetch('/wallet/gift-cards', token, { method: 'POST', body: JSON.stringify(payload) });
   },
 
@@ -543,7 +543,10 @@ export const api = {
   async getVisitFeedback(appointmentId: number, token: string): Promise<any> {
     return publicFetch(`/appointments/${appointmentId}/feedback?token=${encodeURIComponent(token)}`);
   },
-  async tipMaster(appointmentId: number, token: string, amount: number): Promise<{ status: string; checkout_url: string | null; amount: number }> {
+  async deleteVisitReview(appointmentId: number, token: string): Promise<void> {
+    await publicFetch(`/appointments/${appointmentId}/review?token=${encodeURIComponent(token)}`, { method: 'DELETE' });
+  },
+  async tipMaster(appointmentId: number, token: string, amount: number): Promise<{ status: string; checkout_url: string | null; checkout?: { action: string; fields: Record<string, string> } | null; amount: number }> {
     return publicFetch(`/appointments/${appointmentId}/tip`, { method: 'POST', body: JSON.stringify({ token, amount }) });
   },
 

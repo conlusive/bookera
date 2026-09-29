@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { goToCheckout } from '@/lib/checkout';
 import { getAuthTokenOrNull } from '@/lib/auth-token-client';
 
 /**
@@ -55,10 +56,8 @@ export default function GiftCardModal({
         recipient_email: recipientEmail.trim() || undefined,
         message: message.trim() || undefined,
       });
-      if (res.checkout_url) {
-        window.location.href = res.checkout_url;
-        return;
-      }
+      // Справжня оплата - на сторінку WayForPay (підписана форма, не посилання)
+      if (goToCheckout(res)) return;
       showToast('Картку оплачено - код у «Бонуси та картки»', 'success');
       onClose();
       router.push('/account/profile?tab=wallet');

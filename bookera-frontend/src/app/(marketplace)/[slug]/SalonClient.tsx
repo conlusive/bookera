@@ -21,6 +21,7 @@ import SmartImage from '@/components/ui/SmartImage';
 import GiftCardModal from '@/components/salon/GiftCardModal';
 import { resolveDisplayName } from '@/lib/displayName';
 import { formatDuration } from '@/lib/duration';
+import VisitFeedback from '@/components/visit/VisitFeedback';
 
 // === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
@@ -201,6 +202,49 @@ export default function SalonClient({
   // --- Відгуки та відповіді ---
   const [reviewFilter, setReviewFilter] = useState('all');
   const [currentReviewPage, setCurrentReviewPage] = useState(1);
+  // Мої завершені візити в цей заклад - щоб оцінити прямо тут
+  const [myVisitsHere, setMyVisitsHere] = useState<any[] | null>(null);
+  // Лічильник: після оцінки чи видалення - перечитати візити з сервера
+  const [visitsNonce, setVisitsNonce] = useState(0);
+  const [feedbackVisit, setFeedbackVisit] = useState<any | null>(null);
+  const [confirmDeleteReview, setConfirmDeleteReview] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isLoggedIn || !salon?.id) { setMyVisitsHere(null); return; }
+    let alive = true;
+    void (async () => {
+      try {
+        const t = await getAuthTokenOrNull();
+        if (!t) return;
+        const all = await api.listMyAppointments(t);
+        if (alive) setMyVisitsHere(all.filter((a: any) => String(a.business_id) === String(salon.id) && a.status === 'completed' && a.manage_token)
+          .sort((a: any, b: any) => String(b.start_time).localeCompare(String(a.start_time))));
+      } catch { if (alive) setMyVisitsHere([]); }
+    })();
+    return () => { alive = false; };
+  }, [isLoggedIn, salon?.id, visitsNonce]);
+  const myTokenByAppointment = useMemo(
+    () => new Map((myVisitsHere || []).map((v: any) => [Number(v.id), v.manage_token as string])),
+    [myVisitsHere],
+  );
+  const refreshReviews = useCallback(async () => {
+    if (!salon?.id) return;
+    try { setReviews(await api.listReviews(Number(salon.id))); } catch { /* лишаємо як є */ }
+  }, [salon?.id]);
+  const deleteMyReview = async (review: any) => {
+    const token = myTokenByAppointment.get(Number(review.appointment_id));
+    if (!token) return;
+    try {
+      await api.deleteVisitReview(Number(review.appointment_id), token);
+      setReviews(prev => prev.filter(r => r.id !== review.id));
+      setMyVisitsHere(prev => (prev || []).map(v => (Number(v.id) === Number(review.appointment_id) ? { ...v, has_review: false } : v)));
+      showToast('Відгук видалено', 'success');
+    } catch (e: any) {
+      showToast(e?.message || 'Не вдалося видалити відгук', 'error');
+    } finally {
+      setConfirmDeleteReview(null);
+    }
+  };
+
   const [reviewRating, setReviewRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
@@ -2071,20 +2115,61 @@ const formatRole = (role?: string) => {
                 </div>
               </div>
 
-              {/* Замість форми - підказка. Відгук залишають лише після
-                  справжнього візиту, у профілі: так рейтинг не можна
-                  накрутити чи засипати одиницями без жодного запису. */}
-              <div style={{ padding: '1.25rem 1.4rem', borderRadius: '18px', background: '#F4FAF5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: '0.975rem', fontWeight: 600, color: '#1D1D1F' }}>Були тут?</div>
-                  <div style={{ fontSize: '0.875rem', color: '#5C6B5E', marginTop: '2px' }}>
-                    Оцінити візит можна після нього - у профілі, розділ «Мої візити».
+              {/* Відгук - прямо тут, але лише про справжній візит: сторінка
+                  знаходить ваші завершені візити в цей заклад. Так рейтинг
+                  не накрутити без запису, а оцінити не треба йти в профіль. */}
+              <div style={{ padding: '1.1rem 1.3rem', borderRadius: '18px', background: '#F4FAF5', border: '1px solid #E4EBE3', marginBottom: '1.5rem' }}>
+                {!isLoggedIn ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: '0.975rem', fontWeight: 600, color: '#1D1D1F' }}>Були тут?</div>
+                      <div style={{ fontSize: '0.875rem', color: '#5C6B5E', marginTop: '2px' }}>Увійдіть, щоб оцінити свій візит і подякувати майстрові.</div>
+                    </div>
+                    <button type="button" onClick={() => setIsAuthModalOpen(true)}
+                      style={{ height: '38px', padding: '0 1.1rem', borderRadius: '11px', border: 'none', background: '#1D1D1F', color: '#fff', fontFamily: 'inherit', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' }}>
+                      Увійти
+                    </button>
+                  </div>
+                ) : myVisitsHere === null ? (
+                  <div style={{ fontSize: '0.875rem', color: '#5C6B5E' }}>Шукаємо ваші візити…</div>
+                ) : myVisitsHere.length === 0 ? (
+                  <div style={{ fontSize: '0.875rem', color: '#5C6B5E' }}>
+                    Оцінити заклад можна після візиту — відгуки тут лише від тих, хто справді був.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '0.975rem', fontWeight: 600, color: '#1D1D1F', marginBottom: '0.6rem' }}>Ваші візити</div>
+                    {myVisitsHere.slice(0, 3).map(v => {
+                      const reviewed = !!v.has_review;
+                      return (
+                        <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.55rem 0', borderTop: '1px solid #E4EBE3' }}>
+                          <div style={{ fontSize: '0.9rem', color: '#1D1D1F' }}>
+                            {v.service_name || 'Візит'}
+                            <span style={{ color: '#6B756A' }}> · {new Date(v.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}</span>
+                          </div>
+                          <button type="button" onClick={() => setFeedbackVisit(v)}
+                            style={{ height: '34px', padding: '0 0.95rem', borderRadius: '10px', border: reviewed ? '1px solid #D5E2D3' : 'none', background: reviewed ? '#fff' : '#1D1D1F', color: reviewed ? '#1D1D1F' : '#fff', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            {reviewed ? 'Ваш відгук' : 'Оцінити'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+
+              {feedbackVisit && (
+                <div onClick={() => setFeedbackVisit(null)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem' }}>
+                  <div onClick={ev => ev.stopPropagation()} role="dialog" aria-label="Оцінити візит"
+                    style={{ position: 'relative', width: '100%', maxWidth: '460px', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: '20px', padding: '1.5rem 1.4rem 1.3rem' }}>
+                    <button type="button" aria-label="Закрити" onClick={() => setFeedbackVisit(null)}
+                      style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#64748b', cursor: 'pointer' }}>✕</button>
+                    <VisitFeedback compact appointmentId={Number(feedbackVisit.id)} token={feedbackVisit.manage_token}
+                      onReviewed={() => { setVisitsNonce(n => n + 1); void refreshReviews(); }} />
                   </div>
                 </div>
-                <Link href="/account/profile" style={{ height: '36px', padding: '0 1.1rem', borderRadius: '10px', background: '#1D1D1F', color: '#fff', fontSize: '0.875rem', fontWeight: 500, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-                  Мої візити
-                </Link>
-              </div>
+              )}
 
               {/* СПИСОК ВІДГУКІВ (МАКСИМУМ 5 НА СТОРІНКУ) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -2143,9 +2228,36 @@ const formatRole = (role?: string) => {
                           </div>
                         </div>
 
-                        <p style={{ color: '#1D1D1F', margin: 0, fontSize: '0.95rem', lineHeight: '1.6', fontWeight: '400' }}>
-                          {review.comment}
-                        </p>
+                        {/* Окремо майстер і заклад - якщо відгук нового зразка */}
+                        {review.master_rating && review.salon_rating && review.master_rating !== review.salon_rating && (
+                          <div style={{ display: 'flex', gap: '0.9rem', fontSize: '0.8rem', color: '#6B756A', margin: '-0.4rem 0 0.6rem' }}>
+                            <span>Майстер <b style={{ color: '#1D1D1F' }}>{review.master_rating}★</b></span>
+                            <span>Заклад <b style={{ color: '#1D1D1F' }}>{review.salon_rating}★</b></span>
+                          </div>
+                        )}
+                        {review.comment && (
+                          <p style={{ color: '#1D1D1F', margin: 0, fontSize: '0.95rem', lineHeight: '1.6', fontWeight: '400' }}>
+                            {review.comment}
+                          </p>
+                        )}
+
+                        {/* Ваш відгук - можна видалити (за вашим візитом) */}
+                        {myTokenByAppointment.has(Number(review.appointment_id)) && (
+                          confirmDeleteReview === review.id ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.7rem', fontSize: '0.85rem', color: '#A83934', flexWrap: 'wrap' }}>
+                              <span>Видалити ваш відгук?</span>
+                              <button type="button" onClick={() => void deleteMyReview(review)}
+                                style={{ height: '30px', padding: '0 0.8rem', borderRadius: '8px', border: 'none', background: '#A83934', color: '#fff', fontFamily: 'inherit', fontSize: '0.8rem', cursor: 'pointer' }}>Так, видалити</button>
+                              <button type="button" onClick={() => setConfirmDeleteReview(null)}
+                                style={{ height: '30px', padding: '0 0.8rem', borderRadius: '8px', border: '1px solid #E4EBE3', background: '#fff', fontFamily: 'inherit', fontSize: '0.8rem', cursor: 'pointer' }}>Ні</button>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => setConfirmDeleteReview(review.id)}
+                              style={{ marginTop: '0.6rem', border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: '0.8rem', color: '#86868B', cursor: 'pointer' }}>
+                              Ваш відгук · Видалити
+                            </button>
+                          )
+                        )}
 
                         {(review.reply || review.response || review.business_reply) && (
                           <div style={{

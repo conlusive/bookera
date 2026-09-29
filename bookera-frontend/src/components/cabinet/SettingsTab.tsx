@@ -9,6 +9,7 @@ import AppSelect from '@/components/ui/AppSelect';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { categoryTitle } from '@/lib/categories';
 import { formatDuration } from '@/lib/duration';
+import HelpTip from '@/components/ui/HelpTip';
 
 interface SettingsTabProps {
   onNavigate?: (tab: string) => void;
@@ -391,7 +392,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               </p>
               <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
                 <div>
-                  <label className="setting-label">Напрям</label>
+                  <label className="setting-label">Напрям <HelpTip>Основна категорія закладу - за нею вас знаходять у пошуку.</HelpTip></label>
                   <div style={{
                     height: '44px', padding: '0 0.9rem', display: 'flex', alignItems: 'center',
                     justifyContent: 'space-between', gap: '0.5rem',
@@ -416,7 +417,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                   />
                 </div>
                 <div>
-                  <label className="setting-label">Де приймаєте</label>
+                  <label className="setting-label">Де приймаєте <HelpTip>У закладі - клієнти приходять до вас. Виїзд - ви їдете до клієнта, і час на дорогу враховується в записі.</HelpTip></label>
                   <AppSelect
                     value={profileSettings.workspace_type}
                     onChange={v => setProfileSettings({ ...profileSettings, workspace_type: String(v) })}
@@ -568,7 +569,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             </div>
 
             <div className="clean-panel">
-              <h3 className="panel-title">Що з цього випливає</h3>
+              <h3 className="panel-title">Що з цього випливає <HelpTip>Налаштування, які система підібрала за вашим типом бізнесу й способом роботи. Їх можна змінити окремо.</HelpTip></h3>
               <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {[
                   ['Крок сітки', `${bookingSettings.time_step} хв`],
@@ -729,11 +730,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
                 <div>
                   <label className="setting-label">
-                    <div className="tooltip-wrap">
-                      Інтервал часу
-                      <SvgHelpCircle size={14} className="tooltip-icon" />
-                      <div className="tooltip-content">Час, який пропонується клієнту на вибір. Визначає щільність записів.</div>
-                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>Інтервал часу <HelpTip>Час, який пропонується клієнту на вибір. Визначає щільність записів.</HelpTip></span>
                   </label>
                   <AppSelect
                     value={bookingSettings.time_step}
@@ -752,11 +749,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
                 <div>
                   <label className="setting-label">
-                    <div className="tooltip-wrap">
-                      Буфер після візиту
-                      <SvgHelpCircle size={14} className="tooltip-icon" />
-                      <div className="tooltip-content">Час на прибирання й підготовку між клієнтами.</div>
-                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>Буфер після візиту <HelpTip>Час на прибирання й підготовку між клієнтами.</HelpTip></span>
                   </label>
                   <AppSelect
                     value={bookingSettings.buffer_minutes}
@@ -776,11 +769,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
                 <div>
                   <label className="setting-label">
-                    <div className="tooltip-wrap">
-                      Тривалість візиту
-                      <SvgHelpCircle size={14} className="tooltip-icon" />
-                      <div className="tooltip-content">Значення за замовчуванням. Підставляється при створенні нової послуги.</div>
-                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>Тривалість візиту <HelpTip>Значення за замовчуванням. Підставляється при створенні нової послуги.</HelpTip></span>
                   </label>
                   <AppSelect
                     value={bookingSettings.default_duration}
@@ -802,11 +791,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
                 <div>
                   <label className="setting-label">
-                    <div className="tooltip-wrap">
-                      Мінімум часу до візиту
-                      <SvgHelpCircle size={14} className="tooltip-icon" />
-                      <div className="tooltip-content">Забороняє клієнтам бронювати візит "в останню секунду".</div>
-                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>Мінімум часу до візиту <HelpTip>Забороняє клієнтам бронювати візит "в останню секунду".</HelpTip></span>
                   </label>
                   <AppSelect
                     value={bookingSettings.min_advance_hours}
@@ -826,11 +811,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
                 <div>
                   <label className="setting-label">
-                    <div className="tooltip-wrap">
-                      Горизонт планування
-                      <SvgHelpCircle size={14} className="tooltip-icon" />
-                      <div className="tooltip-content">На скільки днів вперед клієнти можуть гортати календар.</div>
-                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>Горизонт планування <HelpTip>На скільки днів вперед клієнти можуть гортати календар.</HelpTip></span>
                   </label>
                   <AppSelect
                     value={bookingSettings.max_advance_days}
@@ -851,7 +832,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
             {/* Закриті періоди */}
             <div className="clean-panel">
-              <h3 className="panel-title">Закриті періоди</h3>
+              <h3 className="panel-title">Закриті періоди <HelpTip>Дні, коли заклад не працює: відпустка, ремонт, свята. Клієнти не зможуть записатись на ці дати, навіть якщо за графіком це робочий день.</HelpTip></h3>
               <p className="panel-subtitle">Відпустка, санітарні дні, ремонт. У ці дати клієнти не зможуть записатись.</p>
               <div style={{ padding: '1.5rem 2rem' }}>
                 {(bookingSettings.closed_periods || []).length > 0 && (
@@ -919,7 +900,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             </div>
 
             <div className="clean-panel">
-              <h3 className="panel-title">Умови скасування</h3>
+              <h3 className="panel-title">Умови скасування <HelpTip>До якого часу клієнт може сам скасувати чи перенести запис. Пізніше - лише через заклад.</HelpTip></h3>
               <p className="panel-subtitle">Клієнт побачить цей текст перед підтвердженням.</p>
               <div style={{ padding: '1.5rem 2rem' }}>
                 <textarea
@@ -939,12 +920,12 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         {settingsView === 'security' && (
           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <h3 className="panel-title">Захист від фейків</h3>
+              <h3 className="panel-title">Захист від фейків <HelpTip>Перевірки, що відсіюють ненастоящі записи: підтвердження номера кодом, блок тих, хто не приходить.</HelpTip></h3>
               <p className="panel-subtitle">Запобігайте спаму та порожнім записам.</p>
 
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Верифікація номеру (OTP) <span className="badge" style={{color: '#f59e0b', borderColor: '#fde68a', background: '#fffbeb'}}>В розробці</span></h4>
+                  <h4>Верифікація номеру (OTP) <HelpTip>Клієнт підтверджує номер кодом з SMS перед записом. Відсікає вигадані номери й записи «для жарту».</HelpTip> <span className="badge" style={{color: '#f59e0b', borderColor: '#fde68a', background: '#fffbeb'}}>В розробці</span></h4>
                   <p>Клієнти повинні підтвердити свій телефон по SMS перед записом.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" disabled checked={securitySettings.require_phone_verification} onChange={e => setSecuritySettings({...securitySettings, require_phone_verification: e.target.checked})} /><span className="ios-slider"></span></label>
@@ -952,7 +933,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Авто-блокування неявок <span className="badge">Рекомендовано</span></h4>
+                  <h4>Авто-блокування неявок <HelpTip>Клієнт, який кілька разів не прийшов без попередження, більше не зможе записатись онлайн - лише через адміністратора.</HelpTip> <span className="badge">Рекомендовано</span></h4>
                   <p>Система заборонить онлайн-запис клієнтам, які мають 2+ неявки.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={securitySettings.block_no_shows} onChange={e => setSecuritySettings({...securitySettings, block_no_shows: e.target.checked})} /><span className="ios-slider"></span></label>
@@ -965,18 +946,18 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         {settingsView === 'notifications' && (
           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <h3 className="panel-title">Робота з клієнтами</h3>
+              <h3 className="panel-title">Робота з клієнтами <HelpTip>Як поводитись із записами: підтверджувати вручну чи автоматично, які нагадування надсилати клієнтові.</HelpTip></h3>
               <p className="panel-subtitle">Автоматичні повідомлення для збільшення явки.</p>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Авто-підтвердження записів <span className="badge">Система</span></h4>
+                  <h4>Авто-підтвердження записів <HelpTip>Увімкнено - онлайн-запис одразу підтверджений. Вимкнено - кожен новий запис чекає, поки ви його підтвердите в календарі.</HelpTip> <span className="badge">Система</span></h4>
                   <p>Нові записи з онлайну будуть автоматично підтверджені.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.auto_approve} onChange={e => setNotificationSettings({...notificationSettings, auto_approve: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Підтвердження візиту (SMS)</h4>
+                  <h4>Підтвердження візиту (SMS) <HelpTip>Клієнт отримує SMS із деталями запису одразу після бронювання.</HelpTip></h4>
                   <p>Відправляти повідомлення з деталями одразу після бронювання.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.notify_client_booking} onChange={e => setNotificationSettings({...notificationSettings, notify_client_booking: e.target.checked})} /><span className="ios-slider"></span></label>
@@ -990,7 +971,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               </div>
             </div>
             <div className="clean-panel">
-              <h3 className="panel-title">Сповіщення команди</h3>
+              <h3 className="panel-title">Сповіщення команди <HelpTip>Кому й про що приходять листи: новий запис, перенесення, скасування.</HelpTip></h3>
               <div className="list-row">
                 <div className="list-row-info">
                   <h4>Сповіщати майстра про новий запис</h4>
@@ -1016,10 +997,10 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             </div>
 
             <div className="clean-panel">
-              <h3 className="panel-title">Захист від неявок (Онлайн-оплата)</h3>
+              <h3 className="panel-title">Захист від неявок (Онлайн-оплата) <HelpTip>Передоплата при онлайн-записі. Клієнт, який заплатив, приходить значно частіше - а якщо ні, гроші лишаються закладу за умовами скасування.</HelpTip></h3>
               <div className="list-row" style={{ background: paymentsSettings.require_deposit ? '#f8fafc' : '#fff' }}>
                 <div className="list-row-info">
-                  <h4>Брати передоплату (Депозит)</h4>
+                  <h4>Брати передоплату (Депозит) <HelpTip>Частина вартості сплачується під час онлайн-запису. Потім вона зараховується в оплату візиту.</HelpTip></h4>
                   <p>Клієнти повинні будуть оплатити частину вартості онлайн.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={paymentsSettings.require_deposit} onChange={e => setPaymentsSettings({...paymentsSettings, require_deposit: e.target.checked})} /><span className="ios-slider"></span></label>
@@ -1028,7 +1009,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               {paymentsSettings.require_deposit && (
                 <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', borderTop: '1px solid #e2e8f0', background: '#fafafa' }}>
                   <div>
-                    <label className="setting-label">Тип депозиту</label>
+                    <label className="setting-label">Тип депозиту <HelpTip>Фіксована сума (наприклад, 200 ₴) або відсоток від вартості послуги.</HelpTip></label>
                     <AppSelect
                       value={paymentsSettings.deposit_type}
                       onChange={v => setPaymentsSettings({ ...paymentsSettings, deposit_type: String(v) })}

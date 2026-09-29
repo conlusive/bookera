@@ -12,6 +12,7 @@ import Avatar from '@/components/ui/Avatar';
 import TeamRequestsPanel from '@/components/cabinet/TeamRequestsPanel';
 import StaffAccessPanel from '@/components/cabinet/StaffAccessPanel';
 import StaffQuality from '@/components/cabinet/StaffQuality';
+import HelpTip from '@/components/ui/HelpTip';
 
 // Локальні іконки
 const WalletIcon = () => (
@@ -1117,7 +1118,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem' }}>
                       <div>
-                         <h3 style={{ fontSize: '1rem', fontWeight: '700', color: colors.textPrimary, margin: '0 0 0.4rem 0' }}>Регулярні робочі години</h3>
+                         <h3 style={{ fontSize: '1rem', fontWeight: '700', color: colors.textPrimary, margin: '0 0 0.4rem 0' }}>Регулярні робочі години <HelpTip>Тижневий графік цього майстра. Клієнти бачать вільні години лише в межах його змін.</HelpTip></h3>
                          <p style={{ fontSize: '0.85rem', color: colors.textSecondary, margin: 0 }}>Зміни зберігаються автоматично.</p>
                       </div>
                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -1440,7 +1441,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.6rem' }}>Комісія від послуг (%)</label>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.6rem' }}>Комісія від послуг (%) <HelpTip>Частка вартості кожного завершеного візиту, яка йде майстрові. Наприклад, 40% від стрижки за 500 ₴ - 200 ₴.</HelpTip></label>
                       <div style={{ position: 'relative' }}>
                         <input
                            type="number"
@@ -1453,7 +1454,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.6rem' }}>Фіксована ставка (₴)</label>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.6rem' }}>Фіксована ставка (₴) <HelpTip>Сума за період незалежно від кількості візитів. Можна поєднувати з відсотком.</HelpTip></label>
                       <div style={{ position: 'relative' }}>
                         <input
                            type="number"
@@ -1466,7 +1467,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.6rem' }}>Податок / Утримання (%)</label>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.6rem' }}>Податок / Утримання (%) <HelpTip>Відсоток, що утримується з нарахованого перед виплатою. Чайові не оподатковуються - вони йдуть майстрові повністю.</HelpTip></label>
                       <div style={{ position: 'relative' }}>
                         <input
                            type="number"
@@ -1489,7 +1490,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                           return (
                             <>
                                <div>
-                                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Періодичність виплат</label>
+                                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.4rem' }}>Періодичність виплат <HelpTip>Як часто платите майстрові. Система нагадає, коли настане час виплати, і сама порахує суму.</HelpTip></label>
                                  <div style={{ position: 'relative' }}>
                                    <select
                                       value={safePeriod}
@@ -1730,7 +1731,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 )}
 
                 <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div><h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Приймає записи клієнтів</h3><p style={{ fontSize: '0.8rem', color: colors.textSecondary, margin: 0 }}>Якщо вимкнено, співробітник зникне з онлайн-бронювання та розкладу.</p></div>
+                  <div><h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Приймає записи клієнтів <HelpTip>Вимкнено - майстра немає серед варіантів під час онлайн-запису, але він лишається в команді й бачить свій календар.</HelpTip></h3><p style={{ fontSize: '0.8rem', color: colors.textSecondary, margin: 0 }}>Якщо вимкнено, співробітник зникне з онлайн-бронювання та розкладу.</p></div>
                   <div onClick={() => {
                      handleUpdateLocalStaff({ provides_services: !providesServices });
                      handleSaveSettingsDB({ provides_services: !providesServices });
@@ -1744,7 +1745,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     приховування з вітрини. */}
                 <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                   <div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Показувати на сторінці закладу</h3>
+                    <h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Показувати на сторінці закладу <HelpTip>Чи видно майстра в блоці «Наша команда» на сторінці салону. Записи це не зупиняє.</HelpTip></h3>
                     <p style={{ fontSize: '0.82rem', color: colors.textSecondary, margin: 0 }}>Блок «Наша команда». На запис це не впливає.</p>
                   </div>
                   <div onClick={() => {
@@ -1766,7 +1767,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 ) : (
                   <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                     <div>
-                      <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#991b1b', margin: '0 0 0.4rem 0' }}>Передача прав власника</h3>
+                      <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#991b1b', margin: '0 0 0.4rem 0' }}>Передача прав власника <HelpTip>Інша людина стане власником закладу з усіма правами, а ви - адміністратором. Скасувати сам не зможете.</HelpTip></h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0, maxWidth: '400px', lineHeight: 1.4, opacity: 0.9 }}>Щоб звільнити цей профіль, потрібно спочатку передати права власності на бізнес іншому адміністратору.</p>
                     </div>
                     {isSystemOwner ? (

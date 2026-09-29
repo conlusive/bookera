@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import HelpTip from '@/components/ui/HelpTip';
 
 /**
  * «Якість» - вкладка в картці майстра («Команда»).
@@ -118,7 +119,7 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
         </div>
         <div className="sq-head-text">
           <div className="sq-label" style={{ background: t.bg, color: t.color }}>{t.label}</div>
-          <h3>Якість роботи</h3>
+          <h3>Якість роботи <HelpTip width={300}>Оцінка 0-100 із трьох речей, які клієнт показує поведінкою: рейтинг відгуків про майстра (50%), чи приходять клієнти знову (35%) і як часто залишають чайові (15%). Зʼявляється після 5 завершених візитів за період.</HelpTip></h3>
           <p>
             {q.enough_data
               ? <>{periodLabel(q)} · {q.visits} завершених візитів{q.rank ? <> · <b>{q.rank}-е місце</b> із {q.ranked_of} у команді</> : null}</>
@@ -146,7 +147,7 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
       {/* Три складові */}
       <div className="sq-cards">
         <div className="sq-card">
-          <div className="sq-card-l">Рейтинг відгуків <em>50%</em></div>
+          <div className="sq-card-l">Рейтинг відгуків <em>50%</em> <HelpTip>Середня оцінка саме майстра - окремо від оцінки закладу.</HelpTip></div>
           <div className="sq-card-v">{q.rating.avg != null ? <>{q.rating.avg.toFixed(1)} <small>★</small></> : '—'}</div>
           <div className="sq-card-s">{q.rating.count ? `${q.rating.count} відгуків` : 'відгуків ще немає'} <Compare mine={q.rating.avg} team={q.team?.rating} fmt={v => v.toFixed(1)} /></div>
           {q.rating.count > 0 && (
@@ -163,7 +164,7 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
         </div>
 
         <div className="sq-card">
-          <div className="sq-card-l">Повертаються <em>35%</em></div>
+          <div className="sq-card-l">Повертаються <em>35%</em> <HelpTip>Частка клієнтів, які прийшли до цього майстра знову протягом 60 днів. Тих, у кого 60 днів ще не минуло, не рахуємо втраченими.</HelpTip></div>
           <div className="sq-card-v">{pct(q.retention.rate)}</div>
           <div className="sq-card-s">
             {q.retention.eligible
@@ -175,7 +176,7 @@ export default function StaffQuality({ businessId, staffId, canReply = true }: {
         </div>
 
         <div className="sq-card">
-          <div className="sq-card-l">Чайові <em>15%</em></div>
+          <div className="sq-card-l">Чайові <em>15%</em> <HelpTip>Частка візитів, за які клієнт залишив чайові - у салоні чи онлайн після оцінки.</HelpTip></div>
           <div className="sq-card-v">{pct(q.tips.share)}</div>
           <div className="sq-card-s">
             {q.tips.count ? `${q.tips.count} візитів із чайовими · разом ${money(q.tips.total)} · в середньому ${money(q.tips.avg)}` : 'Чайових за період не записано'}

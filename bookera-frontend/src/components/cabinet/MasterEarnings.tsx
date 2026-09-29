@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import HelpTip from '@/components/ui/HelpTip';
 
 /**
  * «Заробіток» майстра - окремо від розкладу.
@@ -74,7 +75,7 @@ export default function MasterEarnings({ businessId, userId }: { businessId: num
 
       <div className="me-kpis">
         <div className="me-kpi">
-          <div className="me-kpi-l">До виплати</div>
+          <div className="me-kpi-l">До виплати <HelpTip>Скільки ви заробили з останньої виплати: відсоток від завершених візитів, ставка й чайові, мінус податок і матеріали.</HelpTip></div>
           <div className="me-kpi-v" style={{ color: configured ? C.text : C.sub }}>{preview === undefined ? '—' : configured ? money(preview.payout_amount) : '—'}</div>
           <div className="me-kpi-s">{configured ? 'за поточний період' : 'оплату ще не налаштовано'}</div>
         </div>
@@ -97,7 +98,7 @@ export default function MasterEarnings({ businessId, userId }: { businessId: num
 
       <div className="me-grid">
         <section className="me-card">
-          <div className="me-card-title">Як рахується</div>
+          <div className="me-card-title">Як рахується <HelpTip>Розбивка суми до виплати. Рахуються лише візити, позначені «Завершено» в календарі.</HelpTip></div>
           {preview === undefined ? (
             <div className="me-muted">Завантаження…</div>
           ) : !configured ? (

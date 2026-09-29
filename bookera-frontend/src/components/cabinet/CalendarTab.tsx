@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import { formatDuration } from '@/lib/duration';
+import HelpTip from '@/components/ui/HelpTip';
 
 // Іконка для чекбоксу в стилі Apple
 const CheckIcon = () => (
@@ -1972,7 +1973,7 @@ const handleSaveShifts = async () => {
                 onClick={() => setIsBlockMode(true)}
                 style={{ paddingBottom: '0.5rem', background: 'none', border: 'none', borderBottom: isBlockMode ? '2px solid #0f172a' : '2px solid transparent', fontWeight: isBlockMode ? '700' : '500', color: isBlockMode ? '#0f172a' : '#64748b', cursor: 'pointer', fontSize: '0.95rem' }}
               >
-                Блокувати час
+                Блокувати час <HelpTip>Закрити час для онлайн-запису: перерва, обід, особисті справи. Клієнти не зможуть записатись на цей проміжок, а в календарі він буде сірим.</HelpTip>
               </button>
             </div>
 

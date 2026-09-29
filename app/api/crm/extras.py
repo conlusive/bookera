@@ -527,19 +527,25 @@ async def send_campaign(
     clients = result.scalars().all()
 
     now = utc_now()
+    # Візити й останній візит - із записів. Збережені лічильники ніхто не
+    # оновлював: «постійним» не знаходилось нікого, а «давно не були»
+    # падала на неіснуючому полі last_visit.
+    from app.services.client_stats import client_stats
+    from app.core.time_utils import local_now as _local_now
+    stats = await client_stats(db, payload.business_id, clients)
+    today = _local_now().date()
     selected = []
     for c in clients:
         if not c.email:
             continue
-        if payload.audience == "regular" and (c.visits_count or 0) < 3:
+        s = stats.get(c.id, {})
+        if payload.audience == "regular" and s.get("visits_count", 0) < 3:
             continue
         if payload.audience == "lapsed":
-            # «Давно не був» - понад 60 днів. Тим, хто був учора,
-            # лист «ми скучили» виглядає безглуздо.
-            if not c.last_visit:
-                continue
-            days = (now.date() - c.last_visit).days if hasattr(c.last_visit, "year") else 0
-            if days < 60:
+            # «Давно не був» - понад 60 днів і без майбутнього запису. Тим,
+            # хто був учора чи записаний на завтра, «ми скучили» - безглуздо.
+            last = s.get("last_visit_at")
+            if not last or s.get("next_visit_at") or (today - last.date()).days < 60:
                 continue
         selected.append(c)
 

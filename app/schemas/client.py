@@ -40,9 +40,13 @@ class ClientResponse(ClientBase):
     business_id: int
     is_blacklisted: bool
     balance: float
-    visits_count: int
-    total_spent: float
+    # Рахуються із записів (services/client_stats.py), а не зі збережених
+    # лічильників, які ніхто не оновлював.
+    visits_count: int = 0
+    total_spent: float = 0
     last_visit_at: Optional[datetime] = None
+    next_visit_at: Optional[datetime] = None
+    no_show_count: int = 0
     medical_pdf_url: Optional[str] = None
     formulas: Optional[str] = None
     consent_photo: bool = False

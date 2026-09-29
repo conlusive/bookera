@@ -11,6 +11,7 @@ from app.models import Client, ClientLink, Business, PointsLedgerEntry, Appointm
 from app.models.appointment import Appointment
 from app.services.monetization import award_points_for_new_client
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
+from app.services.client_stats import apply_stats, client_stats, phone_tail
 
 router = APIRouter(prefix="/crm/clients", tags=["CRM - Clients"])
 
@@ -20,6 +21,14 @@ async def _load_with_links(db: AsyncSession, client_id: int) -> Optional[Client]
         select(Client).where(Client.id == client_id).options(selectinload(Client.links))
     )
     return result.scalars().first()
+
+
+
+async def _with_stats(db: AsyncSession, business_id: int, clients) -> List[ClientResponse]:
+    """Відповідь зі статистикою, порахованою із записів."""
+    clients = list(clients)
+    stats = await client_stats(db, business_id, clients)
+    return [apply_stats(ClientResponse.model_validate(cl, from_attributes=True), stats.get(cl.id)) for cl in clients]
 
 
 @router.get("", response_model=List[ClientResponse])
@@ -54,7 +63,7 @@ async def list_clients(
         stmt = stmt.where(or_(func.lower(Client.name).like(like), Client.phone.like(like)))
     stmt = stmt.order_by(Client.last_visit_at.desc().nullslast()).limit(limit).offset(offset)
     result = await db.execute(stmt)
-    return result.scalars().all()
+    return await _with_stats(db, business_id, result.scalars().unique().all())
 
 
 @router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
@@ -75,7 +84,8 @@ async def create_client(
             await award_points_for_new_client(db, business, client_in.phone, client.id)
 
     await db.commit()
-    return await _load_with_links(db, client.id)
+    _cl = await _load_with_links(db, client.id)
+    return (await _with_stats(db, _cl.business_id, [_cl]))[0]
 
 
 async def _get_owned_client(db: AsyncSession, current_user: CurrentUser, client_id: int) -> Client:
@@ -98,7 +108,49 @@ async def update_client(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(client, field, value)
     await db.commit()
-    return await _load_with_links(db, client_id)
+    _cl = await _load_with_links(db, client_id)
+    return (await _with_stats(db, _cl.business_id, [_cl]))[0]
+
+
+
+@router.get("/{client_id}/history")
+async def client_history(
+    client_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Справжня історія клієнта: візити з датою, послугою, майстром, статусом,
+    ціною, чайовими й оцінкою. Раніше вкладка «Історія» показувала заготовку
+    «Візит успішно завершено. Послуга виконана. Оплачено» без жодних даних.
+    """
+    from app.models import Service, User
+    from app.models.extras import Review
+    from sqlalchemy import and_, or_
+    client = await _get_owned_client(db, current_user, client_id)
+    tail = phone_tail(client.phone)
+    cond = Appointment.client_id == client.id
+    if tail:
+        cond = or_(cond, and_(Appointment.client_id.is_(None), Appointment.client_phone.like(f"%{tail}")))
+    rows = (await db.execute(
+        select(Appointment).where(Appointment.business_id == client.business_id, cond,
+                                  Appointment.status.notin_(["blocked"]))
+        .order_by(Appointment.start_time.desc()).limit(200)
+    )).scalars().all()
+    srv_ids = {a.service_id for a in rows if a.service_id}
+    m_ids = {str(a.master_id) for a in rows if a.master_id}
+    srv = {s.id: s.name for s in (await db.execute(select(Service).where(Service.id.in_(srv_ids)))).scalars().all()} if srv_ids else {}
+    masters = {u.id: (u.full_name or u.email) for u in (await db.execute(select(User).where(User.id.in_(m_ids)))).scalars().all()} if m_ids else {}
+    reviews = {r.appointment_id: r for r in (await db.execute(select(Review).where(Review.appointment_id.in_([a.id for a in rows])))).scalars().all()} if rows else {}
+    return [{
+        "id": a.id, "start_time": a.start_time.isoformat() if a.start_time else None,
+        "status": a.status, "service": srv.get(a.service_id), "master": masters.get(str(a.master_id)),
+        "price": float(a.price) if a.price is not None else None,
+        "tip": float(a.tip_amount) if a.tip_amount else None,
+        "rating": (reviews[a.id].master_rating or reviews[a.id].rating) if a.id in reviews else None,
+        "comment": reviews[a.id].comment if a.id in reviews else None,
+        "notes": a.notes,
+    } for a in rows]
 
 
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -156,7 +208,8 @@ async def link_clients(
         db.add(ClientLink(client_id=target.id, linked_client_id=client.id))
         await db.commit()
 
-    return await _load_with_links(db, client_id)
+    _cl = await _load_with_links(db, client_id)
+    return (await _with_stats(db, _cl.business_id, [_cl]))[0]
 
 
 @router.delete("/{client_id}/link/{target_client_id}", response_model=ClientResponse)
@@ -180,4 +233,5 @@ async def unlink_clients(
         )
     )
     await db.commit()
-    return await _load_with_links(db, client_id)
+    _cl = await _load_with_links(db, client_id)
+    return (await _with_stats(db, _cl.business_id, [_cl]))[0]

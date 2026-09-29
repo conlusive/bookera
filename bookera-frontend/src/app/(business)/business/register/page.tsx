@@ -1,760 +1,724 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { api } from '@/lib/api';
-import { getAuthToken } from '@/lib/auth-token-client';
-import { useToast } from '@/context/ToastContext';
-import { OWNER_ROLE } from '@/lib/roles';
-import { MAIN_CATEGORIES, MORE_CATEGORIES } from '@/lib/categories';
+import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
+import { CATEGORIES, MAIN_CATEGORIES, MORE_CATEGORIES, categoryTitle } from '@/lib/categories';
 import { formatDuration } from '@/lib/duration';
+import { OWNER_ROLE } from '@/lib/roles';
 
-export default function BusinessRegisterWizard() {
-  const { showToast } = useToast();
+/**
+ * Реєстрація бізнесу.
+ *
+ * Шість коротких кроків замість десяти, праворуч - живий перегляд того,
+ * як заклад побачать клієнти. Усі дані - ПРО ЗАКЛАД:
+ *   - жодних даних власника (раніше тут був рядок «Я (Власник)» і імʼя з
+ *     памʼяті браузера)
+ *   - пошта закладу обовʼязкова - сюди приходять записи й сповіщення
+ *   - телефон - РОБОЧИЙ номер закладу, з поясненням, що це не особистий
+ *   - місто окремим полем: раніше воно йшло в адресу одним рядком, а
+ *     сервер ставив «Львів» усім
+ * Чернетка зберігається в браузері - оновлення сторінки нічого не стирає.
+ */
+
+const LocationPicker = dynamic(() => import('@/components/ui/LocationPicker'), { ssr: false });
+
+const INK = '#1D1D1F', SUB = '#6E6E73', LINE = '#E8E8ED', SOFT = '#F5F5F7', GREEN = '#6F9273', GREEN_SOFT = '#EEF5EE';
+const DRAFT_KEY = 'bookera_register_draft_v2';
+const DAYS = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пʼятниця', 'Субота', 'Неділя'];
+const DAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+
+type Day = { open: boolean; from: string; to: string };
+type Service = { key: string; name: string; duration: number; price: number };
+type Invite = { key: string; email: string; role: 'master' | 'admin' };
+type Form = {
+  name: string; category: string; type: 'solo' | 'salon' | '';
+  email: string; phone: string; showPhone: boolean;
+  workspace: 'studio' | 'client_place'; city: string; street: string; details: string;
+  coords: { lat: number; lng: number } | null;
+  hours: Day[]; services: Service[]; team: Invite[];
+};
+
+const EMPTY: Form = {
+  name: '', category: '', type: '',
+  email: '', phone: '', showPhone: true,
+  workspace: 'studio', city: '', street: '', details: '', coords: null,
+  hours: DAYS.map((_, i) => ({ open: i < 5, from: i < 5 ? '09:00' : '10:00', to: i < 5 ? '20:00' : '18:00' })),
+  services: [], team: [],
+};
+
+// Готові послуги під категорію - один натиск замість заповнення з нуля
+const TEMPLATES: Record<string, Omit<Service, 'key'>[]> = {
+  barber: [{ name: 'Чоловіча стрижка', duration: 45, price: 500 }, { name: 'Стрижка + борода', duration: 90, price: 750 }, { name: 'Оформлення бороди', duration: 30, price: 300 }],
+  hair: [{ name: 'Жіноча стрижка', duration: 60, price: 800 }, { name: 'Укладка', duration: 45, price: 500 }, { name: 'Фарбування в один тон', duration: 120, price: 1500 }],
+  nails: [{ name: 'Манікюр із покриттям', duration: 90, price: 600 }, { name: 'Педикюр', duration: 90, price: 750 }, { name: 'Зняття покриття', duration: 30, price: 150 }],
+  brows: [{ name: 'Корекція й фарбування брів', duration: 45, price: 450 }, { name: 'Ламінування вій', duration: 60, price: 600 }],
+  skincare: [{ name: 'Чистка обличчя', duration: 90, price: 900 }, { name: 'Пілінг', duration: 45, price: 700 }],
+  cosmetology: [{ name: 'Консультація косметолога', duration: 30, price: 400 }, { name: 'Біоревіталізація', duration: 60, price: 2500 }],
+  massage: [{ name: 'Масаж тіла', duration: 60, price: 800 }, { name: 'Масаж спини й шиї', duration: 30, price: 500 }],
+  tattoo: [{ name: 'Консультація й ескіз', duration: 30, price: 0 }, { name: 'Мінітату', duration: 60, price: 1200 }],
+  epilation: [{ name: 'Лазерна епіляція: пахви', duration: 30, price: 600 }, { name: 'Шугаринг ніг', duration: 60, price: 700 }],
+  makeup: [{ name: 'Вечірній макіяж', duration: 60, price: 800 }, { name: 'Денний макіяж', duration: 45, price: 600 }],
+};
+
+const STEPS = [
+  { id: 'about', title: 'Заклад', hint: 'Назва й чим займаєтесь' },
+  { id: 'contacts', title: 'Контакти закладу', hint: 'Пошта й робочий телефон' },
+  { id: 'place', title: 'Де ви працюєте', hint: 'Адреса й мітка на мапі' },
+  { id: 'hours', title: 'Графік', hint: 'Коли приймаєте клієнтів' },
+  { id: 'services', title: 'Послуги', hint: 'Що можна забронювати' },
+  { id: 'team', title: 'Команда', hint: 'Запросіть майстрів' },
+  { id: 'review', title: 'Перевірка', hint: 'Усе на одному екрані' },
+] as const;
+type StepId = typeof STEPS[number]['id'];
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+const phoneDigits = (v: string) => v.replace(/\D/g, '').slice(0, 9);
+const phonePretty = (d: string) => [d.slice(0, 2), d.slice(2, 5), d.slice(5, 7), d.slice(7, 9)].filter(Boolean).join(' ');
+
+export default function BusinessRegisterPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [userName, setUserName] = useState('');
+  const [form, setForm] = useState<Form>(EMPTY);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [dir, setDir] = useState<1 | -1>(1);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState<{ name: string; failedInvites: string[] } | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [svcDraft, setSvcDraft] = useState({ name: '', duration: 60, price: '' });
+  const [invDraft, setInvDraft] = useState<{ email: string; role: 'master' | 'admin' }>({ email: '', role: 'master' });
+  const loaded = useRef(false);
 
-  // Модалки
-  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
-  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
-
-  // Додаткові категорії
-  const [showMoreCategories, setShowMoreCategories] = useState(false);
-
-  // Стейт онбордингу
-  const [formData, setFormData] = useState({
-    businessName: '',
-    phone: '',
-    email: '',
-    businessCategory: '',
-    businessType: '',
-    workspace: '',
-    city: '',
-    street: '',
-    addressDetails: '',
-    teamSize: '',
-    hours: {
-      monday: { isOpen: true, open: '09:00', close: '20:00' },
-      tuesday: { isOpen: true, open: '09:00', close: '20:00' },
-      wednesday: { isOpen: true, open: '09:00', close: '20:00' },
-      thursday: { isOpen: true, open: '09:00', close: '20:00' },
-      friday: { isOpen: true, open: '09:00', close: '20:00' },
-      saturday: { isOpen: false, open: '10:00', close: '16:00' },
-      sunday: { isOpen: false, open: '10:00', close: '16:00' }
-    },
-    services: [] as any[],
-    staff: [
-      { id: 1, name: 'Я (Власник)', role: 'Власник', email: '', phone: '', isOwner: true } as { id: number; name: string; role: string; email: string; phone: string; isOwner?: boolean }
-    ]
-  });
-
-  const [newStaff, setNewStaff] = useState({ name: '', email: '', phone: '', role: '' });
-  const [serviceForm, setServiceForm] = useState({ id: 0, name: '', duration: 60, price: '' });
-  const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
-
-  // Категорії
-  const mainCategories = [
-    // Той самий список, що на головній і в налаштуваннях (lib/categories):
-    // раніше тут були власні коди (wellness, home_services), і такі
-    // заклади не знаходились у пошуку за категорією.
-    ...MAIN_CATEGORIES.map(cat => ({ id: cat.slug, name: cat.title })),
-  ];
-
-  const moreCategories = MORE_CATEGORIES.map(cat => ({ id: cat.slug, name: cat.title }));
-
-  // Динамічні базові послуги
-  const defaultServicesMap: Record<string, any[]> = {
-    'barber': [
-      { id: 1, name: 'Чоловіча стрижка', duration: 45, price: '500' },
-      { id: 2, name: 'Моделювання бороди', duration: 30, price: '300' }
-    ],
-    'hair': [
-      { id: 1, name: 'Жіноча стрижка', duration: 60, price: '800' },
-      { id: 2, name: 'Укладка волосся', duration: 40, price: '500' },
-      { id: 3, name: 'Фарбування (в один тон)', duration: 120, price: '1500' }
-    ],
-    'nails': [
-      { id: 1, name: 'Манікюр + Гель-лак', duration: 90, price: '600' },
-      { id: 2, name: 'Педикюр (Апаратний)', duration: 90, price: '750' }
-    ],
-    'brows': [
-      { id: 1, name: 'Корекція та фарбування брів', duration: 45, price: '450' },
-      { id: 2, name: 'Ламінування вій', duration: 60, price: '600' }
-    ],
-    'massage': [
-      { id: 1, name: 'Загальний масаж тіла', duration: 60, price: '800' },
-      { id: 2, name: 'Масаж спини та шиї', duration: 30, price: '500' }
-    ],
-    'skincare': [
-      { id: 1, name: 'Чистка обличчя', duration: 90, price: '900' },
-      { id: 2, name: 'Пілінг', duration: 45, price: '700' }
-    ],
-    'makeup': [
-      { id: 1, name: 'Вечірній макіяж', duration: 60, price: '800' },
-      { id: 2, name: 'Макіяж Nude', duration: 40, price: '600' }
-    ],
-  };
-
+  // Лише для тих, хто увійшов (сервер визначає власника з токена)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedName = localStorage.getItem('userName');
-      if (!storedName) {
-        router.push('/business');
-      } else {
-        setUserName(storedName.split(' ')[0]);
-      }
-    }
-  }, []);
+    void getAuthTokenOrNull().then(t => { if (!t) router.replace('/business?login=1'); });
+  }, [router]);
 
-  const handleNext = () => {
-    if (step < 10) setStep(prev => prev + 1);
-    else handleFinalSubmit();
-  };
-
-  const handleBack = () => {
-    if (step > 1) setStep(prev => prev - 1);
-    else router.push('/business');
-  };
-
-  const handleFinalSubmit = async () => {
-    setLoading(true);
+  // Чернетка: відновити й зберігати
+  useEffect(() => {
     try {
-      // owner_id більше НЕ передається звідси - раніше бралось з
-      // localStorage.getItem('userId'), яке будь-хто міг підмінити в DevTools.
-      // Тепер сервер сам визначає власника з перевіреного JWT-токена.
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d?.form) setForm({ ...EMPTY, ...d.form });
+        if (typeof d?.step === 'number') setStepIdx(Math.min(d.step, STEPS.length - 1));
+      }
+    } catch { /* зіпсована чернетка - з нуля */ }
+    loaded.current = true;
+  }, []);
+  useEffect(() => {
+    if (!loaded.current || done) return;
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, step: stepIdx })); } catch { /* немає місця */ }
+  }, [form, stepIdx, done]);
+
+  const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm(f => ({ ...f, [k]: v }));
+  const touch = (k: string) => setTouched(t => ({ ...t, [k]: true }));
+
+  // Крок «Команда» - лише для салону
+  const steps = useMemo(() => STEPS.filter(s => s.id !== 'team' || form.type === 'salon'), [form.type]);
+  const step = steps[Math.min(stepIdx, steps.length - 1)];
+
+  // --- Перевірка кроку ---
+  const problems = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (form.name.trim().length < 2) p.name = 'Щонайменше 2 символи';
+    if (!form.category) p.category = 'Оберіть категорію';
+    if (!form.type) p.type = 'Оберіть формат';
+    if (!isEmail(form.email)) p.email = form.email ? 'Перевірте адресу' : 'Обовʼязково: сюди приходитимуть записи';
+    if (phoneDigits(form.phone).length !== 9) p.phone = form.phone ? 'Ще кілька цифр' : 'Обовʼязково';
+    if (form.city.trim().length < 2) p.city = 'Вкажіть місто';
+    if (form.workspace === 'studio' && form.street.trim().length < 3) p.street = 'Вкажіть вулицю й будинок';
+    if (!form.hours.some(h => h.open)) p.hours = 'Хоча б один робочий день';
+    if (form.hours.some(h => h.open && h.to <= h.from)) p.hoursRange = 'Кінець дня має бути пізніше за початок';
+    if (!form.services.length) p.services = 'Додайте хоча б одну послугу';
+    return p;
+  }, [form]);
+  const STEP_FIELDS: Record<StepId, string[]> = {
+    about: ['name', 'category', 'type'], contacts: ['email', 'phone'], place: ['city', 'street'],
+    hours: ['hours', 'hoursRange'], services: ['services'], team: [], review: [],
+  };
+  const stepOk = (id: StepId) => STEP_FIELDS[id].every(f => !problems[f]);
+  const firstBad = steps.findIndex(s => !stepOk(s.id));
+
+  const go = useCallback((to: number) => {
+    setDir(to > stepIdx ? 1 : -1);
+    setStepIdx(Math.max(0, Math.min(to, steps.length - 1)));
+    setError('');
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [stepIdx, steps.length]);
+
+  const next = () => {
+    STEP_FIELDS[step.id].forEach(touch);
+    if (!stepOk(step.id)) return;
+    if (step.id === 'review') { void submit(); return; }
+    go(stepIdx + 1);
+  };
+
+  // --- Відправка ---
+  const submit = async () => {
+    if (firstBad !== -1) { go(firstBad); return; }
+    setSaving(true); setError('');
+    try {
       const token = await getAuthToken();
-
-      // ISO-порядок днів (0=понеділок...6=неділя), замість українських назв,
-      // які писались у JSON-поле shifts, якого в новій схемі більше немає -
-      // натомість окрема таблиця business_hours.
-      const weekdayOrder: (keyof typeof formData.hours)[] =
-        ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-      const hoursPayload = weekdayOrder.map((day, index) => ({
-        weekday: index,
-        is_open: formData.hours[day].isOpen,
-        open_time: formData.hours[day].open,
-        close_time: formData.hours[day].close,
-      }));
-
-      // 1. Створюємо бізнес через FastAPI (не напряму в Supabase)
       const business = await api.registerBusiness(token, {
-        name: formData.businessName,
-        category: formData.businessCategory,
-        business_type: formData.businessType,
-        workspace_type: formData.workspace,
-        address: formData.workspace === 'client_place'
-          ? formData.city.trim()
-          : `${formData.city}, ${formData.street} ${formData.addressDetails}`.trim(),
-        phone: `+380${formData.phone}`,
-        email: formData.email.trim() || undefined,
-        hours: hoursPayload,
-      });
-
-      // 2. Зберігаємо послуги (кожна - окремим запитом, бекенд не має bulk-create)
-      for (const s of formData.services) {
-        await api.createService(token, {
-          business_id: business.id,
-          name: s.name,
-          price: Number(s.price),
-          duration_minutes: s.duration,
-        });
+        name: form.name.trim(),
+        category: form.category,
+        // Коди - як на сервері (business_profile.py): individual / company, my_place / client_place
+        business_type: form.type === 'solo' ? 'individual' : 'company',
+        workspace_type: form.workspace === 'studio' ? 'my_place' : 'client_place',
+        city: form.city.trim(),
+        address: form.workspace === 'studio' ? [form.street.trim(), form.details.trim()].filter(Boolean).join(', ') : undefined,
+        email: form.email.trim(),
+        phone: `+380${phoneDigits(form.phone)}`,
+        hours: form.hours.map((h, i) => ({ weekday: i, is_open: h.open, open_time: h.from, close_time: h.to })),
+        ...(form.coords ? { latitude: form.coords.lat, longitude: form.coords.lng } : {}),
+        show_phone_publicly: form.showPhone,
+      } as any);
+      for (const s of form.services) {
+        await api.createService(token, { business_id: business.id, name: s.name, price: s.price, duration_minutes: s.duration });
       }
-
-      // 3. Запрошення команді через FastAPI (тепер з токеном - раніше йшло
-      // без жодної авторизації на хардкоджений 127.0.0.1:8000, що в проді
-      // взагалі нікуди не вело)
       const failedInvites: string[] = [];
-      for (const member of formData.staff) {
-        const isOwner = (member as any).isOwner === true;
-        if (isOwner || !member.email) continue;
-        try {
-          await api.inviteStaff(token, business.id, {
-            email: member.email,
-            role: member.role.toLowerCase().includes('адмін') ? 'admin' : 'master',
-          });
-        } catch {
-          // Заклад уже створено - зривати весь процес через одне
-          // запрошення не можна. Але й мовчати не можна: людина
-          // вважатиме, що лист пішов.
-          failedInvites.push(member.email);
-        }
+      for (const m of form.type === 'salon' ? form.team : []) {
+        try { await api.inviteStaff(token, business.id, { email: m.email, role: m.role }); }
+        catch { failedInvites.push(m.email); }
       }
-      if (failedInvites.length > 0) {
-        showToast(
-          `Заклад створено, але не вдалося запросити: ${failedInvites.join(', ')}. Спробуйте у вкладці «Команда».`,
-          'error'
-        );
-      }
-
-      // Роль власника FastAPI вже виставив сам усередині registerBusiness -
-      // окремого оновлення 'profiles' більше не потрібно (такої таблиці нема).
-      // OWNER_ROLE ('business_owner') - те саме значення, що повертає бекенд.
-      // Раніше тут писалось 'owner', і сторінка /business не впізнавала
-      // власника, показуючи йому кнопку "Відкрити бізнес" замість кабінету.
       localStorage.setItem('userRole', OWNER_ROLE);
-
-      router.push('/cabinet');
-
-    } catch (error: any) {
-      alert("Відбулася помилка при збереженні: " + error.message);
-      setLoading(false);
+      localStorage.removeItem(DRAFT_KEY);
+      setDone({ name: business.name, failedInvites });
+    } catch (e: any) {
+      setError(e?.message || 'Не вдалося створити заклад. Спробуйте ще раз.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleToggleHour = (day: keyof typeof formData.hours) => {
-    setFormData({ ...formData, hours: { ...formData.hours, [day]: { ...formData.hours[day], isOpen: !formData.hours[day].isOpen } } });
+  // Enter - далі (крім багаторядкових полів)
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT' && !(e.target as HTMLElement).dataset.noenter) { e.preventDefault(); next(); }
   };
 
-  const handleTimeChange = (day: keyof typeof formData.hours, type: 'open' | 'close', value: string) => {
-    setFormData({ ...formData, hours: { ...formData.hours, [day]: { ...formData.hours[day], [type]: value } } });
+  const show = (k: string) => touched[k] && problems[k];
+
+  // --- Послуги ---
+  const templates = (TEMPLATES[form.category] || []).filter(t => !form.services.some(s => s.name === t.name));
+  const addService = (s: Omit<Service, 'key'>) => set('services', [...form.services, { ...s, key: uid() }]);
+  const addCustom = () => {
+    const name = svcDraft.name.trim();
+    if (name.length < 2 || svcDraft.price === '') return;
+    addService({ name, duration: svcDraft.duration, price: Number(svcDraft.price) });
+    setSvcDraft({ name: '', duration: 60, price: '' });
   };
 
-  const handlePhoneChange = (e: any, fieldType: 'business' | 'staff') => {
-    let val = e.target.value;
-    if (!val.startsWith('+380')) {
-      const lastChar = val.slice(-1);
-      if (val.length === 1 && /\d/.test(lastChar)) val = '+380 ' + lastChar;
-      else val = '+380 ';
-    }
-    const digitsOnly = val.substring(4).replace(/\D/g, '').slice(0, 9);
-    if (fieldType === 'business') setFormData({ ...formData, phone: digitsOnly });
-    else setNewStaff({ ...newStaff, phone: digitsOnly });
+  // --- Команда ---
+  const addInvite = () => {
+    const email = invDraft.email.trim().toLowerCase();
+    if (!isEmail(email) || email === form.email.trim().toLowerCase() || form.team.some(t => t.email === email)) return;
+    set('team', [...form.team, { key: uid(), email, role: invDraft.role }]);
+    setInvDraft({ email: '', role: invDraft.role });
   };
 
-  const isEmailValid = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const cat = CATEGORIES.find(c => c.slug === form.category);
+  const openDays = form.hours.map((h, i) => (h.open ? i : -1)).filter(i => i >= 0);
+  const progress = Math.round(((stepIdx + (stepOk(step.id) ? 1 : 0.4)) / steps.length) * 100);
 
-  const addStaffMember = () => {
-    if (newStaff.name.length >= 2 && isEmailValid(newStaff.email) && newStaff.phone.length === 9) {
-      setFormData({ ...formData, staff: [...formData.staff, { ...newStaff, id: Date.now() }] });
-      setNewStaff({ name: '', email: '', phone: '', role: '' });
-      setIsStaffModalOpen(false);
-    }
-  };
-
-  const openServiceModal = (service: any = null) => {
-    if (service) {
-      setEditingServiceId(service.id);
-      setServiceForm(service);
-    } else {
-      setEditingServiceId(null);
-      setServiceForm({ id: 0, name: '', duration: 60, price: '' });
-    }
-    setIsServiceModalOpen(true);
-  };
-
-  const saveService = () => {
-    if (editingServiceId) {
-      setFormData({ ...formData, services: formData.services.map(s => s.id === editingServiceId ? { ...serviceForm, id: editingServiceId } : s) });
-    } else {
-      setFormData({ ...formData, services: [...formData.services, { ...serviceForm, id: Date.now() }] });
-    }
-    setIsServiceModalOpen(false);
-  };
-
-  const deleteService = (id: number) => {
-    setFormData({ ...formData, services: formData.services.filter(s => s.id !== id) });
-  };
-
-  const isStepValid = () => {
-    switch (step) {
-      case 1: return formData.businessName.trim().length >= 2 && formData.phone.length === 9;
-      case 2: return formData.businessCategory !== '';
-      case 3: return formData.businessType !== '';
-      case 4: return formData.workspace !== '';
-      case 5:
-        if (formData.workspace === 'client_place') return formData.city.trim().length >= 2;
-        return formData.city.trim().length >= 2 && formData.street.trim().length >= 2;
-      case 6: return formData.teamSize !== '';
-      case 7: return Object.values(formData.hours).some(day => day.isOpen);
-      case 8: return formData.services.length > 0;
-      case 9: return true; // персонал необовʼязковий: майстер може працювати сам
-      case 10: return true;
-      default: return false;
-    }
-  };
-
-  const progressPercentage = (step / 10) * 100;
-
-  const getDynamicSidePanel = () => {
-    switch (step) {
-      case 1: return { title: "Створення профілю", desc: "Вкажіть назву та контактний телефон." };
-      case 2: return { title: "Сфера діяльності", desc: "Оберіть основний напрямок." };
-      case 3: return { title: "Формат бізнесу", desc: "Впливає на фінансові звіти та рівні доступу." };
-      case 4: return { title: "Локація", desc: "Впливає на відображення вашої адреси." };
-      case 5: return { title: "Адреса", desc: "Де саме ви знаходитесь?" };
-      case 6: return { title: "Команда", desc: "Скільки людей працює у закладі?" };
-      case 7: return { title: "Робочі години", desc: "Встановіть базовий графік для онлайн-записів." };
-      case 8: return { title: "Прайс-лист", desc: "Базові послуги для вашої сфери." };
-      case 9: return { title: "Майстри", desc: "Додайте фахівців вашої команди." };
-      case 10: return { title: "Все готово", desc: "Ваш профіль повністю налаштовано." };
-      default: return { title: "Налаштування", desc: "" };
-    }
-  };
-
-  const sidePanel = getDynamicSidePanel();
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', width: '100vw', backgroundColor: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif', alignItems: 'center', paddingTop: '4rem', paddingBottom: '4rem' }}>
-
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .anim-step { animation: fadeIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; display: flex; flex-direction: column; width: 100%; }
-        
-        /* BookEra Style Card */
-        .wizard-card {
-          width: 100%; max-width: 500px; background: #ffffff; border-radius: 24px; 
-          box-shadow: 0 10px 40px rgba(0,0,0,0.04), 0 2px 10px rgba(0,0,0,0.02);
-          padding: 2.5rem 2.5rem; position: relative; border: 1px solid #e2e8f0; overflow: hidden;
-        }
-
-        .top-progress-bar { width: 100%; height: 4px; background-color: #f1f5f9; position: absolute; top: 0; left: 0; }
-        .top-progress-fill { height: 100%; background-color: #0f172a; transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1); border-radius: 0 4px 4px 0; }
-
-        .back-btn { background: transparent; border: none; cursor: pointer; color: #64748b; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; transition: 0.2s; position: absolute; top: 1.25rem; left: 1rem; font-size: 1.2rem; }
-        .back-btn:hover { background: #f1f5f9; color: #0f172a; }
-
-        /* Inputs */
-        .custom-input { width: 100%; padding: 0.9rem 1rem; border: 1px solid #cbd5e1; border-radius: 12px; font-size: 1rem; font-weight: 500; box-sizing: border-box; margin-bottom: 1.2rem; transition: all 0.2s ease; color: #0f172a; background: #f8fafc; font-family: inherit; }
-        .custom-input:focus { outline: none; background: #ffffff; border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15,23,42,0.05); }
-        .custom-input::placeholder { color: #94a3b8; font-weight: 400; }
-        
-        .input-label { font-size: 0.85rem; font-weight: 700; color: #64748b; margin-bottom: 0.4rem; display: block; text-transform: uppercase; letter-spacing: 0.05em; }
-
-        /* Картки вибору */
-        .option-card { border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 1.25rem; margin-bottom: 0.8rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: flex-start; gap: 1rem; background: #ffffff; }
-        .option-card:hover { border-color: #cbd5e1; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
-        .option-card.active { border-color: #0f172a; background: #f8fafc; box-shadow: 0 0 0 1px #0f172a; }
-        
-        .radio-circle { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; transition: 0.2s; flex-shrink: 0; margin-top: 1px; }
-        .option-card.active .radio-circle { border-color: #0f172a; }
-        .option-card.active .radio-circle::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background-color: #0f172a; }
-        
-        .option-title { font-weight: 800; color: #0f172a; font-size: 1.05rem; margin-bottom: 0.2rem; }
-
-        /* BookEra Row Lists */
-        .booksy-row { border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 1.1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.2s ease; background: #ffffff; margin-bottom: 0.5rem; }
-        .booksy-row:hover { border-color: #cbd5e1; background: #f8fafc; }
-        .booksy-row.active { border-color: #0f172a; background: #f8fafc; box-shadow: 0 0 0 1px #0f172a; }
-        .booksy-row-text { font-weight: 700; color: #0f172a; font-size: 1rem; }
-
-        /* Час як у кабінеті */
-        .time-input { padding: 0.5rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; color: #0f172a; background: #fff; font-family: inherit; font-weight: 600; outline: none; cursor: pointer; width: 80px; text-align: center; transition: 0.2s; }
-        .time-input:focus { border-color: #0f172a; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-
-        .continue-btn { width: 100%; background-color: #0f172a; color: #ffffff; font-weight: 700; border: none; padding: 1.1rem; border-radius: 12px; cursor: pointer; transition: all 0.2s ease; font-size: 1.05rem; margin-top: 1.5rem; box-shadow: 0 4px 12px rgba(15,23,42,0.15); }
-        .continue-btn:disabled { background-color: #e2e8f0; color: #94a3b8; cursor: not-allowed; box-shadow: none; }
-        .continue-btn:not(:disabled):hover { background-color: #1e293b; transform: translateY(-1px); box-shadow: 0 6px 15px rgba(15,23,42,0.2); }
-
-        .btn-outline { width: 100%; background-color: transparent; color: #0f172a; font-weight: 700; border: 1.5px dashed #cbd5e1; padding: 1rem; border-radius: 12px; cursor: pointer; transition: 0.2s; font-size: 0.95rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
-        .btn-outline:hover { background-color: #f8fafc; border-color: #94a3b8; }
-
-        .action-icon { background: transparent; border: none; cursor: pointer; color: #64748b; font-size: 1.1rem; padding: 0.4rem; border-radius: 8px; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
-        .action-icon:hover { background: #f1f5f9; color: #0f172a; }
-        .action-icon.danger:hover { color: #ef4444; background: #fef2f2; }
-        
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 1rem; box-sizing: border-box; }
-        .modal-content { background: #ffffff; width: 100%; max-width: 420px; border-radius: 20px; padding: 1.5rem 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.15); animation: fadeIn 0.2s ease-out; }
-
-        /* 🟢 ПРАВИЛЬНИЙ І РОБОЧИЙ СКРОЛ КАТЕГОРІЙ */
-        .categories-scroll-wrapper { max-height: 380px; overflow-y: auto; padding-right: 0.5rem; margin-right: -0.5rem; display: flex; flex-direction: column; }
-        .categories-scroll-wrapper::-webkit-scrollbar { width: 4px; }
-        .categories-scroll-wrapper::-webkit-scrollbar-track { background: transparent; }
-        .categories-scroll-wrapper::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-      `}</style>
-
-      {/* ОРИГІНАЛЬНИЙ ЛОГОТИП BOOKERA BUSINESS */}
-      <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'center' }}>
-        <Link href="/business" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline' }}>
-          <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em' }}>
-            Book<span style={{ color: '#8fae92' }}>Era</span>
-          </div>
-          <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: '700', marginLeft: '6px' }}>Business</span>
-        </Link>
-      </div>
-
-      <div className="wizard-card">
-        {/* ПОВЕРНУЛИ ПРОГРЕС БАР ЗВЕРХУ */}
-        <div className="top-progress-bar"><div className="top-progress-fill" style={{ width: `${progressPercentage}%` }}></div></div>
-
-        {step > 1 && step < 10 && <button onClick={handleBack} className="back-btn">←</button>}
-
-        <div style={{ textAlign: 'center', marginBottom: '2rem', marginTop: step > 1 ? '1rem' : '0' }}>
-          {/* ПОВЕРНУЛИ ТЕКСТ КРОКУ */}
-          <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Крок {step} з 10</div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.4rem 0', letterSpacing: '-0.02em' }}>
-            {sidePanel.title}
-          </h1>
-          <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: '1.4' }}>
-            {sidePanel.desc}
-          </p>
-        </div>
-
-        <div>
-          {/* КРОК 1 */}
-          {step === 1 && (
-            <div className="anim-step">
-              <label className="input-label">Назва закладу</label>
-              <input type="text" placeholder="Barber Studio" className="custom-input" value={formData.businessName} onChange={(e) => setFormData({...formData, businessName: e.target.value})} autoFocus />
-
-              <label className="input-label">Номер телефону</label>
-              <input
-                type="tel"
-                placeholder="+380 99 123 45 67"
-                className="custom-input"
-                value={formData.phone ? `+380 ${formData.phone}` : '+380 '}
-                onChange={(e) => handlePhoneChange(e, 'business')}
-              />
-
-              {/* Пошта закладу. Раніше її не питали взагалі, і заклад
-                  не отримував сповіщень про нові записи - дізнавався,
-                  лише відкривши календар.
-                  Необовʼязкова: змусити людину вигадувати пошту на
-                  першому кроці означає втратити частину реєстрацій. */}
-              <label className="input-label">Пошта закладу (необовʼязково)</label>
-              <input
-                type="email"
-                placeholder="salon@example.com"
-                className="custom-input"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-              <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.5rem 0 0', lineHeight: 1.45 }}>
-                На неї приходитимуть сповіщення про нові записи. Можна додати пізніше в налаштуваннях.
-              </p>
-            </div>
+  // ---------------------------------------------------------------- Готово
+  if (done) {
+    return (
+      <main className="rg-done">
+        <div className="rg-done-card">
+          <svg className="rg-check" width="84" height="84" viewBox="0 0 84 84" aria-hidden>
+            <circle cx="42" cy="42" r="38" fill={GREEN_SOFT} />
+            <path d="M26 43l11 11 21-23" fill="none" stroke={GREEN} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <h1>«{done.name}» створено</h1>
+          <p>Календар готовий до записів. 14 днів — безкоштовно, усі можливості відкриті.</p>
+          {done.failedInvites.length > 0 && (
+            <div className="rg-warn">Не вдалося надіслати запрошення: {done.failedInvites.join(', ')}. Запросіть їх у кабінеті, розділ «Команда».</div>
           )}
+          <button type="button" className="rg-primary" onClick={() => router.push('/cabinet')}>Відкрити кабінет</button>
+        </div>
+        <style jsx>{`
+          .rg-done { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1.25rem;
+            background: radial-gradient(60% 50% at 50% 0%, ${GREEN_SOFT}, transparent 70%), #FAFAFA; font-family: inherit; }
+          .rg-done-card { max-width: 460px; text-align: center; animation: rgRise .6s cubic-bezier(.16,1,.3,1); }
+          .rg-done h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.03em; color: ${INK}; margin: 1.1rem 0 0.5rem; }
+          .rg-done p { color: ${SUB}; font-size: 1rem; line-height: 1.5; margin: 0 0 1.5rem; }
+          .rg-warn { font-size: 0.875rem; color: #8A6516; background: #FBF6EC; border-radius: 12px; padding: 0.7rem 0.9rem; margin-bottom: 1.2rem; }
+          .rg-primary { height: 52px; padding: 0 2rem; border-radius: 14px; border: none; background: ${INK}; color: #fff; font-family: inherit; font-size: 1rem; font-weight: 600; cursor: pointer; }
+          .rg-check { animation: rgPop .5s cubic-bezier(.34,1.56,.64,1) .1s both; }
+          .rg-check path { stroke-dasharray: 60; stroke-dashoffset: 60; animation: rgDraw .5s ease .45s forwards; }
+          @keyframes rgRise { from { opacity: 0; transform: translateY(14px); } }
+          @keyframes rgPop { from { transform: scale(.4); opacity: 0; } }
+          @keyframes rgDraw { to { stroke-dashoffset: 0; } }
+        `}</style>
+      </main>
+    );
+  }
 
-          {/* 🟢 КРОК 2: КАТЕГОРІЯ (З виправленим скролом та відокремленими блоками) */}
-          {step === 2 && (
-            <div className="anim-step">
-              <div className="categories-scroll-wrapper">
-                {mainCategories.map(cat => (
-                  <div key={cat.id} className={`booksy-row ${formData.businessCategory === cat.id ? 'active' : ''}`} onClick={() => {
-                    const defaultSrvs = defaultServicesMap[cat.id] || [{ id: 1, name: 'Консультація', duration: 30, price: '300' }];
-                    setFormData({...formData, businessCategory: cat.id, services: defaultSrvs});
-                    setTimeout(() => setStep(3), 200);
-                  }}>
-                    <span className="booksy-row-text">{cat.name}</span>
-                    {formData.businessCategory === cat.id ? (
-                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    ) : (
-                       <div style={{ color: '#cbd5e1', fontSize: '1.4rem', fontWeight: 'bold' }}>›</div>
-                    )}
-                  </div>
-                ))}
+  // ---------------------------------------------------------------- Форма
+  return (
+    <main className="rg" onKeyDown={onKey}>
+      <header className="rg-top">
+        <button type="button" className="rg-logo" onClick={() => router.push('/business')}>Book<span>Era</span></button>
+        <div className="rg-bar" aria-hidden><i style={{ width: `${progress}%` }} /></div>
+        <span className="rg-count">Крок {stepIdx + 1} з {steps.length}</span>
+      </header>
 
-                <div className={`booksy-row`} onClick={() => setShowMoreCategories(!showMoreCategories)} style={{ borderStyle: 'dashed', backgroundColor: 'transparent', marginBottom: '1rem' }}>
-                  <span className="booksy-row-text" style={{ color: '#64748b' }}>{showMoreCategories ? 'Сховати' : 'Інші сфери...'}</span>
-                  <div style={{ color: '#cbd5e1', fontSize: '1.4rem', fontWeight: 'bold', transform: showMoreCategories ? 'rotate(90deg)' : 'rotate(0deg)', transition: '0.2s' }}>›</div>
+      <div className="rg-layout">
+        {/* Кроки */}
+        <nav className="rg-steps" aria-label="Кроки реєстрації">
+          {steps.map((s, i) => {
+            const ok = stepOk(s.id) && i < stepIdx;
+            const reachable = i <= stepIdx || steps.slice(0, i).every(p => stepOk(p.id));
+            return (
+              <button key={s.id} type="button" disabled={!reachable} onClick={() => go(i)}
+                className={`rg-step ${i === stepIdx ? 'on' : ''} ${ok ? 'ok' : ''}`}>
+                <span className="rg-dot">{ok ? '✓' : i + 1}</span>
+                <span><b>{s.title}</b><small>{s.hint}</small></span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Крок */}
+        <section className="rg-main">
+          <div key={step.id} className={`rg-pane ${dir > 0 ? 'fwd' : 'back'}`}>
+            <h1>{step.title}</h1>
+
+            {step.id === 'about' && (
+              <>
+                <p className="rg-lead">Як називається заклад і чим ви займаєтесь.</p>
+                <label className="rg-field">
+                  <span>Назва закладу</span>
+                  <input className={show('name') ? 'bad' : ''} value={form.name} maxLength={60} autoFocus placeholder="Напр., Barber Studio"
+                    onChange={e => set('name', e.target.value)} onBlur={() => touch('name')} />
+                  {show('name') && <em>{problems.name}</em>}
+                </label>
+                <div className="rg-label">Категорія</div>
+                <div className="rg-chips">
+                  {(showMore ? [...MAIN_CATEGORIES, ...MORE_CATEGORIES] : MAIN_CATEGORIES).map(c => (
+                    <button key={c.slug} type="button" className={form.category === c.slug ? 'on' : ''} onClick={() => { set('category', c.slug); touch('category'); }}>{c.title}</button>
+                  ))}
+                  {!showMore && <button type="button" className="rg-more" onClick={() => setShowMore(true)}>Більше…</button>}
                 </div>
+                {show('category') && <em className="rg-err">{problems.category}</em>}
+                <div className="rg-label">Формат</div>
+                <div className="rg-cards">
+                  {([
+                    { id: 'solo', title: 'Приватний майстер', text: 'Працюю сам. Простий календар без налаштувань команди.' },
+                    { id: 'salon', title: 'Салон із командою', text: 'Кілька майстрів, графіки, зарплати, ролі.' },
+                  ] as const).map(t => (
+                    <button key={t.id} type="button" className={`rg-card ${form.type === t.id ? 'on' : ''}`} onClick={() => { set('type', t.id); touch('type'); }}>
+                      <span className="rg-radio" />
+                      <span><b>{t.title}</b><small>{t.text}</small></span>
+                    </button>
+                  ))}
+                </div>
+                {show('type') && <em className="rg-err">{problems.type}</em>}
+              </>
+            )}
 
-                {showMoreCategories && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingLeft: '1rem', borderLeft: '2px solid #e2e8f0', marginLeft: '0.5rem', marginBottom: '1rem' }}>
-                    {moreCategories.map(cat => (
-                      <div key={cat.id} className={`booksy-row ${formData.businessCategory === cat.id ? 'active' : ''}`} onClick={() => {
-                        const defaultSrvs = defaultServicesMap[cat.id] || [{ id: 1, name: 'Базова послуга', duration: 60, price: '500' }];
-                        setFormData({...formData, businessCategory: cat.id, services: defaultSrvs});
-                        setTimeout(() => setStep(3), 200);
-                      }} style={{ marginBottom: 0 }}>
-                        <span className="booksy-row-text" style={{ fontSize: '0.95rem' }}>{cat.name}</span>
-                        {formData.businessCategory === cat.id ? (
-                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        ) : (
-                           <div style={{ color: '#cbd5e1', fontSize: '1.2rem', fontWeight: 'bold' }}>›</div>
-                        )}
+            {step.id === 'contacts' && (
+              <>
+                <p className="rg-lead">Контакти <b>закладу</b>, а не ваші особисті. Ви зможете змінити їх у налаштуваннях.</p>
+                <label className="rg-field">
+                  <span>Пошта закладу</span>
+                  <input type="email" inputMode="email" autoComplete="off" className={show('email') ? 'bad' : ''} value={form.email} autoFocus
+                    placeholder="studio@example.com" onChange={e => set('email', e.target.value)} onBlur={() => touch('email')} />
+                  {show('email') ? <em>{problems.email}</em> : <small>Сюди приходитимуть нові записи, скасування й відгуки. Клієнти бачать її на сторінці закладу.</small>}
+                </label>
+                <label className="rg-field">
+                  <span>Робочий телефон закладу</span>
+                  <div className={`rg-phone ${show('phone') ? 'bad' : ''}`}>
+                    <b>+380</b>
+                    <input inputMode="numeric" autoComplete="off" value={phonePretty(phoneDigits(form.phone))} placeholder="67 123 45 67"
+                      onChange={e => set('phone', phoneDigits(e.target.value))} onBlur={() => touch('phone')} />
+                  </div>
+                  {show('phone') ? <em>{problems.phone}</em> : <small>Номер салону чи адміністратора — не ваш особистий. За ним клієнти дзвонитимуть із питаннями.</small>}
+                </label>
+                <button type="button" className="rg-toggle" onClick={() => set('showPhone', !form.showPhone)} role="switch" aria-checked={form.showPhone}>
+                  <span className={`rg-switch ${form.showPhone ? 'on' : ''}`}><i /></span>
+                  <span><b>Показувати телефон клієнтам</b><small>{form.showPhone ? 'Номер видно на сторінці закладу' : 'Лише для записів, на сторінці прихований'}</small></span>
+                </button>
+              </>
+            )}
+
+            {step.id === 'place' && (
+              <>
+                <p className="rg-lead">Де клієнти вас знайдуть.</p>
+                <div className="rg-cards">
+                  {([
+                    { id: 'studio', title: 'У закладі', text: 'Клієнти приходять за вашою адресою.' },
+                    { id: 'client_place', title: 'Виїзд до клієнта', text: 'Ви їдете до клієнта. Вулиця не потрібна.' },
+                  ] as const).map(t => (
+                    <button key={t.id} type="button" className={`rg-card ${form.workspace === t.id ? 'on' : ''}`} onClick={() => set('workspace', t.id)}>
+                      <span className="rg-radio" />
+                      <span><b>{t.title}</b><small>{t.text}</small></span>
+                    </button>
+                  ))}
+                </div>
+                <label className="rg-field">
+                  <span>Місто</span>
+                  <input className={show('city') ? 'bad' : ''} value={form.city} placeholder="Напр., Київ" onChange={e => set('city', e.target.value)} onBlur={() => touch('city')} />
+                  {show('city') && <em>{problems.city}</em>}
+                </label>
+                {form.workspace === 'studio' && (
+                  <>
+                    <div className="rg-row">
+                      <label className="rg-field" style={{ flex: 2 }}>
+                        <span>Вулиця й будинок</span>
+                        <input className={show('street') ? 'bad' : ''} value={form.street} placeholder="вул. Івана Франка, 12" onChange={e => set('street', e.target.value)} onBlur={() => touch('street')} />
+                        {show('street') && <em>{problems.street}</em>}
+                      </label>
+                      <label className="rg-field" style={{ flex: 1 }}>
+                        <span>Поверх, кабінет</span>
+                        <input value={form.details} placeholder="2 поверх" onChange={e => set('details', e.target.value)} />
+                      </label>
+                    </div>
+                    <div className="rg-label">Мітка на мапі <small>— знайдіть адресу або перетягніть мітку, щоб клієнти не заблукали</small></div>
+                    <div className="rg-map">
+                      <LocationPicker value={form.coords} city={form.city} height={280} onChange={c => set('coords', c)} />
+                    </div>
+                    {form.coords && <small className="rg-ok">✓ Мітку поставлено</small>}
+                  </>
+                )}
+              </>
+            )}
+
+            {step.id === 'hours' && (
+              <>
+                <p className="rg-lead">Коли можна записатись. Графік кожного майстра налаштуєте пізніше.</p>
+                <div className="rg-chips" style={{ marginBottom: '1rem' }}>
+                  {[
+                    { label: 'Пн–Пт 9:00–20:00', v: (i: number) => ({ open: i < 5, from: '09:00', to: '20:00' }) },
+                    { label: 'Пн–Сб 10:00–19:00', v: (i: number) => ({ open: i < 6, from: '10:00', to: '19:00' }) },
+                    { label: 'Щодня 10:00–20:00', v: () => ({ open: true, from: '10:00', to: '20:00' }) },
+                  ].map(p => (
+                    <button key={p.label} type="button" onClick={() => set('hours', DAYS.map((_, i) => p.v(i)))}>{p.label}</button>
+                  ))}
+                </div>
+                <div className="rg-hours">
+                  {form.hours.map((h, i) => (
+                    <div key={i} className={`rg-day ${h.open ? '' : 'off'}`}>
+                      <button type="button" role="switch" aria-checked={h.open} aria-label={DAYS[i]} className={`rg-switch ${h.open ? 'on' : ''}`}
+                        onClick={() => set('hours', form.hours.map((d, k) => (k === i ? { ...d, open: !d.open } : d)))}><i /></button>
+                      <span className="rg-dayname">{DAYS[i]}</span>
+                      {h.open ? (
+                        <span className="rg-times">
+                          <input type="time" value={h.from} onChange={e => set('hours', form.hours.map((d, k) => (k === i ? { ...d, from: e.target.value } : d)))} />
+                          <i>–</i>
+                          <input type="time" value={h.to} onChange={e => set('hours', form.hours.map((d, k) => (k === i ? { ...d, to: e.target.value } : d)))} />
+                        </span>
+                      ) : <span className="rg-offlabel">Вихідний</span>}
+                      {h.open && i > 0 && (
+                        <button type="button" className="rg-copy" title="Як у попередній день"
+                          onClick={() => set('hours', form.hours.map((d, k) => (k === i ? { ...form.hours[i - 1], open: true } : d)))}>↑</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {(problems.hours || problems.hoursRange) && touched.hours && <em className="rg-err">{problems.hours || problems.hoursRange}</em>}
+              </>
+            )}
+
+            {step.id === 'services' && (
+              <>
+                <p className="rg-lead">Що клієнти зможуть забронювати. Змінити й доповнити можна будь-коли.</p>
+                {templates.length > 0 && (
+                  <>
+                    <div className="rg-label">Популярні для категорії «{categoryTitle(form.category)}»</div>
+                    <div className="rg-tpls">
+                      {templates.map(t => (
+                        <button key={t.name} type="button" onClick={() => addService(t)}>
+                          <b>+ {t.name}</b><small>{formatDuration(t.duration)} · {t.price ? `${t.price} ₴` : 'безкоштовно'}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {form.services.length > 0 && (
+                  <div className="rg-list">
+                    {form.services.map(s => (
+                      <div key={s.key} className="rg-item">
+                        <span><b>{s.name}</b><small>{formatDuration(s.duration)}</small></span>
+                        <span className="rg-price">{s.price ? `${s.price.toLocaleString('uk-UA')} ₴` : 'безкоштовно'}</span>
+                        <button type="button" aria-label="Прибрати" onClick={() => set('services', form.services.filter(x => x.key !== s.key))}>×</button>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* КРОК 3: ФОРМАТ БІЗНЕСУ */}
-          {step === 3 && (
-            <div className="anim-step">
-              <div className={`option-card ${formData.businessType === 'individual' ? 'active' : ''}`} onClick={() => setFormData({...formData, businessType: 'individual'})}>
-                <div className="radio-circle"></div>
-                <div>
-                  <div className="option-title">Приватний майстер / ФОП</div>
-                  <div style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: '1.4' }}>Індивідуальна фінансова аналітика та управління.</div>
-                </div>
-              </div>
-
-              <div className={`option-card ${formData.businessType === 'company' ? 'active' : ''}`} onClick={() => setFormData({...formData, businessType: 'company'})}>
-                <div className="radio-circle"></div>
-                <div>
-                  <div className="option-title">Компанія / Салон</div>
-                  <div style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: '1.4' }}>Для команд. Розширене налаштування зарплат та каси.</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* КРОК 4: ЛОКАЦІЯ СЕРВІСУ */}
-          {step === 4 && (
-            <div className="anim-step">
-              <div className={`option-card ${formData.workspace === 'my_place' ? 'active' : ''}`} onClick={() => setFormData({...formData, workspace: 'my_place'})}>
-                <div className="radio-circle"></div>
-                <div>
-                  <div className="option-title">У закладі (Студія)</div>
-                  <div style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: '1.4' }}>Клієнти приходять за вашою адресою.</div>
-                </div>
-              </div>
-
-              <div className={`option-card ${formData.workspace === 'client_place' ? 'active' : ''}`} onClick={() => setFormData({...formData, workspace: 'client_place'})}>
-                <div className="radio-circle"></div>
-                <div>
-                  <div className="option-title">Виїзне обслуговування</div>
-                  <div style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: '1.4' }}>Ви приїжджаєте до клієнта. Вулиця не обов'язкова.</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* КРОК 5: АДРЕСА */}
-          {step === 5 && (
-            <div className="anim-step">
-              <label className="input-label">Місто / Населений пункт</label>
-              <input type="text" placeholder="Наприклад: Львів" className="custom-input" value={formData.city} onChange={(e) => setFormData({...formData, city: e.target.value})} autoFocus />
-
-              {formData.workspace !== 'client_place' ? (
-                <>
-                  <label className="input-label">Вулиця та будинок</label>
-                  <input type="text" placeholder="Наприклад: вул. Івана Франка, 12" className="custom-input" value={formData.street} onChange={(e) => setFormData({...formData, street: e.target.value})} />
-
-                  <label className="input-label">Додаткові деталі (Необов'язково)</label>
-                  <input type="text" placeholder="2 поверх, кабінет 4" className="custom-input" style={{ marginBottom: 0 }} value={formData.addressDetails} onChange={(e) => setFormData({...formData, addressDetails: e.target.value})} />
-                </>
-              ) : (
-                <>
-                  <label className="input-label">Район виїзду (Опціонально)</label>
-                  <input type="text" placeholder="Наприклад: Сихівський район" className="custom-input" style={{ marginBottom: 0 }} value={formData.street} onChange={(e) => setFormData({...formData, street: e.target.value})} />
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem', lineHeight: '1.4' }}>Для виїзного обслуговування достатньо вказати лише місто. Вулиця не перевіряється.</div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* КРОК 6: КОМАНДА */}
-          {step === 6 && (
-            <div className="anim-step">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
-                {['Тільки я', '2-4 спеціалісти', '5-9 спеціалістів', 'Більше 10'].map((size) => (
-                  <div key={size} className={`option-card ${formData.teamSize === size ? 'active' : ''}`} style={{ marginBottom: 0, padding: '1.2rem 1rem', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '0.6rem' }} onClick={() => setFormData({...formData, teamSize: size})}>
-                    <div className="radio-circle"></div>
-                    <div className="option-title" style={{ margin: 0, fontSize: '0.95rem' }}>{size}</div>
+                <div className="rg-add">
+                  <div className="rg-label" style={{ marginTop: 0 }}>Своя послуга</div>
+                  <input data-noenter value={svcDraft.name} maxLength={80} placeholder="Назва послуги" onChange={e => setSvcDraft(d => ({ ...d, name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } }} />
+                  <div className="rg-durs">
+                    {[30, 45, 60, 90, 120, 180].map(m => (
+                      <button key={m} type="button" className={svcDraft.duration === m ? 'on' : ''} onClick={() => setSvcDraft(d => ({ ...d, duration: m }))}>{formatDuration(m)}</button>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  <div className="rg-row" style={{ alignItems: 'center' }}>
+                    <div className="rg-phone" style={{ flex: 1 }}>
+                      <input data-noenter inputMode="numeric" value={svcDraft.price} placeholder="Ціна" onChange={e => setSvcDraft(d => ({ ...d, price: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } }} />
+                      <b>₴</b>
+                    </div>
+                    <button type="button" className="rg-secondary" disabled={svcDraft.name.trim().length < 2 || svcDraft.price === ''} onClick={addCustom}>Додати</button>
+                  </div>
+                </div>
+                {touched.services && problems.services && <em className="rg-err">{problems.services}</em>}
+              </>
+            )}
 
-          {/* 🟢 КРОК 7: РОБОЧІ ГОДИНИ (Як у Кабінеті: Зелені тумблери) */}
-          {step === 7 && (
-            <div className="anim-step">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {Object.entries(formData.hours).map(([dayKey, data]) => {
-                  const dayNames: any = { monday: 'Понеділок', tuesday: 'Вівторок', wednesday: 'Середа', thursday: 'Четвер', friday: 'П\'ятниця', saturday: 'Субота', sunday: 'Неділя' };
-                  return (
-                    <div key={dayKey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1rem', background: data.isOpen ? '#fff' : '#f8fafc', borderRadius: '12px', border: '1px solid', borderColor: data.isOpen ? '#e2e8f0' : '#f1f5f9', transition: 'all 0.2s' }}>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '140px' }}>
-                        {/* Тумблер */}
-                        <div
-                          onClick={() => handleToggleHour(dayKey as any)}
-                          style={{ width: '42px', height: '24px', borderRadius: '12px', background: data.isOpen ? '#10b981' : '#cbd5e1', position: 'relative', cursor: 'pointer', transition: 'background 0.3s' }}
-                        >
-                          <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: data.isOpen ? '20px' : '2px', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}></div>
-                        </div>
-                        <div style={{ fontWeight: '700', color: data.isOpen ? '#0f172a' : '#94a3b8', fontSize: '0.95rem', transition: 'color 0.3s' }}>
-                          {dayNames[dayKey]}
-                        </div>
+            {step.id === 'team' && (
+              <>
+                <p className="rg-lead">Надішліть запрошення майстрам — вони приєднаються за посиланням із листа. Можна пропустити й запросити пізніше.</p>
+                <div className="rg-note">Ви вже в команді як власник — додавати себе не потрібно.</div>
+                <div className="rg-row" style={{ alignItems: 'stretch' }}>
+                  <input data-noenter className="rg-plain" type="email" value={invDraft.email} placeholder="Пошта майстра" style={{ flex: 1 }}
+                    onChange={e => setInvDraft(d => ({ ...d, email: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addInvite(); } }} />
+                  <div className="rg-seg">
+                    {([['master', 'Майстер'], ['admin', 'Адміністратор']] as const).map(([id, l]) => (
+                      <button key={id} type="button" className={invDraft.role === id ? 'on' : ''} onClick={() => setInvDraft(d => ({ ...d, role: id }))}>{l}</button>
+                    ))}
+                  </div>
+                  <button type="button" className="rg-secondary" disabled={!isEmail(invDraft.email)} onClick={addInvite}>Додати</button>
+                </div>
+                {invDraft.email && isEmail(invDraft.email) && invDraft.email.trim().toLowerCase() === form.email.trim().toLowerCase() && (
+                  <em className="rg-err">Це пошта закладу — вкажіть пошту самого майстра</em>
+                )}
+                {form.team.length > 0 && (
+                  <div className="rg-list">
+                    {form.team.map(t => (
+                      <div key={t.key} className="rg-item">
+                        <span><b>{t.email}</b><small>{t.role === 'admin' ? 'Адміністратор' : 'Майстер'} · отримає запрошення</small></span>
+                        <span />
+                        <button type="button" aria-label="Прибрати" onClick={() => set('team', form.team.filter(x => x.key !== t.key))}>×</button>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {data.isOpen ? (
-                          <>
-                            <input type="time" value={data.open} onChange={(e) => handleTimeChange(dayKey as any, 'open', e.target.value)} className="time-input" />
-                            <span style={{ color: '#cbd5e1', fontWeight: '700' }}>—</span>
-                            <input type="time" value={data.close} onChange={(e) => handleTimeChange(dayKey as any, 'close', e.target.value)} className="time-input" />
-                          </>
-                        ) : (
-                          <div style={{ color: '#94a3b8', fontSize: '0.9rem', fontWeight: '600', paddingRight: '0.5rem' }}>Вихідний</div>
-                        )}
-                      </div>
+            {step.id === 'review' && (
+              <>
+                <p className="rg-lead">Перевірте — і календар готовий до записів.</p>
+                {[
+                  { id: 'about', title: 'Заклад', lines: [form.name, `${categoryTitle(form.category)} · ${form.type === 'solo' ? 'приватний майстер' : 'салон із командою'}`] },
+                  { id: 'contacts', title: 'Контакти закладу', lines: [form.email, `+380 ${phonePretty(phoneDigits(form.phone))}${form.showPhone ? '' : ' · прихований'}`] },
+                  { id: 'place', title: 'Де ви працюєте', lines: [form.workspace === 'studio' ? [form.city, form.street, form.details].filter(Boolean).join(', ') : `${form.city} · виїзд до клієнта`, form.workspace === 'studio' ? (form.coords ? 'Мітку на мапі поставлено' : 'Точку визначимо за адресою') : ''] },
+                  { id: 'hours', title: 'Графік', lines: [openDays.length ? openDays.map(i => `${DAYS_SHORT[i]} ${form.hours[i].from}–${form.hours[i].to}`).join(', ') : '—'] },
+                  { id: 'services', title: 'Послуги', lines: [form.services.map(s => s.name).join(', ') || '—'] },
+                  ...(form.type === 'salon' ? [{ id: 'team', title: 'Команда', lines: [form.team.length ? `${form.team.length} запрошення` : 'Запросите пізніше'] }] : []),
+                ].map(b => (
+                  <div key={b.id} className={`rg-sum ${!stepOk(b.id as StepId) ? 'bad' : ''}`}>
+                    <div>
+                      <small>{b.title}</small>
+                      {b.lines.filter(Boolean).map((l, i) => <div key={i} className={i ? 'rg-sum-sub' : ''}>{l}</div>)}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* КРОК 8: ПРАЙС-ЛИСТ */}
-          {step === 8 && (
-            <div className="anim-step">
-              <div style={{ marginBottom: '1rem' }}>
-                {formData.services.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.95rem' }}>Список порожній.</div>}
-
-                {formData.services.map((service, index, arr) => (
-                  <div key={service.id} className="booksy-row" style={{ padding: '1rem 1.25rem' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1rem', marginBottom: '0.2rem' }}>{service.name}</div>
-                      <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>{formatDuration(service.duration)} • <span style={{ color: '#0f172a', fontWeight: '700' }}>{service.price} ₴</span></div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.3rem' }}>
-                      <button onClick={() => openServiceModal(service)} className="action-icon">✎</button>
-                      <button onClick={() => deleteService(service.id)} className="action-icon danger">✕</button>
-                    </div>
+                    <button type="button" onClick={() => go(steps.findIndex(s => s.id === b.id))}>Змінити</button>
                   </div>
                 ))}
-              </div>
+                <div className="rg-trial">14 днів безкоштовно, без картки. Потім — тариф за вибором.</div>
+              </>
+            )}
 
-              <button className="btn-outline" onClick={() => openServiceModal()}>+ Додати послугу</button>
+            {error && <div className="rg-error">{error}</div>}
+
+            <div className="rg-nav">
+              <button type="button" className="rg-back" onClick={() => (stepIdx === 0 ? router.push('/business') : go(stepIdx - 1))}>
+                {stepIdx === 0 ? 'Скасувати' : '← Назад'}
+              </button>
+              <button type="button" className="rg-primary" disabled={saving} onClick={next}>
+                {saving ? 'Створюємо…' : step.id === 'review' ? 'Створити заклад' : step.id === 'team' && !form.team.length ? 'Пропустити' : 'Далі'}
+              </button>
             </div>
-          )}
+          </div>
+        </section>
 
-          {/* КРОК 9: КОМАНДА */}
-          {step === 9 && (
-            <div className="anim-step">
-              <div style={{ marginBottom: '1rem' }}>
-                {formData.staff.map((member) => (
-                  <div key={member.id} className="booksy-row" style={{ padding: '1rem 1.25rem' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f1f5f9', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '1rem', marginRight: '1rem' }}>
-                      {member.name.charAt(0)}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '1rem', marginBottom: '0.1rem' }}>{member.name}</div>
-                      <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>{member.role}</div>
-                    </div>
-                    {member.id !== 1 && (
-                      <button onClick={() => setFormData({...formData, staff: formData.staff.filter(s => s.id !== member.id)})} className="action-icon danger">✕</button>
-                    )}
-                  </div>
+        {/* Живий перегляд */}
+        <aside className="rg-preview" aria-label="Як вас побачать клієнти">
+          <div className="rg-preview-cap">Так вас побачать клієнти</div>
+          <div className="rg-pcard">
+            <div className="rg-pcover"><span>{(form.name || 'Ваш заклад').slice(0, 1).toUpperCase()}</span></div>
+            <div className="rg-pbody">
+              <div className="rg-pname">{form.name || 'Назва закладу'}</div>
+              <div className="rg-pmeta">{cat ? cat.title : 'Категорія'}{form.city ? ` · ${form.city}` : ''}</div>
+              <div className="rg-pline">{form.workspace === 'client_place' ? 'Виїзд до клієнта' : (form.street || 'Адреса')}</div>
+              <div className="rg-pline">{openDays.length ? `${DAYS_SHORT[openDays[0]]}–${DAYS_SHORT[openDays[openDays.length - 1]]} ${form.hours[openDays[0]].from}–${form.hours[openDays[0]].to}` : 'Графік'}</div>
+              {form.showPhone && phoneDigits(form.phone).length === 9 && <div className="rg-pline">+380 {phonePretty(phoneDigits(form.phone))}</div>}
+              <div className="rg-psvc">
+                {(form.services.length ? form.services.slice(0, 3) : [{ key: 'x', name: 'Ваші послуги', duration: 60, price: 0 }]).map(s => (
+                  <div key={s.key}><span>{s.name}</span><b>{s.price ? `${s.price} ₴` : ''}</b></div>
                 ))}
               </div>
-
-              <button className="btn-outline" onClick={() => setIsStaffModalOpen(true)}>+ Запросити фахівця</button>
+              <div className="rg-pbtn">Записатись</div>
             </div>
-          )}
-
-          {/* КРОК 10: УСПІХ */}
-          {step === 10 && (
-            <div className="anim-step" style={{ alignItems: 'center', textAlign: 'center', padding: '1rem 0' }}>
-              <div style={{ width: '64px', height: '64px', background: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', boxShadow: '0 8px 20px rgba(16, 185, 129, 0.2)' }}>
-                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
-              <div style={{ width: '100%', textAlign: 'left', marginBottom: 0 }}>
-                 <div className="booksy-row" style={{ cursor: 'default' }}>
-                    <span style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.95rem' }}>Календар готовий до запису</span>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
-                 </div>
-                 <div className="booksy-row" style={{ cursor: 'default' }}>
-                    <span style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.95rem' }}>Системні сповіщення налаштовано</span>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
-                 </div>
-                 <div className="booksy-row" style={{ cursor: 'default' }}>
-                    <span style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.95rem' }}>Команда додана та очікує</span>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
-                 </div>
-              </div>
-            </div>
-          )}
-
-        </div>
-
-        {/* Кнопка ПРОДОВЖИТИ */}
-        {step !== 2 && (
-          <button
-            onClick={handleNext}
-            className="continue-btn"
-            disabled={!isStepValid() || loading}
-          >
-            {loading ? 'Збереження...' : step === 10 ? 'Відкрити Кабінет' : 'Продовжити'}
-          </button>
-        )}
-
+          </div>
+        </aside>
       </div>
 
-      {/* 🟢 МОДАЛКА МАЙСТРА */}
-      {isStaffModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsStaffModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#0f172a' }}>Новий фахівець</h3>
-              <button onClick={() => setIsStaffModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', color: '#64748b', transition: '0.2s', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseOver={e=>e.currentTarget.style.background='#e2e8f0'}>✕</button>
-            </div>
+      <style jsx>{`
+        .rg { min-height: 100vh; background: #FAFAFA; color: ${INK}; font-family: inherit; }
+        .rg-top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 1.25rem; padding: 0.9rem clamp(1rem, 3vw, 2.5rem); background: rgba(250,250,250,.86); backdrop-filter: blur(14px); border-bottom: 1px solid ${LINE}; }
+        .rg-logo { border: none; background: none; font-family: inherit; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.03em; color: ${INK}; cursor: pointer; padding: 0; }
+        .rg-logo span { color: ${GREEN}; }
+        .rg-bar { flex: 1; height: 4px; border-radius: 2px; background: ${LINE}; overflow: hidden; }
+        .rg-bar i { display: block; height: 100%; background: ${GREEN}; border-radius: 2px; transition: width .5s cubic-bezier(.16,1,.3,1); }
+        .rg-count { font-size: 0.8rem; color: ${SUB}; white-space: nowrap; }
 
-            <label className="input-label">Ім'я та прізвище</label>
-            <input type="text" placeholder="Наприклад: Олексій" className="custom-input" value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} autoFocus />
+        .rg-layout { display: grid; grid-template-columns: 250px minmax(0, 620px) 300px; gap: 2.5rem; justify-content: center; padding: 2.5rem clamp(1rem, 3vw, 2.5rem) 4rem; }
+        .rg-steps { display: flex; flex-direction: column; gap: 0.25rem; position: sticky; top: 90px; align-self: start; }
+        .rg-step { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.7rem; border: none; background: none; border-radius: 12px; text-align: left; font-family: inherit; cursor: pointer; transition: background-color .2s; }
+        .rg-step:disabled { cursor: default; opacity: .45; }
+        .rg-step:hover:not(:disabled) { background: #fff; }
+        .rg-step.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+        .rg-dot { width: 28px; height: 28px; border-radius: 50%; background: ${SOFT}; color: ${SUB}; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; flex-shrink: 0; transition: all .3s; }
+        .rg-step.on .rg-dot { background: ${INK}; color: #fff; }
+        .rg-step.ok .rg-dot { background: ${GREEN_SOFT}; color: ${GREEN}; }
+        .rg-step b { display: block; font-size: 0.9rem; font-weight: 600; color: ${INK}; }
+        .rg-step small { display: block; font-size: 0.75rem; color: ${SUB}; }
 
-            <label className="input-label">Email адреса</label>
-            <input type="email" placeholder="alex@gmail.com" className="custom-input" value={newStaff.email} onChange={e => setNewStaff({...newStaff, email: e.target.value})} />
-            {!isEmailValid(newStaff.email) && newStaff.email.length > 0 && <span style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '-1rem', marginBottom: '1rem', display: 'block', fontWeight: '600' }}>Некоректний формат email</span>}
+        .rg-main { min-width: 0; }
+        .rg-pane { animation: rgIn .45s cubic-bezier(.16,1,.3,1); }
+        .rg-pane.back { animation-name: rgInBack; }
+        @keyframes rgIn { from { opacity: 0; transform: translateX(26px); } }
+        @keyframes rgInBack { from { opacity: 0; transform: translateX(-26px); } }
+        .rg-pane h1 { font-size: clamp(1.7rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -0.035em; margin: 0 0 0.4rem; }
+        .rg-lead { font-size: 1rem; color: ${SUB}; margin: 0 0 1.6rem; line-height: 1.5; }
+        .rg-lead b { color: ${INK}; }
 
-            <label className="input-label">Номер телефону</label>
-            <input
-              type="tel"
-              placeholder="+380 99 123 45 67"
-              className="custom-input"
-              value={newStaff.phone ? `+380 ${newStaff.phone}` : '+380 '}
-              onChange={(e) => handlePhoneChange(e, 'staff')}
-            />
+        .rg-field { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1.15rem; }
+        .rg-field > span, .rg-label { font-size: 0.85rem; font-weight: 600; color: #3A3A3C; }
+        .rg-label { margin: 1.3rem 0 0.6rem; }
+        .rg-label small { font-weight: 400; color: ${SUB}; }
+        .rg-field input, .rg-plain, .rg-add > input { height: 50px; padding: 0 1rem; border-radius: 14px; border: 1px solid ${LINE}; background: #fff; font-family: inherit; font-size: 1rem; color: ${INK}; outline: none; transition: border-color .2s, box-shadow .2s; box-sizing: border-box; width: 100%; }
+        .rg-field input:focus, .rg-plain:focus, .rg-add > input:focus { border-color: ${GREEN}; box-shadow: 0 0 0 4px rgba(111,146,115,.15); }
+        .rg-field input.bad, .rg-phone.bad { border-color: #E0645C; }
+        .rg-field small { font-size: 0.8rem; color: ${SUB}; line-height: 1.45; }
+        .rg-field em, .rg-err { font-style: normal; font-size: 0.8rem; color: #C2410C; display: block; }
+        .rg-err { margin-top: 0.5rem; }
+        .rg-ok { font-size: 0.8rem; color: ${GREEN}; font-weight: 600; display: block; margin-top: 0.5rem; }
+        .rg-row { display: flex; gap: 0.75rem; }
+        .rg-row .rg-field { margin-bottom: 1.15rem; }
 
-            <label className="input-label">Посада</label>
-            <input type="text" placeholder="Топ-майстер" className="custom-input" value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value})} style={{ marginBottom: 0 }} />
+        .rg-phone { display: flex; align-items: center; height: 50px; border-radius: 14px; border: 1px solid ${LINE}; background: #fff; overflow: hidden; transition: border-color .2s, box-shadow .2s; }
+        .rg-phone:focus-within { border-color: ${GREEN}; box-shadow: 0 0 0 4px rgba(111,146,115,.15); }
+        .rg-phone b { padding: 0 0.9rem; font-weight: 600; color: ${SUB}; font-size: 1rem; }
+        .rg-phone input { border: none !important; box-shadow: none !important; height: 100%; flex: 1; padding: 0 0.9rem 0 0; font-family: inherit; font-size: 1rem; outline: none; background: transparent; min-width: 0; }
 
-            <button
-               className="continue-btn"
-               onClick={addStaffMember}
-               disabled={newStaff.name.length < 2 || !isEmailValid(newStaff.email) || newStaff.phone.length !== 9 || newStaff.role.length < 2}
-            >
-              Додати
-            </button>
-          </div>
-        </div>
-      )}
+        .rg-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+        .rg-chips button { height: 40px; padding: 0 1rem; border-radius: 999px; border: 1px solid ${LINE}; background: #fff; font-family: inherit; font-size: 0.9rem; color: ${INK}; cursor: pointer; transition: all .18s; }
+        .rg-chips button:hover { border-color: #C7C7CC; }
+        .rg-chips button:active { transform: scale(.96); }
+        .rg-chips button.on { background: ${INK}; border-color: ${INK}; color: #fff; }
+        .rg-chips .rg-more { color: ${GREEN}; border-style: dashed; }
 
-      {/* 🟢 МОДАЛКА ПОСЛУГИ */}
-      {isServiceModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsServiceModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#0f172a' }}>{editingServiceId ? 'Редагувати' : 'Нова послуга'}</h3>
-              <button onClick={() => setIsServiceModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', color: '#64748b', transition: '0.2s', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseOver={e=>e.currentTarget.style.background='#e2e8f0'}>✕</button>
-            </div>
+        .rg-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin-bottom: 1.2rem; }
+        .rg-card { display: flex; gap: 0.75rem; align-items: flex-start; padding: 1rem 1.05rem; border-radius: 16px; border: 1.5px solid ${LINE}; background: #fff; text-align: left; font-family: inherit; cursor: pointer; transition: all .2s; }
+        .rg-card:hover { border-color: #C7C7CC; }
+        .rg-card.on { border-color: ${GREEN}; background: ${GREEN_SOFT}; }
+        .rg-card b { display: block; font-size: 0.95rem; color: ${INK}; }
+        .rg-card small { display: block; font-size: 0.82rem; color: ${SUB}; margin-top: 3px; line-height: 1.4; }
+        .rg-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #C7C7CC; flex-shrink: 0; margin-top: 2px; position: relative; transition: border-color .2s; }
+        .rg-card.on .rg-radio { border-color: ${GREEN}; }
+        .rg-card.on .rg-radio::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: ${GREEN}; animation: rgPop .25s ease; }
+        @keyframes rgPop { from { transform: scale(0); } }
 
-            <label className="input-label">Назва послуги</label>
-            <input type="text" placeholder="Чоловіча стрижка" className="custom-input" value={serviceForm.name} onChange={e => setServiceForm({...serviceForm, name: e.target.value})} autoFocus />
+        .rg-toggle { display: flex; align-items: center; gap: 0.85rem; width: 100%; padding: 0.95rem 1rem; border-radius: 14px; border: 1px solid ${LINE}; background: #fff; text-align: left; font-family: inherit; cursor: pointer; }
+        .rg-toggle b { display: block; font-size: 0.925rem; color: ${INK}; }
+        .rg-toggle small { display: block; font-size: 0.8rem; color: ${SUB}; }
+        .rg-switch { width: 44px; height: 26px; border-radius: 13px; border: none; background: #E5E5EA; position: relative; flex-shrink: 0; padding: 0; cursor: pointer; transition: background-color .25s; display: inline-block; }
+        .rg-switch i { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: left .25s cubic-bezier(.16,1,.3,1); }
+        .rg-switch.on { background: #34C759; }
+        .rg-switch.on i { left: 20px; }
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
-                <label className="input-label">Тривалість</label>
-                <select className="custom-input" style={{ cursor: 'pointer', appearance: 'none', marginBottom: 0 }} value={serviceForm.duration} onChange={e => setServiceForm({...serviceForm, duration: Number(e.target.value)})}>
-                  <option value={15}>15 хв</option>
-                  <option value={30}>30 хв</option>
-                  <option value={45}>45 хв</option>
-                  <option value={60}>1 год</option>
-                  <option value={90}>1.5 год</option>
-                  <option value={120}>2 год</option>
-                </select>
-              </div>
-              <div>
-                <label className="input-label">Вартість (₴)</label>
-                <input type="number" placeholder="500" className="custom-input" style={{ marginBottom: 0 }} value={serviceForm.price} onChange={e => setServiceForm({...serviceForm, price: e.target.value})} />
-              </div>
-            </div>
+        .rg-map { border-radius: 16px; overflow: hidden; border: 1px solid ${LINE}; }
 
-            <button className="continue-btn" onClick={saveService} disabled={serviceForm.name.length < 2 || !serviceForm.price}>
-               Зберегти
-            </button>
-          </div>
-        </div>
-      )}
+        .rg-hours { background: #fff; border: 1px solid ${LINE}; border-radius: 16px; padding: 0.3rem 1rem; }
+        .rg-day { display: grid; grid-template-columns: 44px 120px 1fr 32px; align-items: center; gap: 0.75rem; padding: 0.65rem 0; border-top: 1px solid ${SOFT}; }
+        .rg-day:first-child { border-top: none; }
+        .rg-dayname { font-size: 0.925rem; font-weight: 500; }
+        .rg-day.off .rg-dayname { color: ${SUB}; }
+        .rg-times { display: flex; align-items: center; gap: 0.4rem; }
+        .rg-times i { font-style: normal; color: ${SUB}; }
+        .rg-times input { height: 38px; padding: 0 0.6rem; border-radius: 10px; border: 1px solid ${LINE}; font-family: inherit; font-size: 0.9rem; background: #fff; outline: none; }
+        .rg-times input:focus { border-color: ${GREEN}; }
+        .rg-offlabel { font-size: 0.875rem; color: #AEAEB2; }
+        .rg-copy { width: 30px; height: 30px; border-radius: 8px; border: 1px solid ${LINE}; background: #fff; color: ${SUB}; cursor: pointer; font-size: 0.85rem; }
+        .rg-copy:hover { color: ${INK}; background: ${SOFT}; }
 
-    </div>
+        .rg-tpls { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.55rem; }
+        .rg-tpls button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0.8rem 0.95rem; border-radius: 14px; border: 1px dashed #C7C7CC; background: #fff; font-family: inherit; text-align: left; cursor: pointer; transition: all .18s; }
+        .rg-tpls button:hover { border-color: ${GREEN}; background: ${GREEN_SOFT}; }
+        .rg-tpls button:active { transform: scale(.97); }
+        .rg-tpls b { font-size: 0.9rem; color: ${INK}; }
+        .rg-tpls small { font-size: 0.78rem; color: ${SUB}; }
+        .rg-list { margin-top: 1rem; background: #fff; border: 1px solid ${LINE}; border-radius: 16px; padding: 0 1rem; }
+        .rg-item { display: grid; grid-template-columns: 1fr auto 32px; gap: 0.75rem; align-items: center; padding: 0.8rem 0; border-top: 1px solid ${SOFT}; animation: rgIn .35s cubic-bezier(.16,1,.3,1); }
+        .rg-item:first-child { border-top: none; }
+        .rg-item b { display: block; font-size: 0.925rem; }
+        .rg-item small { display: block; font-size: 0.78rem; color: ${SUB}; }
+        .rg-price { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .rg-item button { width: 30px; height: 30px; border-radius: 50%; border: none; background: ${SOFT}; color: ${SUB}; font-size: 1.05rem; cursor: pointer; }
+        .rg-item button:hover { background: #FDECEC; color: #C2410C; }
+        .rg-add { margin-top: 1.2rem; padding: 1rem; border-radius: 16px; background: #fff; border: 1px solid ${LINE}; display: flex; flex-direction: column; gap: 0.65rem; }
+        .rg-durs { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .rg-durs button { height: 34px; padding: 0 0.8rem; border-radius: 10px; border: 1px solid ${LINE}; background: #fff; font-family: inherit; font-size: 0.82rem; cursor: pointer; }
+        .rg-durs button.on { background: ${INK}; color: #fff; border-color: ${INK}; }
+
+        .rg-note { font-size: 0.875rem; color: #3F5F45; background: ${GREEN_SOFT}; border-radius: 12px; padding: 0.7rem 0.9rem; margin-bottom: 1rem; }
+        .rg-seg { display: flex; background: ${SOFT}; border-radius: 12px; padding: 3px; }
+        .rg-seg button { border: none; background: transparent; padding: 0 0.8rem; border-radius: 9px; font-family: inherit; font-size: 0.82rem; cursor: pointer; color: ${INK}; }
+        .rg-seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }
+
+        .rg-sum { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 0.95rem 1.1rem; border-radius: 14px; background: #fff; border: 1px solid ${LINE}; margin-bottom: 0.55rem; }
+        .rg-sum.bad { border-color: #F5B7A5; }
+        .rg-sum small { display: block; font-size: 0.75rem; font-weight: 600; color: ${SUB}; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.2rem; }
+        .rg-sum div div { font-size: 0.95rem; }
+        .rg-sum .rg-sum-sub { font-size: 0.85rem; color: ${SUB}; }
+        .rg-sum button { border: none; background: none; color: ${GREEN}; font-family: inherit; font-weight: 600; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
+        .rg-trial { font-size: 0.875rem; color: ${SUB}; text-align: center; margin-top: 1rem; }
+
+        .rg-error { margin-top: 1rem; padding: 0.75rem 0.9rem; border-radius: 12px; background: #FDECEC; color: #B42318; font-size: 0.9rem; }
+        .rg-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid ${LINE}; }
+        .rg-back { border: none; background: none; font-family: inherit; font-size: 0.95rem; color: ${SUB}; cursor: pointer; padding: 0.6rem 0; }
+        .rg-back:hover { color: ${INK}; }
+        .rg-primary { height: 50px; padding: 0 2rem; border-radius: 14px; border: none; background: ${INK}; color: #fff; font-family: inherit; font-size: 1rem; font-weight: 600; cursor: pointer; transition: transform .15s, opacity .2s; }
+        .rg-primary:active { transform: scale(.97); }
+        .rg-primary:disabled { opacity: .5; cursor: default; }
+        .rg-secondary { height: 50px; padding: 0 1.2rem; border-radius: 14px; border: 1px solid ${LINE}; background: #fff; font-family: inherit; font-size: 0.925rem; font-weight: 600; color: ${INK}; cursor: pointer; white-space: nowrap; }
+        .rg-secondary:disabled { opacity: .4; cursor: default; }
+
+        .rg-preview { position: sticky; top: 90px; align-self: start; }
+        .rg-preview-cap { font-size: 0.75rem; font-weight: 600; color: ${SUB}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.7rem; }
+        .rg-pcard { background: #fff; border-radius: 22px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 24px 50px -30px rgba(0,0,0,.25); }
+        .rg-pcover { height: 110px; background: linear-gradient(135deg, #DCE8DB, #B8CFB9); display: flex; align-items: flex-end; padding: 0 1rem; }
+        .rg-pcover span { width: 56px; height: 56px; border-radius: 16px; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; color: ${GREEN}; transform: translateY(24px); box-shadow: 0 6px 16px -6px rgba(0,0,0,.2); }
+        .rg-pbody { padding: 2rem 1.1rem 1.1rem; }
+        .rg-pname { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; transition: all .2s; }
+        .rg-pmeta { font-size: 0.85rem; color: ${GREEN}; font-weight: 600; margin: 0.15rem 0 0.6rem; }
+        .rg-pline { font-size: 0.82rem; color: ${SUB}; margin-top: 0.2rem; }
+        .rg-psvc { margin-top: 0.9rem; border-top: 1px solid ${SOFT}; padding-top: 0.6rem; }
+        .rg-psvc div { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.3rem 0; }
+        .rg-psvc b { font-weight: 600; }
+        .rg-pbtn { margin-top: 0.9rem; height: 40px; border-radius: 12px; background: ${INK}; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 600; }
+
+        @media (max-width: 1180px) { .rg-layout { grid-template-columns: 220px minmax(0, 620px); } .rg-preview { display: none; } }
+        @media (max-width: 820px) {
+          .rg-layout { grid-template-columns: 1fr; padding-top: 1.5rem; }
+          .rg-steps { display: none; }
+          .rg-cards { grid-template-columns: 1fr; }
+          .rg-row { flex-direction: column; gap: 0; }
+          .rg-day { grid-template-columns: 44px 1fr auto; }
+          .rg-copy { display: none; }
+          .rg-nav { position: sticky; bottom: 0; background: #FAFAFA; margin: 1.5rem -1rem 0; padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom)); }
+        }
+      `}</style>
+    </main>
   );
 }

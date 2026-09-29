@@ -632,6 +632,9 @@ export const api = {
       phone?: string;
       email?: string;
       hours?: BusinessHoursItem[];
+      latitude?: number;
+      longitude?: number;
+      show_phone_publicly?: boolean;
     }
   ): Promise<Business> {
     return authFetch(`/crm/businesses`, token, { method: 'POST', body: JSON.stringify(payload) });

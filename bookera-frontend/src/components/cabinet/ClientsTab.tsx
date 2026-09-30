@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
@@ -9,6 +9,8 @@ import HelpTip from '@/components/ui/HelpTip';
 import { notify } from '@/lib/feedback';
 import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
 import BirthdayInput from '@/components/ui/BirthdayInput';
+import ClientImportModal from '@/components/cabinet/ClientImportModal';
+import ClientDuplicatesModal from '@/components/cabinet/ClientDuplicatesModal';
 
 export default function ClientsTab({ business, clientsList, setClientsList, fetchClientsFromDB, onBookAgain }: any) {
   const supabase = createClient();
@@ -180,6 +182,32 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newClientForm.email, isAddClientModalOpen]);
+
+  // Імпорт / експорт / дублі - лише з доступом до всієї бази (власник,
+  // адміністратор; майстрові - якщо власник відкрив)
+  const [canManageBase, setCanManageBase] = useState(false);
+  const [dupCount, setDupCount] = useState(0);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isDupOpen, setIsDupOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const refreshDuplicates = useCallback(async () => {
+    if (!business?.id) return;
+    try {
+      const t = await getAuthToken();
+      const acc = await api.getMyAccess(t, Number(business.id));
+      const ok = !!acc.sections?.clients;
+      setCanManageBase(ok);
+      setDupCount(ok ? (await api.getClientDuplicates(t, Number(business.id))).length : 0);
+    } catch { setCanManageBase(false); }
+  }, [business?.id]);
+  useEffect(() => { void refreshDuplicates(); }, [refreshDuplicates, clientsList.length]);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try { await api.exportClients(await getAuthToken(), Number(business.id)); }
+    catch (e: any) { showToast(e?.message || 'Не вдалося вивантажити базу', 'error'); }
+    finally { setIsExporting(false); }
+  };
 
   const handleSaveNewClient = async () => {
     if (!newClientForm.name.trim()) return showToast("Вкажіть імʼя клієнта", 'error', { field: 'client-name' });
@@ -541,6 +569,16 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .service-table td { color: #0f172a; }
         .service-table th { color: #64748b; }
         .cl-cake { display: inline-flex; vertical-align: -2px; margin-left: 0.35rem; color: #f59e0b; }
+        .cl-actions-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+        .cl-actions-top .clean-btn-ghost, .cl-actions-top .clean-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
+        .cl-dup { color: #b45309 !important; border-color: #fcd34d !important; background: #fffbeb !important; }
+        .cl-dup span { font-weight: 700; }
+        .cl-acts { white-space: nowrap; padding-left: 0 !important; }
+        .cl-acts > span { display: inline-flex; gap: 0.25rem; opacity: 0; transition: opacity .15s; }
+        .service-row:hover .cl-acts > span, .cl-acts > span:focus-within { opacity: 1; }
+        .cl-acts a, .cl-acts button { width: 32px; height: 32px; border-radius: 9px; border: 1px solid #e2e8f0; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; padding: 0; }
+        .cl-acts a:hover, .cl-acts button:hover { color: #0f172a; border-color: #cbd5e1; background: #f8fafc; }
+        @media (hover: none) { .cl-acts > span { opacity: 1; } }
         .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .cl-search { position: relative; width: 280px; max-width: 100%; }
         .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }
@@ -934,7 +972,22 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                  <span className="cl-search-ico"><Icons.Search /></span>
                  <input type="text" className="clean-input" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Імʼя чи телефон…" />
               </div>
-              <button type="button" onClick={() => setIsAddClientModalOpen(true)} className="clean-btn"><Icons.Plus /> Додати</button>
+              <div className="cl-actions-top">
+                 {canManageBase && dupCount > 0 && (
+                   <button type="button" className="clean-btn-ghost cl-dup" onClick={() => setIsDupOpen(true)} title="Картки з тим самим номером чи поштою">
+                     <Icons.Duplicates /> Дублі <span>{dupCount}</span>
+                   </button>
+                 )}
+                 {canManageBase && (
+                   <>
+                     <button type="button" className="clean-btn-ghost" onClick={() => setIsImportOpen(true)} title="Додати клієнтів з Excel чи CSV"><Icons.Import /> Імпорт</button>
+                     <button type="button" className="clean-btn-ghost" disabled={isExporting || clientsList.length === 0} onClick={() => void handleExport()} title="Уся база в Excel">
+                       <Icons.Export /> {isExporting ? 'Готуємо…' : 'Експорт'}
+                     </button>
+                   </>
+                 )}
+                 <button type="button" onClick={() => setIsAddClientModalOpen(true)} className="clean-btn"><Icons.Plus /> Додати</button>
+              </div>
            </div>
 
            {/* Сегменти - із лічильниками, щоб одразу було видно, скільки кого */}
@@ -971,6 +1024,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                           <th className="sortable" onClick={() => handleSortClick('visits')} style={{ textAlign: 'right' }}>Візити <SortIcon columnKey="visits" /></th>
                           <th className="sortable" onClick={() => handleSortClick('spent')} style={{ textAlign: 'right' }}>Витратили <SortIcon columnKey="spent" /></th>
                           <th className="sortable" onClick={() => handleSortClick('balance')} style={{ textAlign: 'right' }}>Депозит <SortIcon columnKey="balance" /></th>
+                          <th aria-label="Дії" style={{ width: 1 }} />
                         </tr>
                       </thead>
                       <tbody>
@@ -992,6 +1046,16 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                             <td style={{ textAlign: 'right', fontWeight: 600 }}>{client.visits_count || 0}</td>
                             <td style={{ textAlign: 'right', fontWeight: 700 }}>{Math.round(client.total_spent || 0).toLocaleString('uk-UA')} ₴</td>
                             <td style={{ textAlign: 'right', fontWeight: 600, color: (client.balance || 0) > 0 ? '#059669' : (client.balance || 0) < 0 ? '#dc2626' : '#94a3b8' }}>{client.balance || 0} ₴</td>
+                            {/* Швидкі дії без відкриття картки; натиск на них картку не відкриває */}
+                            <td className="cl-acts" onClick={e => e.stopPropagation()}>
+                              <span>
+                                {client.phone && <a href={`tel:${client.phone}`} title={`Подзвонити ${client.phone}`} aria-label="Подзвонити"><Icons.Phone /></a>}
+                                {client.phone && <a href={`sms:${client.phone}`} title="Написати SMS" aria-label="Написати"><Icons.Chat /></a>}
+                                {!client.is_blacklisted && onBookAgain && (
+                                  <button type="button" title="Записати" aria-label="Записати" onClick={() => onBookAgain(client)}><Icons.Calendar /></button>
+                                )}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1080,6 +1144,14 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         </div>
       )}
 
+      {business?.id && (
+        <>
+          <ClientImportModal open={isImportOpen} onClose={() => setIsImportOpen(false)} businessId={Number(business.id)}
+            onDone={() => { fetchClientsFromDB?.(); void refreshDuplicates(); }} />
+          <ClientDuplicatesModal open={isDupOpen} onClose={() => setIsDupOpen(false)} businessId={Number(business.id)}
+            onChanged={() => { fetchClientsFromDB?.(); void refreshDuplicates(); }} />
+        </>
+      )}
       {/* Новий клієнт - той самий шаблон вікна, що в «Послугах» (FormModal):
           поля з рамкою, тож і червоне підсвічування помилки справді видно. */}
       <FormModal

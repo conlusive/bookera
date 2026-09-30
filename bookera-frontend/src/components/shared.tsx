@@ -46,6 +46,8 @@ import {
   Instagram,
   ClipboardText,
   Cake,
+  ImportCurve,
+  ExportCurve,
 } from 'iconsax-react';
 
 export const Icons = {
@@ -97,6 +99,9 @@ export const Icons = {
   NavEarnings: () => <CardTick size="20" color="currentColor" variant="Linear" />,
   NavActivity: () => <ClipboardText size="20" color="currentColor" variant="Linear" />,
   // Торт - той самий стиль, що й решта іконок (замість смайлика 🎂)
+  Import: () => <ImportCurve size="16" color="currentColor" variant="Linear" />,
+  Export: () => <ExportCurve size="16" color="currentColor" variant="Linear" />,
+  Duplicates: () => <Profile2User size="16" color="currentColor" variant="Linear" />,
   Cake: ({ size = 16 }: { size?: number }) => <Cake size={String(size)} color="currentColor" variant="Linear" />,
   CheckCircle: () => <TickCircle size="16" color="currentColor" variant="Bold" />,
   AlertCircle: () => <InfoCircle size="16" color="currentColor" variant="Bold" />,

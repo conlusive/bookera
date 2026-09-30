@@ -283,6 +283,29 @@ async function authFetch(path: string, token: string, options: RequestInit = {})
   return handle(res);
 }
 
+/** Завантажити файл із сервера (Excel) - і віддати браузеру як звичайне завантаження. */
+async function downloadFile(path: string, token: string, fallbackName: string): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+  if (!res.ok) await handle(res);
+  const blob = await res.blob();
+  const cd = res.headers.get('Content-Disposition') || '';
+  const m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const name = m ? decodeURIComponent(m[1]) : fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Надіслати файл: без Content-Type - браузер сам поставить multipart із межею. */
+async function uploadFile(path: string, token: string, file: File): Promise<any> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`${API_URL}${path}`, { method: 'POST', body: fd, headers: { Authorization: `Bearer ${token}` } });
+  return handle(res);
+}
+
 // ============ API ============
 
 export const api = {
@@ -368,6 +391,26 @@ export const api = {
   /** Автозаповнення нового клієнта за поштою (дані - лише якщо людина вже була в закладі). */
   async lookupClient(token: string, businessId: number, email: string): Promise<{ existing_client?: { id: number; name: string }; found?: boolean; shared?: boolean; name?: string | null; phone?: string | null; birthday?: string | null }> {
     return authFetch(`/crm/clients/lookup?business_id=${businessId}&email=${encodeURIComponent(email)}`, token);
+  },
+
+  // --- База клієнтів: Excel і дублі ---
+  async exportClients(token: string, businessId: number): Promise<void> {
+    return downloadFile(`/crm/clients/export?business_id=${businessId}`, token, 'Клієнти.xlsx');
+  },
+  async downloadClientsTemplate(token: string): Promise<void> {
+    return downloadFile('/crm/clients/import-template', token, 'Шаблон імпорту клієнтів.xlsx');
+  },
+  async importClients(token: string, businessId: number, file: File, dryRun: boolean): Promise<{
+    total: number; to_create: number; skipped: number; created?: number; columns: string[]; truncated: boolean;
+    skipped_rows: { row: number; name?: string; reason: string }[]; preview: { name: string; phone: string | null; email: string | null }[];
+  }> {
+    return uploadFile(`/crm/clients/import?business_id=${businessId}&dry_run=${dryRun}`, token, file);
+  },
+  async getClientDuplicates(token: string, businessId: number): Promise<{ id: number; name: string; phone: string | null; email: string | null; visits_count: number; total_spent: number; created_at: string | null }[][]> {
+    return authFetch(`/crm/clients/duplicates?business_id=${businessId}`, token);
+  },
+  async mergeClients(token: string, keepId: number, mergeIds: number[]): Promise<{ id: number; merged: number }> {
+    return authFetch(`/crm/clients/${keepId}/merge`, token, { method: 'POST', body: JSON.stringify({ merge_ids: mergeIds }) });
   },
 
   // --- Доступи й журнал ---

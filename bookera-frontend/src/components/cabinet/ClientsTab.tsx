@@ -129,13 +129,20 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
   // Бічна колонка: гроші й найближчі дні народження
   const sideStats = useMemo(() => {
-    let spent = 0, visits = 0, deposits = 0;
+    let spent = 0, visits = 0, deposits = 0, newThis = 0, newPrev = 0, visited = 0, returned = 0;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
     const birthdays: { client: any; days: number; label: string }[] = [];
     const today = new Date(); today.setHours(0, 0, 0, 0);
     for (const cl of clientsList as any[]) {
       spent += Number(cl.total_spent || 0);
       visits += Number(cl.visits_count || 0);
       if (Number(cl.balance) > 0) deposits += Number(cl.balance);
+      const created = cl.created_at ? new Date(cl.created_at).getTime() : 0;
+      if (created >= monthStart) newThis += 1;
+      else if (created >= prevStart) newPrev += 1;
+      if ((cl.visits_count || 0) >= 1) { visited += 1; if ((cl.visits_count || 0) >= 2) returned += 1; }
       const m = /^\d{4}-(\d{2})-(\d{2})/.exec(cl.birthday || '');
       if (m) {
         const next = new Date(today.getFullYear(), Number(m[1]) - 1, Number(m[2]));
@@ -145,7 +152,8 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
       }
     }
     birthdays.sort((a, b) => a.days - b.days);
-    return { spent, avgCheck: visits ? spent / visits : 0, deposits, birthdays };
+    return { spent, avgCheck: visits ? spent / visits : 0, deposits, birthdays, newThis, newPrev,
+             returnPct: visited ? Math.round((returned / visited) * 100) : null, visited };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientsList]);
 
@@ -621,6 +629,13 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-side-row.static { cursor: default; }
         .cl-side-row span { color: #475569; font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cl-side-row b { font-weight: 700; color: #0f172a; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .cl-kpi { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.45rem 0; }
+        .cl-kpi + .cl-kpi { border-top: 1px solid #eef2f6; }
+        .cl-kpi > b { font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; min-width: 2.6rem; }
+        .cl-kpi > span { font-size: 0.8rem; color: #475569; line-height: 1.35; }
+        .cl-kpi em { display: block; font-style: normal; font-size: 0.72rem; color: #94a3b8; margin-top: 1px; }
+        .cl-kpi em.up { color: #059669; font-weight: 600; }
+        .cl-kpi em.down { color: #d97706; font-weight: 600; }
         .cl-side-bd { display: inline-flex; align-items: center; gap: 0.35rem; }
         .cl-side-bd .cl-cake { margin-left: 0; }
         .cl-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
@@ -1136,18 +1151,28 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
              {/* Бічна колонка - як у «Послугах»: стан бази, гроші, дні народження, підказка */}
              <aside className="custom-scroll cl-side">
+               {/* Як росте база - того, чого немає в пігулках над таблицею. Раніше тут
+                   був блок «База клієнтів», що повторював ті самі сегменти й числа. */}
                <div className="widget-card">
-                 <div className="widget-title">База клієнтів</div>
-                 {([
-                   ['all', 'Усього', segmentCounts.all, '#0f172a'],
-                   ['new', 'Нові за 30 днів', segmentCounts.new, '#0f172a'],
-                   ['regular', 'Постійні', segmentCounts.regular, '#10b981'],
-                   ['lost', 'Давно не були', segmentCounts.lost, segmentCounts.lost ? '#d97706' : '#0f172a'],
-                 ] as const).map(([id, label, n, color]) => (
-                   <button key={id} type="button" className={`cl-side-row ${activeSegment === id ? 'on' : ''}`} onClick={() => setActiveSegment(id)}>
-                     <span>{label}</span><b style={{ color }}>{n || 0}</b>
-                   </button>
-                 ))}
+                 <div className="widget-title">Як росте база</div>
+                 <div className="cl-kpi">
+                   <b>{sideStats.newThis}</b>
+                   <span>
+                     {sideStats.newThis === 1 ? 'новий клієнт' : sideStats.newThis >= 2 && sideStats.newThis <= 4 ? 'нових клієнти' : 'нових клієнтів'} цього місяця
+                     {sideStats.newThis !== sideStats.newPrev && (
+                       <em className={sideStats.newThis > sideStats.newPrev ? 'up' : 'down'}>
+                         {sideStats.newThis > sideStats.newPrev ? '↑' : '↓'} {Math.abs(sideStats.newThis - sideStats.newPrev)} до минулого
+                       </em>
+                     )}
+                   </span>
+                 </div>
+                 <div className="cl-kpi">
+                   <b>{sideStats.returnPct === null ? '—' : `${sideStats.returnPct}%`}</b>
+                   <span>
+                     повертаються
+                     <em>{sideStats.returnPct === null ? 'зʼявиться після перших візитів' : 'прийшли вдруге й більше — головна ознака, що в салоні подобається'}</em>
+                   </span>
+                 </div>
                </div>
 
                <div className="widget-card">

@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ClientBase(BaseModel):
@@ -53,6 +53,13 @@ class ClientResponse(ClientBase):
     consent_procedure: bool = False
     linked_client_ids: List[int] = []
     created_at: Optional[datetime] = None
+
+    @field_validator("balance", "visits_count", "total_spent", "no_show_count", mode="before")
+    @classmethod
+    def _none_is_zero(cls, v):
+        # Порожнє в базі (клієнти, створені не через кабінет) - це 0, а не
+        # причина впасти всьому списку клієнтів.
+        return 0 if v is None else v
 
     model_config = ConfigDict(from_attributes=True)
 

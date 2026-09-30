@@ -565,7 +565,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
           border-bottom-right-radius: 12px;
           padding-right: 1.25rem;
         }
-        .clean-btn-ghost:disabled { opacity: .4; cursor: default; }
+        .clean-btn-ghost:disabled { cursor: progress; }
         .service-table td { color: #0f172a; }
         .service-table th { color: #64748b; }
         .cl-cake { display: inline-flex; vertical-align: -2px; margin-left: 0.35rem; color: #f59e0b; }
@@ -623,10 +623,10 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-stat-bar { display: block; width: 100%; height: 4px; border-radius: 2px; background: #e2e8f0; overflow: hidden; margin-top: 0.3rem; }
         .cl-stat-bar em { display: block; height: 100%; background: #10b981; border-radius: 2px; transition: width .6s ease; }
         /* Телефон із префіксом +380 у вікні нового клієнта */
-        .cl-phone { display: flex; align-items: stretch; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+        .cl-phone { display: flex; align-items: stretch; height: 42px; box-sizing: border-box; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
         .cl-phone:focus-within { border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15,23,42,.08); }
         .cl-phone b { display: flex; align-items: center; padding: 0 0.75rem; color: #64748b; font-weight: 600; font-size: 0.925rem; background: #f8fafc; border-right: 1px solid #e2e8f0; }
-        .cl-phone .fm-input { border: none !important; box-shadow: none !important; border-radius: 0; }
+        .cl-phone .fm-input { border: none !important; box-shadow: none !important; border-radius: 0; height: 100% !important; min-width: 0; flex: 1; }
       `}</style>
 
       {viewingClient ? (
@@ -981,7 +981,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                  {canManageBase && (
                    <>
                      <button type="button" className="clean-btn-ghost" onClick={() => setIsImportOpen(true)} title="Додати клієнтів з Excel чи CSV"><Icons.Import /> Імпорт</button>
-                     <button type="button" className="clean-btn-ghost" disabled={isExporting || clientsList.length === 0} onClick={() => void handleExport()} title="Уся база в Excel">
+                     <button type="button" className="clean-btn-ghost" disabled={isExporting} onClick={() => void handleExport()} title="Уся база в Excel">
                        <Icons.Export /> {isExporting ? 'Готуємо…' : 'Експорт'}
                      </button>
                    </>
@@ -1158,7 +1158,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         open={isAddClientModalOpen}
         onClose={() => setIsAddClientModalOpen(false)}
         title="Новий клієнт"
-        subtitle="Візити з цим номером підтягнуться в картку самі"
+        subtitle="Візити з цим номером телефону підтягнуться в картку самі"
         primary={{ label: 'Додати клієнта', onClick: () => void handleSaveNewClient(), loading: isSavingClient }}
         width={520}
       >
@@ -1172,7 +1172,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
               value={newClientForm.name} onChange={e => setNewClientForm({ ...newClientForm, name: e.target.value })} />
           </Field>
           <div className="fm-row">
-            <Field label="Телефон" hint="За номером знайдемо записи клієнта">
+            <Field label="Телефон">
               <span className="cl-phone" data-error-anchor>
                 <b>+380</b>
                 <input className="fm-input" data-field="client-phone" inputMode="numeric" placeholder="67 123 45 67"

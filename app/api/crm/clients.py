@@ -66,6 +66,50 @@ async def list_clients(
     return await _with_stats(db, business_id, result.scalars().unique().all())
 
 
+
+@router.get("/lookup")
+async def lookup_client(
+    business_id: int = Query(...),
+    email: str = Query(..., min_length=3, max_length=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Автозаповнення нового клієнта за поштою.
+
+    Приватність: особисті дані (телефон, дата народження) віддаємо ЛИШЕ
+    якщо людина вже записувалась у ЦЕЙ заклад. Інакше будь-який салон міг
+    би дізнатись телефон і день народження незнайомої людини, вгадавши її
+    пошту. Без такого звʼязку - лише «є акаунт BookEra».
+    """
+    from sqlalchemy import func, or_
+    from app.models import User
+    await assert_business_access(db, current_user, business_id)
+    e = email.strip().lower()
+    existing = (await db.execute(select(Client).where(
+        Client.business_id == business_id, func.lower(Client.email) == e,
+    ))).scalars().first()
+    if existing:
+        return {"existing_client": {"id": existing.id, "name": existing.name}}
+    user = (await db.execute(select(User).where(func.lower(User.email) == e))).scalars().first()
+    if not user:
+        return {"found": False}
+    conds = [func.lower(Appointment.client_email) == e]
+    tail = phone_tail(user.phone)
+    if tail:
+        conds.append(Appointment.client_phone.like(f"%{tail}"))
+    related = (await db.execute(select(Appointment.id).where(
+        Appointment.business_id == business_id, or_(*conds),
+    ).limit(1))).first()
+    if not related:
+        return {"found": True, "shared": False}
+    return {
+        "found": True, "shared": True,
+        "name": user.full_name, "phone": user.phone,
+        "birthday": user.birthday.isoformat() if user.birthday else None,
+    }
+
+
 @router.post("", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
 async def create_client(
     client_in: ClientCreate,

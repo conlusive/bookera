@@ -86,3 +86,36 @@ async def test_duplicate_phone_rejected(client, auth_headers):
     assert (await client.post("/crm/clients", json={"business_id": bid, "name": "Марія", "phone": "+380671234567"}, headers=h)).status_code == 201
     r = await client.post("/crm/clients", json={"business_id": bid, "name": "Маша", "phone": "+38 067 123 45 67"}, headers=h)
     assert r.status_code == 409 and "Марія" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_by_email_respects_privacy(client, auth_headers):
+    """
+    Дані з акаунта - лише якщо людина вже записувалась у цей заклад.
+    Інакше салон дізнавався б телефон і день народження незнайомця.
+    """
+    bid, sid, h = await _setup(client, auth_headers, "look")
+    me = auth_headers("cs-user-look", "client")
+    conn = await asyncpg.connect(DB)
+    try:
+        await conn.execute("INSERT INTO users (id, email, role, is_active, created_at) VALUES ('cs-user-look','Olena@Example.com','client',true,now())")
+    finally:
+        await conn.close()
+    await client.patch("/account/me", json={"full_name": "Олена Коваль", "phone": "+380671230000", "birthday": "1995-03-14"}, headers=me)
+    assert (await client.get("/account/me", headers=me)).json()["birthday"] == "1995-03-14"
+
+    r = (await client.get("/crm/clients/lookup", params={"business_id": bid, "email": "olena@example.com"}, headers=h)).json()
+    assert r == {"found": True, "shared": False}, "ще не була в салоні - без особистих даних"
+
+    await _appt(bid, sid, 5, "completed", phone="+380671230000")
+    r = (await client.get("/crm/clients/lookup", params={"business_id": bid, "email": "OLENA@example.com"}, headers=h)).json()
+    assert r["shared"] and r["name"] == "Олена Коваль" and r["phone"] == "+380671230000" and r["birthday"] == "1995-03-14"
+
+    assert (await client.get("/crm/clients/lookup", params={"business_id": bid, "email": "nobody@example.com"}, headers=h)).json() == {"found": False}
+    await client.post("/crm/clients", json={"business_id": bid, "name": "Є вже", "email": "dup@example.com"}, headers=h)
+    r = (await client.get("/crm/clients/lookup", params={"business_id": bid, "email": "dup@example.com"}, headers=h)).json()
+    assert r["existing_client"]["name"] == "Є вже"
+    assert (await client.get("/crm/clients/lookup", params={"business_id": bid, "email": "olena@example.com"}, headers=auth_headers("cs-other"))).status_code == 403
+
+    bad = await client.patch("/account/me", json={"birthday": "2999-01-01"}, headers=me)
+    assert bad.status_code == 400, "майбутня дата народження"

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Numeric, JSON, UniqueConstraint
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Numeric, JSON, UniqueConstraint, Date
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -29,6 +29,9 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
     phone = Column(String, nullable=True)
+    # Дата народження - заповнює сама людина в профілі. Салон, де вона вже
+    # записувалась, отримує її автоматично, коли додає клієнта за поштою.
+    birthday = Column(Date, nullable=True)
     role = Column(String, default="client", nullable=False)
     business_id = Column(Integer, ForeignKey("businesses.id"), nullable=True)
 

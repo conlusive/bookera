@@ -1,3 +1,4 @@
+from datetime import date
 """
 Власні дані користувача: імʼя, телефон, фото.
 
@@ -29,6 +30,7 @@ class MeOut(BaseModel):
     email: Optional[str] = None
     full_name: Optional[str] = None
     phone: Optional[str] = None
+    birthday: Optional[date] = None
     avatar_url: Optional[str] = None
     role: Optional[str] = None
 
@@ -36,6 +38,7 @@ class MeOut(BaseModel):
 class MeUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=120)
     phone: Optional[str] = Field(default=None, max_length=20)
+    birthday: Optional[date] = None
     avatar_url: Optional[str] = Field(default=None, max_length=1000)
 
 
@@ -55,7 +58,7 @@ async def _get_or_create(db: AsyncSession, current_user: CurrentUser) -> User:
 
 def _out(user: User, current_user: CurrentUser) -> MeOut:
     return MeOut(email=user.email or current_user.email, full_name=user.full_name,
-                 phone=user.phone, avatar_url=user.avatar_url, role=user.role)
+                 phone=user.phone, birthday=user.birthday, avatar_url=user.avatar_url, role=user.role)
 
 
 @router.get("/me", response_model=MeOut)
@@ -80,6 +83,15 @@ async def update_me(
         if not name:
             raise HTTPException(status_code=400, detail="Імʼя не може бути порожнім")
         user.full_name = name
+
+    if "birthday" in data:
+        b = data["birthday"]
+        if b is not None:
+            from app.core.time_utils import local_now
+            today = local_now().date()
+            if b > today or b.year < today.year - 120:
+                raise HTTPException(status_code=400, detail="Перевірте дату народження")
+        user.birthday = b
 
     if "phone" in data:
         raw = (data["phone"] or "").strip()

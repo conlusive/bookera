@@ -111,12 +111,17 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const phoneDigits = (v: string) => String(v || '').replace(/\D/g, '').replace(/^380/, '').slice(-9);
   // Хто в якому сегменті - одне правило і для фільтра, і для лічильників
   const DAY = 86400000;
+  // Межі сегментів - ОДНІ для фільтра над таблицею, лічильників і пояснень
+  // у бічній колонці, тож числа ніколи не розходяться.
+  const NEW_DAYS = 30, LOST_DAYS = 60, REGULAR_VISITS = 3;
+  const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const newSince = startOfToday() - NEW_DAYS * DAY;      // додані з цієї дати
+  const lostBefore = startOfToday() - LOST_DAYS * DAY;   // останній візит раніше цієї дати
   const segmentOf = (seg: string, c: any) => {
-    const now = Date.now();
-    if (seg === 'new') return (c.visits_count || 0) <= 1 && c.created_at && now - new Date(c.created_at).getTime() < 30 * DAY;
-    if (seg === 'regular') return (c.visits_count || 0) >= 3;
+    if (seg === 'new') return (c.visits_count || 0) <= 1 && !!c.created_at && new Date(c.created_at).getTime() >= newSince;
+    if (seg === 'regular') return (c.visits_count || 0) >= REGULAR_VISITS;
     if (seg === 'vip') return (c.tags || []).some((t: string) => String(t).toLowerCase().includes('vip'));
-    if (seg === 'lost') return !!c.last_visit_at && !c.next_visit_at && now - new Date(c.last_visit_at).getTime() > 60 * DAY;
+    if (seg === 'lost') return !!c.last_visit_at && !c.next_visit_at && new Date(c.last_visit_at).getTime() < lostBefore;
     if (seg === 'blacklist') return !!c.is_blacklisted;
     return true;
   };
@@ -126,6 +131,14 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientsList]);
+
+  // 31 серп.; «вересень (1-30)» для поточного місяця, «серпень» - для минулого
+  const fmtDay = (t: number) => new Date(t).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+  const monthLabel = (offset: number) => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + offset);
+    const name = d.toLocaleDateString('uk-UA', { month: 'long' });
+    return offset === 0 ? `${name} (1–${new Date().getDate()})` : name;
+  };
 
   // Бічна колонка: гроші й найближчі дні народження
   const sideStats = useMemo(() => {
@@ -153,7 +166,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     }
     birthdays.sort((a, b) => a.days - b.days);
     return { spent, avgCheck: visits ? spent / visits : 0, deposits, birthdays, newThis, newPrev,
-             returnPct: visited ? Math.round((returned / visited) * 100) : null, visited };
+             returnPct: visited ? Math.round((returned / visited) * 100) : null, visited, returned };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientsList]);
 
@@ -629,13 +642,17 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-side-row.static { cursor: default; }
         .cl-side-row span { color: #475569; font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cl-side-row b { font-weight: 700; color: #0f172a; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .cl-kpi { display: flex; align-items: baseline; gap: 0.6rem; padding: 0.45rem 0; }
-        .cl-kpi + .cl-kpi { border-top: 1px solid #eef2f6; }
-        .cl-kpi > b { font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; min-width: 2.6rem; }
-        .cl-kpi > span { font-size: 0.8rem; color: #475569; line-height: 1.35; }
-        .cl-kpi em { display: block; font-style: normal; font-size: 0.72rem; color: #94a3b8; margin-top: 1px; }
-        .cl-kpi em.up { color: #059669; font-weight: 600; }
-        .cl-kpi em.down { color: #d97706; font-weight: 600; }
+        .cl-seg { display: block; width: calc(100% + 1rem); margin: 0 -0.5rem; padding: 0.5rem; border: none; background: none; border-radius: 9px; text-align: left; font-family: inherit; cursor: pointer; transition: background-color .15s; box-sizing: border-box; }
+        .cl-seg:hover:not(.static), .cl-seg.on { background: #eef2f6; }
+        .cl-seg.static { cursor: default; border-top: 1px solid #eef2f6; border-radius: 0; margin-top: 0.3rem; padding-top: 0.7rem; }
+        .cl-seg-top { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+        .cl-seg-top span { font-size: 0.85rem; font-weight: 600; color: #0f172a; }
+        .cl-seg-top b { font-size: 1rem; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+        .cl-seg-top b.good { color: #10b981; }
+        .cl-seg-top b.warn { color: #d97706; }
+        .cl-seg small { display: block; font-size: 0.72rem; color: #94a3b8; line-height: 1.35; margin-top: 1px; }
+        .cl-months { display: flex !important; gap: 0.9rem; flex-wrap: wrap; }
+        .cl-months b { color: #0f172a; font-weight: 700; }
         .cl-side-bd { display: inline-flex; align-items: center; gap: 0.35rem; }
         .cl-side-bd .cl-cake { margin-left: 0; }
         .cl-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
@@ -1151,27 +1168,32 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
              {/* Бічна колонка - як у «Послугах»: стан бази, гроші, дні народження, підказка */}
              <aside className="custom-scroll cl-side">
-               {/* Як росте база - того, чого немає в пігулках над таблицею. Раніше тут
-                   був блок «База клієнтів», що повторював ті самі сегменти й числа. */}
+               {/* Клієнтська база: кожне число - з точним правилом і конкретними датами,
+                   порахованими від сьогодні. Натиск - той самий сегмент над таблицею. */}
                <div className="widget-card">
-                 <div className="widget-title">Як росте база</div>
-                 <div className="cl-kpi">
-                   <b>{sideStats.newThis}</b>
-                   <span>
-                     {sideStats.newThis === 1 ? 'новий клієнт' : sideStats.newThis >= 2 && sideStats.newThis <= 4 ? 'нових клієнти' : 'нових клієнтів'} цього місяця
-                     {sideStats.newThis !== sideStats.newPrev && (
-                       <em className={sideStats.newThis > sideStats.newPrev ? 'up' : 'down'}>
-                         {sideStats.newThis > sideStats.newPrev ? '↑' : '↓'} {Math.abs(sideStats.newThis - sideStats.newPrev)} до минулого
-                       </em>
-                     )}
-                   </span>
+                 <div className="widget-title">Клієнтська база</div>
+                 {([
+                   ['all', 'Усі', 'уся база закладу'],
+                   ['new', 'Нові', `додані з ${fmtDay(newSince)}, не більше 1 візиту`],
+                   ['regular', 'Постійні', `${REGULAR_VISITS} і більше завершених візитів`],
+                   ['lost', 'Давно не були', `останній візит до ${fmtDay(lostBefore)}, нового запису немає`],
+                   ...(segmentCounts.blacklist > 0 ? [['blacklist', 'Чорний список', 'не можуть записатись онлайн']] : []),
+                 ] as [any, string, string][]).map(([id, label, rule]) => (
+                   <button key={id} type="button" className={`cl-seg ${activeSegment === id ? 'on' : ''}`} onClick={() => setActiveSegment(id)}>
+                     <span className="cl-seg-top"><span>{label}</span><b className={id === 'lost' && segmentCounts.lost ? 'warn' : id === 'regular' ? 'good' : ''}>{segmentCounts[id] || 0}</b></span>
+                     <small>{rule}</small>
+                   </button>
+                 ))}
+                 <div className="cl-seg static">
+                   <span className="cl-seg-top"><span>Повертаються</span><b>{sideStats.returnPct === null ? '—' : `${sideStats.returnPct}%`}</b></span>
+                   <small>{sideStats.visited ? `${sideStats.returned} з ${sideStats.visited} клієнтів із візитами прийшли вдруге` : 'зʼявиться після перших візитів'}</small>
                  </div>
-                 <div className="cl-kpi">
-                   <b>{sideStats.returnPct === null ? '—' : `${sideStats.returnPct}%`}</b>
-                   <span>
-                     повертаються
-                     <em>{sideStats.returnPct === null ? 'зʼявиться після перших візитів' : 'прийшли вдруге й більше — головна ознака, що в салоні подобається'}</em>
-                   </span>
+                 <div className="cl-seg static">
+                   <span className="cl-seg-top"><span>Нові по місяцях</span></span>
+                   <small className="cl-months">
+                     <span>{monthLabel(0)}: <b>{sideStats.newThis}</b></span>
+                     <span>{monthLabel(-1)}: <b>{sideStats.newPrev}</b></span>
+                   </small>
                  </div>
                </div>
 

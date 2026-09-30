@@ -1,1228 +1,634 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
-import { useToast } from '@/context/ToastContext';
-import { Icons, toLocalDateStr } from '@/components/shared';
+import { notify } from '@/lib/feedback';
+import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
 import HelpTip from '@/components/ui/HelpTip';
 
-export default function InventoryTab({ business, team }: any) {
-  const { showToast } = useToast();
-  const [activeMode, setActiveMode] = useState<'expenses' | 'stock'>('expenses');
+/**
+ * Склад і витрати - у стилі «Клієнтів» і «Послуг»: панель, пігулки,
+ * таблиця ліворуч, бічна колонка праворуч, вікна на шаблоні FormModal.
+ *
+ * Звʼязки:
+ *   - товар, привʼязаний до послуги («Послуги» -> «Матеріали зі складу»),
+ *     списується сам, коли візит завершено - будь-яким шляхом
+ *   - «Прихід» додає кількість і записує витрату «Матеріали» на суму
+ *     закупівлі - гроші за товар видно у витратах
+ *   - виплата майстрові («Команда» -> «Зарплата») сама стає витратою
+ *     «Зарплата» - тут її не треба вносити вручну
+ *
+ * Прибрано: «прогноз зарплат», що вигадував майбутні виплати лише з
+ * фіксованої ставки (майстри на відсотку мали 0) і плутав із
+ * справжніми виплатами.
+ */
 
-  // 🟢 СТЕЙТИ ДАНИХ
-  const [allExpenses, setAllExpenses] = useState<any[]>([]);
-  const [virtualSalaries, setVirtualSalaries] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+const CATEGORIES = ['Матеріали', 'Оренда', 'Комунальні', 'Зарплата', 'Маркетинг', 'Податки', 'Інше'];
+const CAT_COLOR: Record<string, string> = {
+  Матеріали: '#8b5cf6', Оренда: '#0ea5e9', Комунальні: '#14b8a6', Зарплата: '#f59e0b',
+  Маркетинг: '#ec4899', Податки: '#64748b', Інше: '#94a3b8',
+};
+const UNITS = ['шт', 'мл', 'г', 'уп'];
+const MONTHS = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
 
-  // 🟢 ЛОГІКА КАЛЕНДАРЯ
-  const [periodType, setPeriodType] = useState<'day' | 'week' | 'month' | 'year' | 'custom'>('month');
-  const [currentDate, setCurrentDate] = useState(new Date());
+const money = (n: number) => `${Math.round(n).toLocaleString('uk-UA')} ₴`;
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const num = (v: any) => Number(v) || 0;
+const fmtQty = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ''));
 
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [customStart, setCustomStart] = useState(new Date());
-  const [customEnd, setCustomEnd] = useState(new Date());
+type Mode = 'expenses' | 'stock';
+type Period = 'month' | 'year';
 
-  const [tempStart, setTempStart] = useState<Date | null>(new Date());
-  const [tempEnd, setTempEnd] = useState<Date | null>(new Date());
-  const [viewDate, setViewDate] = useState(new Date());
-  const datePickerRef = useRef<HTMLDivElement>(null);
+export default function InventoryTab({ business }: any) {
+  const [mode, setMode] = useState<Mode>('expenses');
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
-  const [searchQuery, setSearchQuery] = useState('');
+  // Період витрат: місяць чи рік, стрілками назад / вперед
+  const [period, setPeriod] = useState<Period>('month');
+  const [anchor, setAnchor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
+  const [catFilter, setCatFilter] = useState<string | null>(null);
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  // 🟢 СТЕЙТИ ПАГІНАЦІЇ
-  const [expensePage, setExpensePage] = useState(1);
-  const [inventoryPage, setInventoryPage] = useState(1);
-  const [plannedPage, setPlannedPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
+  // Вікна
+  const [expModal, setExpModal] = useState<any | null>(null);     // {} - нова, {...} - зміна
+  const [itemModal, setItemModal] = useState<any | null>(null);
+  const [restock, setRestock] = useState<any | null>(null);
+  const [history, setHistory] = useState<{ item: any; rows: any[] | null } | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const [sortConfig, setSortConfig] = useState<{ key: 'expense_date' | 'category' | 'amount' | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
+  const bid = Number(business?.id);
 
-  const [isExpModalOpen, setIsExpModalOpen] = useState(false);
-  const [isInvModalOpen, setIsInvModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const [isCustomDatePickerOpen, setIsCustomDatePickerOpen] = useState(false);
-  const [pickerViewDate, setPickerViewDate] = useState(new Date());
-
-  const [editingExpense, setEditingExpense] = useState<any>(null);
-  const [editingInventory, setEditingInventory] = useState<any>(null);
-
-  const [expForm, setExpForm] = useState({ amount: '', category: 'Оренда', description: '', date: toLocalDateStr(new Date()), recurrence: 'none' });
-  const [invForm, setInvForm] = useState({ name: '', quantity: '', unit: 'шт', price: '' });
-
-  const EXPENSE_CATEGORIES = ['Матеріали', 'Оренда', 'Комунальні', 'Зарплата', 'Маркетинг', 'Податки', 'Інше'];
-  const UNIT_TYPES = ['шт', 'мл', 'літри', 'грами'];
-
-  const todayStr = toLocalDateStr(new Date());
-
-  // Надійний конвертер дати для уникнення зміщень через часові пояси
-  const getLocalYYYYMMDD = (d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  // --- ФУНКЦІЇ ДАТ ТА КАЛЕНДАРЯ ---
-  const getStartEnd = (date: Date, type: string) => {
-    const start = new Date(date), end = new Date(date);
-    if (type === 'day') { start.setHours(0,0,0,0); end.setHours(23,59,59,999); }
-    else if (type === 'month') { start.setDate(1); start.setHours(0,0,0,0); end.setMonth(end.getMonth() + 1, 0); end.setHours(23,59,59,999); }
-    else if (type === 'year') { start.setMonth(0, 1); start.setHours(0,0,0,0); end.setMonth(11, 31); end.setHours(23,59,59,999); }
-    else if (type === 'week') {
-      const day = start.getDay(), diff = start.getDate() - day + (day === 0 ? -6 : 1);
-      start.setDate(diff); start.setHours(0,0,0,0); end.setDate(diff + 6); end.setHours(23,59,59,999);
-    }
-    else if (type === 'custom') {
-      const cStart = new Date(customStart); cStart.setHours(0,0,0,0);
-      const cEnd = new Date(customEnd); cEnd.setHours(23,59,59,999);
-      return { start: cStart, end: cEnd };
-    }
-    return { start, end };
-  };
-
-  const currPeriod = getStartEnd(currentDate, periodType);
-
-  const currentPeriodLabel = (() => {
-    const formatShort = (d: Date) => d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-    if (periodType === 'day') return currentDate.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
-    if (periodType === 'month') return currentDate.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
-    if (periodType === 'year') return currentDate.getFullYear().toString();
-    if (periodType === 'week') {
-      return `${formatShort(currPeriod.start)} - ${formatShort(currPeriod.end)} ${currPeriod.end.getFullYear()}`;
-    }
-    if (periodType === 'custom') {
-      return `${formatShort(customStart)} - ${formatShort(customEnd)}`;
-    }
-    return '';
-  })();
-
-  const shiftPeriod = (direction: -1 | 1) => {
-    if (periodType === 'custom') {
-      const diff = (customEnd.getTime() - customStart.getTime()) + 86400000;
-      setCustomStart(new Date(customStart.getTime() + (diff * direction)));
-      setCustomEnd(new Date(customEnd.getTime() + (diff * direction)));
-    } else {
-      const nd = new Date(currentDate);
-      if (periodType === 'day') nd.setDate(nd.getDate() + direction);
-      if (periodType === 'week') nd.setDate(nd.getDate() + (7 * direction));
-      if (periodType === 'month') nd.setMonth(nd.getMonth() + direction);
-      if (periodType === 'year') nd.setFullYear(nd.getFullYear() + direction);
-      setCurrentDate(nd);
-    }
-    setExpensePage(1);
-  };
-
-  const handleCalendarClick = (day: number) => {
-    const clickedDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
-    if (!tempStart || (tempStart && tempEnd)) {
-      setTempStart(clickedDate);
-      setTempEnd(null);
-    } else {
-      if (clickedDate < tempStart) {
-        setTempEnd(tempStart);
-        setTempStart(clickedDate);
-      } else {
-        setTempEnd(clickedDate);
-      }
-    }
-  };
-
-  const applyCustomDate = () => {
-    if (tempStart) {
-      setCustomStart(tempStart);
-      setCustomEnd(tempEnd || tempStart);
-      setPeriodType('custom');
-      setIsDatePickerOpen(false);
-      setExpensePage(1);
-    }
-  };
-
-  const toInputFormat = (d: Date | null) => {
-    if (!d) return '';
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const generateCalendarDays = () => {
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    let startDayIndex = firstDay === 0 ? 6 : firstDay - 1;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const days = [];
-    for (let i = 0; i < startDayIndex; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) days.push(i);
-    return days;
-  };
-
-  const isSelectedDate = (day: number) => {
-    if (!day) return false;
-    const current = new Date(viewDate.getFullYear(), viewDate.getMonth(), day).getTime();
-    const start = tempStart ? tempStart.getTime() : 0;
-    const end = tempEnd ? tempEnd.getTime() : 0;
-    if (start && end) return current >= start && current <= end;
-    if (start) return current === start;
-    return false;
-  };
-
-  const isEdgeDate = (day: number, edge: 'start'|'end') => {
-    if (!day) return false;
-    const current = new Date(viewDate.getFullYear(), viewDate.getMonth(), day).getTime();
-    if (edge === 'start' && tempStart) return current === tempStart.getTime();
-    if (edge === 'end' && tempEnd) return current === tempEnd.getTime();
-    return false;
-  };
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
-        setIsDatePickerOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // --- ЗАВАНТАЖЕННЯ ДАНИХ З БД ---
-  useEffect(() => {
-    const fetchAllData = async () => {
-      if (!business?.id) return;
-      setIsLoading(true);
-      try {
-        const token = await getAuthToken();
-        const [expData, invData] = await Promise.all([
-          api.listExpenses(token, business.id),
-          api.listInventory(token, business.id),
-        ]);
-        setAllExpenses(expData);
-        setInventory(invData);
-      } catch (error) {
-        console.error("Помилка завантаження:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAllData();
-  }, [business?.id]);
-
-  // 🟢 ГЕНЕРАЦІЯ АВТО-ПРОГНОЗУ ЗАРПЛАТ (Оновлена логіка)
-  useEffect(() => {
-    if (!team || !Array.isArray(team)) return;
-
-    const virtual: any[] = [];
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    // Прогнозуємо на 3 місяці вперед
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 90);
-
-    team.forEach((staff: any) => {
-       const fixed = Number(staff.fixed_salary) || 0;
-
-       let currentIterDate = new Date(today);
-       currentIterDate.setDate(currentIterDate.getDate() + 1); // Починаємо з завтра
-
-       while(currentIterDate <= maxDate) {
-          let isPayout = false;
-          const dayOfMonth = currentIterDate.getDate();
-          const dayOfWeek = currentIterDate.getDay();
-
-          if (staff.payout_period === 'monthly') {
-             if (dayOfMonth === Number(staff.payout_day || 1)) isPayout = true;
-          } else if (staff.payout_period === 'weekly') {
-             const daysMap: any = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
-             if (dayOfWeek === daysMap[staff.payout_day || 'monday']) isPayout = true;
-          } else if (staff.payout_period === 'biweekly') {
-             const d = Number(staff.payout_day || 1);
-             const secondD = d + 15 > 28 ? 28 : d + 15;
-             if (dayOfMonth === d || dayOfMonth === secondD) isPayout = true;
-          } else if (staff.payout_period === 'daily') {
-             const shift = staff.shifts ? staff.shifts[dayOfWeek === 0 ? 6 : dayOfWeek - 1] : null;
-             if (shift && shift.active) isPayout = true;
-          }
-
-          if (isPayout) {
-             virtual.push({
-                amount: fixed,
-                expense_date: getLocalYYYYMMDD(currentIterDate)
-             });
-          }
-          currentIterDate.setDate(currentIterDate.getDate() + 1);
-       }
-    });
-
-    // Групуємо зарплати різних майстрів в одну лінію
-    const grouped = virtual.reduce((acc: any, curr: any) => {
-       if (acc[curr.expense_date] === undefined) acc[curr.expense_date] = 0;
-       acc[curr.expense_date] += curr.amount;
-       return acc;
-    }, {});
-
-    const aggregated = Object.keys(grouped).map(date => ({
-       id: `virt-agg-${date}`,
-       amount: grouped[date],
-       category: 'Зарплата',
-       description: 'Прогноз зарплати',
-       expense_date: date,
-       isVirtual: true
-    }));
-
-    setVirtualSalaries(aggregated);
-  }, [team]);
-
-  // Об'єднуємо реальні витрати та прогнозовані зарплати
-  const combinedExpenses = [...allExpenses, ...virtualSalaries];
-
-  // ФІЛЬТРАЦІЯ ВИТРАТ ПО КАЛЕНДАРЮ
-  const currentExpenses = combinedExpenses.filter(e => {
-    const d = new Date(e.expense_date);
-    d.setHours(0,0,0,0);
-    return d >= currPeriod.start && d <= currPeriod.end;
-  });
-
-  const handleSaveExpense = async () => {
-    if (!expForm.amount || Number(expForm.amount) <= 0) return showToast('Введіть коректну суму більше нуля', 'error', { field: 'exp-amount' });
-    setIsSaving(true);
+  const load = useCallback(async () => {
+    if (!bid) return;
+    setLoading(true);
     try {
-      const token = await getAuthToken();
-      const recurrence = (expForm.recurrence === 'weekly' || expForm.recurrence === 'monthly')
-        ? expForm.recurrence
-        : 'none';
-
-      if (editingExpense) {
-        const wasRecurring = editingExpense.recurrence && editingExpense.recurrence !== 'none';
-        const isDateChanged = editingExpense.expense_date !== expForm.date;
-        const isAmountChanged = Number(editingExpense.amount) !== Number(expForm.amount);
-
-        let applyToFuture = false;
-        if (wasRecurring && (isDateChanged || isAmountChanged)) {
-          applyToFuture = window.confirm(
-            'Ви змінили дату або суму регулярного платежу. Бажаєте автоматично оновити всі майбутні записи цієї витрати?'
-          );
-        }
-
-        // Уся логіка "знайти й посунути майбутні входження" тепер на бекенді
-        // (за recurrence_group_id, надійно) - тут лише один запит замість
-        // ручного select+diff+upsert по всій таблиці.
-        await api.updateExpense(token, editingExpense.id, {
-          amount: Number(expForm.amount),
-          category: expForm.category,
-          description: expForm.description.trim(),
-          expense_date: expForm.date,
-          apply_to_future: applyToFuture,
-        });
-      } else {
-        // Якщо recurrence != 'none' - бекенд одразу створює й майбутні
-        // входження (12 місячних / 52 тижневих), одним запитом.
-        await api.createExpense(token, {
-          business_id: business.id,
-          amount: Number(expForm.amount),
-          category: expForm.category,
-          description: expForm.description.trim(),
-          expense_date: expForm.date,
-          recurrence,
-        });
-      }
-
-      const refreshed = await api.listExpenses(token, business.id);
-      setAllExpenses(refreshed);
-      closeExpModal();
+      const t = await getAuthToken();
+      const [e, i] = await Promise.all([api.listExpenses(t, bid), api.listInventory(t, bid)]);
+      setExpenses(e); setItems(i);
     } catch (err: any) {
-      showToast(err?.message || 'Не вдалося зберегти', 'error');
+      notify(err?.message || 'Не вдалося завантажити дані', 'error');
     } finally {
-      setIsSaving(false);
+      setLoading(false);
+    }
+  }, [bid]);
+  useEffect(() => { void load(); }, [load]);
+
+  // ------------------------------------------------------------ витрати
+  const range = useMemo(() => {
+    const from = new Date(anchor);
+    const to = period === 'month' ? new Date(from.getFullYear(), from.getMonth() + 1, 1) : new Date(from.getFullYear() + 1, 0, 1);
+    const pFrom = period === 'month' ? new Date(from.getFullYear(), from.getMonth() - 1, 1) : new Date(from.getFullYear() - 1, 0, 1);
+    return { from: ymd(from), to: ymd(to), pFrom: ymd(pFrom) };
+  }, [anchor, period]);
+  const periodLabel = period === 'month' ? `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}` : `${anchor.getFullYear()} рік`;
+  const prevLabel = period === 'month' ? MONTHS[(anchor.getMonth() + 11) % 12].toLowerCase() : `${anchor.getFullYear() - 1} рік`;
+  const shift = (dir: number) => setAnchor(a => (period === 'month' ? new Date(a.getFullYear(), a.getMonth() + dir, 1) : new Date(a.getFullYear() + dir, 0, 1)));
+  const today = ymd(new Date());
+
+  const inPeriod = useMemo(() => expenses.filter(e => e.expense_date >= range.from && e.expense_date < range.to), [expenses, range]);
+  const prevTotal = useMemo(() => expenses.filter(e => e.expense_date >= range.pFrom && e.expense_date < range.from).reduce((s, e) => s + num(e.amount), 0), [expenses, range]);
+  const total = inPeriod.reduce((s, e) => s + num(e.amount), 0);
+  const paid = inPeriod.filter(e => e.expense_date <= today).reduce((s, e) => s + num(e.amount), 0);
+  const byCat = useMemo(() => {
+    const m: Record<string, number> = {};
+    inPeriod.forEach(e => { const k = e.category || 'Інше'; m[k] = (m[k] || 0) + num(e.amount); });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [inPeriod]);
+  const shownExpenses = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return inPeriod
+      .filter(e => !catFilter || (e.category || 'Інше') === catFilter)
+      .filter(e => !q || `${e.category} ${e.description || ''}`.toLowerCase().includes(q))
+      .sort((a, b) => (a.expense_date < b.expense_date ? 1 : a.expense_date > b.expense_date ? -1 : b.id - a.id));
+  }, [inPeriod, catFilter, search]);
+  const recurring = useMemo(() => {
+    // Найближче майбутнє входження кожної серії
+    const next: Record<string, any> = {};
+    expenses.filter(e => e.recurrence_group_id && e.expense_date >= today).forEach(e => {
+      const g = e.recurrence_group_id;
+      if (!next[g] || e.expense_date < next[g].expense_date) next[g] = e;
+    });
+    return Object.values(next).sort((a: any, b: any) => (a.expense_date < b.expense_date ? -1 : 1)).slice(0, 5);
+  }, [expenses, today]);
+
+  const saveExpense = async (f: any) => {
+    const amount = num(String(f.amount).replace(',', '.'));
+    if (!(amount > 0)) return notify('Вкажіть суму більше нуля', 'error', { field: 'exp-amount' });
+    if (!f.expense_date) return notify('Вкажіть дату', 'error', { field: 'exp-date' });
+    setSaving(true);
+    try {
+      const t = await getAuthToken();
+      const payload = { category: f.category, description: (f.description || '').trim() || undefined, amount, expense_date: f.expense_date };
+      if (f.id) await api.updateExpense(t, f.id, { ...payload, apply_to_future: !!f.apply_to_future } as any);
+      else await api.createExpense(t, { business_id: bid, ...payload, recurrence: f.recurrence || 'none' });
+      setExpModal(null);
+      await load();
+    } catch (err: any) {
+      notify(err?.message || 'Не вдалося зберегти витрату', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+  const deleteExpense = async (f: any, future: boolean) => {
+    try {
+      await api.deleteExpense(await getAuthToken(), f.id, future);
+      setExpModal(null);
+      await load();
+    } catch (err: any) {
+      notify(err?.message || 'Не вдалося видалити', 'error');
     }
   };
 
-  const handleSaveInventory = async () => {
-    if (!invForm.name.trim()) return showToast('Введіть назву товару', 'error', { field: 'inv-name' });
-    setIsSaving(true);
+  // ------------------------------------------------------------ склад
+  const isLow = (i: any) => num(i.quantity) > 0 && i.low_stock_threshold != null && num(i.quantity) <= num(i.low_stock_threshold);
+  const isOut = (i: any) => num(i.quantity) <= 0;
+  const stockValue = items.reduce((s, i) => s + Math.max(0, num(i.quantity)) * num(i.cost_per_unit), 0);
+  const toOrder = items.filter(i => isOut(i) || isLow(i)).sort((a, b) => num(a.quantity) - num(b.quantity));
+  const shownItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items
+      .filter(i => stockFilter === 'all' || (stockFilter === 'out' ? isOut(i) : isLow(i)))
+      .filter(i => !q || String(i.name).toLowerCase().includes(q))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'uk'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, stockFilter, search]);
+
+  const saveItem = async (f: any) => {
+    if (!String(f.name || '').trim()) return notify('Вкажіть назву товару', 'error', { field: 'inv-name' });
+    setSaving(true);
     try {
-      const token = await getAuthToken();
-      const invData = {
-        name: invForm.name.trim(),
-        quantity: Number(invForm.quantity) || 0,
-        unit: invForm.unit,
-        cost_per_unit: Number(invForm.price) || 0,
+      const t = await getAuthToken();
+      const data: any = {
+        name: f.name.trim(), unit: f.unit,
+        cost_per_unit: num(String(f.cost_per_unit).replace(',', '.')),
+        low_stock_threshold: f.low_stock_threshold === '' || f.low_stock_threshold == null ? null : num(String(f.low_stock_threshold).replace(',', '.')),
       };
-
-      if (editingInventory) {
-        const updated = await api.updateInventoryItem(token, editingInventory.id, invData);
-        setInventory(inventory.map(i => i.id === editingInventory.id ? updated : i));
-      } else {
-        const created = await api.createInventoryItem(token, { business_id: business.id, ...invData });
-        setInventory([created, ...inventory]);
-      }
-
-      closeInvModal();
+      // Кількість при створенні - початковий залишок; при зміні - фактичний залишок (інвентаризація)
+      data.quantity = num(String(f.quantity).replace(',', '.'));
+      if (f.id) await api.updateInventoryItem(t, f.id, data);
+      else await api.createInventoryItem(t, { business_id: bid, ...data });
+      setItemModal(null);
+      await load();
     } catch (err: any) {
-      showToast(err?.message || 'Не вдалося зберегти', 'error');
+      notify(err?.message || 'Не вдалося зберегти товар', 'error');
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
-
-  const deleteExpense = async (id: string) => {
-    const expense = allExpenses.find((e: any) => e.id === id);
-    let deleteFuture = false;
-    if (expense?.recurrence_group_id) {
-      deleteFuture = window.confirm('Це частина повторюваного платежу. Видалити також усі майбутні входження?');
-    } else if (!confirm('Видалити витрату?')) {
-      return;
-    }
+  const deleteItem = async (f: any) => {
     try {
-      const token = await getAuthToken();
-      await api.deleteExpense(token, Number(id), deleteFuture);
-      const refreshed = await api.listExpenses(token, business.id);
-      setAllExpenses(refreshed);
-    } catch (error: any) { showToast(error?.message || 'Не вдалося видалити', 'error'); }
+      await api.deleteInventoryItem(await getAuthToken(), f.id);
+      setItemModal(null);
+      await load();
+    } catch (err: any) {
+      notify(err?.message || 'Не вдалося видалити', 'error');
+    }
   };
-
-  const deleteInventory = async (id: string) => {
-    if (!confirm('Видалити товар?')) return;
+  const saveRestock = async (f: any) => {
+    const qty = num(String(f.quantity).replace(',', '.'));
+    if (!(qty > 0)) return notify('Вкажіть, скільки прийшло', 'error', { field: 'rs-qty' });
+    setSaving(true);
     try {
-      const token = await getAuthToken();
-      await api.deleteInventoryItem(token, Number(id));
-      setInventory(inventory.filter(i => i.id !== id));
-    } catch (error: any) { showToast(error?.message || 'Не вдалося видалити', 'error'); }
-  };
-
-  const shiftPickerMonth = (direction: number) => {
-    const newDate = new Date(pickerViewDate);
-    newDate.setMonth(newDate.getMonth() + direction);
-    setPickerViewDate(newDate);
-  };
-
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    let startDayIndex = firstDay === 0 ? 6 : firstDay - 1;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const days = [];
-    for (let i = 0; i < startDayIndex; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) days.push(i);
-    return days;
-  };
-
-  const handleOpenNewExpense = () => {
-    setExpForm({ amount: '', category: 'Оренда', description: '', date: todayStr, recurrence: 'none' });
-    setPickerViewDate(new Date());
-    setIsExpModalOpen(true);
-  };
-
-  const startEditExpense = (expense: any) => {
-    setEditingExpense(expense);
-    setExpForm({
-      amount: String(expense.amount),
-      category: expense.category,
-      description: expense.description || '',
-      date: expense.expense_date,
-      recurrence: expense.recurrence || 'none'
-    });
-    setPickerViewDate(new Date(expense.expense_date));
-    setIsExpModalOpen(true);
-  };
-
-  const startEditInventory = (item: any) => {
-    setEditingInventory(item);
-    setInvForm({
-      name: item.name,
-      quantity: String(item.quantity),
-      unit: item.unit,
-      price: String(item.cost_per_unit)
-    });
-    setIsInvModalOpen(true);
-  };
-
-  const closeExpModal = () => {
-    setIsExpModalOpen(false);
-    setIsCustomDatePickerOpen(false);
-    setEditingExpense(null);
-    setExpForm({ amount: '', category: 'Оренда', description: '', date: todayStr, recurrence: 'none' });
-  };
-
-  const closeInvModal = () => {
-    setIsInvModalOpen(false);
-    setEditingInventory(null);
-    setInvForm({ name: '', quantity: '', unit: 'шт', price: '' });
-  };
-
-  // --- ФІЛЬТРАЦІЯ, СОРТУВАННЯ ТА ПАГІНАЦІЯ ---
-  const filteredExpenses = currentExpenses.filter(e =>
-    (e.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    String(e?.category ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase())
-  );
-
-  const requestSort = (key: 'expense_date' | 'category' | 'amount') => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
+      await api.restockInventoryItem(await getAuthToken(), f.item.id, {
+        quantity: qty, cost_per_unit: f.cost_per_unit === '' ? undefined : num(String(f.cost_per_unit).replace(',', '.')), add_expense: f.add_expense,
+      });
+      setRestock(null);
+      await load();
+    } catch (err: any) {
+      notify(err?.message || 'Не вдалося записати прихід', 'error');
+    } finally {
+      setSaving(false);
     }
-    setSortConfig({ key, direction });
-    setExpensePage(1);
+  };
+  const openHistory = async (item: any) => {
+    setHistory({ item, rows: null });
+    try { setHistory({ item, rows: await api.getInventoryMovements(await getAuthToken(), item.id) }); }
+    catch { setHistory({ item, rows: [] }); }
   };
 
-  const sortedExpenses = [...filteredExpenses].sort((a, b) => {
-    if (!sortConfig.key) return 0;
-
-    if (sortConfig.key === 'expense_date') {
-      const dateA = new Date(a.expense_date).getTime();
-      const dateB = new Date(b.expense_date).getTime();
-      return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
-    }
-    if (sortConfig.key === 'amount') {
-      return sortConfig.direction === 'asc' ? Number(a.amount) - Number(b.amount) : Number(b.amount) - Number(a.amount);
-    }
-    if (sortConfig.key === 'category') {
-      return sortConfig.direction === 'asc' ? a.category.localeCompare(b.category) : b.category.localeCompare(a.category);
-    }
-    return 0;
-  });
-
-  const totalExpensePages = Math.ceil(sortedExpenses.length / ITEMS_PER_PAGE);
-  const paginatedExpenses = sortedExpenses.slice((expensePage - 1) * ITEMS_PER_PAGE, expensePage * ITEMS_PER_PAGE);
-
-  const filteredInventory = (inventory || []).filter(i => String(i?.name ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase()));
-  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
-  const paginatedInventory = filteredInventory.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE);
-
-  // Метрики віджета
-  const totalPeriodExpenses = currentExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-
-  // 🟢 ПРОГНОЗ НА НАСТУПНИЙ МІСЯЦЬ (Враховує авто-зарплати)
-  const nextMonthStart = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
-  const nextMonthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 2, 0);
-  const nextMStartStr = `${nextMonthStart.getFullYear()}-${String(nextMonthStart.getMonth() + 1).padStart(2, '0')}-01`;
-  const nextMEndStr = `${nextMonthEnd.getFullYear()}-${String(nextMonthEnd.getMonth() + 1).padStart(2, '0')}-${String(nextMonthEnd.getDate()).padStart(2, '0')}`;
-
-  const nextMonthName = nextMonthStart.toLocaleDateString('uk-UA', { month: 'long' });
-  const formattedNextMonth = nextMonthName.charAt(0).toUpperCase() + nextMonthName.slice(1);
-
-  const upcomingMonthItems = combinedExpenses
-    .filter(e => e.expense_date >= nextMStartStr && e.expense_date <= nextMEndStr)
-    .sort((a, b) => new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime());
-
-  const upcomingMonthTotal = upcomingMonthItems.reduce((sum, e) => sum + Number(e.amount), 0);
-
-  const PLANNED_PER_PAGE = 4;
-  const totalPlannedPages = Math.ceil(upcomingMonthItems.length / PLANNED_PER_PAGE);
-  const paginatedPlannedItems = upcomingMonthItems.slice((plannedPage - 1) * PLANNED_PER_PAGE, plannedPage * PLANNED_PER_PAGE);
-
-  const categoryBreakdown = currentExpenses.reduce((acc: any, curr: any) => {
-    acc[curr.category] = (acc[curr.category] || 0) + Number(curr.amount);
-    return acc;
-  }, {});
-
-  const totalStockValue = inventory.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.cost_per_unit)), 0);
-  const lowStockItems = inventory.filter(i => i.quantity <= 5 && i.quantity > 0);
-  const outOfStockItems = inventory.filter(i => i.quantity <= 0);
-
-  const theme = {
-    textMain: '#0f172a',
-    textMuted: '#64748b',
-    border: '#e2e8f0',
-    bgLight: '#f8fafc',
-    blue: '#6F9273',
-    red: '#ef4444',
-    darkBg: '#0f172a',
-    darkTextMuted: '#94a3b8',
-    appleGray: '#f5f5f7'
-  };
-
-  const categoryStyles: Record<string, { fill: string, bg: string }> = {
-    'Матеріали': { fill: '#6F9273', bg: '#F4FAF5' },
-    'Оренда': { fill: '#f59e0b', bg: '#fffbeb' },
-    'Комунальні': { fill: '#0ea5e9', bg: '#ecfeff' },
-    'Зарплата': { fill: '#10b981', bg: '#ecfdf5' },
-    'Маркетинг': { fill: '#8b5cf6', bg: '#faf5ff' },
-    'Податки': { fill: '#ef4444', bg: '#fef2f2' },
-    'Інше': { fill: '#94a3b8', bg: '#f1f5f9' },
-  };
-
-  const renderSortIcon = (key: string) => {
-    const isActive = sortConfig.key === key;
-    return (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-           style={{
-             marginLeft: '6px',
-             opacity: isActive ? 1 : 0.3,
-             transform: isActive && sortConfig.direction === 'desc' ? 'rotate(180deg)' : 'none',
-             transition: 'transform 0.2s, opacity 0.2s'
-           }}>
-        <path d="M6 15l6-6 6 6"/>
-      </svg>
-    );
-  };
+  // ------------------------------------------------------------ розмітка
+  const hint = mode === 'expenses'
+    ? (total === 0
+      ? { t: 'Витрат за період немає', x: 'Оренду й комунальні зручно внести один раз як щомісячні — вони самі зʼявлятимуться щомісяця.' }
+      : { t: 'Зарплати — автоматично', x: 'Виплата майстрові в «Команда → Зарплата» сама стає витратою «Зарплата». Вносити її тут не потрібно.' })
+    : (items.length === 0
+      ? { t: 'Склад порожній', x: 'Додайте матеріали, а потім привʼяжіть їх до послуг — вони списуватимуться самі, коли візит завершено.' }
+      : toOrder.length
+        ? { t: `${toOrder.length} ${toOrder.length === 1 ? 'позицію' : 'позиції'} пора замовити`, x: 'Коли прийде товар — натисніть «Прихід»: кількість додасться, а закупівля потрапить у витрати.' }
+        : { t: 'Списання — автоматичне', x: 'Матеріали, привʼязані до послуг, списуються самі, коли візит завершено. Історія кожного товару — в його картці.' });
 
   return (
-    <div style={{ padding: '2rem 3rem', flexGrow: 1, width: '100%', animation: 'fadeSlide 0.3s ease-out' }}>
-
-      {/* 🟢 ГОЛОВНИЙ GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '2.5rem', alignItems: 'start' }}>
-
-        {/* ЛІВА КОЛОНКА */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-            <div style={{ display: 'flex', background: theme.bgLight, padding: '4px', borderRadius: '12px', gap: '4px', border: `1px solid ${theme.border}` }}>
-              <button onClick={() => { setActiveMode('expenses'); setSearchQuery(''); setExpensePage(1); }} style={{ padding: '0.5rem 2rem', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', transition: '0.2s', background: activeMode === 'expenses' ? '#ffffff' : 'transparent', color: activeMode === 'expenses' ? theme.textMain : theme.textMuted, boxShadow: activeMode === 'expenses' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none' }}>
-                Фінансові витрати
-              </button>
-              <button onClick={() => { setActiveMode('stock'); setSearchQuery(''); setInventoryPage(1); }} style={{ padding: '0.5rem 2rem', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', transition: '0.2s', background: activeMode === 'stock' ? '#ffffff' : 'transparent', color: activeMode === 'stock' ? theme.textMain : theme.textMuted, boxShadow: activeMode === 'stock' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none' }}>
-                Облік матеріалів
-              </button>
-            </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#fff' }}>
+      {/* --- ПАНЕЛЬ --- */}
+      <div className="iv-toolbar">
+        <div className="iv-left">
+          <div className="iv-seg" role="tablist">
+            <button type="button" role="tab" aria-selected={mode === 'expenses'} className={mode === 'expenses' ? 'on' : ''} onClick={() => { setMode('expenses'); setSearch(''); }}>Витрати</button>
+            <button type="button" role="tab" aria-selected={mode === 'stock'} className={mode === 'stock' ? 'on' : ''} onClick={() => { setMode('stock'); setSearch(''); }}>
+              Склад{toOrder.length > 0 && <span className="iv-dot" title="Є що замовити" />}
+            </button>
           </div>
-
-          {activeMode === 'expenses' ? (
-            <div style={{ animation: 'slideUp 0.2s ease-out' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
-
-                {/* 🟢 КАЛЕНДАР */}
-                <div style={{ position: 'relative' }} ref={datePickerRef}>
-                  <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: `1px solid ${theme.border}`, borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                    <button onClick={() => shiftPeriod(-1)} style={{ padding: '8px 12px', border: 'none', borderRight: `1px solid ${theme.border}`, background: 'transparent', cursor: 'pointer', color: theme.textMuted, borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px' }}>&lt;</button>
-
-                    <div
-                      onClick={() => {
-                         setIsDatePickerOpen(!isDatePickerOpen);
-                         if (!isDatePickerOpen) {
-                            setTempStart(periodType === 'custom' ? customStart : currPeriod.start);
-                            setTempEnd(periodType === 'custom' ? customEnd : currPeriod.end);
-                            setViewDate(periodType === 'custom' ? customStart : currPeriod.start);
-                         }
-                      }}
-                      style={{ padding: '8px 16px', fontSize: '0.85rem', fontWeight: '600', minWidth: '180px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: theme.textMain }}
-                    >
-                      <div style={{ width: 14, height: 14, color: theme.textMuted, display: 'flex' }}><Icons.Calendar /></div>
-                      <span style={{ flex: 1, textAlign: 'center', textTransform: 'capitalize' }}>{currentPeriodLabel}</span>
-                    </div>
-
-                    <button onClick={() => shiftPeriod(1)} style={{ padding: '8px 12px', border: 'none', borderLeft: `1px solid ${theme.border}`, background: 'transparent', cursor: 'pointer', color: theme.textMuted, borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>&gt;</button>
-                  </div>
-
-                  {isDatePickerOpen && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '8px', background: '#fff', border: `1px solid ${theme.border}`, borderRadius: '14px', padding: '1.25rem', boxShadow: '0 8px 30px rgba(0,0,0,0.1)', zIndex: 50, width: '300px', cursor: 'default' }}>
-                      <div style={{ display: 'flex', background: theme.bgLight, borderRadius: '8px', padding: '2px', marginBottom: '1.25rem' }}>
-                        {[
-                          { id: 'day', label: 'День' },
-                          { id: 'week', label: 'Тиждень' },
-                          { id: 'month', label: 'Місяць' },
-                          { id: 'year', label: 'Рік' }
-                        ].map(pt => (
-                          <button
-                            key={pt.id}
-                            onClick={() => {
-                              setPeriodType(pt.id as any);
-                              setCurrentDate(new Date());
-                              setIsDatePickerOpen(false);
-                              setExpensePage(1);
-                            }}
-                            style={{
-                              flex: 1, padding: '6px 0',
-                              background: periodType === pt.id ? '#ffffff' : 'transparent',
-                              color: periodType === pt.id ? theme.textMain : theme.textMuted,
-                              border: 'none', borderRadius: '6px', fontSize: '0.75rem',
-                              fontWeight: periodType === pt.id ? '600' : '400',
-                              cursor: 'pointer',
-                              boxShadow: periodType === pt.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                              transition: '0.2s'
-                            }}
-                          >
-                            {pt.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '0 4px' }}>
-                         <strong style={{ fontSize: '0.9rem', color: theme.textMain, fontWeight: '600' }}>
-                           {viewDate.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' })}
-                         </strong>
-                         <div style={{ display: 'flex', gap: '4px' }}>
-                            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} style={{ width: '24px', height: '24px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '1.2rem', color: theme.textMuted }}>&lt;</button>
-                            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} style={{ width: '24px', height: '24px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '1.2rem', color: theme.textMuted }}>&gt;</button>
-                         </div>
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px 0', textAlign: 'center', marginBottom: '1.25rem' }}>
-                         {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'].map(d => (
-                           <div key={d} style={{ fontSize: '0.7rem', fontWeight: '600', color: theme.textMuted, marginBottom: '6px' }}>{d}</div>
-                         ))}
-                         {generateCalendarDays().map((day, idx) => {
-                           const isSel = isSelectedDate(day!);
-                           const isStart = isEdgeDate(day!, 'start');
-                           const isEnd = isEdgeDate(day!, 'end');
-                           const isToday = day ? new Date(viewDate.getFullYear(), viewDate.getMonth(), day).toDateString() === todayStr : false;
-
-                           return (
-                             <div key={idx} style={{ position: 'relative', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {isSel && day && <div style={{ position: 'absolute', top: '2px', bottom: '2px', left: isStart ? '50%' : '0', right: isEnd ? '50%' : '0', backgroundColor: '#e5f1ff', zIndex: 1 }}></div>}
-
-                                <button
-                                  onClick={() => day && handleCalendarClick(day)}
-                                  disabled={!day}
-                                  style={{
-                                    position: 'relative', zIndex: 2,
-                                    width: '30px', height: '30px', borderRadius: '50%', border: 'none', padding: 0,
-                                    flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    background: (isStart || isEnd) ? theme.blue : 'transparent',
-                                    color: (isStart || isEnd) ? '#fff' : (day ? theme.textMain : 'transparent'),
-                                    fontSize: '0.85rem', fontWeight: (isStart || isEnd) ? '600' : '400',
-                                    cursor: day ? 'pointer' : 'default',
-                                    transition: '0.2s'
-                                  }}
-                                >
-                                  {day || ''}
-                                  {isToday && !(isStart || isEnd) && (
-                                    <div style={{ position: 'absolute', bottom: '3px', left: '50%', transform: 'translateX(-50%)', width: '4px', height: '4px', borderRadius: '50%', backgroundColor: theme.blue }}></div>
-                                  )}
-                                </button>
-                             </div>
-                           )
-                         })}
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '1.25rem' }}>
-                        <div>
-                           <label style={{ display: 'block', fontSize: '0.65rem', color: theme.textMuted, marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' }}>Початок</label>
-                           <input type="date" value={toInputFormat(tempStart)} onChange={(e) => { if(e.target.value) setTempStart(new Date(e.target.value)) }} style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: `1px solid ${theme.border}`, fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', background: theme.bgLight }} />
-                        </div>
-                        <div>
-                           <label style={{ display: 'block', fontSize: '0.65rem', color: theme.textMuted, marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' }}>Кінець</label>
-                           <input type="date" value={toInputFormat(tempEnd)} onChange={(e) => { if(e.target.value) setTempEnd(new Date(e.target.value)) }} style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: `1px solid ${theme.border}`, fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', background: theme.bgLight }} />
-                        </div>
-                      </div>
-
-                      <button onClick={applyCustomDate} style={{ width: '100%', background: theme.textMain, color: '#fff', border: 'none', padding: '10px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer' }}>Застосувати</button>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, justifyContent: 'flex-end' }}>
-                  <div style={{ position: 'relative', maxWidth: '280px', width: '100%' }}>
-                     <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: theme.textMuted, display: 'flex' }}><Icons.Search /></div>
-                     <input
-                       type="text"
-                       placeholder="Пошук витрат..."
-                       value={searchQuery}
-                       onChange={(e) => { setSearchQuery(e.target.value); setExpensePage(1); }}
-                       style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.5rem', borderRadius: '10px', border: `1px solid ${theme.border}`, outline: 'none', fontSize: '0.9rem', color: theme.textMain, transition: '0.2s' }}
-                       onFocus={e => e.currentTarget.style.borderColor = theme.blue}
-                       onBlur={e => e.currentTarget.style.borderColor = theme.border}
-                     />
-                  </div>
-                  <button onClick={handleOpenNewExpense} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: theme.textMain, color: '#fff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.1)' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
-                    <Icons.Plus /> Додати витрату
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ background: '#fff', border: `1px solid ${theme.border}`, borderRadius: '16px', overflow: 'hidden' }}>
-                {isLoading ? <div style={{ padding: '4rem', textAlign: 'center', color: theme.textMuted }}>Оновлення...</div> :
-                 filteredExpenses.length === 0 ? (
-                  <div style={{ padding: '5rem 2rem', textAlign: 'center' }}>
-                    <div style={{ color: theme.border, marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}><div style={{ transform: 'scale(2)' }}><Icons.Calendar /></div></div>
-                    <h4 style={{ color: theme.textMain, fontSize: '1rem', marginBottom: '0.4rem', fontWeight: '600' }}>Нічого не знайдено</h4>
-                    <p style={{ color: theme.textMuted, fontSize: '0.9rem', margin: 0 }}>Спробуйте змінити запит або додайте нову витрату.</p>
-                  </div>
-                ) : (
-                  <>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ background: theme.appleGray, borderBottom: `1px solid ${theme.border}` }}>
-                          <th onClick={() => requestSort('expense_date')} style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', userSelect: 'none', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.color=theme.textMain} onMouseOut={e=>e.currentTarget.style.color=theme.textMuted}>
-                            <div style={{ display: 'flex', alignItems: 'center' }}>Дата {renderSortIcon('expense_date')}</div>
-                          </th>
-                          <th onClick={() => requestSort('category')} style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', userSelect: 'none', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.color=theme.textMain} onMouseOut={e=>e.currentTarget.style.color=theme.textMuted}>
-                            <div style={{ display: 'flex', alignItems: 'center' }}>Категорія {renderSortIcon('category')}</div>
-                          </th>
-                          <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            Опис
-                          </th>
-                          <th onClick={() => requestSort('amount')} style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', userSelect: 'none', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.color=theme.textMain} onMouseOut={e=>e.currentTarget.style.color=theme.textMuted}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>Сума {renderSortIcon('amount')}</div>
-                          </th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedExpenses.map(e => {
-                          const isPlanned = e.expense_date > todayStr;
-                          return (
-                          <tr key={e.id} style={{ borderBottom: `1px solid ${theme.bgLight}`, transition: '0.2s' }} onMouseOver={ev=>ev.currentTarget.style.background='#f8fafc'} onMouseOut={ev=>ev.currentTarget.style.background='#fff'}>
-                            <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', color: theme.textMuted, fontWeight: '500' }}>
-                              {new Date(e.expense_date).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })}
-
-                              {isPlanned && <div style={{ fontSize: '0.65rem', color: theme.blue, background: '#F4FAF5', padding: '2px 6px', borderRadius: '6px', display: 'inline-block', marginLeft: '6px', fontWeight: '700' }}>Заплановано</div>}
-
-                              {e.recurrence === 'monthly' && <div style={{ fontSize: '0.65rem', color: '#8b5cf6', background: '#faf5ff', padding: '2px 6px', borderRadius: '6px', display: 'inline-block', marginLeft: '6px', fontWeight: '700' }}>Щомісяця</div>}
-                              {e.recurrence === 'weekly' && <div style={{ fontSize: '0.65rem', color: '#10b981', background: '#ecfdf5', padding: '2px 6px', borderRadius: '6px', display: 'inline-block', marginLeft: '6px', fontWeight: '700' }}>Щотижня</div>}
-                            </td>
-
-                            <td style={{ padding: '1rem 1.5rem' }}>
-                               <span style={{ background: categoryStyles[e.category]?.bg || theme.bgLight, color: categoryStyles[e.category]?.fill || theme.textMain, padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '600' }}>{e.category}</span>
-                            </td>
-                            <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', color: theme.textMain }}>
-                              {e.description || '—'}
-                            </td>
-                            <td style={{ padding: '1rem 1.5rem', fontSize: '0.95rem', color: theme.textMain, fontWeight: '700', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                               {e.isVirtual && Number(e.amount) === 0 ? <span style={{ color: theme.textMuted, fontSize: '0.85rem' }}>Залежить від комісії</span> : `${Number(e.amount).toLocaleString('uk-UA')} ₴`}
-                            </td>
-                            <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
-                              {e.isVirtual ? (
-                                <span style={{ fontSize: '0.75rem', color: theme.blue, background: '#F4FAF5', padding: '4px 8px', borderRadius: '6px', fontWeight: '600' }}>Авто-прогноз</span>
-                              ) : (
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                  <button onClick={() => startEditExpense(e)} style={{ background: 'transparent', border: 'none', color: '#cbd5e1', cursor: 'pointer', transition: '0.2s' }} onMouseOver={ev=>ev.currentTarget.style.color=theme.blue} onMouseOut={ev=>ev.currentTarget.style.color='#cbd5e1'} title="Редагувати">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                  </button>
-                                  <button onClick={() => deleteExpense(e.id)} style={{ background: 'transparent', border: 'none', color: '#cbd5e1', cursor: 'pointer', transition: '0.2s' }} onMouseOver={ev=>ev.currentTarget.style.color=theme.red} onMouseOut={ev=>ev.currentTarget.style.color='#cbd5e1'} title="Видалити">
-                                    <Icons.TrashSmall />
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )})}
-                      </tbody>
-                    </table>
-
-                    {totalExpensePages > 1 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderTop: `1px solid ${theme.bgLight}` }}>
-                        <span style={{ fontSize: '0.85rem', color: theme.textMuted, fontWeight: '500' }}>
-                          Сторінка {expensePage} з {totalExpensePages}
-                        </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button disabled={expensePage === 1} onClick={() => setExpensePage(p => p - 1)} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: `1px solid ${theme.border}`, background: expensePage === 1 ? theme.bgLight : '#fff', color: expensePage === 1 ? '#cbd5e1' : theme.textMain, cursor: expensePage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: '600', transition: '0.2s' }}>Назад</button>
-                          <button disabled={expensePage === totalExpensePages} onClick={() => setExpensePage(p => p + 1)} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: `1px solid ${theme.border}`, background: expensePage === totalExpensePages ? theme.bgLight : '#fff', color: expensePage === totalExpensePages ? '#cbd5e1' : theme.textMain, cursor: expensePage === totalExpensePages ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: '600', transition: '0.2s' }}>Далі</button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div style={{ animation: 'slideUp 0.2s ease-out' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ position: 'relative', width: '280px' }}>
-                   <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: theme.textMuted, display: 'flex' }}><Icons.Search /></div>
-                   <input
-                     type="text"
-                     placeholder="Пошук матеріалів..."
-                     value={searchQuery}
-                     onChange={(e) => { setSearchQuery(e.target.value); setInventoryPage(1); }}
-                     style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.5rem', borderRadius: '10px', border: `1px solid ${theme.border}`, outline: 'none', fontSize: '0.9rem', color: theme.textMain, transition: '0.2s' }}
-                     onFocus={e => e.currentTarget.style.borderColor = theme.blue}
-                     onBlur={e => e.currentTarget.style.borderColor = theme.border}
-                   />
-                </div>
-                <button onClick={() => setIsInvModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: theme.textMain, color: '#fff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.1)' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-2px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
-                  <Icons.Plus /> Додати товар
-                </button>
-              </div>
-
-              <div style={{ background: '#fff', border: `1px solid ${theme.border}`, borderRadius: '16px', overflow: 'hidden' }}>
-                {isLoading ? <div style={{ padding: '4rem', textAlign: 'center', color: theme.textMuted }}>Завантаження...</div> :
-                 inventory.length === 0 ? (
-                  <div style={{ padding: '5rem 2rem', textAlign: 'center' }}>
-                    <div style={{ color: theme.border, marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}><div style={{ transform: 'scale(2)' }}><Icons.Archive /></div></div>
-                    <h4 style={{ color: theme.textMain, fontSize: '1rem', marginBottom: '0.4rem', fontWeight: '600' }}>Склад порожній</h4>
-                    <p style={{ color: theme.textMuted, fontSize: '0.9rem', margin: 0 }}>Додайте сюди матеріали для контролю залишків.</p>
-                  </div>
-                ) : filteredInventory.length === 0 ? (
-                   <div style={{ padding: '3rem', textAlign: 'center', color: theme.textMuted, fontSize: '0.9rem' }}>Нічого не знайдено за запитом "{searchQuery}"</div>
-                ) : (
-                  <>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ background: theme.appleGray, borderBottom: `1px solid ${theme.border}` }}>
-                          <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Назва</th>
-                          <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Залишок</th>
-                          <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', color: theme.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Вартість од.</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedInventory.map(i => (
-                          <tr key={i.id} style={{ borderBottom: `1px solid ${theme.bgLight}`, transition: '0.2s' }} onMouseOver={ev=>ev.currentTarget.style.background='#f8fafc'} onMouseOut={ev=>ev.currentTarget.style.background='#fff'}>
-                            <td style={{ padding: '1rem 1.5rem', fontSize: '0.95rem', color: theme.textMain, fontWeight: '600' }}>
-                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: i.quantity > 5 ? '#10b981' : (i.quantity > 0 ? '#f59e0b' : theme.red) }} title="Статус"></div>
-                                  {i.name}
-                               </div>
-                            </td>
-                            <td style={{ padding: '1rem 1.5rem', textAlign: 'center', fontSize: '0.9rem', color: theme.textMain, fontWeight: '600' }}>
-                              {i.quantity} <span style={{ color: theme.textMuted, fontWeight: '500' }}>{i.unit}</span>
-                            </td>
-                            <td style={{ padding: '1rem 1.5rem', fontSize: '0.95rem', color: theme.textMain, textAlign: 'right' }}>
-                               {Number(i.cost_per_unit).toLocaleString('uk-UA')} ₴
-                            </td>
-                            <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                <button onClick={() => startEditInventory(i)} style={{ background: 'transparent', border: 'none', color: '#cbd5e1', cursor: 'pointer', transition: '0.2s' }} onMouseOver={ev=>ev.currentTarget.style.color=theme.blue} onMouseOut={ev=>ev.currentTarget.style.color='#cbd5e1'} title="Редагувати">
-                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                </button>
-                                <button onClick={() => deleteInventory(i.id)} style={{ background: 'transparent', border: 'none', color: '#cbd5e1', cursor: 'pointer', transition: '0.2s' }} onMouseOver={ev=>ev.currentTarget.style.color=theme.red} onMouseOut={ev=>ev.currentTarget.style.color='#cbd5e1'} title="Видалити">
-                                  <Icons.TrashSmall />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-
-                    {totalInventoryPages > 1 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', borderTop: `1px solid ${theme.bgLight}` }}>
-                        <span style={{ fontSize: '0.85rem', color: theme.textMuted, fontWeight: '500' }}>
-                          Сторінка {inventoryPage} з {totalInventoryPages}
-                        </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button disabled={inventoryPage === 1} onClick={() => setInventoryPage(p => p - 1)} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: `1px solid ${theme.border}`, background: inventoryPage === 1 ? theme.bgLight : '#fff', color: inventoryPage === 1 ? '#cbd5e1' : theme.textMain, cursor: inventoryPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: '600', transition: '0.2s' }}>Назад</button>
-                          <button disabled={inventoryPage === totalInventoryPages} onClick={() => setInventoryPage(p => p + 1)} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: `1px solid ${theme.border}`, background: inventoryPage === totalInventoryPages ? theme.bgLight : '#fff', color: inventoryPage === totalInventoryPages ? '#cbd5e1' : theme.textMain, cursor: inventoryPage === totalInventoryPages ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: '600', transition: '0.2s' }}>Далі</button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
+          <div className="iv-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input className="clean-input" value={search} onChange={e => setSearch(e.target.value)} placeholder={mode === 'expenses' ? 'Опис чи категорія…' : 'Назва товару…'} />
+          </div>
+        </div>
+        <div className="iv-right">
+          {mode === 'expenses' && (
+            <div className="iv-period">
+              <button type="button" aria-label="Назад" onClick={() => shift(-1)}>‹</button>
+              <span>{periodLabel}</span>
+              <button type="button" aria-label="Вперед" onClick={() => shift(1)}>›</button>
+              <div className="iv-seg small">
+                <button type="button" className={period === 'month' ? 'on' : ''} onClick={() => { setPeriod('month'); }}>Місяць</button>
+                <button type="button" className={period === 'year' ? 'on' : ''} onClick={() => { setPeriod('year'); setAnchor(a => new Date(a.getFullYear(), 0, 1)); }}>Рік</button>
               </div>
             </div>
           )}
+          <button type="button" className="clean-btn" onClick={() => (mode === 'expenses'
+            ? setExpModal({ category: 'Оренда', amount: '', description: '', expense_date: today, recurrence: 'none' })
+            : setItemModal({ name: '', unit: 'шт', quantity: '', cost_per_unit: '', low_stock_threshold: '' }))}>
+            + {mode === 'expenses' ? 'Витрата' : 'Товар'}
+          </button>
+        </div>
+      </div>
+
+      {/* --- ПІГУЛКИ --- */}
+      <div className="hide-scrollbar iv-pills">
+        {mode === 'expenses' ? (
+          <>
+            <button type="button" className={`category-pill ${!catFilter ? 'active' : ''}`} onClick={() => setCatFilter(null)}>Усі <span className="iv-c">{money(total)}</span></button>
+            {byCat.map(([cat, sum]) => (
+              <button key={cat} type="button" className={`category-pill ${catFilter === cat ? 'active' : ''}`} onClick={() => setCatFilter(cat)}>
+                <i className="iv-sw" style={{ background: CAT_COLOR[cat] || '#94a3b8' }} />{cat} <span className="iv-c">{money(sum)}</span>
+              </button>
+            ))}
+          </>
+        ) : (
+          ([['all', 'Усі', items.length], ['low', 'Закінчуються', items.filter(isLow).length], ['out', 'Немає', items.filter(isOut).length]] as const).map(([id, label, n]) => (
+            <button key={id} type="button" className={`category-pill ${stockFilter === id ? 'active' : ''}`} onClick={() => setStockFilter(id)}>
+              {label} <span className="iv-c">{n}</span>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* --- ТАБЛИЦЯ + БІЧНА КОЛОНКА --- */}
+      <div className="iv-grid">
+        <div className="custom-scroll iv-main">
+          <div className="iv-main-inner">
+            {loading ? <div className="iv-empty">Завантаження…</div> : mode === 'expenses' ? (
+              shownExpenses.length === 0 ? (
+                <div className="iv-empty"><b>{inPeriod.length ? 'Нічого не знайдено' : `Витрат за ${period === 'month' ? MONTHS[anchor.getMonth()].toLowerCase() : 'рік'} немає`}</b><span>Додайте оренду, закупівлі чи інші витрати — побачите, куди йдуть гроші.</span></div>
+              ) : (
+                <table className="service-table">
+                  <thead><tr><th>Дата</th><th>Категорія</th><th>Опис</th><th style={{ textAlign: 'right' }}>Сума</th></tr></thead>
+                  <tbody>
+                    {shownExpenses.map(e => {
+                      const planned = e.expense_date > today;
+                      return (
+                        <tr key={e.id} className="service-row" onClick={() => setExpModal({ ...e, amount: String(num(e.amount)), apply_to_future: false })} style={{ opacity: planned ? 0.6 : 1 }}>
+                          <td className="iv-date">
+                            {new Date(`${e.expense_date}T12:00:00`).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })}
+                            {planned && <small>заплановано</small>}
+                          </td>
+                          <td><span className="iv-cat"><i style={{ background: CAT_COLOR[e.category] || '#94a3b8' }} />{e.category || 'Інше'}</span></td>
+                          <td className="iv-desc">
+                            {e.description || <span className="iv-muted">—</span>}
+                            {e.recurrence_group_id && <small className="iv-rec">{e.recurrence === 'weekly' ? 'щотижня' : 'щомісяця'}</small>}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{money(num(e.amount))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )
+            ) : (
+              shownItems.length === 0 ? (
+                <div className="iv-empty"><b>{items.length ? 'Нічого не знайдено' : 'Склад порожній'}</b><span>{items.length ? 'Змініть запит чи фільтр.' : 'Додайте матеріали — і привʼяжіть їх до послуг, щоб списувались самі.'}</span></div>
+              ) : (
+                <table className="service-table">
+                  <thead><tr>
+                    <th>Товар</th>
+                    <th style={{ textAlign: 'right' }}>Залишок</th>
+                    <th style={{ textAlign: 'right' }}>Мін. запас <HelpTip>Коли залишок опуститься до цього числа, товар зʼявиться в «Потрібно замовити».</HelpTip></th>
+                    <th style={{ textAlign: 'right' }}>Ціна за од.</th>
+                    <th style={{ textAlign: 'right' }}>Вартість</th>
+                    <th aria-label="Дії" style={{ width: 1 }} />
+                  </tr></thead>
+                  <tbody>
+                    {shownItems.map(i => (
+                      <tr key={i.id} className="service-row" onClick={() => void openHistory(i)}>
+                        <td><b className="iv-name">{i.name}</b></td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span className={`iv-qty ${isOut(i) ? 'out' : isLow(i) ? 'low' : ''}`}>{fmtQty(num(i.quantity))} {i.unit}</span>
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#64748b' }}>{i.low_stock_threshold != null ? `${fmtQty(num(i.low_stock_threshold))} ${i.unit}` : '—'}</td>
+                        <td style={{ textAlign: 'right', color: '#64748b' }}>{num(i.cost_per_unit) ? money(num(i.cost_per_unit)) : '—'}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{money(Math.max(0, num(i.quantity)) * num(i.cost_per_unit))}</td>
+                        <td className="iv-acts" onClick={ev => ev.stopPropagation()}>
+                          <button type="button" className="clean-btn-ghost" onClick={() => setRestock({ item: i, quantity: '', cost_per_unit: num(i.cost_per_unit) ? String(num(i.cost_per_unit)) : '', add_expense: true })}>+ Прихід</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+            )}
+          </div>
         </div>
 
-        {/* 🟢 ПРАВА КОЛОНКА */}
-        <div style={{ position: 'sticky', top: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-
-          {activeMode === 'expenses' ? (
+        {/* --- БІЧНА КОЛОНКА --- */}
+        <aside className="custom-scroll iv-side">
+          {mode === 'expenses' ? (
             <>
-              {/* 1. ФІНАНСОВІ ВИТРАТИ */}
-              <div style={{ background: '#fff1f2', border: '1.5px dashed #fda4af', borderRadius: '16px', padding: '1.25rem' }}>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                     <span style={{ color: '#be123c', display: 'flex', alignItems: 'center' }}><Icons.TrendingDown /></span>
-                     <h3 style={{ margin: 0, fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: '700', color: '#be123c', letterSpacing: '0.5px' }}>
-                        Витрати за період
-                     </h3>
-                   </div>
-                 </div>
-
-                 <p style={{ fontSize: '0.75rem', color: '#be123c', marginBottom: '1rem', opacity: 0.8, marginTop: '-0.5rem' }}>
-                   За {currentPeriodLabel}
-                 </p>
-
-                 <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.6)', borderRadius: '12px' }}>
-                    <div style={{ fontSize: '0.65rem', color: '#be123c', fontWeight: '700', marginBottom: '4px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                       Загальна сума
+              <div className="widget-card">
+                <div className="widget-title">{periodLabel}</div>
+                <div className="iv-row"><span>Разом</span><b>{money(total)}</b></div>
+                {total !== paid && <div className="iv-row"><span>Уже сплачено</span><b>{money(paid)}</b></div>}
+                <div className="iv-row"><span>{prevLabel[0].toUpperCase() + prevLabel.slice(1)}</span><b style={{ color: '#64748b' }}>{money(prevTotal)}</b></div>
+                {prevTotal > 0 && total !== prevTotal && (
+                  <div className={`iv-delta ${total > prevTotal ? 'up' : 'down'}`}>
+                    {total > prevTotal ? '↑' : '↓'} {money(Math.abs(total - prevTotal))} ({Math.round(Math.abs(total - prevTotal) / prevTotal * 100)}%) до попереднього
+                  </div>
+                )}
+              </div>
+              {byCat.length > 0 && (
+                <div className="widget-card">
+                  <div className="widget-title">На що йдуть гроші</div>
+                  {byCat.map(([cat, sum]) => (
+                    <button key={cat} type="button" className={`iv-bar ${catFilter === cat ? 'on' : ''}`} onClick={() => setCatFilter(catFilter === cat ? null : cat)}>
+                      <span className="iv-bar-top"><span>{cat}</span><b>{Math.round(sum / total * 100)}%</b></span>
+                      <i><em style={{ width: `${Math.max(3, sum / total * 100)}%`, background: CAT_COLOR[cat] || '#94a3b8' }} /></i>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {recurring.length > 0 && (
+                <div className="widget-card">
+                  <div className="widget-title">Повторювані</div>
+                  {recurring.map((e: any) => (
+                    <div key={e.recurrence_group_id} className="iv-row">
+                      <span>{e.description || e.category}<small>{e.recurrence === 'weekly' ? 'щотижня' : 'щомісяця'} · {new Date(`${e.expense_date}T12:00:00`).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })}</small></span>
+                      <b>{money(num(e.amount))}</b>
                     </div>
-                    <strong style={{ fontSize: '1.5rem', fontWeight: '800', color: '#be123c', whiteSpace: 'nowrap' }}>
-                      {totalPeriodExpenses.toLocaleString('uk-UA')} ₴
-                    </strong>
-                 </div>
-              </div>
-
-              <div style={{ background: '#fff', border: `2px dashed ${theme.border}`, padding: '1.5rem', borderRadius: '16px', boxShadow: 'none' }}>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                     <div style={{ color: theme.blue, display: 'flex' }}><Icons.Calendar /></div>
-                     <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: theme.textMain }}>
-                       План: {formattedNextMonth}
-                     </h4>
-                   </div>
-                   <div style={{ background: '#F4FAF5', color: theme.blue, padding: '0.25rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700' }}>
-                     {upcomingMonthItems.length}
-                   </div>
-                 </div>
-
-                 <div style={{ fontSize: '1.5rem', fontWeight: '800', letterSpacing: '-0.03em', color: theme.textMain, marginBottom: '1.2rem' }}>
-                   {upcomingMonthTotal.toLocaleString('uk-UA')} <span style={{ fontSize: '1rem', color: theme.textMuted }}>₴</span>
-                 </div>
-
-                 {upcomingMonthItems.length > 0 ? (
-                   <>
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                       {paginatedPlannedItems.map(f => (
-                         <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.6rem', borderBottom: `1px dashed ${theme.border}` }}>
-                           <div>
-                             <div style={{ color: theme.textMain, fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {f.description || f.category}
-                             </div>
-                             <div style={{ color: theme.textMuted, fontSize: '0.75rem', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {new Date(f.expense_date).toLocaleDateString('uk-UA', {day:'numeric', month:'short'})}
-                                {f.isVirtual && <span style={{ color: theme.blue, background: '#F4FAF5', padding: '2px 4px', borderRadius: '4px', fontSize: '0.6rem' }}>Прогноз</span>}
-                             </div>
-                           </div>
-                           <div style={{ fontWeight: '700', color: theme.textMain, fontSize: '0.9rem' }}>
-                             {f.isVirtual && Number(f.amount) === 0 ? <span style={{ color: theme.textMuted, fontSize: '0.8rem' }}>Залежить від комісії</span> : `${Number(f.amount).toLocaleString('uk-UA')} ₴`}
-                           </div>
-                         </div>
-                       ))}
-                     </div>
-
-                     {/* 🟢 ПАГІНАЦІЯ ВІДЖЕТА */}
-                     {totalPlannedPages > 1 && (
-                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', paddingTop: '0.5rem' }}>
-                          <button
-                            disabled={plannedPage === 1}
-                            onClick={() => setPlannedPage(p => p - 1)}
-                            style={{ background: 'transparent', border: 'none', color: plannedPage === 1 ? '#cbd5e1' : theme.blue, cursor: plannedPage === 1 ? 'default' : 'pointer', display: 'flex', padding: '4px', transition: '0.2s' }}
-                          >
-                            <Icons.ChevronLeft />
-                          </button>
-                          <span style={{ fontSize: '0.75rem', fontWeight: '600', color: theme.textMuted }}>
-                            {plannedPage} з {totalPlannedPages}
-                          </span>
-                          <button
-                            disabled={plannedPage === totalPlannedPages}
-                            onClick={() => setPlannedPage(p => p + 1)}
-                            style={{ background: 'transparent', border: 'none', color: plannedPage === totalPlannedPages ? '#cbd5e1' : theme.blue, cursor: plannedPage === totalPlannedPages ? 'default' : 'pointer', display: 'flex', padding: '4px', transform: 'rotate(180deg)', transition: '0.2s' }}
-                          >
-                            <Icons.ChevronLeft />
-                          </button>
-                       </div>
-                     )}
-                   </>
-                 ) : (
-                   <div style={{ fontSize: '0.85rem', color: theme.textMuted, lineHeight: '1.4' }}>
-                     Немає запланованих витрат чи зарплат на {formattedNextMonth.toLowerCase()}.
-                   </div>
-                 )}
-              </div>
-
-              <div style={{ background: '#fff', border: `1px solid ${theme.border}`, padding: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                   <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: theme.textMain }}>Структура витрат <HelpTip>На що йдуть гроші закладу за період: матеріали, оренда, зарплати, інше.</HelpTip></h4>
-                 </div>
-
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                   {EXPENSE_CATEGORIES.map(cat => {
-                     const amount = categoryBreakdown[cat] || 0;
-                     const percent = totalPeriodExpenses > 0 ? Math.round((amount / totalPeriodExpenses) * 100) : 0;
-                     const style = categoryStyles[cat] || categoryStyles['Інше'];
-
-                     return (
-                       <div key={cat}>
-                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px', alignItems: 'center' }}>
-                           <span style={{ color: theme.textMain, fontWeight: '600' }}>{cat}</span>
-                           <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
-                             <span style={{ color: amount > 0 ? theme.textMuted : '#cbd5e1', fontWeight: '600', fontSize: '0.8rem' }}>{amount.toLocaleString('uk-UA')} ₴</span>
-                             <span style={{ color: amount > 0 ? style.fill : '#cbd5e1', fontWeight: '700', width: '36px', textAlign: 'right', fontSize: '0.85rem' }}>{percent}%</span>
-                           </div>
-                         </div>
-                         <div style={{ width: '100%', height: '6px', background: amount > 0 ? style.bg : '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
-                           <div style={{ width: `${percent}%`, height: '100%', background: amount > 0 ? style.fill : 'transparent', borderRadius: '4px', transition: 'width 0.5s ease-out' }}></div>
-                         </div>
-                       </div>
-                     );
-                   })}
-                 </div>
-              </div>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <>
-              <div style={{ background: '#fff', border: `1px solid ${theme.border}`, padding: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.2rem' }}>
-                   <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#F4FAF5', color: theme.blue, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <Icons.Archive />
-                   </div>
-                   <div style={{ background: '#F4FAF5', color: theme.blue, padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700' }}>
-                     Актив
-                   </div>
-                 </div>
-                 <div style={{ fontSize: '0.85rem', fontWeight: '600', color: theme.textMuted, marginBottom: '0.3rem' }}>Капітал у товарі</div>
-                 <div style={{ fontSize: '1.8rem', fontWeight: '800', color: theme.textMain, letterSpacing: '-0.03em' }}>
-                   {totalStockValue.toLocaleString('uk-UA')} <span style={{ fontSize: '1.1rem', color: theme.textMuted }}>₴</span>
-                 </div>
+              <div className="widget-card">
+                <div className="widget-title">Склад</div>
+                <div className="iv-row"><span>Позицій</span><b>{items.length}</b></div>
+                <div className="iv-row"><span>Вартість залишків</span><b>{money(stockValue)}</b></div>
               </div>
-
-              {(lowStockItems.length > 0 || outOfStockItems.length > 0) && (
-                <div style={{ background: '#fff', border: `1px solid ${theme.border}`, padding: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.2rem', color: theme.red }}>
-                     <Icons.AlertCircle />
-                     <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '700' }}>Потрібно замовити</h4>
-                   </div>
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                     {outOfStockItems.map(i => (
-                       <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', paddingBottom: '0.6rem', borderBottom: `1px dashed ${theme.border}` }}>
-                         <span style={{ color: theme.textMain, fontWeight: '600' }}>{i.name}</span>
-                         <span style={{ color: theme.red, fontWeight: '700' }}>Немає!</span>
-                       </div>
-                     ))}
-                     {lowStockItems.map(i => (
-                       <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', paddingBottom: '0.6rem', borderBottom: `1px dashed ${theme.border}` }}>
-                         <span style={{ color: theme.textMain, fontWeight: '600' }}>{i.name}</span>
-                         <span style={{ color: '#f59e0b', fontWeight: '700' }}>Залишилось {i.quantity}</span>
-                       </div>
-                     ))}
-                   </div>
+              {toOrder.length > 0 && (
+                <div className="widget-card">
+                  <div className="widget-title">Потрібно замовити</div>
+                  {toOrder.slice(0, 8).map(i => (
+                    <div key={i.id} className="iv-row">
+                      <span>{i.name}<small className={isOut(i) ? 'out' : 'low'}>{isOut(i) ? 'немає' : `лишилось ${fmtQty(num(i.quantity))} ${i.unit}`}</small></span>
+                      <button type="button" className="iv-link" onClick={() => setRestock({ item: i, quantity: '', cost_per_unit: num(i.cost_per_unit) ? String(num(i.cost_per_unit)) : '', add_expense: true })}>Прихід</button>
+                    </div>
+                  ))}
                 </div>
               )}
             </>
           )}
-
-        </div>
+          <div className="iv-hint">
+            <div className="iv-hint-t">✦ Підказка</div>
+            <b>{hint.t}</b>
+            <p>{hint.x}</p>
+          </div>
+        </aside>
       </div>
 
-      {isCustomDatePickerOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }} onClick={(e) => { e.stopPropagation(); setIsCustomDatePickerOpen(false); }} />
+      {/* --- ВИТРАТА --- */}
+      {expModal && (
+        <FormModal open onClose={() => setExpModal(null)} title={expModal.id ? 'Витрата' : 'Нова витрата'} width={520}
+          subtitle={expModal.recurrence_group_id ? `Повторюється ${expModal.recurrence === 'weekly' ? 'щотижня' : 'щомісяця'}` : undefined}
+          primary={{ label: expModal.id ? 'Зберегти' : 'Додати', onClick: () => void saveExpense(expModal), loading: saving }}
+          danger={expModal.id ? { label: 'Видалити', confirmLabel: expModal.recurrence_group_id ? 'Видалити цю витрату?' : 'Видалити витрату?', onClick: () => void deleteExpense(expModal, false) } : undefined}>
+          <FormSection>
+            <div className="fm-row">
+              <Field label="Сума" required>
+                <span className="fm-affix"><input className="fm-input" data-field="exp-amount" inputMode="decimal" autoFocus placeholder="0" value={expModal.amount}
+                  onChange={e => setExpModal({ ...expModal, amount: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>₴</span></span>
+              </Field>
+              <Field label="Дата" required>
+                <input className="fm-input" data-field="exp-date" type="date" value={expModal.expense_date} onChange={e => setExpModal({ ...expModal, expense_date: e.target.value })} />
+              </Field>
+            </div>
+            <Field label="Категорія">
+              <div className="fm-chips">
+                {CATEGORIES.map(c => <button key={c} type="button" className={`fm-chip ${expModal.category === c ? 'on' : ''}`} onClick={() => setExpModal({ ...expModal, category: c })}>{c}</button>)}
+              </div>
+            </Field>
+            <Field label="Опис">
+              <input className="fm-input" maxLength={200} placeholder={expModal.category === 'Оренда' ? 'Оренда приміщення' : 'Що саме'} value={expModal.description || ''}
+                onChange={e => setExpModal({ ...expModal, description: e.target.value })} />
+            </Field>
+            {!expModal.id ? (
+              <Field label="Повторювати" hint={expModal.recurrence !== 'none' ? 'Наступні витрати зʼявляться самі на рік уперед — змінити чи видалити можна всю серію.' : undefined}>
+                <span className="iv-seg wide">
+                  {([['none', 'Одноразово'], ['weekly', 'Щотижня'], ['monthly', 'Щомісяця']] as const).map(([v, l]) => (
+                    <button key={v} type="button" className={expModal.recurrence === v ? 'on' : ''} onClick={() => setExpModal({ ...expModal, recurrence: v })}>{l}</button>
+                  ))}
+                </span>
+              </Field>
+            ) : expModal.recurrence_group_id ? (
+              <>
+                <label className="iv-check">
+                  <input type="checkbox" className="fm-check" checked={!!expModal.apply_to_future} onChange={e => setExpModal({ ...expModal, apply_to_future: e.target.checked })} />
+                  <span>Змінити й усі наступні в цій серії</span>
+                </label>
+                <button type="button" className="iv-link danger" onClick={() => void deleteExpense(expModal, true)}>Видалити цю й усі наступні</button>
+              </>
+            ) : null}
+          </FormSection>
+        </FormModal>
       )}
 
-      {isExpModalOpen && (
-        <div className="modal-overlay" onClick={closeExpModal}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '420px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: theme.textMain, margin: 0 }}>
-                {editingExpense ? 'Редагувати витрату' : 'Новий запис'}
-              </h2>
-              <button onClick={closeExpModal} style={{ background: theme.bgLight, border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: theme.textMuted, cursor: 'pointer' }}>✕</button>
+      {/* --- ТОВАР --- */}
+      {itemModal && (
+        <FormModal open onClose={() => setItemModal(null)} title={itemModal.id ? 'Товар' : 'Новий товар'} width={520}
+          primary={{ label: itemModal.id ? 'Зберегти' : 'Додати', onClick: () => void saveItem(itemModal), loading: saving }}
+          danger={itemModal.id ? { label: 'Видалити', confirmLabel: 'Видалити товар і його історію?', onClick: () => void deleteItem(itemModal) } : undefined}>
+          <FormSection>
+            <Field label="Назва" required>
+              <input className="fm-input" data-field="inv-name" autoFocus maxLength={120} placeholder="Гель-лак, рукавички, олія…" value={itemModal.name}
+                onChange={e => setItemModal({ ...itemModal, name: e.target.value })} />
+            </Field>
+            <Field label="Одиниця">
+              <div className="fm-chips">{UNITS.map(u => <button key={u} type="button" className={`fm-chip ${itemModal.unit === u ? 'on' : ''}`} onClick={() => setItemModal({ ...itemModal, unit: u })}>{u}</button>)}</div>
+            </Field>
+            <div className="fm-row">
+              <Field label={itemModal.id ? 'Фактичний залишок' : 'Скільки є зараз'} hint={itemModal.id ? 'Змінюйте лише після перерахунку — у історії буде «Інвентаризація».' : undefined}>
+                <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="0" value={itemModal.quantity}
+                  onChange={e => setItemModal({ ...itemModal, quantity: e.target.value.replace(/[^\d.,-]/g, '').slice(0, 10) })} /><span>{itemModal.unit}</span></span>
+              </Field>
+              <Field label="Ціна за одиницю">
+                <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="0" value={itemModal.cost_per_unit}
+                  onChange={e => setItemModal({ ...itemModal, cost_per_unit: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>₴</span></span>
+              </Field>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label className="modal-label" style={{ fontWeight: '600' }}>Сума (₴) *</label>
-                <input data-field="exp-amount" type="number" autoFocus value={expForm.amount} onChange={e=>setExpForm({...expForm, amount: e.target.value})} className="modal-input" placeholder="Наприклад: 1500" />
-              </div>
-              <div>
-                <label className="modal-label" style={{ fontWeight: '600' }}>Категорія *</label>
-                <div className="modal-select-wrapper">
-                  <select value={expForm.category} onChange={e=>setExpForm({...expForm, category: e.target.value})}>
-                    {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <div className="modal-select-icon"><Icons.ChevronDown /></div>
-                </div>
-              </div>
-              <div>
-                <label className="modal-label" style={{ fontWeight: '600' }}>Опис (необов'язково)</label>
-                <input type="text" value={expForm.description} onChange={e=>setExpForm({...expForm, description: e.target.value})} className="modal-input" placeholder="Наприклад: Закупівля шампунів" />
-              </div>
+            <Field label="Мінімальний запас" hint="Коли залишиться стільки чи менше — товар зʼявиться в «Потрібно замовити». Порожньо — не стежити.">
+              <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="напр., 5" value={itemModal.low_stock_threshold ?? ''}
+                onChange={e => setItemModal({ ...itemModal, low_stock_threshold: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>{itemModal.unit}</span></span>
+            </Field>
+          </FormSection>
+        </FormModal>
+      )}
 
-              <div>
-                <label className="modal-label" style={{ fontWeight: '600' }}>Дата</label>
-                <div style={{ position: 'relative' }}>
-                  <div
-                    onClick={() => setIsCustomDatePickerOpen(!isCustomDatePickerOpen)}
-                    className="modal-input"
-                    style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', border: `1px solid ${theme.border}` }}
-                  >
-                    <span style={{ color: theme.textMain, fontWeight: '500' }}>
-                      {new Date(expForm.date).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long', year: 'numeric' })}
+      {/* --- ПРИХІД --- */}
+      {restock && (
+        <FormModal open onClose={() => setRestock(null)} title="Прихід товару" subtitle={`${restock.item.name} · зараз ${fmtQty(num(restock.item.quantity))} ${restock.item.unit}`} width={480}
+          primary={{ label: 'Записати прихід', onClick: () => void saveRestock(restock), loading: saving }}>
+          <FormSection>
+            <div className="fm-row">
+              <Field label="Скільки прийшло" required>
+                <span className="fm-affix"><input className="fm-input" data-field="rs-qty" inputMode="decimal" autoFocus placeholder="0" value={restock.quantity}
+                  onChange={e => setRestock({ ...restock, quantity: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>{restock.item.unit}</span></span>
+              </Field>
+              <Field label="Ціна за одиницю">
+                <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="0" value={restock.cost_per_unit}
+                  onChange={e => setRestock({ ...restock, cost_per_unit: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>₴</span></span>
+              </Field>
+            </div>
+            {(() => {
+              const sum = num(String(restock.quantity).replace(',', '.')) * num(String(restock.cost_per_unit).replace(',', '.'));
+              return (
+                <label className="iv-check">
+                  <input type="checkbox" className="fm-check" checked={restock.add_expense} onChange={e => setRestock({ ...restock, add_expense: e.target.checked })} />
+                  <span>Записати у витрати «Матеріали»{sum > 0 ? ` — ${money(sum)}` : ''}</span>
+                </label>
+              );
+            })()}
+          </FormSection>
+        </FormModal>
+      )}
+
+      {/* --- КАРТКА ТОВАРУ: ІСТОРІЯ --- */}
+      {history && (
+        <FormModal open onClose={() => setHistory(null)} title={history.item.name} width={560}
+          subtitle={`Залишок ${fmtQty(num(history.item.quantity))} ${history.item.unit}${num(history.item.cost_per_unit) ? ` · ${money(num(history.item.cost_per_unit))} за ${history.item.unit}` : ''}`}
+          primary={{ label: '+ Прихід', onClick: () => { const i = history.item; setHistory(null); setRestock({ item: i, quantity: '', cost_per_unit: num(i.cost_per_unit) ? String(num(i.cost_per_unit)) : '', add_expense: true }); } }}
+          secondary={{ label: 'Змінити', onClick: () => { const i = history.item; setHistory(null); setItemModal({ ...i, quantity: String(num(i.quantity)), cost_per_unit: num(i.cost_per_unit) ? String(num(i.cost_per_unit)) : '', low_stock_threshold: i.low_stock_threshold != null ? String(num(i.low_stock_threshold)) : '' }); } }}>
+          <FormSection title="Історія руху" hint="Куди пішов товар: прихід, списання за послугами, інвентаризація.">
+            {history.rows === null ? <div className="iv-empty small">Завантаження…</div> : history.rows.length === 0 ? <div className="iv-empty small">Руху ще не було.</div> : (
+              <div className="iv-moves">
+                {history.rows.map(m => (
+                  <div key={m.id} className="iv-move">
+                    <span className={`iv-mv-d ${m.quantity_delta > 0 ? 'in' : 'out'}`}>{m.quantity_delta > 0 ? '+' : ''}{fmtQty(m.quantity_delta)} {history.item.unit}</span>
+                    <span className="iv-mv-main">
+                      <b>{m.label}</b>
+                      <small>{[m.service, m.client].filter(Boolean).join(' · ') || ''}{m.service || m.client ? ' · ' : ''}{new Date(m.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' })}</small>
                     </span>
-                    <div style={{ color: theme.textMuted, display: 'flex' }}><Icons.Calendar /></div>
                   </div>
-
-                  {isCustomDatePickerOpen && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '8px', background: '#fff', border: `1px solid ${theme.border}`, borderRadius: '12px', padding: '1rem', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 100, width: '100%', animation: 'slideUp 0.2s ease' }}>
-                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); shiftPickerMonth(-1); }} style={{ background: theme.bgLight, border: 'none', padding: '4px', borderRadius: '6px', cursor: 'pointer', color: theme.textMuted }}><Icons.ChevronLeft /></button>
-                          <span style={{ fontWeight: '700', fontSize: '0.9rem', color: theme.textMain, textTransform: 'capitalize' }}>
-                            {pickerViewDate.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' })}
-                          </span>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); shiftPickerMonth(1); }} style={{ background: theme.bgLight, border: 'none', padding: '4px', borderRadius: '6px', cursor: 'pointer', color: theme.textMuted, transform: 'rotate(180deg)' }}><Icons.ChevronLeft /></button>
-                       </div>
-                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
-                          {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'].map(d => <div key={d} style={{ fontSize: '0.7rem', color: theme.textMuted, fontWeight: '700' }}>{d}</div>)}
-                          {getDaysInMonth(pickerViewDate).map((day, idx) => {
-                             if (!day) return <div key={idx} />;
-                             const dateStr = `${pickerViewDate.getFullYear()}-${String(pickerViewDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                             const isSelected = dateStr === expForm.date;
-                             const isToday = dateStr === todayStr;
-                             return (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setExpForm({...expForm, date: dateStr}); setIsCustomDatePickerOpen(false); }}
-                                  style={{ width: '32px', height: '32px', margin: 'auto', borderRadius: '50%', background: isSelected ? theme.blue : 'transparent', color: isSelected ? '#fff' : (isToday ? theme.blue : theme.textMain), border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: isSelected || isToday ? '700' : '500', transition: '0.2s' }}
-                                  onMouseOver={e=> { if(!isSelected) e.currentTarget.style.background = theme.bgLight }}
-                                  onMouseOut={e=> { if(!isSelected) e.currentTarget.style.background = 'transparent' }}
-                                >
-                                  {day}
-                                </button>
-                             )
-                          })}
-                       </div>
-                    </div>
-                  )}
-                </div>
+                ))}
               </div>
-
-              <div>
-                <label className="modal-label" style={{ fontWeight: '600' }}>Повторення</label>
-                <div className="modal-select-wrapper">
-                  <select value={expForm.recurrence} onChange={e=>setExpForm({...expForm, recurrence: e.target.value})}>
-                    <option value="none">Без повторень</option>
-                    <option value="weekly">Щотижня (на рік вперед)</option>
-                    <option value="monthly">Щомісяця (на рік вперед)</option>
-                  </select>
-                  <div className="modal-select-icon"><Icons.ChevronDown /></div>
-                </div>
-                {expForm.recurrence !== 'none' && (
-                  <div style={{ fontSize: '0.75rem', color: theme.blue, marginTop: '0.5rem', background: '#F4FAF5', padding: '0.6rem', borderRadius: '8px', lineHeight: '1.4' }}>
-                    {editingExpense
-                      ? "Увага: старі майбутні платежі цієї категорії будуть оновлені та перенесені відповідно до нової дати."
-                      : "Система автоматично створить майбутні платежі починаючи з цієї дати. Вони з'являться у графі 'Заплановано'."}
-                  </div>
-                )}
-              </div>
-
-            </div>
-            <button onClick={handleSaveExpense} disabled={isSaving} style={{ width: '100%', marginTop: '2rem', padding: '0.85rem', backgroundColor: theme.textMain, color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '0.95rem', cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: '0.2s' }}>
-              {isSaving ? 'Збереження...' : 'Зберегти'}
-            </button>
-          </div>
-        </div>
+            )}
+          </FormSection>
+        </FormModal>
       )}
 
-      {isInvModalOpen && (
-        <div className="modal-overlay" onClick={closeInvModal}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '400px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: theme.textMain, margin: 0 }}>
-                {editingInventory ? 'Редагувати матеріал' : 'Новий матеріал'}
-              </h2>
-              <button onClick={closeInvModal} style={{ background: theme.bgLight, border: 'none', width: '32px', height: '32px', borderRadius: '50%', color: theme.textMuted, cursor: 'pointer' }}>✕</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label className="modal-label" style={{ fontWeight: '600' }}>Назва</label>
-                <input data-field="inv-name" type="text" autoFocus value={invForm.name} onChange={e=>setInvForm({...invForm, name: e.target.value})} className="modal-input" placeholder="Окисник 6% 1000мл" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label className="modal-label" style={{ fontWeight: '600' }}>Кількість</label>
-                  <input type="number" value={invForm.quantity} onChange={e=>setInvForm({...invForm, quantity: e.target.value})} className="modal-input" placeholder="0" />
-                </div>
-                <div>
-                  <label className="modal-label" style={{ fontWeight: '600' }}>Од. виміру</label>
-                  <div className="modal-select-wrapper">
-                    <select value={invForm.unit} onChange={e=>setInvForm({...invForm, unit: e.target.value})}>
-                      {UNIT_TYPES.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                    <div className="modal-select-icon"><Icons.ChevronDown /></div>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="modal-label" style={{ fontWeight: '600' }}>Вартість за одиницю (₴)</label>
-                <input type="number" value={invForm.price} onChange={e=>setInvForm({...invForm, price: e.target.value})} className="modal-input" placeholder="0" />
-              </div>
-            </div>
-            <button onClick={handleSaveInventory} disabled={isSaving} style={{ width: '100%', marginTop: '2rem', padding: '0.85rem', backgroundColor: theme.textMain, color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '0.95rem', cursor: isSaving ? 'not-allowed' : 'pointer', opacity: isSaving ? 0.7 : 1, transition: '0.2s' }}>
-              {isSaving ? 'Збереження...' : 'Зберегти'}
-            </button>
-          </div>
-        </div>
-      )}
+      <style>{`
+        .iv-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .iv-left, .iv-right { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+        .iv-seg { display: inline-flex; background: #f1f5f9; border-radius: 10px; padding: 3px; }
+        .iv-seg button { position: relative; height: 32px; padding: 0 0.95rem; border: none; background: transparent; border-radius: 8px; font-family: inherit; font-size: 0.85rem; font-weight: 500; color: #475569; cursor: pointer; }
+        .iv-seg button.on { background: #fff; color: #0f172a; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .iv-seg.small button { height: 28px; padding: 0 0.7rem; font-size: 0.8rem; }
+        .iv-seg.wide { display: flex; width: 100%; }
+        .iv-seg.wide button { flex: 1; height: 36px; }
+        .iv-dot { position: absolute; top: 5px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; }
+        .iv-search { position: relative; width: 260px; max-width: 100%; }
+        .iv-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
+        .iv-search .clean-input { padding-left: 2.2rem; }
+        .iv-period { display: flex; align-items: center; gap: 0.35rem; }
+        .iv-period > button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 1rem; color: #475569; }
+        .iv-period > button:hover { background: #f8fafc; color: #0f172a; }
+        .iv-period > span { min-width: 124px; text-align: center; font-size: 0.875rem; font-weight: 600; color: #0f172a; }
+        .iv-pills { display: flex; gap: 8px; overflow-x: auto; padding: 1rem 2rem; border-bottom: 1px solid #f1f5f9; }
+        .iv-c { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
+        .iv-sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.4rem; vertical-align: 1px; }
 
+        .clean-input { width: 100%; box-sizing: border-box; height: 36px; padding: 0 0.8rem; border-radius: 10px; border: 1px solid #e2e8f0; font-family: inherit; font-size: 0.875rem; outline: none; transition: border-color .15s; background: #fff; }
+        .clean-input:focus { border-color: #0f172a; }
+        .clean-btn { height: 36px; padding: 0 1rem; border-radius: 10px; border: none; background: #0f172a; color: #fff; font-family: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .clean-btn:hover { background: #1e293b; }
+        .clean-btn-ghost { height: 32px; padding: 0 0.8rem; border-radius: 9px; border: 1px solid #e2e8f0; background: #fff; color: #0f172a; font-family: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .clean-btn-ghost:hover { background: #f8fafc; }
+        .category-pill { height: 32px; padding: 0 0.9rem; border-radius: 999px; border: 1px solid #e2e8f0; background: #fff; font-family: inherit; font-size: 0.82rem; color: #334155; cursor: pointer; white-space: nowrap; transition: all .15s; }
+        .category-pill:hover { border-color: #cbd5e1; }
+        .category-pill.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+
+        .iv-grid { display: grid; grid-template-columns: 1fr 300px; flex: 1; min-height: 0; overflow: hidden; }
+        .iv-main { overflow-y: auto; border-right: 1px solid #f1f5f9; display: flex; justify-content: center; }
+        .iv-main-inner { width: 100%; max-width: 1200px; padding: 0 1.25rem 1rem; box-sizing: border-box; }
+        .iv-side { padding: 1.2rem; overflow-y: auto; }
+        @media (max-width: 1100px) { .iv-grid { grid-template-columns: 1fr; } .iv-side { display: none; } .iv-main { border-right: none; } }
+
+        .service-table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
+        .service-table th { text-align: left; font-size: 0.75rem; font-weight: 600; color: #64748b; padding: 0.75rem 1rem 0.25rem; position: sticky; top: 0; background: #fff; z-index: 1; }
+        .service-table td { padding: 0.85rem 1rem; font-size: 0.875rem; color: #0f172a; background: #fff; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; }
+        .service-table tr.service-row { cursor: pointer; }
+        .service-table tr.service-row:hover td { background: #f8fafc; }
+        .service-table tr.service-row td:first-child { border-left: 1px solid #f1f5f9; border-radius: 12px 0 0 12px; }
+        .service-table tr.service-row td:last-child { border-right: 1px solid #f1f5f9; border-radius: 0 12px 12px 0; }
+        .iv-date { white-space: nowrap; }
+        .iv-date small, .iv-desc small { display: block; font-size: 0.72rem; color: #94a3b8; margin-top: 1px; }
+        .iv-rec { color: #6366f1 !important; font-weight: 600; }
+        .iv-cat { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; font-weight: 600; color: #334155; }
+        .iv-cat i { width: 8px; height: 8px; border-radius: 50%; }
+        .iv-muted { color: #cbd5e1; }
+        .iv-name { font-weight: 600; }
+        .iv-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
+        .iv-qty.low { color: #d97706; }
+        .iv-qty.out { color: #dc2626; }
+        .iv-acts { white-space: nowrap; padding-left: 0 !important; }
+        .iv-empty { text-align: center; padding: 5rem 2rem; color: #64748b; display: flex; flex-direction: column; gap: 0.4rem; }
+        .iv-empty.small { padding: 1.5rem 0; }
+        .iv-empty b { color: #0f172a; font-size: 1.05rem; }
+        .iv-empty span { font-size: 0.9rem; }
+
+        .widget-card { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 1.2rem; margin-bottom: 0.8rem; }
+        .widget-title { font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.6rem; }
+        .iv-row { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; padding: 0.35rem 0; }
+        .iv-row > span { color: #475569; font-size: 0.8rem; min-width: 0; }
+        .iv-row small { display: block; font-size: 0.72rem; color: #94a3b8; }
+        .iv-row small.low { color: #d97706; } .iv-row small.out { color: #dc2626; }
+        .iv-row b { font-weight: 700; color: #0f172a; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .iv-delta { font-size: 0.75rem; font-weight: 600; margin-top: 0.3rem; }
+        .iv-delta.up { color: #dc2626; } .iv-delta.down { color: #059669; }
+        .iv-bar { display: block; width: 100%; padding: 0.35rem 0; border: none; background: none; font-family: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
+        .iv-bar.on .iv-bar-top span { color: #0f172a; font-weight: 700; }
+        .iv-bar-top { display: flex; justify-content: space-between; font-size: 0.8rem; color: #475569; }
+        .iv-bar-top b { color: #0f172a; font-variant-numeric: tabular-nums; }
+        .iv-bar i { display: block; height: 5px; border-radius: 3px; background: #e2e8f0; margin-top: 4px; overflow: hidden; }
+        .iv-bar em { display: block; height: 100%; border-radius: 3px; transition: width .5s ease; }
+        .iv-link { border: none; background: none; padding: 0; font-family: inherit; font-size: 0.8rem; font-weight: 600; color: #436b49; cursor: pointer; white-space: nowrap; }
+        .iv-link.danger { color: #dc2626; align-self: flex-start; }
+        .iv-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
+        .iv-hint-t { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
+        .iv-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .iv-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
+
+        .iv-check { display: flex; align-items: center; gap: 0.6rem; font-size: 0.875rem; color: #334155; cursor: pointer; }
+        .iv-moves { display: flex; flex-direction: column; }
+        .iv-move { display: grid; grid-template-columns: 96px 1fr; gap: 0.8rem; align-items: center; padding: 0.6rem 0; border-top: 1px solid #f1f5f9; }
+        .iv-move:first-child { border-top: none; }
+        .iv-mv-d { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+        .iv-mv-d.in { color: #059669; } .iv-mv-d.out { color: #dc2626; }
+        .iv-mv-main b { display: block; font-size: 0.875rem; color: #0f172a; font-weight: 600; }
+        .iv-mv-main small { display: block; font-size: 0.75rem; color: #64748b; }
+      `}</style>
     </div>
   );
 }

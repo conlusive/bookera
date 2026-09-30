@@ -413,6 +413,11 @@ export const api = {
     return authFetch(`/crm/clients/${keepId}/merge`, token, { method: 'POST', body: JSON.stringify({ merge_ids: mergeIds }) });
   },
 
+  /** Прихід товару: +кількість, ціна і (за замовчуванням) витрата «Матеріали». */
+  async restockInventoryItem(token: string, itemId: number, payload: { quantity: number; cost_per_unit?: number; add_expense?: boolean; note?: string }): Promise<InventoryItem> {
+    return authFetch(`/crm/inventory/${itemId}/restock`, token, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
   // --- Доступи й журнал ---
   async getMyAccess(token: string, businessId: number): Promise<{ role: string; sections: Record<string, boolean> }> {
     return authFetch(`/crm/businesses/${businessId}/me/access`, token);

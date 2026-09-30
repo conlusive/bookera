@@ -43,6 +43,7 @@ import WorkTab from '@/components/profile/WorkTab';
 import { resolveDisplayName } from '@/lib/displayName';
 import { formatDuration } from '@/lib/duration';
 import VisitFeedback from '@/components/visit/VisitFeedback';
+import BirthdayInput from '@/components/ui/BirthdayInput';
 
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
@@ -122,6 +123,7 @@ function ProfileContent() {
   // --- Форма налаштувань ---
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('+380 ');
+  const [birthday, setBirthday] = useState('');
   const [email, setEmail] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -193,6 +195,7 @@ function ProfileContent() {
       if (profileData) {
         setProfile(profileData);
         setFullName(profileData.full_name || '');
+        setBirthday(profileData.birthday || '');
         setUserRole(profileData.role || 'client');
         setAvatarUrl(profileData.avatar_url || null);
 
@@ -627,7 +630,7 @@ function ProfileContent() {
    */
   const savedPhone = (profile?.phone || '').replace(/\s+/g, '');
   const currentPhone = (() => { const p = phone.replace(/\s+/g, ''); return p.length > 4 ? p : ''; })();
-  const hasProfileChanges = fullName.trim() !== (profile?.full_name || '') || currentPhone !== savedPhone;
+  const hasProfileChanges = fullName.trim() !== (profile?.full_name || '') || currentPhone !== savedPhone || birthday !== (profile?.birthday || '');
 
   // Збереження особистих даних
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -643,7 +646,8 @@ function ProfileContent() {
     let error: string | null = null;
     try {
       const token = await getAuthToken();
-      await api.updateMe(token, { full_name: fullName.trim(), phone: phoneToSave });
+      await api.updateMe(token, { full_name: fullName.trim(), phone: phoneToSave, birthday: birthday || null });
+      setProfile((pr: any) => ({ ...(pr || {}), full_name: fullName.trim(), phone: phoneToSave, birthday: birthday || null }));
     } catch (err: any) {
       error = err?.message || 'Не вдалося зберегти';
     }
@@ -1716,6 +1720,16 @@ function ProfileContent() {
                             placeholder="+380 97 123 4567"
                             className="clean-input anim"
                           />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: '#374151', marginBottom: '0.4rem' }}>
+                            Дата народження
+                          </label>
+                          <BirthdayInput value={birthday} onChange={setBirthday} className="clean-input anim" />
+                          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.35rem', lineHeight: 1.4 }}>
+                            Бачать лише заклади, де ви вже записувались, — щоб привітати й не питати щоразу.
+                          </div>
                         </div>
                       </div>
 

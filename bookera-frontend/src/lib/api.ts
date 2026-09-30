@@ -333,12 +333,12 @@ export const api = {
   },
 
   /** Власні дані: імʼя, телефон, фото, роль. Пошта - лише через Supabase Auth. */
-  async getMe(token: string): Promise<{ email: string | null; full_name: string | null; phone: string | null; avatar_url: string | null; role: string | null }> {
+  async getMe(token: string): Promise<{ email: string | null; full_name: string | null; phone: string | null; birthday?: string | null; avatar_url: string | null; role: string | null }> {
     return authFetch('/account/me', token);
   },
 
   /** Змінюються лише передані поля; avatar_url: null прибирає фото. */
-  async updateMe(token: string, payload: { full_name?: string; phone?: string | null; avatar_url?: string | null }): Promise<any> {
+  async updateMe(token: string, payload: { full_name?: string; phone?: string | null; avatar_url?: string | null; birthday?: string | null }): Promise<any> {
     return authFetch('/account/me', token, { method: 'PATCH', body: JSON.stringify(payload) });
   },
 
@@ -363,6 +363,11 @@ export const api = {
   /** Справжня історія клієнта: візити, послуги, майстри, статуси, оцінки. */
   async getClientHistory(token: string, clientId: number): Promise<{ id: number; start_time: string; status: string; service: string | null; master: string | null; price: number | null; tip: number | null; rating: number | null; comment: string | null; notes: string | null }[]> {
     return authFetch(`/crm/clients/${clientId}/history`, token);
+  },
+
+  /** Автозаповнення нового клієнта за поштою (дані - лише якщо людина вже була в закладі). */
+  async lookupClient(token: string, businessId: number, email: string): Promise<{ existing_client?: { id: number; name: string }; found?: boolean; shared?: boolean; name?: string | null; phone?: string | null; birthday?: string | null }> {
+    return authFetch(`/crm/clients/lookup?business_id=${businessId}&email=${encodeURIComponent(email)}`, token);
   },
 
   // --- Доступи й журнал ---

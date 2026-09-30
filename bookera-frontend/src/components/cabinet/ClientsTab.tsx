@@ -8,6 +8,7 @@ import { Icons } from '@/components/shared';
 import HelpTip from '@/components/ui/HelpTip';
 import { notify } from '@/lib/feedback';
 import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
+import BirthdayInput from '@/components/ui/BirthdayInput';
 
 export default function ClientsTab({ business, clientsList, setClientsList, fetchClientsFromDB, onBookAgain }: any) {
   const supabase = createClient();
@@ -149,6 +150,36 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   }, [clientsList, debouncedSearch, sortConfig, activeSegment]);
 
   useEffect(() => { setClientCurrentPage(1); }, [debouncedSearch, sortConfig, activeSegment]);
+
+  // Автозаповнення за поштою: клієнт уже в базі - кажемо; людина вже була в
+  // закладі й має акаунт - підставляємо імʼя, телефон, дату народження в
+  // ПОРОЖНІ поля (введене вручну не перетираємо).
+  const [lookupNote, setLookupNote] = useState('');
+  useEffect(() => {
+    setLookupNote('');
+    const email = newClientForm.email.trim();
+    if (!isAddClientModalOpen || !business?.id || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return;
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.lookupClient(await getAuthToken(), Number(business.id), email);
+        if (r.existing_client) {
+          showToast(`Цей клієнт уже є в базі: ${r.existing_client.name}`, 'error', { field: 'client-email' });
+        } else if (r.shared) {
+          setNewClientForm(f => ({
+            ...f,
+            name: f.name.trim() ? f.name : (r.name || ''),
+            phone: phoneDigits(f.phone) ? f.phone : (r.phone ? '+380' + phoneDigits(r.phone) : f.phone),
+            birthday: f.birthday || r.birthday || '',
+          }));
+          setLookupNote('✓ Дані підтягнуто з акаунта BookEra');
+        } else if (r.found) {
+          setLookupNote('Є акаунт BookEra — дані зʼявляться після першого запису у ваш заклад');
+        }
+      } catch { /* пошук необовʼязковий */ }
+    }, 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newClientForm.email, isAddClientModalOpen]);
 
   const handleSaveNewClient = async () => {
     if (!newClientForm.name.trim()) return showToast("Вкажіть імʼя клієнта", 'error', { field: 'client-name' });
@@ -393,9 +424,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
   const loyaltyTarget = 10;
   const loyaltyProgress = viewingClient ? Math.min((viewingClient.visits_count || 0) / loyaltyTarget, 1) : 0;
-  const ringRadius = 20;
-  const ringCircumference = 2 * Math.PI * ringRadius;
-  const ringOffset = ringCircumference - loyaltyProgress * ringCircumference;
   const isClientLost = !!viewingClient && segmentOf('lost', viewingClient);
 
   return (
@@ -510,6 +538,8 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
           padding-right: 1.25rem;
         }
         .clean-btn-ghost:disabled { opacity: .4; cursor: default; }
+        .service-table td { color: #0f172a; }
+        .service-table th { color: #64748b; }
         .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .cl-search { position: relative; width: 280px; max-width: 100%; }
         .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }
@@ -543,6 +573,16 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-hist-sum { text-align: right; }
         .cl-hist-sum b { display: block; font-size: 0.9rem; color: #0f172a; font-variant-numeric: tabular-nums; }
         .cl-hist-sum small { display: block; font-size: 0.72rem; color: #059669; font-weight: 600; }
+        .cl-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+        .cl-stat { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 1rem 1.1rem; border-radius: 14px; background: #f8fafc; border: 1px solid #eef2f6; text-align: left; font-family: inherit; min-height: 104px; box-sizing: border-box; }
+        .cl-stat-btn { cursor: pointer; transition: background-color .15s, border-color .15s; }
+        .cl-stat-btn:hover { background: #f1f5f9; border-color: #e2e8f0; }
+        .cl-stat-l { font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+        .cl-stat-v { font-size: 1.45rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .cl-stat-s { font-size: 0.75rem; color: #64748b; margin-top: auto; }
+        .cl-stat-btn .cl-stat-s { color: #436b49; font-weight: 600; }
+        .cl-stat-bar { display: block; width: 100%; height: 4px; border-radius: 2px; background: #e2e8f0; overflow: hidden; margin-top: 0.3rem; }
+        .cl-stat-bar em { display: block; height: 100%; background: #10b981; border-radius: 2px; transition: width .6s ease; }
         /* Телефон із префіксом +380 у вікні нового клієнта */
         .cl-phone { display: flex; align-items: stretch; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
         .cl-phone:focus-within { border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15,23,42,.08); }
@@ -661,12 +701,8 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                           {/* Інтерактивне поле День народження */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                              <span style={{ color: '#94a3b8' }}>🎂</span>
-                             <input
-                                type="date"
-                                value={editingBirthday}
-                                onChange={e => setEditingBirthday(e.target.value)}
-                                style={{ border: 'none', borderBottom: '1px dashed #cbd5e1', background: 'transparent', outline: 'none', color: '#0f172a', fontWeight: '500', width: '100%', fontFamily: 'inherit', cursor: 'pointer' }}
-                             />
+                             <BirthdayInput value={editingBirthday || ''} onChange={v => setEditingBirthday(v)}
+                                style={{ border: 'none', borderBottom: '1px dashed #cbd5e1', background: 'transparent', outline: 'none', color: '#0f172a', fontWeight: '500', width: '100%', fontFamily: 'inherit', padding: '2px 0' }} />
                           </div>
                        </div>
 
@@ -698,35 +734,30 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                        </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem' }}>
-                       <div style={{ background: '#fff', padding: '1.25rem 1rem', borderRadius: '16px', border: '1px solid #e2e8f0', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                          <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', position: 'absolute', top: '1rem', left: '1rem' }}>Візити</div>
-                          <div style={{ position: 'relative', width: '60px', height: '60px', marginTop: '1rem' }}>
-                             <svg width="60" height="60" style={{ transform: 'rotate(-90deg)' }}>
-                                <circle cx="30" cy="30" r={ringRadius} stroke="#f1f5f9" strokeWidth="4" fill="none" />
-                                <circle cx="30" cy="30" r={ringRadius} stroke="#10b981" strokeWidth="4" fill="none" strokeDasharray={ringCircumference} strokeDashoffset={ringOffset} style={{ transition: 'stroke-dashoffset 1s ease-out' }} strokeLinecap="round" />
-                             </svg>
-                             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: '800', color: '#0f172a' }}>
-                                {viewingClient.visits_count || 0}
-                             </div>
-                          </div>
-                          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.5rem' }}>{loyaltyTarget - (viewingClient.visits_count || 0)} до VIP</div>
-                       </div>
-
-                       <div style={{ background: '#fff', padding: '1.25rem 1rem', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                          <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>LTV</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>{viewingClient.total_spent || 0}₴</div>
-                       </div>
-
-                       <div style={{ background: '#fff', padding: '1.25rem 1rem', borderRadius: '16px', border: '1px solid #e2e8f0', position: 'relative' }}>
-                          <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Депозит</div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: (viewingClient.balance || 0) < 0 ? '#ef4444' : '#6F9273' }}>
-                             {viewingClient.balance || 0}₴
-                          </div>
-                          <button onClick={() => setIsBalanceModalOpen(true)} title="Керувати балансом" style={{ position: 'absolute', top: '0.8rem', right: '0.8rem', width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', fontSize: '1.2rem', paddingBottom: '2px' }}>
-                             +
-                          </button>
-                       </div>
+                    {/* Три однакові блоки: підпис, число, пояснення. Раніше «Візити» були
+                        зверстані інакше, ніж «LTV» і «Депозит», тож не вирівнювались, а білі
+                        плашки зливались із білим тлом. */}
+                    <div className="cl-stats">
+                      <div className="cl-stat">
+                        <span className="cl-stat-l">Візити</span>
+                        <b className="cl-stat-v">{viewingClient.visits_count || 0}</b>
+                        <span className="cl-stat-s">
+                          {(viewingClient.visits_count || 0) >= loyaltyTarget ? 'VIP-клієнт' : `ще ${loyaltyTarget - (viewingClient.visits_count || 0)} до VIP`}
+                        </span>
+                        <i className="cl-stat-bar"><em style={{ width: `${Math.round(loyaltyProgress * 100)}%` }} /></i>
+                      </div>
+                      <div className="cl-stat">
+                        <span className="cl-stat-l">Витратили</span>
+                        <b className="cl-stat-v">{Math.round(viewingClient.total_spent || 0).toLocaleString('uk-UA')} ₴</b>
+                        <span className="cl-stat-s">
+                          {(viewingClient.visits_count || 0) > 0 ? `у середньому ${Math.round((viewingClient.total_spent || 0) / viewingClient.visits_count).toLocaleString('uk-UA')} ₴ за візит` : 'ще не було візитів'}
+                        </span>
+                      </div>
+                      <button type="button" className="cl-stat cl-stat-btn" onClick={() => setIsBalanceModalOpen(true)} title="Поповнити чи списати депозит">
+                        <span className="cl-stat-l">Депозит</span>
+                        <b className="cl-stat-v" style={{ color: (viewingClient.balance || 0) < 0 ? '#dc2626' : (viewingClient.balance || 0) > 0 ? '#059669' : '#0f172a' }}>{viewingClient.balance || 0} ₴</b>
+                        <span className="cl-stat-s">Змінити →</span>
+                      </button>
                     </div>
 
                     <div style={{ background: viewingClient.is_blacklisted ? '#fff5f5' : '#fff', padding: '1.2rem 1.5rem', borderRadius: '16px', border: '1px solid', borderColor: viewingClient.is_blacklisted ? '#feb2b2' : '#e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1059,8 +1090,12 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         width={520}
       >
         <FormSection>
+          <Field label="Пошта" hint={lookupNote || 'Якщо в людини є акаунт BookEra, дані підтягнуться самі'}>
+            <input className="fm-input" data-field="client-email" type="email" inputMode="email" autoFocus placeholder="maria@example.com"
+              value={newClientForm.email} onChange={e => setNewClientForm({ ...newClientForm, email: e.target.value })} />
+          </Field>
           <Field label="Імʼя та прізвище" required>
-            <input className="fm-input" data-field="client-name" autoFocus maxLength={80} placeholder="Марія Коваль"
+            <input className="fm-input" data-field="client-name" maxLength={80} placeholder="Марія Коваль"
               value={newClientForm.name} onChange={e => setNewClientForm({ ...newClientForm, name: e.target.value })} />
           </Field>
           <div className="fm-row">
@@ -1073,14 +1108,10 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
               </span>
             </Field>
             <Field label="День народження">
-              <input className="fm-input" type="date" value={newClientForm.birthday} max={new Date().toISOString().slice(0, 10)}
-                onChange={e => setNewClientForm({ ...newClientForm, birthday: e.target.value })} />
+              <BirthdayInput className="fm-input" dataField="client-birthday" value={newClientForm.birthday}
+          onChange={v => setNewClientForm({ ...newClientForm, birthday: v })} />
             </Field>
           </div>
-          <Field label="Пошта" hint="Для нагадувань про записи й листа «Як вам візит?»">
-            <input className="fm-input" data-field="client-email" type="email" inputMode="email" placeholder="maria@example.com"
-              value={newClientForm.email} onChange={e => setNewClientForm({ ...newClientForm, email: e.target.value })} />
-          </Field>
         </FormSection>
       </FormModal>
 

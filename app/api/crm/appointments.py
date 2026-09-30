@@ -295,6 +295,11 @@ async def update_crm_appointment_status(
         await _audit(db, appointment.business_id, str(current_user.id), "bookings", "status_changed",
                      f"Запис {appointment.client_name or ''} {appointment.start_time:%d.%m %H:%M}: {_labels.get(new_status, new_status)}")
 
+    # Комісія й матеріали - та сама функція, що в календарі й автозавершенні.
+    # Раніше цим маршрутом візит завершувався без списання й без комісії.
+    from app.services.visit_hooks import on_status_change
+    await on_status_change(db, appointment, _old_status, new_status)
+
     # «Як вам візит?» - одразу, щойно майстер позначив візит завершеним
     from app.services.reminders import request_review_now
     _review_args = await request_review_now(db, appointment) if new_status == "completed" and _old_status != "completed" else None

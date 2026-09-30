@@ -87,6 +87,12 @@ async def create_inventory_item(item_in: InventoryItemCreate, db: AsyncSession =
     await assert_section(db, current_user, item_in.business_id, "inventory")
     item = InventoryItem(**item_in.model_dump())
     db.add(item)
+    await db.flush()
+    # Початковий залишок - в історію руху, щоб з неї сходився поточний
+    if item.quantity:
+        from app.models import InventoryMovement
+        db.add(InventoryMovement(business_id=item.business_id, inventory_item_id=item.id,
+                                 quantity_delta=item.quantity, cost_at_moment=item.cost_per_unit, reason="initial"))
     # Журнал дій
     from app.services.audit import record as _audit
     await _audit(db, item.business_id, str(current_user.id), "inventory", "item_created", f"Додано на склад: {item.name}")
@@ -102,8 +108,58 @@ async def update_inventory_item(item_id: int, payload: InventoryItemUpdate, db: 
     if not item:
         raise HTTPException(status_code=404, detail="Позицію не знайдено")
     await assert_section(db, current_user, item.business_id, "inventory")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # Ручне виправлення кількості (інвентаризація) - слід в історії руху.
+    # Раніше число просто перезаписувалось, і не було видно, куди поділось.
+    if "quantity" in data and data["quantity"] is not None:
+        from decimal import Decimal as _D
+        from app.models import InventoryMovement
+        delta = _D(str(data["quantity"])) - _D(str(item.quantity or 0))
+        if delta != 0:
+            db.add(InventoryMovement(business_id=item.business_id, inventory_item_id=item.id,
+                                     quantity_delta=delta, cost_at_moment=item.cost_per_unit, reason="adjustment"))
+    for field, value in data.items():
         setattr(item, field, value)
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
+class RestockIn(BaseModel):
+    quantity: float = Field(gt=0, le=1_000_000)
+    cost_per_unit: Optional[float] = Field(default=None, ge=0, le=1_000_000)
+    add_expense: bool = True
+    note: Optional[str] = Field(default=None, max_length=200)
+
+
+@router.post("/crm/inventory/{item_id}/restock", response_model=InventoryItemResponse)
+async def restock_inventory_item(item_id: int, payload: RestockIn, db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
+    """
+    Прихід товару: +кількість, нова ціна за одиницю, запис в історії руху
+    і (за замовчуванням) витрата «Матеріали» на суму закупівлі - тож гроші
+    за товар видно у витратах, а не лише кількість на складі.
+    """
+    from decimal import Decimal as _D
+    from app.models import InventoryMovement
+    from app.core.time_utils import local_now
+    item = (await db.execute(select(InventoryItem).where(InventoryItem.id == item_id))).scalars().first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Позицію не знайдено")
+    await assert_section(db, current_user, item.business_id, "inventory")
+    qty = _D(str(payload.quantity))
+    if payload.cost_per_unit is not None:
+        item.cost_per_unit = _D(str(payload.cost_per_unit))
+    item.quantity = _D(str(item.quantity or 0)) + qty
+    db.add(InventoryMovement(business_id=item.business_id, inventory_item_id=item.id,
+                             quantity_delta=qty, cost_at_moment=item.cost_per_unit, reason="restock"))
+    total = (qty * _D(str(item.cost_per_unit or 0))).quantize(_D("0.01"))
+    if payload.add_expense and total > 0:
+        db.add(Expense(business_id=item.business_id, category="Матеріали",
+                       description=(payload.note or f"Закупівля: {item.name} × {payload.quantity:g} {item.unit}")[:200],
+                       amount=total, expense_date=local_now().date(), recurrence="none"))
+    from app.services.audit import record as _audit
+    await _audit(db, item.business_id, str(current_user.id), "inventory", "restock",
+                 f"Прихід: {item.name} +{payload.quantity:g} {item.unit}" + (f" на {total} ₴" if total > 0 else ""))
     await db.commit()
     await db.refresh(item)
     return item
@@ -357,17 +413,31 @@ async def list_inventory_movements(
         .order_by(InventoryMovement.created_at.desc())
         .limit(limit)
     )
-    return [
-        {
+    moves = result.scalars().all()
+    # Для списань за послугою - яка послуга й чий візит: видно, куди пішов товар
+    from app.models import Appointment, Service
+    appt_ids = {m.appointment_id for m in moves if m.appointment_id}
+    appts = {a.id: a for a in (await db.execute(select(Appointment).where(Appointment.id.in_(appt_ids)))).scalars().all()} if appt_ids else {}
+    srv_ids = {a.service_id for a in appts.values() if a.service_id}
+    srv = {s.id: s.name for s in (await db.execute(select(Service).where(Service.id.in_(srv_ids)))).scalars().all()} if srv_ids else {}
+    labels = {"service_usage": "Списано за послугою", "revert": "Повернуто (візит скасовано)",
+              "restock": "Прихід", "adjustment": "Інвентаризація", "initial": "Початковий залишок"}
+    out = []
+    for m in moves:
+        a = appts.get(m.appointment_id)
+        out.append({
             "id": m.id,
             "quantity_delta": float(m.quantity_delta),
             "cost_at_moment": float(m.cost_at_moment) if m.cost_at_moment else None,
             "reason": m.reason,
+            "label": labels.get(m.reason, m.reason),
             "appointment_id": m.appointment_id,
+            "service": srv.get(a.service_id) if a else None,
+            "client": a.client_name if a else None,
+            "visit_at": a.start_time.isoformat() if a and a.start_time else None,
             "created_at": m.created_at,
-        }
-        for m in result.scalars().all()
-    ]
+        })
+    return out
 
 
 # === Справи на день ===

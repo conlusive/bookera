@@ -68,8 +68,9 @@ async def test_materials_deducted_from_stock_on_completion(client, auth_headers)
     assert float(r.json()[0]["quantity"]) == 8.0, "2 мл мали списатись"
 
     r = await client.get(f"/crm/inventory/{item_id}/movements", headers=headers)
-    assert len(r.json()) == 1
-    assert r.json()[0]["reason"] == "service_usage"
+    # в історії тепер і «початковий залишок» - перевіряємо саме списання
+    usage = [m for m in r.json() if m["reason"] == "service_usage"]
+    assert len(usage) == 1
 
     # Повторна зміна статусу на completed НЕ списує вдруге
     await client.patch(f"/appointments/{appt_id}/status", json={"status": "completed"}, headers=headers)

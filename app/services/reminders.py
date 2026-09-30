@@ -171,7 +171,9 @@ async def complete_past_appointments(db: AsyncSession) -> int:
     майстер ще не встиг натиснути «завершено», не варто робити це за
     нього тієї ж секунди.
     """
-    now = utc_now()
+    # Час візитів - у поясі закладу (Київ). Раніше порівнювали з UTC, і
+    # візити автоматично завершувались на 3 години пізніше.
+    now = local_now().replace(tzinfo=None)
     cutoff = now - timedelta(minutes=15)
 
     stmt = select(Appointment).where(
@@ -197,15 +199,15 @@ async def complete_past_appointments(db: AsyncSession) -> int:
         await sync_visit_bonus(db, appointment, _old_status)
         completed += 1
 
-        if business:
-            try:
-                from app.services.monetization import charge_commission_if_applicable
-                await charge_commission_if_applicable(db, appointment, business)
-            except Exception as exc:
-                # Комісія не має блокувати завершення візиту: сам факт
-                # виконаної роботи важливіший за нарахування, яке можна
-                # виправити пізніше.
-                logger.warning("Комісію не нараховано (запис %s): %s", appointment.id, exc)
+        try:
+            # Комісія й списання матеріалів - та сама функція, що в календарі
+            # й CRM. Раніше тут була лише комісія: автозавершені візити не
+            # списували матеріалів зі складу.
+            from app.services.visit_hooks import on_status_change
+            await on_status_change(db, appointment, _old_status, "completed")
+        except Exception as exc:
+            # Не блокує завершення: сам факт виконаної роботи важливіший.
+            logger.warning("Комісія / матеріали не оброблені (запис %s): %s", appointment.id, exc)
 
     if completed:
         await db.commit()

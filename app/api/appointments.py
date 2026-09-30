@@ -1083,17 +1083,9 @@ async def update_appointment_status(
     from app.services.bonuses import sync_visit_bonus
     await sync_visit_bonus(db, appointment, _old_status)
 
-    if payload.status == "completed":
-        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
-        business = biz_res.scalars().first()
-        if business:
-            await charge_commission_if_applicable(db, appointment, business)
-        # Списуємо матеріали зі складу за фактом наданої послуги
-        await consume_materials_for_appointment(db, appointment)
-    elif previous_status == "completed" and payload.status in ("cancelled", "confirmed"):
-        # Візит помилково позначили завершеним - повертаємо матеріали,
-        # інакше залишки на складі зникали б безслідно.
-        await revert_materials_for_appointment(db, appointment)
+    # Комісія й матеріали - одна функція для всіх шляхів завершення
+    from app.services.visit_hooks import on_status_change
+    await on_status_change(db, appointment, previous_status, payload.status)
 
     # Цим маршрутом статус змінює КАЛЕНДАР кабінету - тож тут те саме, що
     # в /crm/appointments/{id}: журнал дій і миттєвий «Як вам візит?».

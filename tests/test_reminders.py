@@ -230,7 +230,9 @@ async def test_recent_appointment_not_completed_too_early(client, auth_headers):
     conn = await asyncpg.connect(DB_URL_RAW)
     try:
         # Візит скінчився 5 хвилин тому - ще зарано
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        # Час візитів - у поясі закладу (Київ), не UTC
+        from app.core.time_utils import local_now
+        now = local_now().replace(tzinfo=None)
         await conn.execute(
             "UPDATE appointments SET start_time=$1, end_time=$2 WHERE id=$3",
             now - timedelta(hours=1), now - timedelta(minutes=5), appointment_id,

@@ -100,3 +100,21 @@ async def test_merge_moves_everything(client, auth_headers):
     assert m["visits_count"] == 1, "запис дубля - тепер у основній картці"
     assert kid in m["linked_client_ids"], "сімейний звʼязок перенесено"
     assert (await client.get("/crm/clients/duplicates", params={"business_id": bid}, headers=h)).json() == []
+
+
+@pytest.mark.asyncio
+async def test_template_is_empty_export_and_roundtrip(client, auth_headers):
+    """Шаблон = експорт без даних; вивантажене можна завантажити назад."""
+    bid, h = await _biz(client, auth_headers, "rt")
+    tpl = load_workbook(io.BytesIO((await client.get("/crm/clients/import-template", headers=h)).content)).active
+    exp_bid, h2 = await _biz(client, auth_headers, "rt2")
+    await client.post("/crm/clients", json={"business_id": exp_bid, "name": "Марія", "phone": "+380671234567", "email": "m@example.com"}, headers=h2)
+    exp = (await client.get("/crm/clients/export", params={"business_id": exp_bid}, headers=h2)).content
+    headers_exp = [c.value for c in load_workbook(io.BytesIO(exp)).active[1]]
+    assert [c.value for c in tpl[1]] == headers_exp and tpl.max_row == 1, "ті самі колонки, без даних"
+
+    r = await client.post("/crm/clients/import", params={"business_id": bid, "dry_run": "false"},
+                          files={"file": ("Клієнти.xlsx", exp, "application/octet-stream")}, headers=h)
+    assert r.json()["created"] == 1
+    got = (await client.get("/crm/clients", params={"business_id": bid}, headers=h)).json()[0]
+    assert got["name"] == "Марія" and got["phone"] == "+380671234567" and got["email"] == "m@example.com"

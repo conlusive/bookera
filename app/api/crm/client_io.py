@@ -44,6 +44,7 @@ COLUMNS = {
 }
 EXPORT_HEADERS = ["Імʼя", "Телефон", "Пошта", "День народження", "Візити", "Витратили, ₴",
                   "Останній візит", "Наступний візит", "Депозит, ₴", "Теги", "Нотатки", "Чорний список"]
+EXPORT_WIDTHS = [24, 16, 26, 16, 9, 13, 15, 15, 11, 18, 30, 13]
 
 
 def _norm_header(h) -> str:
@@ -166,16 +167,18 @@ async def export_clients(
     from app.services.audit import record
     await record(db, business_id, str(current_user.id), "settings", "clients_exported", f"Експорт бази клієнтів: {len(rows)}")
     await db.commit()
-    return _xlsx_response(EXPORT_HEADERS, rows, f"Клієнти {date.today():%d.%m.%Y}.xlsx",
-                          [24, 16, 26, 16, 9, 13, 15, 15, 11, 18, 30, 13])
+    return _xlsx_response(EXPORT_HEADERS, rows, f"Клієнти {date.today():%d.%m.%Y}.xlsx", EXPORT_WIDTHS)
 
 
 @router.get("/crm/clients/import-template")
 async def import_template(current_user: CurrentUser = Depends(get_current_user)):
-    """Шаблон: ті самі назви колонок, що розпізнає імпорт, і приклад рядка."""
-    return _xlsx_response(["Імʼя", "Телефон", "Пошта", "День народження", "Теги", "Нотатки"],
-                          [["Марія Коваль", "+380671234567", "maria@example.com", "14.03.1995", "VIP", "Алергія на лак"]],
-                          "Шаблон імпорту клієнтів.xlsx", [24, 16, 26, 16, 14, 30])
+    """
+    Шаблон - та сама таблиця, що й експорт (колонки, оформлення, ширини),
+    лише порожня. Тож можна й вивантажити базу, виправити в Excel і
+    завантажити назад: імпорт бере імʼя, телефон, пошту, дату народження,
+    теги й нотатки, а пораховані колонки (візити, витрати…) пропускає.
+    """
+    return _xlsx_response(EXPORT_HEADERS, [], "Шаблон імпорту клієнтів.xlsx", EXPORT_WIDTHS)
 
 
 # ------------------------------------------------------------------ імпорт

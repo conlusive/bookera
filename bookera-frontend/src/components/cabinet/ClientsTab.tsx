@@ -127,6 +127,28 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientsList]);
 
+  // Бічна колонка: гроші й найближчі дні народження
+  const sideStats = useMemo(() => {
+    let spent = 0, visits = 0, deposits = 0;
+    const birthdays: { client: any; days: number; label: string }[] = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    for (const cl of clientsList as any[]) {
+      spent += Number(cl.total_spent || 0);
+      visits += Number(cl.visits_count || 0);
+      if (Number(cl.balance) > 0) deposits += Number(cl.balance);
+      const m = /^\d{4}-(\d{2})-(\d{2})/.exec(cl.birthday || '');
+      if (m) {
+        const next = new Date(today.getFullYear(), Number(m[1]) - 1, Number(m[2]));
+        if (next < today) next.setFullYear(today.getFullYear() + 1);
+        const days = Math.round((next.getTime() - today.getTime()) / DAY);
+        if (days <= 7) birthdays.push({ client: cl, days, label: days === 0 ? 'сьогодні' : days === 1 ? 'завтра' : next.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' }) });
+      }
+    }
+    birthdays.sort((a, b) => a.days - b.days);
+    return { spent, avgCheck: visits ? spent / visits : 0, deposits, birthdays };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientsList]);
+
   const filteredAndSortedClients = useMemo(() => {
     let filtered = clientsList.filter((c: any) => {
       const searchLower = String(debouncedSearch ?? '').toLowerCase();
@@ -201,6 +223,15 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     } catch { setCanManageBase(false); }
   }, [business?.id]);
   useEffect(() => { void refreshDuplicates(); }, [refreshDuplicates, clientsList.length]);
+
+  // Підказка - що зараз найкорисніше зробити з базою
+  const sideHint = (() => {
+    if (clientsList.length === 0) return { title: 'База порожня', text: 'Імпортуйте клієнтів з Excel чи іншої системи — так нагадування й розсилки запрацюють одразу.', action: canManageBase ? { label: 'Імпортувати', run: () => setIsImportOpen(true) } : null };
+    if (canManageBase && dupCount > 0) return { title: `${dupCount} ${dupCount === 1 ? 'група дублів' : 'групи дублів'}`, text: 'Один клієнт у кількох картках — його візити й витрати розкидані. Обʼєднайте, щоб бачити правду.', action: { label: 'Обʼєднати', run: () => setIsDupOpen(true) } };
+    if (segmentCounts.lost > 0) return { title: `${segmentCounts.lost} давно не були`, text: 'Понад 60 днів без візиту й без запису. Коротке повідомлення зараз часто повертає людину.', action: { label: 'Показати', run: () => setActiveSegment('lost') } };
+    if (sideStats.birthdays.length > 0) return { title: 'Скоро дні народження', text: 'Привітання з невеликим подарунком — найтепліший привід запросити клієнта.', action: null };
+    return { title: 'База в порядку', text: 'Дублів немає, давно втрачених клієнтів теж. Так тримати.', action: null };
+  })();
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -455,7 +486,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const isClientLost = !!viewingClient && segmentOf('lost', viewingClient);
 
   return (
-    <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#fff' }}>
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -579,11 +610,31 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-acts a, .cl-acts button { width: 32px; height: 32px; border-radius: 9px; border: 1px solid #e2e8f0; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; padding: 0; }
         .cl-acts a:hover, .cl-acts button:hover { color: #0f172a; border-color: #cbd5e1; background: #f8fafc; }
         @media (hover: none) { .cl-acts > span { opacity: 1; } }
+        .cl-grid { display: grid; grid-template-columns: 1fr 300px; flex: 1; min-height: 0; overflow: hidden; }
+        .cl-main { overflow-y: auto; border-right: 1px solid #f1f5f9; display: flex; justify-content: center; }
+        .cl-main-inner { width: 100%; max-width: 1200px; padding: 0 1.25rem 1rem; box-sizing: border-box; }
+        .cl-side { padding: 1.2rem; overflow-y: auto; background: #fff; }
+        .widget-card { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 1.2rem; margin-bottom: 0.8rem; }
+        .widget-title { font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.6rem; }
+        .cl-side-row { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; width: 100%; padding: 0.4rem 0.5rem; margin: 0 -0.5rem; width: calc(100% + 1rem); border: none; background: none; border-radius: 8px; font-family: inherit; text-align: left; cursor: pointer; transition: background-color .15s; box-sizing: border-box; }
+        .cl-side-row:hover:not(.static), .cl-side-row.on { background: #eef2f6; }
+        .cl-side-row.static { cursor: default; }
+        .cl-side-row span { color: #475569; font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cl-side-row b { font-weight: 700; color: #0f172a; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .cl-side-bd { display: inline-flex; align-items: center; gap: 0.35rem; }
+        .cl-side-bd .cl-cake { margin-left: 0; }
+        .cl-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
+        .cl-hint-t svg { width: 14px; height: 14px; }
+        .cl-hint-t { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
+        .cl-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .cl-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
+        .cl-hint button { margin-top: 0.6rem; border: none; background: none; padding: 0; font-family: inherit; font-size: 0.78rem; font-weight: 700; color: #7c3aed; cursor: pointer; }
+        @media (max-width: 1100px) { .cl-grid { grid-template-columns: 1fr; } .cl-side { display: none; } .cl-main { border-right: none; } }
         .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .cl-search { position: relative; width: 280px; max-width: 100%; }
         .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }
         .cl-search .clean-input { padding-left: 2.2rem; }
-        .cl-pills { display: flex; gap: 8px; overflow-x: auto; padding: 1rem 2rem; }
+        .cl-pills { display: flex; gap: 8px; overflow-x: auto; padding: 1rem 2rem; border-bottom: 1px solid #f1f5f9; }
         .cl-count { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
         .cl-who { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
         .cl-who b { display: block; font-size: 0.9rem; font-weight: 600; color: #0f172a; }
@@ -630,7 +681,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
       `}</style>
 
       {viewingClient ? (
-        <div className="page-transition" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%' }}>
+        <div className="page-transition custom-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%', maxWidth: '1180px', alignSelf: 'center', padding: '2rem 3rem', boxSizing: 'border-box', overflowY: 'auto', height: '100%' }}>
 
            {/* Навігація */}
            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1006,7 +1057,9 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
               ))}
            </div>
 
-           <div style={{ flex: 1, overflowY: 'auto', padding: '0 2rem 1rem' }} className="custom-scroll">
+           <div className="cl-grid">
+             <div className="custom-scroll cl-main">
+               <div className="cl-main-inner">
               {(() => {
                 const indexOfLastClient = clientCurrentPage * clientsPerPage;
                 const indexOfFirstClient = indexOfLastClient - clientsPerPage;
@@ -1078,6 +1131,51 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                   </div>
                 );
               })()}
+               </div>
+             </div>
+
+             {/* Бічна колонка - як у «Послугах»: стан бази, гроші, дні народження, підказка */}
+             <aside className="custom-scroll cl-side">
+               <div className="widget-card">
+                 <div className="widget-title">База клієнтів</div>
+                 {([
+                   ['all', 'Усього', segmentCounts.all, '#0f172a'],
+                   ['new', 'Нові за 30 днів', segmentCounts.new, '#0f172a'],
+                   ['regular', 'Постійні', segmentCounts.regular, '#10b981'],
+                   ['lost', 'Давно не були', segmentCounts.lost, segmentCounts.lost ? '#d97706' : '#0f172a'],
+                 ] as const).map(([id, label, n, color]) => (
+                   <button key={id} type="button" className={`cl-side-row ${activeSegment === id ? 'on' : ''}`} onClick={() => setActiveSegment(id)}>
+                     <span>{label}</span><b style={{ color }}>{n || 0}</b>
+                   </button>
+                 ))}
+               </div>
+
+               <div className="widget-card">
+                 <div className="widget-title">Гроші</div>
+                 <div className="cl-side-row static"><span>Витратили разом</span><b>{Math.round(sideStats.spent).toLocaleString('uk-UA')} ₴</b></div>
+                 <div className="cl-side-row static"><span>Середній чек</span><b>{sideStats.avgCheck ? `${Math.round(sideStats.avgCheck).toLocaleString('uk-UA')} ₴` : '—'}</b></div>
+                 <div className="cl-side-row static"><span>Депозити клієнтів</span><b style={{ color: sideStats.deposits > 0 ? '#10b981' : '#0f172a' }}>{Math.round(sideStats.deposits).toLocaleString('uk-UA')} ₴</b></div>
+               </div>
+
+               {sideStats.birthdays.length > 0 && (
+                 <div className="widget-card">
+                   <div className="widget-title">Дні народження тиждень</div>
+                   {sideStats.birthdays.slice(0, 6).map((b: any) => (
+                     <button key={b.client.id} type="button" className="cl-side-row" onClick={() => openViewingClient(b.client)}>
+                       <span className="cl-side-bd"><span className="cl-cake"><Icons.Cake size={14} /></span>{b.client.name}</span>
+                       <b>{b.label}</b>
+                     </button>
+                   ))}
+                 </div>
+               )}
+
+               <div className="cl-hint">
+                 <div className="cl-hint-t"><Icons.Sparkles /> Підказка</div>
+                 <b>{sideHint.title}</b>
+                 <p>{sideHint.text}</p>
+                 {sideHint.action && <button type="button" onClick={sideHint.action.run}>{sideHint.action.label} →</button>}
+               </div>
+             </aside>
            </div>
         </div>
 

@@ -45,6 +45,7 @@ import {
   ArchiveBox,
   Instagram,
   ClipboardText,
+  Cake,
 } from 'iconsax-react';
 
 export const Icons = {
@@ -95,6 +96,8 @@ export const Icons = {
   NavMyClients: () => <User size="20" color="currentColor" variant="Linear" />,
   NavEarnings: () => <CardTick size="20" color="currentColor" variant="Linear" />,
   NavActivity: () => <ClipboardText size="20" color="currentColor" variant="Linear" />,
+  // Торт - той самий стиль, що й решта іконок (замість смайлика 🎂)
+  Cake: ({ size = 16 }: { size?: number }) => <Cake size={String(size)} color="currentColor" variant="Linear" />,
   CheckCircle: () => <TickCircle size="16" color="currentColor" variant="Bold" />,
   AlertCircle: () => <InfoCircle size="16" color="currentColor" variant="Bold" />,
   XCircle: () => <CloseCircle size="16" color="currentColor" variant="Bold" />,

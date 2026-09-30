@@ -540,6 +540,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .clean-btn-ghost:disabled { opacity: .4; cursor: default; }
         .service-table td { color: #0f172a; }
         .service-table th { color: #64748b; }
+        .cl-cake { display: inline-flex; vertical-align: -2px; margin-left: 0.35rem; color: #f59e0b; }
         .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .cl-search { position: relative; width: 280px; max-width: 100%; }
         .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }
@@ -625,7 +626,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                        <h1 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
-                          {viewingClient.name} {isBirthdaySoon(viewingClient.birthday) && '🎂'}
+                          {viewingClient.name} {isBirthdaySoon(viewingClient.birthday) && <span className="cl-cake" title="Скоро день народження"><Icons.Cake size={15} /></span>}
                        </h1>
                        <div style={{ display: 'flex', gap: '0.3rem' }}>
                          {viewingClient.tags?.map((tag: string, idx: number) => (
@@ -700,7 +701,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
                           {/* Інтерактивне поле День народження */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                             <span style={{ color: '#94a3b8' }}>🎂</span>
+                             <span style={{ color: '#94a3b8', display: 'flex' }}><Icons.Cake size={18} /></span>
                              <BirthdayInput value={editingBirthday || ''} onChange={v => setEditingBirthday(v)}
                                 style={{ border: 'none', borderBottom: '1px dashed #cbd5e1', background: 'transparent', outline: 'none', color: '#0f172a', fontWeight: '500', width: '100%', fontFamily: 'inherit', padding: '2px 0' }} />
                           </div>
@@ -979,7 +980,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                               <div className="cl-who">
                                 <span className={`cl-ava ${client.is_blacklisted ? 'bad' : ''}`}>{client.is_blacklisted ? '✕' : getUserInitials(client.name)}</span>
                                 <span>
-                                  <b>{client.name}{isBirthdaySoon(client.birthday) ? ' 🎂' : ''}</b>
+                                  <b>{client.name}{isBirthdaySoon(client.birthday) && <span className="cl-cake" title="Скоро день народження"><Icons.Cake size={15} /></span>}</b>
                                   <small>{client.phone || client.email || 'без контактів'}</small>
                                 </span>
                               </div>

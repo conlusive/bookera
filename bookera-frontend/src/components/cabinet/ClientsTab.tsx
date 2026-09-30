@@ -132,14 +132,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientsList]);
 
-  // 31 серп.; «вересень (1-30)» для поточного місяця, «серпень» - для минулого
-  const fmtDay = (t: number) => new Date(t).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-  const monthLabel = (offset: number) => {
-    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + offset);
-    const name = d.toLocaleDateString('uk-UA', { month: 'long' });
-    return offset === 0 ? `${name} (1–${new Date().getDate()})` : name;
-  };
-
   // Бічна колонка: гроші й найближчі дні народження
   const sideStats = useMemo(() => {
     let spent = 0, visits = 0, deposits = 0, newThis = 0, newPrev = 0, visited = 0, returned = 0;
@@ -642,17 +634,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-side-row.static { cursor: default; }
         .cl-side-row span { color: #475569; font-size: 0.8rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cl-side-row b { font-weight: 700; color: #0f172a; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .cl-seg { display: block; width: calc(100% + 1rem); margin: 0 -0.5rem; padding: 0.5rem; border: none; background: none; border-radius: 9px; text-align: left; font-family: inherit; cursor: pointer; transition: background-color .15s; box-sizing: border-box; }
-        .cl-seg:hover:not(.static), .cl-seg.on { background: #eef2f6; }
-        .cl-seg.static { cursor: default; border-top: 1px solid #eef2f6; border-radius: 0; margin-top: 0.3rem; padding-top: 0.7rem; }
-        .cl-seg-top { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
-        .cl-seg-top span { font-size: 0.85rem; font-weight: 600; color: #0f172a; }
-        .cl-seg-top b { font-size: 1rem; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
-        .cl-seg-top b.good { color: #10b981; }
-        .cl-seg-top b.warn { color: #d97706; }
-        .cl-seg small { display: block; font-size: 0.72rem; color: #94a3b8; line-height: 1.35; margin-top: 1px; }
-        .cl-months { display: flex !important; gap: 0.9rem; flex-wrap: wrap; }
-        .cl-months b { color: #0f172a; font-weight: 700; }
         .cl-side-bd { display: inline-flex; align-items: center; gap: 0.35rem; }
         .cl-side-bd .cl-cake { margin-left: 0; }
         .cl-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
@@ -1082,7 +1063,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                 ['vip', 'VIP', 'З тегом VIP'],
                 ['lost', 'Давно не були', 'Понад 60 днів без візиту й без майбутнього запису - час нагадати про себе'],
                 ['blacklist', 'Чорний список', 'Не можуть записатись онлайн'],
-              ] as const).filter(([id]) => id === 'all' || segmentCounts[id] > 0 || activeSegment === id).map(([id, label, hint]) => (
+              ] as const).filter(([id]) => ['all', 'new', 'regular', 'lost'].includes(id) || segmentCounts[id] > 0 || activeSegment === id).map(([id, label, hint]) => (
                 <button key={id} type="button" title={hint} className={`category-pill ${activeSegment === id ? 'active' : ''}`} onClick={() => setActiveSegment(id)}>
                   {label} <span className="cl-count">{segmentCounts[id] || 0}</span>
                 </button>
@@ -1168,33 +1149,18 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
              {/* Бічна колонка - як у «Послугах»: стан бази, гроші, дні народження, підказка */}
              <aside className="custom-scroll cl-side">
-               {/* Клієнтська база: кожне число - з точним правилом і конкретними датами,
-                   порахованими від сьогодні. Натиск - той самий сегмент над таблицею. */}
                <div className="widget-card">
-                 <div className="widget-title">Клієнтська база</div>
+                 <div className="widget-title">База клієнтів</div>
                  {([
-                   ['all', 'Усі', 'уся база закладу'],
-                   ['new', 'Нові', `додані з ${fmtDay(newSince)}, не більше 1 візиту`],
-                   ['regular', 'Постійні', `${REGULAR_VISITS} і більше завершених візитів`],
-                   ['lost', 'Давно не були', `останній візит до ${fmtDay(lostBefore)}, нового запису немає`],
-                   ...(segmentCounts.blacklist > 0 ? [['blacklist', 'Чорний список', 'не можуть записатись онлайн']] : []),
-                 ] as [any, string, string][]).map(([id, label, rule]) => (
-                   <button key={id} type="button" className={`cl-seg ${activeSegment === id ? 'on' : ''}`} onClick={() => setActiveSegment(id)}>
-                     <span className="cl-seg-top"><span>{label}</span><b className={id === 'lost' && segmentCounts.lost ? 'warn' : id === 'regular' ? 'good' : ''}>{segmentCounts[id] || 0}</b></span>
-                     <small>{rule}</small>
+                   ['all', 'Усього', segmentCounts.all, '#0f172a'],
+                   ['new', 'Нові за 30 днів', segmentCounts.new, '#0f172a'],
+                   ['regular', 'Постійні', segmentCounts.regular, '#10b981'],
+                   ['lost', 'Давно не були', segmentCounts.lost, segmentCounts.lost ? '#d97706' : '#0f172a'],
+                 ] as const).map(([id, label, n, color]) => (
+                   <button key={id} type="button" className={`cl-side-row ${activeSegment === id ? 'on' : ''}`} onClick={() => setActiveSegment(id)}>
+                     <span>{label}</span><b style={{ color }}>{n || 0}</b>
                    </button>
                  ))}
-                 <div className="cl-seg static">
-                   <span className="cl-seg-top"><span>Повертаються</span><b>{sideStats.returnPct === null ? '—' : `${sideStats.returnPct}%`}</b></span>
-                   <small>{sideStats.visited ? `${sideStats.returned} з ${sideStats.visited} клієнтів із візитами прийшли вдруге` : 'зʼявиться після перших візитів'}</small>
-                 </div>
-                 <div className="cl-seg static">
-                   <span className="cl-seg-top"><span>Нові по місяцях</span></span>
-                   <small className="cl-months">
-                     <span>{monthLabel(0)}: <b>{sideStats.newThis}</b></span>
-                     <span>{monthLabel(-1)}: <b>{sideStats.newPrev}</b></span>
-                   </small>
-                 </div>
                </div>
 
                <div className="widget-card">

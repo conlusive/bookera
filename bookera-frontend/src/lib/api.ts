@@ -308,6 +308,36 @@ async function uploadFile(path: string, token: string, file: File): Promise<any>
 
 // ============ API ============
 
+export interface RadarPackage {
+  days: number;
+  price_uah: number;
+  price_points: number;
+  per_day_uah: number;
+  discount_percent: number;
+  can_afford_points: boolean;
+}
+
+export interface RadarOverview {
+  active: boolean;
+  expires_at?: string | null;
+  days_left: number;
+  points_balance: number;
+  packages: RadarPackage[];
+  position?: { total: number; position: number; position_without_radar: number; position_with_radar: number } | null;
+  results?: { storefront_bookings_30d: number; storefront_bookings_prev_30d: number } | null;
+  history: { started_at?: string | null; expires_at: string; paid_with: 'points' | 'payment'; points_spent?: number | null; amount_uah?: number | null; is_active: boolean }[];
+  rules?: RankingRules | null;
+  activated?: boolean | null;
+  checkout?: { action: string; fields: Record<string, string> } | null;
+  checkout_url?: string | null;
+}
+
+export interface RankingRules {
+  weights: { quality_max: number; proximity_max: number; free_slots: number; radar: number };
+  proximity_radius_km: number;
+  radar_bonus_km: number;
+}
+
 export const api = {
   // === КЛІЄНТСЬКИЙ МАРКЕТПЛЕЙС (публічно, без токена) ===
 
@@ -843,6 +873,13 @@ export const api = {
     return authFetch('/crm/campaigns', token, { method: 'POST', body: JSON.stringify(payload) });
   },
 
+  /** Скільки людей отримає розсилку для кожної аудиторії - до відправки. */
+  async getCampaignAudience(token: string, businessId: number): Promise<{
+    all: number; regular: number; lapsed: number; total_clients: number; without_email: number;
+  }> {
+    return authFetch(`/crm/campaigns/audience?business_id=${businessId}`, token);
+  },
+
   /** Оновити правила бронювання за профілем закладу. */
   async applyProfileDefaults(token: string, businessId: number): Promise<{ booking_settings: any }> {
     return authFetch(`/crm/businesses/${businessId}/apply-profile-defaults`, token, { method: 'POST' });
@@ -1028,15 +1065,30 @@ export const api = {
     return authFetch(`/crm/businesses/${businessId}/commissions`, token);
   },
 
-  async getRadarStatus(token: string, businessId: number): Promise<{ active: boolean; expires_at?: string; points_balance: number }> {
+  /** Радар: стан, ціни пакетів, позиція у видачі, результат, історія. */
+  async getRadarStatus(token: string, businessId: number): Promise<RadarOverview> {
     return authFetch(`/crm/businesses/${businessId}/radar`, token);
   },
 
-  async activateRadarWithPoints(token: string, businessId: number, days: number) {
+  /** Оплата пакета балами (days: 7 / 14 / 30). */
+  async activateRadarWithPoints(token: string, businessId: number, days: number): Promise<RadarOverview> {
     return authFetch(`/crm/businesses/${businessId}/radar/activate-with-points`, token, {
       method: 'POST',
       body: JSON.stringify({ days }),
     });
+  },
+
+  /** Оплата пакета карткою. Відповідь: activated - дні вже нараховано, інакше checkout - на сторінку оплати. */
+  async checkoutRadar(token: string, businessId: number, days: number): Promise<RadarOverview> {
+    return authFetch(`/crm/businesses/${businessId}/radar/checkout`, token, {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+    });
+  },
+
+  /** Ваги позиції у видачі - ті самі, що на сервері. */
+  async getRankingRules(revalidate?: number): Promise<RankingRules> {
+    return publicFetch('/businesses/ranking-rules', { revalidate });
   },
 
   async createGiftCertificate(

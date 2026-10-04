@@ -237,7 +237,7 @@ export default function InventoryTab({ business }: any) {
         : { t: 'Списання — автоматичне', x: 'Матеріали, привʼязані до послуг, списуються самі, коли візит завершено. Історія кожного товару — в його картці.' });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, width: '100%', background: '#fff' }}>
       {/* --- ПАНЕЛЬ --- */}
       <div className="iv-toolbar">
         <div className="iv-left">

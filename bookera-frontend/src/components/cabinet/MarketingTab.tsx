@@ -1,1055 +1,583 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { useToast } from '@/context/ToastContext';
-import { api } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { api, RadarOverview, RadarPackage } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
-import SmartImage from '@/components/ui/SmartImage';
+import { notify } from '@/lib/feedback';
+import { goToCheckout } from '@/lib/checkout';
+import FormModal from '@/components/ui/FormModal';
 import HelpTip from '@/components/ui/HelpTip';
 
-interface SmartSlot {
-  id: string;
-  date: string;
-  time: string;
-  type: 'urgent' | 'lull' | 'gap';
-  title: string;
-  insight: string;
-  suggestedPromo: number;
-  audience: string;
-}
+/**
+ * Маркетинг - три розділи, і кожен робить те, що написано:
+ *
+ *   Радар     платне просування у видачі BookEra. Пакети 7 / 14 / 30 днів,
+ *             оплата карткою або балами. Ціни, ваги й позицію віддає сервер
+ *             (app/services/ranking.py) - тут жодних власних чисел.
+ *   Розсилки  лист клієнтам закладу. Скільки людей отримає - видно до
+ *             відправки (той самий підрахунок, що й у самій розсилці).
+ *   Посилання пряме посилання (клієнт безкоштовний) і посилання вітрини
+ *             (з комісією), QR-код.
+ *
+ * Прибрано те, що не працювало: промокоди й «автоматизації» жили лише в
+ * браузері (localStorage) і нічого не робили на сервері; «AI-текст» був
+ * заготовкою із затримкою, що обіцяла неіснуючі знижки; «Радар» у
+ * вкладці був вигаданою «аналітикою розкладу»; лояльність - заглушка.
+ */
 
-interface MarketingTabProps {
-  business: any;
-  clientsList: any[];
-  Icons?: any;
-  marketingStats?: {
-    income: number;
-    incomeTrend: number;
-    returnedClients: number;
-    returnedTrend: number;
-    openRate: number;
-    openRateTrend: number;
-  };
-  availableSlots?: SmartSlot[];
-  averageTicketPrice?: number;
-}
+type View = 'radar' | 'campaigns' | 'links';
+type Audience = 'all' | 'regular' | 'lapsed';
 
-// 🎨 ІКОНКИ
-const SvgIcon = ({ d, size = 24, color = "currentColor", children, strokeWidth = 2, ...props }: any) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...props}>{d && <path d={d} />}{children}</svg>
-);
+const AUDIENCES: { id: Audience; label: string; hint: string }[] = [
+  { id: 'all', label: 'Усі', hint: 'Усі клієнти з поштою' },
+  { id: 'regular', label: 'Постійні', hint: 'Від трьох візитів' },
+  { id: 'lapsed', label: 'Давно не були', hint: 'Понад 60 днів і без майбутнього запису' },
+];
 
-const SvgLink = (p:any) => <SvgIcon {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></SvgIcon>;
-const SvgTrash = (p:any) => <SvgIcon {...p}><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></SvgIcon>;
-const SvgEdit = (p:any) => <SvgIcon {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></SvgIcon>;
-const SvgRadar = (p:any) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle><line x1="12" y1="12" x2="18" y2="6"></line></SvgIcon>;
-const SvgMessage = (p:any) => <SvgIcon {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></SvgIcon>;
-const SvgGift = (p:any) => <SvgIcon {...p}><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></SvgIcon>;
-const SvgTrending = (p:any) => <SvgIcon {...p}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></SvgIcon>;
-const SvgUsers = (p:any) => <SvgIcon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></SvgIcon>;
-const SvgChevronLeft = (p:any) => <SvgIcon {...p}><polyline points="15 18 9 12 15 6"></polyline></SvgIcon>;
-const SvgTag = (p:any) => <SvgIcon {...p}><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></SvgIcon>;
-const SvgPlus = (p:any) => <SvgIcon {...p}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></SvgIcon>;
-const SvgSend = (p:any) => <SvgIcon {...p}><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></SvgIcon>;
-const SvgInfo = (p:any) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></SvgIcon>;
-const SvgSparkles = (p:any) => <SvgIcon {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></SvgIcon>;
-const SvgX = (p:any) => <SvgIcon {...p}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></SvgIcon>;
-const SvgZap = (p:any) => <SvgIcon {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></SvgIcon>;
-const SvgCheck = (p:any) => <SvgIcon strokeWidth="3" {...p}><polyline points="20 6 9 17 4 12"></polyline></SvgIcon>;
-const SvgClock = (p:any) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></SvgIcon>;
-const SvgCalendarLimit = (p:any) => <SvgIcon {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></SvgIcon>;
-const SvgUsersLimit = (p:any) => <SvgIcon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></SvgIcon>;
-const SvgInstagram = (p:any) => <SvgIcon {...p}><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></SvgIcon>;
-const SvgCode = (p:any) => <SvgIcon {...p}><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></SvgIcon>;
-const SvgDownload = (p:any) => <SvgIcon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></SvgIcon>;
-const SvgCopy = (p:any) => <SvgIcon {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></SvgIcon>;
-const SvgShare = (p:any) => <SvgIcon {...p}><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></SvgIcon>;
+const money = (n: number) => `${Math.round(n).toLocaleString('uk-UA')} ₴`;
+// Сервер віддає UTC без позначки пояса; без «Z» браузер вважав би це місцевим часом
+const utc = (s?: string | null) => (s ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`) : null);
+const dayLabel = (s?: string | null) => utc(s)?.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }) ?? '';
+const daysWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'день' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'дні' : 'днів');
 
-export default function MarketingTab({
-  business,
-  clientsList = [],
-  marketingStats,
-  availableSlots = [],
-  averageTicketPrice = 500
-}: MarketingTabProps) {
-  const { showToast } = useToast();
+const TEMPLATES = (name: string, link: string) => [
+  { id: 'remind', label: 'Нагадування', subject: `Чекаємо вас у «${name}»`, message: `Вітаємо! Ви можете записатися до нас онлайн у зручний для вас час.${link ? `\n\nЗапис: ${link}` : ''}` },
+  { id: 'missed', label: 'Давно не бачились', subject: `Ми скучили за вами, ${name}`, message: `Давно не бачились! На цьому тижні є вільні вікна — будемо раді вас бачити.${link ? `\n\nЗапис: ${link}` : ''}` },
+  { id: 'news', label: 'Новинка', subject: `Новинка в «${name}»`, message: `У нас з'явилась нова послуга! Розкажемо деталі при записі.${link ? `\n\nЗапис: ${link}` : ''}` },
+];
 
-  const [marketingView, setMarketingView] = useState<'overview' | 'campaigns' | 'promotions' | 'radar' | 'smm'>('overview');
-  const [directLink, setDirectLink] = useState<{ direct_url: string; marketplace_url: string; token: string } | null>(null);
-  const [campaignTab, setCampaignTab] = useState<'automated' | 'mass'>('automated');
+export default function MarketingTab({ business }: { business: any }) {
+  const [view, setView] = useState<View>('radar');
+  const bid = Number(business?.id);
 
-  const [automations, setAutomations] = useState({ welcome: true, birthday: false, lost: true, reviews: true });
-  const [activePromos, setActivePromos] = useState<any[]>([]);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  // --- Радар ---
+  const [radar, setRadar] = useState<RadarOverview | null>(null);
+  const [radarError, setRadarError] = useState('');
+  const [confirm, setConfirm] = useState<{ pkg: RadarPackage; method: 'card' | 'points' } | null>(null);
+  const [paying, setPaying] = useState(false);
 
-  const [marketingForm, setMarketingForm] = useState({ type: 'sms', audience: 'all', message: '' });
-  const [selectedPromoForMessage, setSelectedPromoForMessage] = useState('');
-  // Тема листа: саме її людина бачить у списку пошти, тому без неї
-  // розсилка втрачає половину сенсу.
-  const [marketingSubject, setMarketingSubject] = useState('');
-  const [isSendingPromo, setIsSendingPromo] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [comingSoonModal, setComingSoonModal] = useState<{ isOpen: boolean, title: string, desc: string }>({ isOpen: false, title: '', desc: '' });
+  // --- Розсилки ---
+  const [counts, setCounts] = useState<{ all: number; regular: number; lapsed: number; total_clients: number; without_email: number } | null>(null);
+  const [audience, setAudience] = useState<Audience>('all');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+  const [sendConfirm, setSendConfirm] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
 
-  const [customDiscounts, setCustomDiscounts] = useState<Record<string, number>>({});
+  // --- Посилання ---
+  const [links, setLinks] = useState<{ direct_url: string; marketplace_url: string } | null>(null);
+  const [copied, setCopied] = useState<'direct' | 'market' | null>(null);
+  const [commission, setCommission] = useState(10);
 
-  // 🟢 СТАН ДЛЯ ІНСТРАГРАМ-МОДАЛКИ
-  const [activeSmmModal, setActiveSmmModal] = useState<'none' | 'instagram'>('none');
+  const loadRadar = useCallback(async () => {
+    if (!bid) return;
+    try {
+      setRadar(await api.getRadarStatus(await getAuthToken(), bid));
+      setRadarError('');
+    } catch (err: any) {
+      setRadarError(err?.message || 'Не вдалося завантажити Радар');
+    }
+  }, [bid]);
 
-  // Пряме посилання завантажуємо окремо: воно не входить у відповідь
-  // закладу, бо та схема публічна, і токен у ній дозволив би будь-кому
-  // підставити його у власне посилання й уникнути комісії.
+  useEffect(() => { void loadRadar(); }, [loadRadar]);
+
   useEffect(() => {
-    if (!business?.id) return;
+    if (!bid) return;
     void (async () => {
       try {
-        const token = await getAuthToken();
-        setDirectLink(await api.getDirectLink(token, business.id));
-      } catch {
-        // Посилання - не критична частина екрана: якщо не завантажилось,
-        // решта маркетингу має працювати.
-      }
+        const t = await getAuthToken();
+        setCounts(await api.getCampaignAudience(t, bid));
+      } catch { /* розсилка покаже порожні лічильники */ }
+      try {
+        setCommission(Number((await api.getMonetizationSummary(await getAuthToken(), bid)).commission_rate) || 10);
+      } catch { /* лишається стандартні 10% */ }
+      try {
+        // Пряме посилання - окремим запитом: у публічній відповіді закладу
+        // його токен був би доступний будь-кому й дозволяв уникати комісії.
+        setLinks(await api.getDirectLink(await getAuthToken(), bid));
+      } catch { /* посилання - не критична частина екрана */ }
     })();
-  }, [business?.id]);
+  }, [bid]);
 
-  useEffect(() => {
-    if (business?.id) {
-      const savedPromos = localStorage.getItem(`bookera_promos_${business.id}`);
-      if (savedPromos) try { setActivePromos(JSON.parse(savedPromos)); } catch (e) {}
+  const templates = useMemo(() => TEMPLATES(business?.name || 'наш заклад', links?.direct_url || ''), [business?.name, links?.direct_url]);
+  const reachable = counts ? counts[audience] : 0;
 
-      const savedAuto = localStorage.getItem(`bookera_automations_${business.id}`);
-      if (savedAuto) try { setAutomations(JSON.parse(savedAuto)); } catch (e) {}
-    }
-    setIsDataLoaded(true);
-  }, [business?.id]);
-
-  useEffect(() => {
-    if (isDataLoaded && business?.id) {
-      localStorage.setItem(`bookera_promos_${business.id}`, JSON.stringify(activePromos));
-      localStorage.setItem(`bookera_automations_${business.id}`, JSON.stringify(automations));
-    }
-  }, [activePromos, automations, isDataLoaded, business?.id]);
-
-  const freeSlotsCount = availableSlots.length;
-  const isRadarEmpty = freeSlotsCount <= 0;
-  const lostProfitAmount = freeSlotsCount * averageTicketPrice;
-
-  const stats = {
-    income: marketingStats?.income || 0,
-    incomeTrend: marketingStats?.incomeTrend || 0,
-    returnedClients: marketingStats?.returnedClients || 0,
-    returnedTrend: marketingStats?.returnedTrend || 0,
-    openRate: marketingStats?.openRate || 0,
-    openRateTrend: marketingStats?.openRateTrend || 0,
-  };
-
-  const formatCurrency = (num: number) => num >= 1000 ? (num / 1000).toFixed(1) + 'k ₴' : num + ' ₴';
-
-  const renderTrend = (val: number, label: string) => {
-    if (val === 0) return <span style={{ color: '#94a3b8' }}>Недостатньо даних</span>;
-    return val > 0 ? <><SvgPlus size={16}/>+{val}% <span style={{ color: '#94a3b8', fontWeight: '500' }}>{label}</span></> : <>{val}% <span style={{ color: '#94a3b8', fontWeight: '500' }}>{label}</span></>;
-  };
-
-  const generateSlug = (name: string) => {
-    if (!name) return 'booking';
-    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-  };
-  const businessLink = `bookera.app/${generateSlug(business?.name)}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&data=https://${businessLink}`;
-
-  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
-  const [editingPromoId, setEditingPromoId] = useState<number | null>(null);
-  const [newPromo, setNewPromo] = useState({ code: '', discount: '', maxUses: '', validUntil: '' });
-
-  const [isPromoDatePickerOpen, setIsPromoDatePickerOpen] = useState(false);
-  const [calendarViewDate, setCalendarViewDate] = useState(new Date());
-  const datePickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) setIsPromoDatePickerOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const generateCalendarDays = () => {
-    const year = calendarViewDate.getFullYear();
-    const month = calendarViewDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    let startDayIndex = firstDay === 0 ? 6 : firstDay - 1;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const days = [];
-    for (let i = 0; i < startDayIndex; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) days.push(i);
-    return days;
-  };
-
-  const handleCalendarDayClick = (day: number) => {
-    const y = calendarViewDate.getFullYear();
-    const m = String(calendarViewDate.getMonth() + 1).padStart(2, '0');
-    const d = String(day).padStart(2, '0');
-    setNewPromo({ ...newPromo, validUntil: `${y}-${m}-${d}` });
-    setIsPromoDatePickerOpen(false);
-  };
-
-  const handleOpenCreatePromo = () => {
-    setEditingPromoId(null);
-    setNewPromo({ code: '', discount: '', maxUses: '', validUntil: '' });
-    setCalendarViewDate(new Date());
-    setIsPromoModalOpen(true);
-  };
-
-  const handleOpenEditPromo = (promo: any) => {
-    setEditingPromoId(promo.id);
-    setNewPromo({
-      code: promo.code, discount: promo.discount.replace('%', ''),
-      maxUses: promo.maxUses ? String(promo.maxUses) : '', validUntil: promo.validUntil || ''
-    });
-    setCalendarViewDate(promo.validUntil ? new Date(promo.validUntil) : new Date());
-    setIsPromoModalOpen(true);
-  };
-
-  const handleSavePromo = () => {
-    if (!newPromo.code || !newPromo.discount) return showToast('Заповніть код і відсоток знижки', 'error', { field: !newPromo.code ? 'promo-code' : 'promo-discount' });
-    const formattedDiscount = newPromo.discount.includes('%') ? newPromo.discount : `${newPromo.discount}%`;
-    const cleanCode = newPromo.code.toUpperCase().replace(/\s+/g, '');
-    const maxUsesVal = newPromo.maxUses ? parseInt(newPromo.maxUses) : null;
-    const validUntilVal = newPromo.validUntil || null;
-
-    if (editingPromoId) {
-      setActivePromos(activePromos.map(p => p.id === editingPromoId ? { ...p, code: cleanCode, discount: formattedDiscount, maxUses: maxUsesVal, validUntil: validUntilVal } : p));
-      showToast('Промокод успішно оновлено');
-    } else {
-      setActivePromos([{ id: Date.now(), code: cleanCode, discount: formattedDiscount, uses: 0, status: 'active', maxUses: maxUsesVal, validUntil: validUntilVal }, ...activePromos]);
-      showToast('Промокод успішно створено');
-    }
-    setIsPromoModalOpen(false);
-  };
-
-  const handleDeletePromo = (id: number) => {
-    if(confirm('Ви впевнені, що хочете видалити цей промокод?')) {
-      setActivePromos(activePromos.filter(p => p.id !== id));
-      if (selectedPromoForMessage && activePromos.find(p => p.id === id)?.code === selectedPromoForMessage) setSelectedPromoForMessage('');
-      showToast('Промокод видалено');
-    }
-  };
-
-  const handleToggleAutomation = (id: string, currentValue: boolean) => {
-    setAutomations({ ...automations, [id]: !currentValue });
-    showToast('Налаштування збережено');
-  };
-
-  const handleSendMarketing = async () => {
-    const text = (marketingForm.message || '').trim();
-    if (!text) return showToast('Введіть текст перед відправкою', 'error', { field: 'mkt-message' });
-    if (text.length < 10) return showToast('Текст закороткий — напишіть хоча б кілька слів', 'error');
-    if (!business?.id) return showToast('Заклад не обрано', 'error');
-    if (clientsList?.length === 0) return showToast('У вас ще немає клієнтів', 'error');
-
-    // Розсилка йде РЕАЛЬНИМ людям і скасувати її неможливо -
-    // підтвердження тут доречне, на відміну від звичайних дій.
-    const audienceLabel = marketingForm.audience === 'vip' ? 'постійним клієнтам'
-      : marketingForm.audience === 'lost' ? 'клієнтам, які давно не були'
-      : 'усім клієнтам';
-    if (!confirm(`Надіслати листа ${audienceLabel}? Скасувати відправку буде неможливо.`)) return;
-
-    setIsSendingPromo(true);
+  // ---------- дії ----------
+  const pay = async () => {
+    if (!confirm) return;
+    setPaying(true);
     try {
-      const token = await getAuthToken();
-      // Назви аудиторій у CRM і на бекенді історично різні -
-      // зводимо їх тут, а не плодимо синоніми в API.
-      const audience = marketingForm.audience === 'vip' ? 'regular'
-        : marketingForm.audience === 'lost' ? 'lapsed' : 'all';
-
-      const res = await api.sendCampaign(token, {
-        business_id: business.id,
-        subject: marketingSubject.trim() || `Новини від ${business.name}`,
-        message: selectedPromoForMessage ? `${text}\n\nВаш промокод: ${selectedPromoForMessage}` : text,
-        audience: audience as any,
-      });
-
-      // Кажемо конкретно, скільки пішло. «Відправлено 🚀» не давало
-      // жодного уявлення, чи дійшло бодай щось.
-      if (res.queued === 0) {
-        showToast('Жоден лист не надіслано: у цих клієнтів немає пошти', 'error');
+      const t = await getAuthToken();
+      if (confirm.method === 'points') {
+        setRadar(await api.activateRadarWithPoints(t, bid, confirm.pkg.days));
+        setConfirm(null);
       } else {
-        const skipped = res.without_email > 0 ? `, без пошти: ${res.without_email}` : '';
-        showToast(`Надіслано листів: ${res.queued}${skipped}`, 'info');
-        setMarketingForm({ audience: 'all', message: '', type: 'sms' });
-        setMarketingSubject('');
-        setSelectedPromoForMessage('');
+        const res = await api.checkoutRadar(t, bid, confirm.pkg.days);
+        if (res.activated) { setRadar(res); setConfirm(null); }
+        else if (!goToCheckout(res)) { setRadar(res); setConfirm(null); }
       }
     } catch (err: any) {
-      showToast(err?.message || 'Не вдалося надіслати розсилку', 'error');
+      notify(err?.message || 'Не вдалося підключити Радар', 'error');
     } finally {
-      setIsSendingPromo(false);
+      setPaying(false);
     }
   };
 
-  const handleAIGenerate = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      let baseMsg = "";
-      const promoText = selectedPromoForMessage ? ` Ваш промокод: ${selectedPromoForMessage}.` : "";
-      if (marketingForm.audience === 'all') baseMsg = `Скучили за вами! Знижка на всі послуги до кінця тижня.${promoText} Запис: ${businessLink}`;
-      if (marketingForm.audience === 'vip') baseMsg = `Тільки для своїх. Отримайте преміум-догляд безкоштовно.${promoText} Забронюйте час: ${businessLink}`;
-      if (marketingForm.audience === 'lost') baseMsg = `Давно не бачились! Даруємо знижку на наступне відвідування.${promoText} Чекаємо вас: ${businessLink}`;
-      setMarketingForm({ ...marketingForm, message: baseMsg });
-      setIsGenerating(false);
-    }, 800);
-  };
-
-  const handleLaunchSmartCampaign = (slot: SmartSlot) => {
-    let codeToUse = "";
-    const finalPromoValue = customDiscounts[slot.id] !== undefined ? customDiscounts[slot.id] : slot.suggestedPromo;
-
-    if (finalPromoValue > 0) {
-      const parts = slot.id.split('-');
-      const rawDate = parts.length >= 4 ? `${parts[1]}-${parts[2]}-${parts[3]}` : '';
-      let aiMaxUses = null, codePrefix = 'SMART';
-      if (slot.type === 'gap') { aiMaxUses = 1; codePrefix = 'GAP'; }
-      if (slot.type === 'lull') { aiMaxUses = 3; codePrefix = 'LULL'; }
-      if (slot.type === 'urgent') { aiMaxUses = 5; codePrefix = 'HOT'; }
-      const newCode = `${codePrefix}${finalPromoValue}`;
-      const existingPromo = activePromos.find(p => p.code === newCode);
-
-      if (existingPromo) codeToUse = existingPromo.code;
-      else {
-        setActivePromos(prev => [{ id: Date.now(), code: newCode, discount: `${finalPromoValue}%`, uses: 0, status: 'active', maxUses: aiMaxUses, validUntil: rawDate }, ...prev]);
-        codeToUse = newCode;
-        showToast(`Створено лімітований промокод: ${newCode}`);
-      }
-    }
-
-    setMarketingView('campaigns');
-    setCampaignTab('mass');
-
-    let generatedMessage = "";
-    const promoStr = codeToUse ? ` Промокод: ${codeToUse}.` : "";
-
-    if (slot.type === 'urgent') generatedMessage = `Гарячі години! Тільки на ${slot.date} (${slot.time}) даруємо знижку ${finalPromoValue}% на всі послуги.${promoStr} Запис: ${businessLink}`;
-    else if (slot.type === 'lull') generatedMessage = `Щасливі ранкові години! Запишіться ${slot.date} (${slot.time}) та отримайте знижку ${finalPromoValue}%.${promoStr} Запис: ${businessLink}`;
-    else if (slot.type === 'gap') generatedMessage = `Звільнилося зручне вікно ${slot.date} о ${slot.time}! Ідеально для швидкого візиту.${promoStr} Забронювати: ${businessLink}`;
-
-    setSelectedPromoForMessage(codeToUse);
-    setMarketingForm({ ...marketingForm, audience: slot.audience, message: generatedMessage });
-  };
-
-  const handlePromoSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const code = e.target.value;
-    setSelectedPromoForMessage(code);
-    if (code && !marketingForm.message.includes(code)) {
-      const newLine = marketingForm.message.length > 0 ? '\n' : '';
-      setMarketingForm({...marketingForm, message: marketingForm.message + `${newLine}Використайте промокод: ${code}`});
-    }
-  };
-
-  // 🟢 ДОПОМІЖНІ ФУНКЦІЇ ДЛЯ SMM
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    showToast('Скопійовано в буфер обміну');
-  };
-
-  const downloadQR = async () => {
+  const doSend = async () => {
+    setSending(true);
     try {
-      const response = await fetch(qrCodeUrl);
-      const blob = await response.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `${generateSlug(business?.name)}-qrcode.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast('QR-код успішно завантажено');
-    } catch(e) { showToast('Помилка завантаження QR-коду'); }
-  };
-
-  const handleShare = async () => {
-    const shareData = { title: `Запис до ${business?.name}`, text: 'Швидкий онлайн-запис!', url: `https://${businessLink}` };
-    if (navigator.share) {
-      try { await navigator.share(shareData); } catch (err) {}
-    } else {
-      copyToClipboard(`https://${businessLink}`);
+      const res = await api.sendCampaign(await getAuthToken(), {
+        business_id: bid,
+        subject: subject.trim() || `Новини від ${business?.name}`,
+        message: message.trim(),
+        audience,
+      });
+      setSendConfirm(false);
+      if (res.queued === 0) {
+        notify('Жоден лист не надіслано: у цих клієнтів немає пошти', 'error');
+      } else {
+        setSent(`Надіслано листів: ${res.queued}${res.without_email ? ` · без пошти: ${res.without_email}` : ''}`);
+        setMessage(''); setSubject('');
+      }
+    } catch (err: any) {
+      setSendConfirm(false);
+      notify(err?.message || 'Не вдалося надіслати розсилку', 'error');
+    } finally {
+      setSending(false);
     }
   };
+
+  const askSend = () => {
+    setSent(null);
+    if (message.trim().length < 10) return notify('Напишіть хоча б кілька слів (від 10 символів)', 'error', { field: 'mk-message' });
+    if (reachable === 0) return notify('Цій аудиторії нікому надсилати: у клієнтів немає пошти', 'error');
+    setSendConfirm(true);
+  };
+
+  const copy = async (what: 'direct' | 'market', text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(what); setTimeout(() => setCopied(null), 1600); }
+    catch { notify('Не вдалося скопіювати — виділіть посилання вручну', 'error'); }
+  };
+
+  const qrUrl = links ? `https://api.qrserver.com/v1/create-qr-code/?size=512x512&margin=12&data=${encodeURIComponent(links.direct_url)}` : '';
+  const downloadQr = async () => {
+    try {
+      const blob = await (await fetch(qrUrl)).blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `qr-${business?.slug || 'booking'}.png`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch { notify('Не вдалося завантажити QR-код', 'error'); }
+  };
+
+  const w = radar?.rules?.weights;
+  const pos = radar?.position;
+  const res = radar?.results;
+  const trend = res ? res.storefront_bookings_30d - res.storefront_bookings_prev_30d : 0;
+
+  const hint = view === 'radar'
+    ? { t: 'Радар — це реклама', x: 'Заклад отримує бали в позиції та позначку «Реклама» на картці. Комісії за Радар немає: 10% беруться лише з клієнтів, що прийшли з вітрини.' }
+    : view === 'campaigns'
+      ? { t: 'Лист із вашим посиланням', x: 'Шаблони вже містять пряме посилання: клієнти, що запишуться з розсилки, не рахуються як клієнти вітрини — комісії за них немає.' }
+      : { t: 'Куди ставити посилання', x: 'Шапка Instagram, Telegram, візитка, QR на дверях. Усі, хто запишеться за прямим посиланням, — ваші клієнти без комісії.' };
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUpFade { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-        @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        
-        .static-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02); }
-
-        .primary-btn { background: #0f172a; color: #ffffff; border: none; padding: 0.55rem 1.1rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 0.4rem; justify-content: center; }
-        .primary-btn:hover:not(:disabled) { background: #1e293b; }
-        .primary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        
-        .secondary-btn { background: #f8fafc; color: #0f172a; border: 1px solid #e2e8f0; padding: 0.55rem 1.1rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 0.4rem; justify-content: center; }
-        .secondary-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
-        
-        /* 🟢 МІНІ-КНОПКИ */
-        .mini-action-btn { background: #f1f5f9; color: #475569; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s; white-space: nowrap; }
-        .mini-action-btn:hover { background: #e2e8f0; color: #0f172a; }
-
-        .tab-btn { background: transparent; border: none; padding: 0.8rem 1.5rem; font-size: 0.95rem; font-weight: 600; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; transition: 0.2s; }
-        .tab-btn.active { color: #5C7A61; border-bottom-color: #5C7A61; }
-        
-        .form-input { width: 100%; padding: 0.8rem 1rem; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 0.95rem; outline: none; transition: border 0.2s; background: #ffffff; color: #0f172a; appearance: none; cursor: pointer; }
-        .form-input:focus { border-color: #6F9273; }
-        
-        .editable-discount { width: 44px; padding: 0.2rem 0; border: none; border-bottom: 1px dashed #10b981; background: transparent; color: #10b981; font-weight: 800; font-size: 1rem; text-align: center; outline: none; transition: 0.2s; }
-        .editable-discount:hover { background: #ecfdf5; border-radius: 4px; border-bottom: 1px solid transparent; }
-        .editable-discount:focus { background: #d1fae5; border-radius: 4px; border-bottom: 1px solid transparent; }
-        .editable-discount::-webkit-inner-spin-button, .editable-discount::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-
-        .select-wrapper { position: relative; width: 100%; }
-        .select-wrapper::after { content: ''; position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 12 15 18 9"></polyline></svg>'); background-repeat: no-repeat; background-position: center; pointer-events: none; }
-
-        .custom-toggle { width: 44px; height: 24px; border-radius: 12px; background: #e2e8f0; position: relative; cursor: pointer; transition: 0.3s; }
-        .custom-toggle.active { background: #10b981; }
-        .custom-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .custom-toggle.active::after { transform: translateX(20px); }
-
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1000; animation: fadeIn 0.2s ease-out; }
-        .modal-content { background: #ffffff; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1); width: 100%; max-width: 450px; animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; position: relative; max-height: 90vh; overflow-y: auto; }
-        
-        .radar-banner { background: #ffffff; transition: 0.2s; }
-        .radar-banner:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); }
-        .radar-banner.has-slots { background: linear-gradient(90deg, #F4FAF5 0%, #ffffff 100%); border-left: 4px solid #6F9273; }
-        
-        .row-icon-btn { background: #ffffff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04); cursor: pointer; transition: transform 0.2s; border: 1px solid transparent; }
-        .row-icon-btn:hover { transform: translateY(-1px); border-color: #e2e8f0; }
-        
-        .radar-banner .icon-container { width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
-        
-        .row-badge { padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem; text-transform: uppercase; letter-spacing: 0.05em; }
-        .row-badge.urgent { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
-        .row-badge.lull { background: #F4FAF5; color: #6F9273; border: 1px solid #bfdbfe; }
-        .row-badge.gap { background: #fdf4ff; color: #d946ef; border: 1px solid #f5d0fe; }
-        .row-badge.active { background: #f8fafc; color: #64748b; }
-        
-        .stats-trend { display: flex; gap: 0.3rem; font-size: 0.85rem; font-weight: 700; margin-top: 0.5rem; align-items: center; }
-        .stats-trend.up { color: #10b981; }
-        .stats-trend.down { color: #ef4444; }
-        
-        .dark-stats-card { background: #0f172a; color: #ffffff; border: none; border-radius: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
-      `}} />
-
-      <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', maxWidth: '1200px', margin: '0 auto', width: '100%', height: '100%', fontFamily: 'Inter, -apple-system, sans-serif', backgroundColor: '#ffffff' }}>
-
-        {/* 🔴 ОГЛЯД МАРКЕТИНГУ */}
-        {marketingView === 'overview' && (
-          <div style={{ animation: 'fadeIn 0.2s ease', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-
-            {/* Пряме посилання закладу.
-                Механіка атрибуції працювала повністю - бекенд розрізняв
-                «свій клієнт» і «клієнт від Bookera», нараховував бали
-                й комісію. Але власнику НІДЕ було взяти саме посилання:
-                ключова частина бізнес-моделі лишалась недоступною. */}
-            <div style={{ background: '#fff', border: '1px solid #E4EBE3', borderRadius: '16px', padding: '1.5rem' }}>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#222222', marginBottom: '0.35rem' }}>
-                Ваше пряме посилання
-              </div>
-              <p style={{ fontSize: '0.875rem', color: '#5C6B5E', margin: '0 0 1rem', lineHeight: 1.5 }}>
-                Діліться ним у соцмережах і з постійними клієнтами. Записи за цим посиланням
-                вважаються вашими власними — комісія за них не стягується.
-              </p>
-
-              {directLink ? (
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <input
-                    readOnly
-                    value={directLink.direct_url}
-                    onFocus={e => e.currentTarget.select()}
-                    style={{
-                      flex: '1 1 260px', minWidth: 0, height: '42px', padding: '0 0.85rem',
-                      border: '1px solid #E4EBE3', borderRadius: '10px', background: '#F6F9F6',
-                      fontSize: '0.85rem', color: '#2E3A30', fontFamily: 'inherit', outline: 'none',
-                    }}
-                  />
-                  <button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(directLink.direct_url);
-                        showToast('Посилання скопійовано', 'info');
-                      } catch {
-                        // Буфер обміну недоступний (старий браузер, http).
-                        // Поле вже виділяється при кліку, тому людина
-                        // може скопіювати вручну - кажемо про це прямо.
-                        showToast('Скопіюйте посилання вручну', 'info');
-                      }
-                    }}
-                    style={{
-                      height: '42px', padding: '0 1.1rem', borderRadius: '10px', border: 'none',
-                      background: '#222222', color: '#fff', fontSize: '0.875rem', fontWeight: 600,
-                      fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
-                    }}
-                  >
-                    Копіювати
-                  </button>
-                </div>
-              ) : (
-                <div style={{ height: '42px', borderRadius: '10px', background: '#F2F6F1' }} />
-              )}
-
-              {/* Друге посилання показуємо поруч, щоб різниця була
-                  очевидною: однакові адреси, різні наслідки. */}
-              {directLink && (
-                <p style={{ fontSize: '0.8rem', color: '#A5AEA3', margin: '0.85rem 0 0', lineHeight: 1.5 }}>
-                  Посилання без мітки ({directLink.marketplace_url}) вважається переходом
-                  із каталогу Bookera — за таких клієнтів стягується комісія.
-                </p>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h1 style={{ fontSize: '2.4rem', fontWeight: '900', color: '#0f172a', margin: '0 0 0.4rem 0', letterSpacing: '-0.04em' }}>Залучай. Утримуй. Зростай.</h1>
-                <p style={{ fontSize: '1rem', color: '#64748b', margin: 0 }}>Керуйте комунікаціями та збільшуйте дохід, заповнюючи порожні вікна.</p>
-              </div>
-              <div style={{ display: 'flex', gap: '0.8rem' }}>
-                <button onClick={handleShare} className="secondary-btn">
-                  <SvgShare size={16} /> Поділитися
-                </button>
-                <button onClick={() => setMarketingView('campaigns')} className="primary-btn">
-                  <SvgZap size={16} /> Нова розсилка
-                </button>
-              </div>
-            </div>
-
-            {/* 📡 РАДАР ОГЛЯД */}
-            <div
-              onClick={() => setMarketingView('radar')}
-              className={`radar-banner static-card ${!isRadarEmpty ? 'has-slots' : ''}`}
-              style={{ padding: '1.2rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: '1rem', borderTop: 'none', borderRight: 'none', borderBottom: 'none' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-                {!isRadarEmpty && (
-                  <>
-                    <div className="icon-container" style={{ color: '#6F9273' }}><SvgRadar size={24} /></div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.3rem' }}>
-                        <h3 style={{ fontWeight: '800', fontSize: '1.15rem', margin: 0, color: '#0f172a' }}>Знайдено {freeSlotsCount} інсайти в розкладі</h3>
-                        <span className="row-badge urgent">Потрібна дія</span>
-                      </div>
-                      <div style={{ fontSize: '0.95rem', color: '#475569' }}>
-                        Ризик втрати прибутку: <span style={{ color: '#0f172a', fontWeight: '700' }}>~{formatCurrency(lostProfitAmount)}</span>. AI підготував стратегії.
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {isRadarEmpty && (
-                  <>
-                    <div className="icon-container" style={{ color: '#64748b' }}><SvgRadar size={24} /></div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.3rem' }}>
-                        <h3 style={{ fontWeight: '800', fontSize: '1.15rem', margin: 0, color: '#0f172a' }}>BookEra Radar <HelpTip>Показує заклад вище в пошуку BookEra для клієнтів поруч - на обраний час.</HelpTip></h3>
-                        <span className="row-badge active">Активно</span>
-                      </div>
-                      <div style={{ fontSize: '0.95rem', color: '#64748b' }}>Система проаналізувала розклад. На найближчі дні все чудово!</div>
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="row-icon-btn" style={{ width: '40px', height: '40px', color: '#0f172a' }}><SvgChevronLeft size={20} style={{ transform: 'rotate(180deg)' }} /></div>
-            </div>
-
-            {/* 📊 СТАТИСТИКА */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
-              <div className="static-card" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                  <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase' }}>Дохід з маркетингу</div>
-                  <div style={{ background: '#dcfce7', color: '#16a34a', padding: '0.5rem', borderRadius: '10px' }}><SvgTrending size={20} /></div>
-                </div>
-                <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#0f172a' }}>{formatCurrency(stats.income)}</div>
-                <div className={`stats-trend ${stats.incomeTrend >= 0 ? 'up' : 'down'}`}>
-                  {renderTrend(stats.incomeTrend, 'за місяць')}
-                </div>
-              </div>
-
-              <div className="static-card" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                  <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase' }}>Повернуто клієнтів</div>
-                  <div style={{ background: '#e0f2fe', color: '#5C7A61', padding: '0.5rem', borderRadius: '10px' }}><SvgUsers size={20} /></div>
-                </div>
-                <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#0f172a' }}>{stats.returnedClients}</div>
-                <div className={`stats-trend ${stats.returnedTrend >= 0 ? 'up' : 'down'}`}>
-                  {renderTrend(stats.returnedTrend, 'через авто-сценарії')}
-                </div>
-              </div>
-
-              <div className="dark-stats-card" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                  <div style={{ color: '#a1a1aa', fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase' }}>Контактна база</div>
-                  <div style={{ background: '#3f3f46', color: '#ffffff', padding: '0.5rem', borderRadius: '10px' }}><SvgMessage size={20} /></div>
-                </div>
-                <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#ffffff' }}>{stats.openRate}%</div>
-                <div className="stats-trend" style={{ color: '#94a3b8', fontWeight: '500' }}>
-                  {stats.openRateTrend} клієнтів з номером телефону
-                </div>
-              </div>
-            </div>
-
-            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0f172a', margin: '0.5rem 0 0 0' }}>Інструменти залучення</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
-              {[
-                { icon: SvgLink, color: '#f59e0b', bg: '#fef3c7', title: 'Онлайн-запис & SMM', desc: 'Ваше посилання та інструменти', action: () => setMarketingView('smm') },
-                { icon: SvgTag, color: '#ec4899', bg: '#fce7f3', title: 'Промокоди', desc: 'Створення купонів на знижку', action: () => setMarketingView('promotions') },
-                { icon: SvgGift, color: '#0ea5e9', bg: '#E4EEE3', title: 'Програми лояльності', desc: 'Приведи друга & Бонуси', action: () => setComingSoonModal({ isOpen: true, title: 'Програма лояльності', desc: 'Кешбек та реферальні посилання з\'являться у наступному оновленні.' }) }
-              ].map((item, i) => (
-                <div key={i} onClick={item.action} className="static-card" style={{ padding: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-                  <div style={{ width: '48px', height: '48px', background: item.bg, borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color }}><item.icon size={24} /></div>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: '0 0 0.1rem 0', fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>{item.title}</h4>
-                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>{item.desc}</p>
-                  </div>
-                   <div style={{ color: '#cbd5e1' }}><SvgChevronLeft size={20} style={{ transform: 'rotate(180deg)' }} /></div>
-                </div>
-              ))}
-            </div>
-
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, width: '100%', background: '#fff' }}>
+      {/* --- ПАНЕЛЬ --- */}
+      <div className="mk-toolbar">
+        <div className="mk-seg" role="tablist">
+          {([['radar', 'Радар'], ['campaigns', 'Розсилки'], ['links', 'Посилання']] as [View, string][]).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>
+              {label}
+              {id === 'radar' && radar?.active && <span className="mk-live" title="Радар активний" />}
+            </button>
+          ))}
+        </div>
+        {view === 'radar' && radar && (
+          <div className="mk-balance" title="Бали заробляються за кожного нового клієнта екосистеми BookEra">
+            Бали: <b>{radar.points_balance}</b>
           </div>
         )}
+      </div>
 
-        {/* 🔴 РОЗУМНИЙ РАДАР */}
-        {marketingView === 'radar' && (
-          <div style={{ animation: 'fadeIn 0.3s ease', display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '850px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-              <button onClick={() => setMarketingView('overview')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', cursor: 'pointer', padding: 0 }}><SvgChevronLeft size={28} /></button>
-              <div>
-                <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>BookEra Radar</h2>
-                <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0 }}>AI-аналітика вашого розкладу. Система знаходить слабкі місця та пропонує рішення.</p>
-              </div>
-            </div>
+      <div className="mk-grid">
+        <div className="custom-scroll mk-main">
+          <div className="mk-main-inner">
 
-            {isRadarEmpty ? (
-              <div className="static-card" style={{ textAlign: 'center', padding: '4rem 0', color: '#64748b' }}>
-                <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
-                  <div style={{ background: '#dcfce7', padding: '1rem', borderRadius: '50%', color: '#16a34a' }}><SvgRadar size={28} /></div>
-                </div>
-                <h3 style={{ fontSize: '1.1rem', color: '#0f172a', margin: '0 0 0.5rem 0', fontWeight: '700' }}>Аномалій не знайдено</h3>
-                <p style={{ margin: 0, fontSize: '0.9rem' }}>Ваш розклад на найближчі дні виглядає чудово. Щойно з'являться серйозні прогалини, ми підготуємо стратегію.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {availableSlots.map((slot) => {
-                  const currentDiscount = customDiscounts[slot.id] !== undefined ? customDiscounts[slot.id] : slot.suggestedPromo;
-
-                  return (
-                    <div key={slot.id} className="static-card" style={{ overflow: 'hidden' }}>
-                      <div style={{
-                        padding: '1rem 1.5rem',
-                        background: slot.type === 'urgent' ? '#fef2f2' : slot.type === 'lull' ? '#F4FAF5' : '#fdf4ff',
-                        borderBottom: `1px solid ${slot.type === 'urgent' ? '#fecaca' : slot.type === 'lull' ? '#bfdbfe' : '#f5d0fe'}`,
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                          <span className={`row-badge ${slot.type}`}>
-                            {slot.type === 'urgent' && <SvgZap size={14}/>}
-                            {slot.type === 'lull' && <SvgTrending size={14}/>}
-                            {slot.type === 'gap' && <SvgClock size={14}/>}
-                            {slot.title}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a' }}>{slot.date} | {slot.time}</div>
+            {/* ================= РАДАР ================= */}
+            {view === 'radar' && (
+              radarError ? <div className="mk-empty"><b>Радар недоступний</b><span>{radarError}</span></div>
+              : !radar ? <div className="mk-empty"><span>Завантаження…</span></div>
+              : (
+                <>
+                  <section className={`mk-hero ${radar.active ? 'on' : ''}`}>
+                    <div className="mk-hero-top">
+                      <span className="mk-radar-ico" aria-hidden>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /><line x1="12" y1="12" x2="18" y2="6" /></svg>
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h2>{radar.active ? 'Радар працює' : 'Радар вимкнено'}</h2>
+                        <p>
+                          {radar.active
+                            ? <>До <b>{dayLabel(radar.expires_at)}</b> · залишилось {radar.days_left} {daysWord(radar.days_left)}</>
+                            : 'Піднімає ваш заклад вище у видачі BookEra — там, де клієнти обирають, куди записатись.'}
+                        </p>
                       </div>
-
-                      <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                        <p style={{ margin: 0, fontSize: '0.95rem', color: '#334155', lineHeight: '1.5' }}>{slot.insight}</p>
-
-                        <div style={{ display: 'flex', gap: '1rem', background: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: '700', marginBottom: '0.3rem' }}>Кому відправити:</div>
-                            <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#0f172a' }}>
-                              {slot.audience === 'lost' ? 'Втрачені клієнти (>30 днів)' : slot.audience === 'vip' ? 'Тільки VIP база' : 'Вся база клієнтів'}
+                    </div>
+                    {pos && (
+                      <div className="mk-pos">
+                        <div>
+                          <small>Ваша позиція за якістю{radar.active ? '' : ' зараз'}</small>
+                          <strong>№{pos.position}<span> із {pos.total}</span></strong>
+                        </div>
+                        {(radar.active ? pos.position_without_radar !== pos.position : pos.position_with_radar !== pos.position) && (
+                          <>
+                            <div className="mk-pos-arrow">→</div>
+                            <div>
+                              <small>{radar.active ? 'Без Радара було б' : 'З Радаром стане'}</small>
+                              <strong className={radar.active ? 'mute' : 'up'}>
+                                №{radar.active ? pos.position_without_radar : pos.position_with_radar}
+                                <span> {radar.active ? `(−${pos.position_without_radar - pos.position})` : `(+${pos.position - pos.position_with_radar})`}</span>
+                              </strong>
                             </div>
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: '700', marginBottom: '0.3rem' }}>Пропозиція AI:</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                              {currentDiscount > 0 ? (
-                                <>
-                                  <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#10b981' }}>Знижка</span>
-                                  <input type="number" value={currentDiscount} onChange={e => setCustomDiscounts({...customDiscounts, [slot.id]: Number(e.target.value)})} className="editable-discount" min="0" max="100" />
-                                  <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#10b981' }}>%</span>
-                                </>
-                              ) : (
-                                <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#64748b' }}>Без знижки (Нагадування)</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                          <button onClick={() => handleLaunchSmartCampaign(slot)} className="primary-btn" style={{ padding: '0.8rem 1.5rem', fontSize: '0.95rem' }}>
-                            <SvgSparkles size={16} /> Згенерувати розсилку
-                          </button>
-                        </div>
+                          </>
+                        )}
+                        <HelpTip>Позиція серед закладів вашої категорії та міста за якістю (рейтинг і відгуки) й Радаром. Відстань до клієнта та вільні вікна в кожного свої, тож реальне місце у видачі змінюється.</HelpTip>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                    )}
+                  </section>
 
-        {/* 🔴 ОНЛАЙН-ЗАПИС & SMM (ОНОВЛЕНО ЗА БАЖАННЯМ) */}
-        {marketingView === 'smm' && (
-          <div style={{ animation: 'fadeIn 0.3s ease', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '850px' }}>
-
-            {/* ШАПКА */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-              <button onClick={() => setMarketingView('overview')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', cursor: 'pointer', padding: 0 }}><SvgChevronLeft size={28} /></button>
-              <div>
-                 <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Онлайн-запис & SMM</h2>
-                 <p style={{ color: '#64748b', fontSize: '0.95rem', margin: '0.2rem 0 0 0' }}>Інструменти для залучення клієнтів з соцмереж та інтернету.</p>
-              </div>
-            </div>
-
-            {/* 1. БАЗОВЕ ПОСИЛАННЯ ТА QR (Ідеально вирівняний блок) */}
-            <div className="static-card" style={{ display: 'flex', overflow: 'hidden' }}>
-              <div style={{ flex: 1, padding: '2rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                   <div style={{ background: '#fef3c7', color: '#f59e0b', padding: '0.8rem', borderRadius: '12px' }}><SvgLink size={20} /></div>
-                   <div>
-                      <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>Smart Link для шапки профілю</h3>
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Єдине посилання для Instagram, TikTok чи Telegram.</p>
-                   </div>
-                </div>
-
-                {/* 🟢 ОНОВЛЕНІ ЛЕГКІ КНОПКИ */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.6rem 0.6rem 0.6rem 1rem', borderRadius: '10px' }}>
-                  <div style={{ flex: 1, fontSize: '0.95rem', color: '#0f172a', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {businessLink}
+                  <h3 className="mk-h">{radar.active ? 'Продовжити' : 'Підключити'}</h3>
+                  <div className="mk-packages">
+                    {radar.packages.map(p => (
+                      <div key={p.days} className={`mk-pkg ${p.days === 14 ? 'best' : ''}`}>
+                        {p.discount_percent > 0 && <span className="mk-save">−{p.discount_percent}%</span>}
+                        <div className="mk-pkg-days">{p.days} {daysWord(p.days)}</div>
+                        <div className="mk-pkg-price">{money(p.price_uah)}</div>
+                        <div className="mk-pkg-day">{p.per_day_uah.toLocaleString('uk-UA')} ₴ за день</div>
+                        <button type="button" className="clean-btn" onClick={() => setConfirm({ pkg: p, method: 'card' })}>Сплатити карткою</button>
+                        <button type="button" className="mk-points" disabled={!p.can_afford_points} onClick={() => setConfirm({ pkg: p, method: 'points' })}
+                          title={p.can_afford_points ? '' : `Не вистачає ${p.price_points - radar.points_balance} балів`}>
+                          {p.price_points} балів
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <button onClick={() => copyToClipboard(`https://${businessLink}`)} className="mini-action-btn">
-                    <SvgCopy size={14} /> Скопіювати
-                  </button>
-                  <button onClick={handleShare} className="mini-action-btn">
-                    <SvgShare size={14} /> Поділитися
-                  </button>
-                </div>
-              </div>
 
-              {/* Блок з QR-кодом справа */}
-              <div style={{ width: '220px', background: '#f8fafc', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #e2e8f0', flexShrink: 0 }}>
-                 <div style={{ width: '110px', height: '110px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', overflow: 'hidden', padding: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                   <SmartImage src={qrCodeUrl} alt="QR Code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                 </div>
-                 <button onClick={downloadQR} className="mini-action-btn" style={{ width: '100%', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0' }}>
-                   <SvgDownload size={14} /> Завантажити QR
-                 </button>
-              </div>
-            </div>
-
-            {/* 2. НОВА ВЕЛИКА ЗАГЛУШКА ДЛЯ SMM СТУДІЇ */}
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: '0.5rem 0 0 0' }}>SMM Студія <HelpTip>Готові зображення й тексти для соцмереж: розклад вільних вікон, акції, нові послуги.</HelpTip></h3>
-            <div style={{
-              background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-              border: '1px dashed #cbd5e1',
-              borderRadius: '16px',
-              padding: '3rem 2rem',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-               <div style={{ background: '#ffffff', padding: '1rem', borderRadius: '50%', marginBottom: '1.5rem', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', color: '#6F9273' }}>
-                 <SvgSparkles size={32} />
-               </div>
-               <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.4rem', fontWeight: '800', color: '#0f172a' }}>
-                 Повноцінна SMM-Студія у розробці 🚀
-               </h4>
-               <p style={{ margin: '0 0 2rem 0', fontSize: '0.95rem', color: '#475569', maxWidth: '600px', lineHeight: '1.5' }}>
-                 Ми готуємо для вас потужний окремий розділ! Тут буде справжній AI-контент менеджер, який аналізує вашу специфіку, генерує ідеї для Reels, створює готові колажі "До/Після", шаблони відгуків та автоматизує ваші соцмережі.
-               </p>
-               <button onClick={() => showToast('Дякуємо! Ми повідомимо вас першими при релізі.')} className="primary-btn" style={{ padding: '0.8rem 2rem', fontSize: '1rem' }}>
-                 Сповістити мене про запуск
-               </button>
-            </div>
-
-            {/* 3. ІНТЕГРАЦІЇ (ОПУЩЕНО ВНИЗ) */}
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: '0.5rem 0 0 0' }}>Інтеграції на сторонні платформи</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-
-              <div className="static-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                   <div style={{ color: '#e1306c', background: '#fdf2f8', padding: '0.8rem', borderRadius: '12px' }}><SvgInstagram size={20} /></div>
-                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>Кнопка в Instagram</h4>
-                 </div>
-                 <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem', flex: 1, lineHeight: '1.5' }}>Додайте офіційну кнопку "Забронювати" (Book Now) у ваш бізнес-профіль Instagram.</p>
-                 <button onClick={() => setActiveSmmModal('instagram')} className="secondary-btn" style={{ width: '100%', justifyContent: 'center' }}>Як підключити?</button>
-              </div>
-
-              {/* Акуратний віджет сайту */}
-              <div className="static-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                   <div style={{ color: '#0ea5e9', background: '#e0f2fe', padding: '0.8rem', borderRadius: '12px' }}><SvgCode size={20} /></div>
-                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>Віджет для сайту</h4>
-                 </div>
-                 <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem', flex: 1, lineHeight: '1.5' }}>Вбудуйте форму онлайн-запису на власний вебсайт (Wix, WordPress тощо).</p>
-                 <button onClick={() => { copyToClipboard(`<iframe src="https://${businessLink}" width="100%" height="600" frameborder="0"></iframe>`); }} className="secondary-btn" style={{ width: '100%', justifyContent: 'center' }}>
-                   <SvgCopy size={16}/> Скопіювати iframe код
-                 </button>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* 🔴 ПРОМОКОДИ */}
-        {marketingView === 'promotions' && (
-          <div style={{ animation: 'fadeIn 0.3s ease', display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '800px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <button onClick={() => setMarketingView('overview')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', cursor: 'pointer', padding: 0 }}><SvgChevronLeft size={28} /></button>
-                <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Промокоди</h2>
-              </div>
-              <button onClick={handleOpenCreatePromo} className="primary-btn">
-                <SvgPlus size={16} /> Створити промокод
-              </button>
-            </div>
-
-            {activePromos.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {activePromos.map(promo => (
-                  <div key={promo.id} className="static-card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.borderColor='#cbd5e1'} onMouseOut={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                      <div style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0f172a', background: '#f8fafc', padding: '0.6rem 1rem', borderRadius: '10px', border: '1px dashed #cbd5e1' }}>{promo.code}</div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                          <span style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: '600' }}>Знижка: {promo.discount}</span>
-                          <span className="row-badge active" style={{ border: 'none' }}>Активно</span>
+                  {w && (
+                    <>
+                      <h3 className="mk-h">Як це працює <HelpTip>Позицію в «Рекомендованих» рахує сервер: усі числа на цій сторінці взято з нього, а не з інтерфейсу.</HelpTip></h3>
+                      <div className="mk-weights">
+                        <div className="mk-bar" role="img" aria-label="Із чого складається позиція">
+                          <i style={{ flex: w.quality_max, background: '#94a3b8' }} />
+                          <i style={{ flex: w.proximity_max, background: '#38bdf8' }} />
+                          <i style={{ flex: w.free_slots, background: '#2dd4bf' }} />
+                          <i style={{ flex: w.radar, background: '#8b5cf6' }} />
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.4rem' }}>
-                          <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <SvgUsersLimit size={12} /> Використано: {promo.uses} {promo.maxUses ? `/ ${promo.maxUses}` : ''}
-                          </div>
-                          {promo.validUntil && (
-                            <div style={{ fontSize: '0.8rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: '600' }}>
-                              <SvgCalendarLimit size={12} /> Діє до: {new Date(promo.validUntil).toLocaleDateString('uk-UA')}
-                            </div>
-                          )}
-                        </div>
+                        <ul>
+                          <li><i style={{ background: '#94a3b8' }} /><span>Якість</span><b>до {w.quality_max}</b><small>рейтинг і кількість відгуків</small></li>
+                          <li><i style={{ background: '#38bdf8' }} /><span>Поруч</span><b>до {w.proximity_max}</b><small>чим ближче до клієнта, тим більше</small></li>
+                          <li><i style={{ background: '#2dd4bf' }} /><span>Вільні вікна</span><b>{w.free_slots}</b><small>є вільний час сьогодні</small></li>
+                          <li><i style={{ background: '#8b5cf6' }} /><span>Радар</span><b>+{w.radar}</b><small>лише поки пакет діє</small></li>
+                        </ul>
+                        <p>У сортуванні «Найближчі» заклад із Радаром рахується ближчим на {radar.rules?.radar_bonus_km} км. На картці стоїть позначка «Реклама». Слабкий заклад не стане першим лише за гроші: якість важить найбільше.</p>
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => handleOpenEditPromo(promo)} className="row-icon-btn" style={{ color: '#0ea5e9' }}>
-                        <SvgEdit size={16} />
-                      </button>
-                      <button onClick={() => handleDeletePromo(promo.id)} className="row-icon-btn" style={{ color: '#ef4444' }}>
-                        <SvgTrash size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-               <div className="static-card" style={{ textAlign: 'center', padding: '4rem 0', color: '#64748b', borderStyle: 'dashed' }}>
-                 <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
-                   <div style={{ background: '#f1f5f9', padding: '1rem', borderRadius: '50%', color: '#94a3b8' }}><SvgTag size={28} /></div>
-                 </div>
-                 <h3 style={{ fontSize: '1.1rem', color: '#0f172a', margin: '0 0 0.5rem 0', fontWeight: '700' }}>Немає активних промокодів</h3>
-                 <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.9rem' }}>Створіть знижку, щоб стимулювати клієнтів записатись.</p>
-                 <button onClick={handleOpenCreatePromo} className="primary-btn" style={{ margin: '0 auto' }}>Створити перший промокод</button>
-               </div>
-            )}
-          </div>
-        )}
+                    </>
+                  )}
 
-        {/* 🔴 КАМПАНІЇ */}
-        {marketingView === 'campaigns' && (
-          <div style={{ animation: 'fadeIn 0.3s ease', display: 'flex', flexDirection: 'column', height: '100%', maxWidth: '800px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-              <button onClick={() => setMarketingView('overview')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', cursor: 'pointer', padding: 0 }}><SvgChevronLeft size={28} /></button>
-              <div>
-                <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Кампанії та Розсилки</h2>
-                <p style={{ color: '#64748b', fontSize: '0.95rem', margin: '0.2rem 0 0 0' }}>Налаштуйте автоматизацію або надішліть масове повідомлення.</p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
-              <button className={`tab-btn ${campaignTab === 'automated' ? 'active' : ''}`} onClick={() => setCampaignTab('automated')}>Авто-сценарії</button>
-              <button className={`tab-btn ${campaignTab === 'mass' ? 'active' : ''}`} onClick={() => setCampaignTab('mass')}>Власна розсилка</button>
-            </div>
-
-            {campaignTab === 'automated' && (
-              <div className="static-card" style={{ overflow: 'hidden' }}>
-                {[
-                  { id: 'welcome', title: 'Привітання нового клієнта', desc: 'Надсилається через 2 години після першого візиту з подякою.', badge: 'Лояльність' },
-                  { id: 'birthday', title: 'Привітання з Днем Народження', desc: 'Знижка за 3 дні до свята клієнта.', badge: 'Конверсія' },
-                  { id: 'lost', title: 'Повернення втрачених клієнтів', desc: 'Для тих, хто не був понад 45 днів.', badge: 'Top ROI' },
-                ].map((item, idx) => {
-                  const isActive = (automations as any)[item.id];
-                  return (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: idx !== 2 ? '1px solid #f1f5f9' : 'none' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.3rem' }}>
-                          <h4 style={{ fontSize: '1rem', fontWeight: '600', margin: 0, color: '#0f172a' }}>{item.title}</h4>
-                          <span className={item.id === 'lost' || item.id === 'birthday' ? "row-badge lull" : "row-badge active"} style={{border: 'none'}}>{item.badge}</span>
-                        </div>
-                        <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>{item.desc}</p>
-                      </div>
-                      <div className={`custom-toggle ${isActive ? 'active' : ''}`} onClick={() => handleToggleAutomation(item.id, isActive)}></div>
-                    </div>
-                  )
-                })}
-              </div>
+                  {radar.history.length > 0 && (
+                    <>
+                      <h3 className="mk-h">Історія</h3>
+                      <table className="service-table">
+                        <thead><tr><th>Період</th><th>Оплата</th><th style={{ textAlign: 'right' }}>Сума</th></tr></thead>
+                        <tbody>
+                          {radar.history.map((h, i) => (
+                            <tr key={i} className="service-row" style={{ cursor: 'default' }}>
+                              <td>{h.started_at ? `${dayLabel(h.started_at)} → ` : ''}{dayLabel(h.expires_at)}{h.is_active && <span className="mk-tag">зараз</span>}</td>
+                              <td>{h.paid_with === 'points' ? 'Бали' : 'Картка'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 700 }}>{h.paid_with === 'points' ? `${h.points_spent} балів` : money(h.amount_uah || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                </>
+              )
             )}
 
-            {campaignTab === 'mass' && (
-              <div className="static-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                  <div className="select-wrapper">
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.5rem' }}>Аудиторія ({clientsList?.length || 0} клієнтів)</label>
-                    <select className="form-input" value={marketingForm.audience} onChange={e => setMarketingForm({...marketingForm, audience: e.target.value})}>
-                      <option value="all">Вся база клієнтів</option>
-                      <option value="vip">Тільки VIP-клієнти</option>
-                      <option value="lost">Втрачені (більше 30 днів)</option>
-                    </select>
-                  </div>
-                  <div className="select-wrapper">
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569', marginBottom: '0.5rem' }}>Прикріпити промокод</label>
-                    <select className="form-input" value={selectedPromoForMessage} onChange={handlePromoSelect}>
-                      <option value="">Без промокоду</option>
-                      {activePromos.map(p => (
-                        <option key={p.id} value={p.code}>{p.code} (-{p.discount})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.5rem' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Текст повідомлення</label>
-                    <button onClick={handleAIGenerate} disabled={isGenerating} style={{ background: 'transparent', color: '#5C7A61', border: 'none', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem', borderRadius: '8px' }}>
-                      <SvgSparkles size={16} /> {isGenerating ? 'AI працює...' : 'Згенерувати з AI'}
+            {/* ================= РОЗСИЛКИ ================= */}
+            {view === 'campaigns' && (
+              <>
+                <div className="mk-pills">
+                  {AUDIENCES.map(a => (
+                    <button key={a.id} type="button" title={a.hint} className={`category-pill ${audience === a.id ? 'active' : ''}`} onClick={() => { setAudience(a.id); setSent(null); }}>
+                      {a.label} <span className="mk-c">{counts ? counts[a.id] : '…'}</span>
                     </button>
+                  ))}
+                </div>
+
+                <div className="mk-form">
+                  <div className="mk-chips">
+                    <span>Шаблон:</span>
+                    {templates.map(t => (
+                      <button key={t.id} type="button" className="mk-chip" onClick={() => { setSubject(t.subject); setMessage(t.message); setSent(null); }}>{t.label}</button>
+                    ))}
                   </div>
-                  <textarea data-field="mkt-message" className="form-input" value={marketingForm.message} onChange={e => setMarketingForm({...marketingForm, message: e.target.value})} style={{ minHeight: '140px', resize: 'vertical', fontSize: '1rem', lineHeight: '1.5' }} placeholder="Напишіть текст розсилки..." />
+                  <label className="mk-lbl">Тема листа</label>
+                  <input className="clean-input" maxLength={150} placeholder={`Новини від ${business?.name || 'закладу'}`} value={subject} onChange={e => setSubject(e.target.value)} />
+                  <label className="mk-lbl">Текст <small>{message.trim().length}/3000</small></label>
+                  <textarea className="clean-input mk-text" data-field="mk-message" maxLength={3000} placeholder="Що ви хочете сказати клієнтам?" value={message} onChange={e => { setMessage(e.target.value); setSent(null); }} />
+                  <div className="mk-send-row">
+                    <span className="mk-reach">
+                      {counts ? <>Лист отримають: <b>{reachable}</b>{counts.without_email > 0 && <> · без пошти: {counts.without_email}</>}</> : 'Рахуємо аудиторію…'}
+                    </span>
+                    <button type="button" className="clean-btn" onClick={askSend}>Надіслати</button>
+                  </div>
+                  {sent && <div className="mk-ok" role="status">{sent}</div>}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
-                  <button onClick={handleSendMarketing} disabled={isSendingPromo || clientsList?.length === 0} className="primary-btn" style={{ padding: '0.8rem 1.5rem', fontSize: '1rem' }}>
-                    <SvgSend size={18} /> {isSendingPromo ? 'Відправка...' : 'Відправити розсилку'}
-                  </button>
-                </div>
-              </div>
+              </>
             )}
-          </div>
-        )}
 
-        {/* ========================================================= */}
-        {/* 🔴 ВСІ МОДАЛЬНІ ВІКНА */}
-        {/* ========================================================= */}
-
-        {/* Модалка: ПРОМОКОДИ */}
-        {isPromoModalOpen && (
-          <div className="modal-overlay" onClick={() => setIsPromoModalOpen(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0f172a', margin: 0 }}>{editingPromoId ? 'Редагувати промокод' : 'Новий промокод'}</h2>
-                <button onClick={() => setIsPromoModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer' }}><SvgX size={18} /></button>
-              </div>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' }}>Унікальний код</label>
-                <input data-field="promo-code" type="text" className="form-input" style={{ textTransform: 'uppercase', letterSpacing: '1px' }} value={newPromo.code} onChange={e => setNewPromo({...newPromo, code: e.target.value.toUpperCase().replace(/\s+/g, '')})} placeholder="Напр. SUMMER20" />
-              </div>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: '#475569', marginBottom: '0.3rem' }}>Знижка (%)</label>
-                <input data-field="promo-discount" type="number" className="form-input" value={newPromo.discount} onChange={e => setNewPromo({...newPromo, discount: e.target.value})} placeholder="15" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: '#64748b', marginBottom: '0.4rem' }}>Ліміт (разів)</label>
-                  <input type="number" className="form-input" style={{ padding: '0.6rem', fontSize: '0.9rem' }} value={newPromo.maxUses} onChange={e => setNewPromo({...newPromo, maxUses: e.target.value})} placeholder="Без ліміту" />
-                </div>
-                <div style={{ position: 'relative' }} ref={datePickerRef}>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: '#64748b', marginBottom: '0.4rem' }}>Діє до дати</label>
-                  <div onClick={() => setIsPromoDatePickerOpen(!isPromoDatePickerOpen)} style={{ padding: '0.6rem', fontSize: '0.9rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: newPromo.validUntil ? '#0f172a' : '#94a3b8', transition: '0.2s' }}>
-                    {newPromo.validUntil ? new Date(newPromo.validUntil).toLocaleDateString('uk-UA') : 'Оберіть дату'} <SvgCalendarLimit size={16} />
+            {/* ================= ПОСИЛАННЯ ================= */}
+            {view === 'links' && (
+              <div className="mk-links">
+                <section className="mk-link-card">
+                  <div className="mk-link-main">
+                    <h3>Пряме посилання <span className="mk-free">без комісії</span></h3>
+                    <p>Ваш особистий запис. Кладіть його в Instagram, Telegram, візитку — клієнт, що записався звідси, ваш назавжди.</p>
+                    <div className="mk-url">
+                      <input readOnly className="clean-input" value={links?.direct_url || 'Завантаження…'} onFocus={e => e.currentTarget.select()} />
+                      <button type="button" className="clean-btn" disabled={!links} onClick={() => links && copy('direct', links.direct_url)}>{copied === 'direct' ? 'Скопійовано ✓' : 'Копіювати'}</button>
+                    </div>
                   </div>
-                  {isPromoDatePickerOpen && (
-                    <div style={{ position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.25rem', boxShadow: '0 -10px 40px rgba(0,0,0,0.1)', zIndex: 2000, width: '280px', cursor: 'default' }}>
-                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                         <strong style={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: '600', textTransform: 'capitalize' }}>{calendarViewDate.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' })}</strong>
-                         <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))} style={{ border: 'none', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer', color: '#64748b', padding: '4px 8px', fontSize: '1rem' }}>&lt;</button>
-                            <button onClick={() => setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))} style={{ border: 'none', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer', color: '#64748b', padding: '4px 8px', fontSize: '1rem' }}>&gt;</button>
-                         </div>
-                       </div>
-                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px 0', textAlign: 'center' }}>
-                         {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'].map(d => ( <div key={d} style={{ fontSize: '0.7rem', fontWeight: '700', color: '#94a3b8', marginBottom: '8px' }}>{d}</div> ))}
-                         {generateCalendarDays().map((day, idx) => {
-                           const currentDateStr = day ? `${calendarViewDate.getFullYear()}-${String(calendarViewDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
-                           const isSelected = newPromo.validUntil === currentDateStr;
-                           return (
-                             <div key={idx} style={{ height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                               <button onClick={() => day && handleCalendarDayClick(day)} disabled={!day} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: isSelected ? '#0f172a' : 'transparent', color: isSelected ? '#fff' : (day ? '#0f172a' : 'transparent'), fontSize: '0.85rem', fontWeight: isSelected ? '700' : '500', cursor: day ? 'pointer' : 'default', transition: '0.2s' }}>{day || ''}</button>
-                             </div>
-                           )
-                         })}
-                       </div>
-                       <button onClick={() => { setNewPromo({...newPromo, validUntil: ''}); setIsPromoDatePickerOpen(false); }} style={{ width: '100%', marginTop: '1rem', padding: '8px', background: '#fef2f2', border: 'none', borderRadius: '8px', color: '#ef4444', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }}>Без ліміту дати</button>
+                  {links && (
+                    <div className="mk-qr">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={qrUrl} alt="QR-код прямого посилання" width={132} height={132} />
+                      <button type="button" className="mk-link-btn" onClick={() => void downloadQr()}>Завантажити QR</button>
                     </div>
                   )}
-                </div>
-              </div>
-              <button onClick={handleSavePromo} className="primary-btn" style={{ width: '100%', justifyContent: 'center', padding: '0.8rem 1.5rem' }}>{editingPromoId ? 'Зберегти зміни' : 'Створити'}</button>
-            </div>
-          </div>
-        )}
+                </section>
 
-        {/* 🟢 МОДАЛКА: ІНСТРАКЦІЯ INSTAGRAM */}
-        {activeSmmModal === 'instagram' && (
-          <div className="modal-overlay" onClick={() => setActiveSmmModal('none')}>
-            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                  <div style={{ color: '#e1306c' }}><SvgInstagram size={24} /></div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0f172a', margin: 0 }}>Кнопка в Instagram</h2>
-                </div>
-                <button onClick={() => setActiveSmmModal('none')} style={{ background: '#f1f5f9', border: 'none', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer' }}><SvgX size={18} /></button>
-              </div>
-
-              <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: '1.5', marginBottom: '1.5rem' }}>
-                Щоб додати кнопку <b>«Забронювати»</b> у свій профіль, виконайте ці кроки в додатку Instagram:
-              </p>
-
-              <ol style={{ paddingLeft: '1.2rem', margin: 0, fontSize: '0.9rem', color: '#0f172a', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                 <li>Перейдіть у свій профіль і натисніть <b>«Редагувати профіль»</b>.</li>
-                 <li>Знайдіть розділ <b>«Посилання»</b> (Links) і виберіть <b>«Додати зовнішнє посилання»</b>.</li>
-                 <li>Вставте посилання на ваш запис у поле URL:
-                    <div style={{ background: '#f1f5f9', padding: '0.6rem 0.8rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', fontWeight: '500' }}>
-                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{businessLink}</span>
-                       <button onClick={() => copyToClipboard(`https://${businessLink}`)} style={{ background: 'transparent', border: 'none', color: '#6F9273', fontWeight: '700', cursor: 'pointer', padding: 0 }}>Копіювати</button>
+                <section className="mk-link-card plain">
+                  <div className="mk-link-main">
+                    <h3>Посилання вітрини</h3>
+                    <p>Так вас знаходять у каталозі BookEra. За клієнтів, що прийшли звідси, стягується комісія {commission}% із завершеного візиту.</p>
+                    <div className="mk-url">
+                      <input readOnly className="clean-input" value={links?.marketplace_url || 'Завантаження…'} onFocus={e => e.currentTarget.select()} />
+                      <button type="button" className="clean-btn-ghost" disabled={!links} onClick={() => links && copy('market', links.marketplace_url)}>{copied === 'market' ? 'Скопійовано ✓' : 'Копіювати'}</button>
                     </div>
-                 </li>
-                 <li>У полі «Назва» (Title) напишіть: <b>Запис онлайн</b>.</li>
-                 <li>Натисніть «Готово» (✓) у правому верхньому куті.</li>
-              </ol>
-
-              <button onClick={() => setActiveSmmModal('none')} className="primary-btn" style={{ width: '100%', justifyContent: 'center', padding: '0.8rem 1.5rem', marginTop: '2rem' }}>Зрозуміло</button>
-            </div>
+                  </div>
+                </section>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {comingSoonModal.isOpen && (
-          <div className="modal-overlay" onClick={() => setComingSoonModal({ isOpen: false, title: '', desc: '' })}>
-            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#f8fafc', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}><SvgInfo size={24} /></div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.5rem' }}>{comingSoonModal.title}</h2>
-              <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '1.5rem' }}>{comingSoonModal.desc}</p>
-              <button onClick={() => setComingSoonModal({ isOpen: false, title: '', desc: '' })} className="primary-btn" style={{ width: '100%', justifyContent: 'center', padding: '0.8rem 1.5rem' }}>Зрозуміло</button>
-            </div>
+        {/* --- БІЧНА КОЛОНКА --- */}
+        <aside className="mk-side">
+          <div className="custom-scroll mk-side-scroll">
+            {view === 'radar' && radar && (
+              <>
+                <div className="widget-card">
+                  <div className="widget-title">Записи з вітрини</div>
+                  <div className="mk-row"><span>За 30 днів</span><b>{res?.storefront_bookings_30d ?? 0}</b></div>
+                  <div className="mk-row"><span>Попередні 30</span><b className="mute">{res?.storefront_bookings_prev_30d ?? 0}</b></div>
+                  {res && trend !== 0 && <div className={`mk-delta ${trend > 0 ? 'up' : 'down'}`}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)} {trend > 0 ? 'більше' : 'менше'}, ніж раніше</div>}
+                </div>
+                <div className="widget-card">
+                  <div className="widget-title">Бали</div>
+                  <div className="mk-row"><span>На рахунку</span><b>{radar.points_balance}</b></div>
+                  <p className="mk-note">+10 балів за кожного нового клієнта, якого ще не було в жодному закладі BookEra.</p>
+                </div>
+              </>
+            )}
+            {view === 'campaigns' && (
+              <div className="widget-card">
+                <div className="widget-title">Ваша база</div>
+                <div className="mk-row"><span>Усього клієнтів</span><b>{counts?.total_clients ?? '—'}</b></div>
+                <div className="mk-row"><span>З поштою</span><b>{counts ? counts.total_clients - counts.without_email : '—'}</b></div>
+                <div className="mk-row"><span>Без пошти</span><b className="mute">{counts?.without_email ?? '—'}</b></div>
+                <p className="mk-note">Розсилка йде листом на пошту. Номер телефону для неї не потрібен.</p>
+              </div>
+            )}
+            {view === 'links' && (
+              <div className="widget-card">
+                <div className="widget-title">Звідки клієнт</div>
+                <div className="mk-row"><span>Пряме посилання</span><b className="up">0%</b></div>
+                <div className="mk-row"><span>Вітрина BookEra</span><b>{commission}%</b></div>
+                <p className="mk-note">Комісія — із завершеного візиту, не за запис. Розсилки, QR і власні клієнти її не мають.</p>
+              </div>
+            )}
           </div>
-        )}
-
+          <div className="mk-hint">
+            <div className="mk-hint-t">✦ Підказка</div>
+            <b>{hint.t}</b>
+            <p>{hint.x}</p>
+          </div>
+        </aside>
       </div>
-    </>
+
+      {/* --- ПІДТВЕРДЖЕННЯ ОПЛАТИ РАДАРА --- */}
+      {confirm && (
+        <FormModal open onClose={() => setConfirm(null)} width={460} title={radar?.active ? 'Продовжити Радар' : 'Підключити Радар'}
+          subtitle={`${confirm.pkg.days} ${daysWord(confirm.pkg.days)} · ${confirm.method === 'card' ? money(confirm.pkg.price_uah) : `${confirm.pkg.price_points} балів`}`}
+          primary={{ label: confirm.method === 'card' ? `Сплатити ${money(confirm.pkg.price_uah)}` : `Списати ${confirm.pkg.price_points} балів`, onClick: () => void pay(), loading: paying }}>
+          <div className="mk-confirm">
+            <p>{radar?.active
+              ? <>Дні додадуться до поточного пакета: Радар діятиме до <b>{dayLabel(new Date((utc(radar.expires_at)?.getTime() ?? 0) + confirm.pkg.days * 86400000).toISOString())}</b>.</>
+              : <>Радар запрацює одразу й діятиме {confirm.pkg.days} {daysWord(confirm.pkg.days)}.</>}</p>
+            <p className="mk-note">{confirm.method === 'card'
+              ? 'Оплата карткою на захищеній сторінці платіжної системи.'
+              : `Після оплати на рахунку лишиться ${(radar?.points_balance ?? 0) - confirm.pkg.price_points} балів.`}</p>
+          </div>
+        </FormModal>
+      )}
+
+      {/* --- ПІДТВЕРДЖЕННЯ РОЗСИЛКИ --- */}
+      {sendConfirm && (
+        <FormModal open onClose={() => setSendConfirm(false)} width={460} title="Надіслати розсилку?"
+          subtitle={`${AUDIENCES.find(a => a.id === audience)?.label} · ${reachable} ${reachable === 1 ? 'лист' : 'листів'}`}
+          primary={{ label: 'Надіслати', onClick: () => void doSend(), loading: sending }}>
+          <div className="mk-confirm">
+            <div className="mk-preview">
+              <small>Тема</small><b>{subject.trim() || `Новини від ${business?.name}`}</b>
+              <small>Текст</small><p>{message.trim()}</p>
+            </div>
+            <p className="mk-note">Листи йдуть реальним людям, скасувати відправку неможливо.</p>
+          </div>
+        </FormModal>
+      )}
+
+      <style>{`
+        .mk-toolbar { padding: 0.8rem 2rem 0.8rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid #f1f5f9; }
+        .mk-seg { display: inline-flex; background: #f1f5f9; border-radius: 10px; padding: 3px; }
+        .mk-seg button { position: relative; height: 32px; padding: 0 1rem; border: none; background: transparent; border-radius: 8px; font-size: 0.8rem; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; }
+        .mk-seg button:hover { color: #0f172a; }
+        .mk-seg button.on { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        .mk-live { position: absolute; top: 6px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+        .mk-balance { font-size: 0.85rem; color: #64748b; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 999px; padding: 0.35rem 0.9rem; }
+        .mk-balance b { color: #0f172a; font-variant-numeric: tabular-nums; }
+
+        .mk-grid { display: grid; grid-template-columns: 1fr 300px; flex: 1; min-height: 0; overflow: hidden; }
+        .mk-main { overflow-y: auto; border-right: 1px solid #f1f5f9; display: flex; justify-content: center; }
+        .mk-main-inner { width: 100%; max-width: 920px; padding: 1.4rem 1.25rem 2rem; box-sizing: border-box; }
+        .mk-side { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+        .mk-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 1.2rem 1.2rem 0.4rem; }
+        @media (max-width: 1100px) { .mk-grid { grid-template-columns: 1fr; } .mk-side { display: none; } .mk-main { border-right: none; } .mk-toolbar { padding: 0.8rem 1rem; } }
+
+        /* ---- спільні класи: дослівно як у «Клієнтах» і «Складі» ---- */
+        .clean-input { width: 100%; padding: 0.5rem 0.8rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fafafa; font-size: 0.85rem; color: #0f172a; outline: none; transition: all 0.2s; box-sizing: border-box; font-family: inherit; }
+        .clean-input:focus { border-color: #436b49; background: #fff; }
+        .clean-input::placeholder { color: #94a3b8; }
+        .clean-btn { background: #0f172a; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; white-space: nowrap; }
+        .clean-btn:hover { background: #1e293b; }
+        .clean-btn:disabled { opacity: .5; cursor: not-allowed; }
+        .clean-btn-ghost { background: transparent; color: #64748b; border: 1px solid #e2e8f0; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; white-space: nowrap; }
+        .clean-btn-ghost:hover { background: #f8fafc; color: #0f172a; }
+        .category-pill { padding: 0.4rem 1.2rem; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0; }
+        .category-pill:hover { background: #f8fafc; color: #0f172a; }
+        .category-pill.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+        .service-table { width: 100%; border-collapse: separate; border-spacing: 0 4px; text-align: left; }
+        .service-table th { padding: 0.75rem 1rem; color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #f1f5f9; background: #fff; }
+        .service-table td { padding: 0.95rem 1rem; border-bottom: 1px solid #f8fafc; border-top: 1px solid transparent; vertical-align: middle; color: #0f172a; font-size: 0.9rem; }
+        .widget-card { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 1.2rem; margin-bottom: 0.8rem; }
+        .widget-title { font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.6rem; }
+
+        .mk-h { margin: 1.7rem 0 0.8rem; font-size: 0.8rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; }
+        .mk-empty { text-align: center; padding: 4rem 2rem; color: #64748b; display: flex; flex-direction: column; gap: 0.4rem; }
+        .mk-empty b { color: #0f172a; font-size: 1.05rem; }
+        .mk-row { display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0; font-size: 0.8rem; color: #475569; }
+        .mk-row b { color: #0f172a; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+        .mk-row b.mute { color: #64748b; } .mk-row b.up { color: #059669; }
+        .mk-delta { font-size: 0.75rem; font-weight: 600; margin-top: 0.3rem; } .mk-delta.up { color: #059669; } .mk-delta.down { color: #dc2626; }
+        .mk-note { margin: 0.5rem 0 0; font-size: 0.75rem; line-height: 1.45; color: #64748b; }
+
+        /* Радар */
+        .mk-hero { border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.3rem 1.4rem; background: #fff; }
+        .mk-hero.on { background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%); border-color: #ddd6fe; }
+        .mk-hero-top { display: flex; align-items: center; gap: 1rem; }
+        .mk-radar-ico { width: 52px; height: 52px; border-radius: 14px; background: #f1f5f9; color: #64748b; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .mk-hero.on .mk-radar-ico { background: #8b5cf6; color: #fff; }
+        .mk-hero h2 { margin: 0 0 0.15rem; font-size: 1.25rem; font-weight: 800; color: #0f172a; }
+        .mk-hero p { margin: 0; font-size: 0.9rem; color: #64748b; }
+        .mk-hero p b { color: #0f172a; }
+        .mk-pos { display: flex; align-items: center; gap: 1.2rem; margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid rgba(15,23,42,.07); flex-wrap: wrap; }
+        .mk-pos small { display: block; font-size: 0.72rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.15rem; }
+        .mk-pos strong { font-size: 1.5rem; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+        .mk-pos strong span { font-size: 0.85rem; font-weight: 600; color: #64748b; }
+        .mk-pos strong.up, .mk-pos strong.up span { color: #7c3aed; }
+        .mk-pos strong.mute, .mk-pos strong.mute span { color: #94a3b8; }
+        .mk-pos-arrow { color: #cbd5e1; font-size: 1.2rem; }
+
+        .mk-packages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.9rem; }
+        @media (max-width: 760px) { .mk-packages { grid-template-columns: 1fr; } }
+        .mk-pkg { position: relative; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; background: #fff; }
+        .mk-pkg.best { border-color: #c4b5fd; box-shadow: 0 0 0 3px rgba(139,92,246,.08); }
+        .mk-save { position: absolute; top: 0.9rem; right: 0.9rem; font-size: 0.7rem; font-weight: 700; color: #7c3aed; background: #f5f3ff; border-radius: 999px; padding: 0.15rem 0.5rem; }
+        .mk-pkg-days { font-size: 0.85rem; font-weight: 700; color: #64748b; }
+        .mk-pkg-price { font-size: 1.7rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+        .mk-pkg-day { font-size: 0.78rem; color: #94a3b8; margin-bottom: 0.6rem; }
+        .mk-pkg .clean-btn { width: 100%; }
+        .mk-points { width: 100%; padding: 0.55rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #0f172a; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: .2s; }
+        .mk-points:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; }
+        .mk-points:disabled { color: #94a3b8; background: #f8fafc; cursor: not-allowed; }
+
+        .mk-weights { border: 1px solid #f1f5f9; border-radius: 14px; padding: 1.1rem 1.2rem; background: #fff; }
+        .mk-bar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; gap: 2px; margin-bottom: 1rem; }
+        .mk-bar i { display: block; }
+        .mk-weights ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1.4rem; }
+        @media (max-width: 760px) { .mk-weights ul { grid-template-columns: 1fr; } }
+        .mk-weights li { display: grid; grid-template-columns: 10px auto 1fr; column-gap: 0.55rem; align-items: baseline; font-size: 0.85rem; color: #0f172a; }
+        .mk-weights li i { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+        .mk-weights li b { justify-self: end; font-variant-numeric: tabular-nums; }
+        .mk-weights li small { grid-column: 2 / 4; color: #94a3b8; font-size: 0.74rem; }
+        .mk-weights p { margin: 1rem 0 0; font-size: 0.8rem; line-height: 1.5; color: #64748b; }
+        .mk-tag { margin-left: 0.5rem; font-size: 0.68rem; font-weight: 700; color: #059669; background: #ecfdf5; border-radius: 999px; padding: 0.1rem 0.45rem; }
+
+        /* Розсилки */
+        .mk-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.2rem; }
+        .mk-c { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
+        .mk-form { display: flex; flex-direction: column; gap: 0.35rem; }
+        .mk-chips { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; font-size: 0.8rem; color: #94a3b8; }
+        .mk-chip { padding: 0.3rem 0.8rem; border-radius: 999px; border: 1px dashed #cbd5e1; background: #fff; color: #475569; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: .2s; }
+        .mk-chip:hover { border-style: solid; border-color: #94a3b8; color: #0f172a; }
+        .mk-lbl { font-size: 0.78rem; font-weight: 600; color: #475569; margin-top: 0.5rem; display: flex; justify-content: space-between; }
+        .mk-lbl small { color: #94a3b8; font-weight: 500; }
+        .mk-text { min-height: 190px; resize: vertical; line-height: 1.5; }
+        .mk-send-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 0.9rem; flex-wrap: wrap; }
+        .mk-reach { font-size: 0.85rem; color: #64748b; } .mk-reach b { color: #0f172a; }
+        .mk-ok { margin-top: 0.8rem; padding: 0.7rem 1rem; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 0.85rem; font-weight: 600; }
+
+        /* Посилання */
+        .mk-links { display: flex; flex-direction: column; gap: 1rem; }
+        .mk-link-card { display: flex; gap: 1.4rem; align-items: center; justify-content: space-between; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.3rem 1.4rem; background: #fff; flex-wrap: wrap; }
+        .mk-link-card.plain { background: #f8fafc; }
+        .mk-link-main { flex: 1; min-width: 260px; }
+        .mk-link-main h3 { margin: 0 0 0.3rem; font-size: 1.05rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 0.6rem; }
+        .mk-link-main p { margin: 0 0 0.9rem; font-size: 0.85rem; line-height: 1.5; color: #64748b; }
+        .mk-free { font-size: 0.7rem; font-weight: 700; color: #059669; background: #ecfdf5; border-radius: 999px; padding: 0.15rem 0.55rem; }
+        .mk-url { display: flex; gap: 0.5rem; }
+        .mk-qr { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+        .mk-qr img { border-radius: 10px; border: 1px solid #f1f5f9; background: #fff; }
+        .mk-link-btn { border: none; background: none; font-size: 0.78rem; font-weight: 600; color: #436b49; cursor: pointer; }
+
+        /* підказка - закріплена внизу колонки */
+        .mk-hint { flex: none; margin: 0.4rem 1.2rem 1.2rem; background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
+        .mk-hint-t { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
+        .mk-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .mk-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
+
+        .mk-confirm p { margin: 0 0 0.6rem; font-size: 0.9rem; line-height: 1.5; color: #334155; }
+        .mk-preview { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 0.9rem 1rem; margin-bottom: 0.8rem; }
+        .mk-preview small { display: block; font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-top: 0.4rem; }
+        .mk-preview small:first-child { margin-top: 0; }
+        .mk-preview b { font-size: 0.9rem; color: #0f172a; }
+        .mk-preview p { white-space: pre-wrap; margin: 0.1rem 0 0; max-height: 160px; overflow: auto; font-size: 0.85rem; }
+      `}</style>
+    </div>
   );
 }

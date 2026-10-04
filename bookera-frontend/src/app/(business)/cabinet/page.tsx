@@ -803,105 +803,6 @@ export default function BusinessCabinet() {
     }
   };
 
-  const averageTicketPrice = useMemo(() => {
-    if (!services || services.length === 0) return 500;
-    const total = services.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
-    return Math.round(total / services.length);
-  }, [services]);
-
-  const marketingStats = useMemo(() => {
-    const totalIncome = clientsList.reduce((sum, c) => sum + (Number(c.spent) || 0), 0);
-    const marketingIncome = totalIncome * 0.15;
-    const returned = clientsList.filter(c => c.visits > 1).length;
-    const clientsWithPhone = clientsList.filter(c => c.phone && c.phone.length > 5).length;
-    const phonePercentage = clientsList.length > 0 ? Math.round((clientsWithPhone / clientsList.length) * 100) : 0;
-
-    return {
-      income: Math.round(marketingIncome),
-      incomeTrend: 0,
-      returnedClients: returned,
-      returnedTrend: 0,
-      openRate: phonePercentage,
-      openRateTrend: clientsWithPhone
-    };
-  }, [clientsList]);
-
-  const availableSlots = useMemo(() => {
-    const slots = [];
-    const today = new Date();
-
-    const timeToMins = (timeStr: string) => {
-      if (!timeStr) return 0;
-      const [h, m] = timeStr.split(':').map(Number);
-      return h * 60 + m;
-    };
-
-    const minsToTime = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    };
-
-    for (let i = 1; i <= 4; i++) {
-      const targetDate = new Date(today);
-      targetDate.setDate(today.getDate() + i);
-      const dateStr = targetDate.toISOString().split('T')[0];
-      const dayOfWeek = targetDate.getDay() === 0 ? 6 : targetDate.getDay() - 1;
-
-      const shift = shifts[dayOfWeek];
-      if (!shift || !shift.active) continue;
-
-      const dayApps = appointments
-        .filter(a => a.booking_date === dateStr && a.status !== 'blocked')
-        .sort((a, b) => a.start_time.localeCompare(b.start_time));
-
-      const formattedDate = targetDate.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
-      const dayName = targetDate.toLocaleDateString('uk-UA', { weekday: 'long' });
-
-      if (i === 1 && dayApps.length <= 1) {
-        slots.push({
-          id: `urgent-${dateStr}`, date: formattedDate, time: `${shift.start.substring(0,5)} - ${shift.end.substring(0,5)}`,
-          type: 'urgent', title: 'Критичний спад завантаження', insight: 'На завтра майже немає записів. Рекомендуємо запустити розсилку по базі "Втрачені клієнти", щоб швидко заповнити розклад.',
-          suggestedPromo: 15, audience: 'lost'
-        });
-        continue;
-      }
-
-      if (dayApps.length >= 2) {
-        let foundGap = false;
-        for (let j = 0; j < dayApps.length - 1; j++) {
-          const endMins1 = timeToMins(dayApps[j].end_time);
-          const startMins2 = timeToMins(dayApps[j+1].start_time);
-          const gapMins = startMins2 - endMins1;
-
-          if (gapMins >= 60 && gapMins <= 120) {
-            slots.push({
-              id: `gap-${dateStr}-${j}`, date: formattedDate, time: `${minsToTime(endMins1)} - ${minsToTime(startMins2)}`,
-              type: 'gap', title: 'Вікно між записами', insight: `Зʼявилося ідеальне вікно (${gapMins} хв) між щільними записами. Запропонуйте цей час VIP-клієнтам для швидкої послуги.`,
-              suggestedPromo: 0, audience: 'vip'
-            });
-            foundGap = true;
-            break;
-          }
-        }
-        if (foundGap) continue;
-      }
-
-      if (dayApps.length > 0) {
-        const firstAppStart = timeToMins(dayApps[0].start_time);
-        const shiftStart = timeToMins(shift.start);
-        if (firstAppStart >= timeToMins("13:00:00") && shiftStart < timeToMins("11:00:00")) {
-          slots.push({
-            id: `lull-${dateStr}`, date: formattedDate, time: `${shift.start.substring(0,5)} - 13:00`,
-            type: 'lull', title: `Низьке завантаження (${dayName})`, insight: 'Ранкові години абсолютно вільні. Запустіть акцію "Щасливі години", щоб залучити клієнтів з гнучким графіком.',
-            suggestedPromo: 10, audience: 'all'
-          });
-        }
-      }
-    }
-    return slots.slice(0, 3);
-  }, [appointments, shifts]);
-
   if (!loading && subscription && !subscription.has_access && business?.id) {
     return (
       <SubscriptionExpired
@@ -1567,17 +1468,7 @@ export default function BusinessCabinet() {
 
         {activeTab === 'Team' && <TeamTab business={business} team={team} setTeam={setTeam} services={services} userProfile={userProfile} appointments={appointments} setActiveTab={setActiveTab} setFilterMaster={setFilterMaster} globalShifts={shifts} />}
 
-        {activeTab === 'Marketing' && (
-          // @ts-ignore
-          <MarketingTab
-            business={business}
-            clientsList={clientsList}
-            Icons={Icons}
-            marketingStats={marketingStats}
-            availableSlots={availableSlots as any}
-            averageTicketPrice={averageTicketPrice}
-          />
-        )}
+        {activeTab === 'Marketing' && <MarketingTab business={business} />}
 
         {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} initialView={settingsTarget} />}
 

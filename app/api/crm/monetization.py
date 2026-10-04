@@ -1,4 +1,5 @@
 import secrets
+from datetime import timedelta
 from decimal import Decimal
 from typing import List
 
@@ -10,13 +11,15 @@ from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_admin, get_current_user, assert_section
 from app.core.time_utils import utc_now
 from app.core.rate_limit import rate_limit
-from app.models import Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
+from app.models import Appointment, Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
 from app.models import Expense, StaffPayout, User
+from app.services import ranking
 from app.services.monetization import calculate_payout_preview
+from app.services.payments import create_payment_intent
 from app.schemas.monetization import (
     GiftCertificateCreate, GiftCertificateResponse,
     GiftCertificateRedeemRequest, GiftCertificateRedeemResponse,
-    RadarActivateRequest, RadarStatusResponse,
+    RadarActivateRequest, RadarStatusResponse, RadarPackageOut, RadarPositionOut, RadarResultsOut, RadarHistoryItem,
     PointsLedgerItem, CommissionItem, MonetizationSummaryResponse,
     PayoutPreviewResponse, StaffPayoutCreate, StaffPayoutResponse,
     TransferOwnershipRequest,
@@ -24,7 +27,6 @@ from app.schemas.monetization import (
 
 router = APIRouter(tags=["CRM - Monetization"])
 
-POINTS_PER_RADAR_DAY = 15  # скільки балів коштує 1 день буста
 
 
 # === Зведена інформація ===
@@ -111,6 +113,72 @@ async def get_commissions(
 
 # === Radar (платне просування) ===
 
+def _bad_package(days: int) -> HTTPException:
+    allowed = ", ".join(str(p["days"]) for p in ranking.RADAR_PACKAGES)
+    return HTTPException(status_code=400, detail=f"Обери пакет Радара: {allowed} днів")
+
+
+async def _radar_overview(db: AsyncSession, business: Business, **extra) -> RadarStatusResponse:
+    """Усе, що показує сторінка «Радар»: стан, ціни, позиція, результат, історія."""
+    now = utc_now()
+    active_boosts = (await db.execute(
+        select(RadarBoost).where(
+            RadarBoost.business_id == business.id, RadarBoost.status == "active", RadarBoost.expires_at > now
+        ).order_by(RadarBoost.expires_at.desc())
+    )).scalars().all()
+    expires = active_boosts[0].expires_at if active_boosts else None
+    days_left = 0
+    if expires:
+        days_left = max(1, -(-int((expires - now).total_seconds()) // 86400))
+
+    balance = business.points_balance or 0
+    packages = [
+        RadarPackageOut(**p, can_afford_points=balance >= p["price_points"]) for p in ranking.packages_view()
+    ]
+
+    position = RadarPositionOut(**(await ranking.position_in_market(db, business)))
+
+    def storefront_count(start, end):
+        return select(func.count(Appointment.id)).where(
+            Appointment.business_id == business.id,
+            Appointment.source == "marketplace",
+            Appointment.status != "cancelled",
+            Appointment.created_at >= start, Appointment.created_at < end,
+        )
+    d30, d60 = now - timedelta(days=30), now - timedelta(days=60)
+    results = RadarResultsOut(
+        storefront_bookings_30d=(await db.execute(storefront_count(d30, now))).scalar() or 0,
+        storefront_bookings_prev_30d=(await db.execute(storefront_count(d60, d30))).scalar() or 0,
+    )
+
+    boosts = (await db.execute(
+        select(RadarBoost, Payment.amount).outerjoin(Payment, Payment.id == RadarBoost.payment_id)
+        .where(RadarBoost.business_id == business.id)
+        .order_by(RadarBoost.created_at.desc()).limit(10)
+    )).all()
+    history = [
+        RadarHistoryItem(
+            started_at=bo.started_at, expires_at=bo.expires_at, paid_with=bo.paid_with,
+            points_spent=bo.points_spent, amount_uah=float(amount) if amount is not None else None,
+            is_active=bo.status == "active" and bo.expires_at > now,
+        )
+        for bo, amount in boosts
+    ]
+
+    return RadarStatusResponse(
+        active=expires is not None, expires_at=expires, points_balance=balance, days_left=days_left,
+        packages=packages, position=position, results=results, history=history,
+        rules=ranking.ranking_rules(), **extra,
+    )
+
+
+async def _get_business_or_404(db: AsyncSession, business_id: int) -> Business:
+    business = (await db.execute(select(Business).where(Business.id == business_id))).scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+    return business
+
+
 @router.get("/crm/businesses/{business_id}/radar", response_model=RadarStatusResponse)
 async def get_radar_status(
     business_id: int,
@@ -118,20 +186,7 @@ async def get_radar_status(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     await assert_section(db, current_user, business_id, "analytics")
-    biz_res = await db.execute(select(Business).where(Business.id == business_id))
-    business = biz_res.scalars().first()
-
-    radar_res = await db.execute(
-        select(RadarBoost).where(
-            RadarBoost.business_id == business_id, RadarBoost.status == "active", RadarBoost.expires_at > utc_now()
-        ).order_by(RadarBoost.expires_at.desc())
-    )
-    active_radar = radar_res.scalars().first()
-    return RadarStatusResponse(
-        active=active_radar is not None,
-        expires_at=active_radar.expires_at if active_radar else None,
-        points_balance=business.points_balance,
-    )
+    return await _radar_overview(db, await _get_business_or_404(db, business_id))
 
 
 @router.post("/crm/businesses/{business_id}/radar/activate-with-points", response_model=RadarStatusResponse)
@@ -142,47 +197,96 @@ async def activate_radar_with_points(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """
-    Оплата radar балами - працює вже зараз, без платіжного шлюзу.
-    Оплата реальними грошима - окремий ендпоінт /radar/activate-with-payment,
-    коли будуть підключені реквізити WayForPay.
+    Оплата Радара балами - працює без платіжного шлюзу. Гроші чи бали
+    витрачає лише власник / адміністратор.
     """
-    await assert_section(db, current_user, business_id, "analytics")
-    biz_res = await db.execute(select(Business).where(Business.id == business_id))
-    business = biz_res.scalars().first()
+    await assert_business_admin(db, current_user, business_id)
+    package = ranking.package_for_days(payload.days)
+    if not package:
+        raise _bad_package(payload.days)
 
-    cost = payload.days * POINTS_PER_RADAR_DAY
-    if business.points_balance < cost:
+    # FOR UPDATE: два одночасні натиски не спишуть бали двічі з одного балансу
+    business = (await db.execute(
+        select(Business).where(Business.id == business_id).with_for_update()
+    )).scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+
+    cost = package["price_points"]
+    if (business.points_balance or 0) < cost:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Недостатньо балів: потрібно {cost}, є {business.points_balance}",
+            detail=f"Недостатньо балів: потрібно {cost}, є {business.points_balance or 0}",
         )
 
     business.points_balance -= cost
     db.add(PointsLedgerEntry(
         business_id=business_id, amount=-cost, reason="radar_purchase", balance_after=business.points_balance,
     ))
-
-    # Якщо вже є активний буст - продовжуємо від його кінця, а не від "зараз"
-    existing_res = await db.execute(
-        select(RadarBoost).where(
-            RadarBoost.business_id == business_id, RadarBoost.status == "active", RadarBoost.expires_at > utc_now()
-        ).order_by(RadarBoost.expires_at.desc())
-    )
-    existing = existing_res.scalars().first()
-    from datetime import timedelta
-    start_from = existing.expires_at if existing else utc_now()
-
-    boost = RadarBoost(
-        business_id=business_id,
-        expires_at=start_from + timedelta(days=payload.days),
-        paid_with="points",
-        points_spent=cost,
-        status="active",
-    )
-    db.add(boost)
+    await ranking.grant_radar(db, business_id, package["days"], paid_with="points", points_spent=cost)
     await db.commit()
+    await db.refresh(business)
+    return await _radar_overview(db, business)
 
-    return RadarStatusResponse(active=True, expires_at=boost.expires_at, points_balance=business.points_balance)
+
+@router.post("/crm/businesses/{business_id}/radar/checkout", response_model=RadarStatusResponse)
+async def checkout_radar(
+    business_id: int,
+    payload: RadarActivateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Оплата Радара карткою. Без ключів WayForPay оплата тестова й дні
+    нараховуються одразу (так само, як підписка й подарункові картки);
+    зі справжніми - повертаємо підписану форму, а пакет активує
+    підтвердження від платіжної системи.
+    """
+    await assert_business_admin(db, current_user, business_id)
+    package = ranking.package_for_days(payload.days)
+    if not package:
+        raise _bad_package(payload.days)
+    business = await _get_business_or_404(db, business_id)
+
+    amount = Decimal(package["price_uah"])
+    order_id = f"rb-{business_id}-{package['days']}-{secrets.token_hex(6)}"
+    intent = create_payment_intent(
+        amount, order_id, f"Радар BookEra, {package['days']} днів — {business.name}",
+        return_url="/cabinet",
+    )
+    payment = Payment(
+        business_id=business_id, purpose="radar_boost", amount=amount,
+        provider=intent.provider, provider_ref=order_id, status="pending",
+    )
+    db.add(payment)
+    await db.flush()
+    activated = False
+    if intent.status == "completed":
+        await complete_radar_payment(db, payment)
+        activated = True
+    await db.commit()
+    await db.refresh(business)
+    return await _radar_overview(db, business, activated=activated, checkout=intent.checkout, checkout_url=intent.checkout_url)
+
+
+async def complete_radar_payment(db: AsyncSession, payment: Payment) -> None:
+    """
+    Оплату Радара підтверджено: фіксуємо платіж і нараховуємо дні.
+    Кількість днів - з номера замовлення (rb-<заклад>-<дні>-<код>), який ми
+    самі склали; повторне підтвердження нічого не нараховує вдруге.
+    """
+    if payment.status == "completed":
+        return
+    try:
+        days = int(str(payment.provider_ref).split("-")[2])
+    except (IndexError, ValueError):
+        days = 0
+    package = ranking.package_for_days(days)
+    if not package:
+        raise HTTPException(status_code=400, detail="Невідомий пакет Радара")
+    payment.status = "completed"
+    payment.completed_at = utc_now()
+    await ranking.grant_radar(db, payment.business_id, package["days"], paid_with="payment", payment_id=payment.id)
 
 
 # === Подарункові сертифікати ===

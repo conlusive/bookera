@@ -9,7 +9,8 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, get_current_user
 from app.core.time_utils import utc_now
-from app.models import Business, User, RoleEnum, Appointment, Service, RadarBoost, BusinessHours, Favorite
+from app.models import Business, User, RoleEnum, Appointment, Service, BusinessHours, Favorite
+from app.services import ranking
 from app.schemas.business import BusinessOut, WorkingDayOut
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
@@ -29,40 +30,56 @@ def parse_time_period(period: Optional[str]):
     return time(8, 0), time(23, 0)
 
 
+@router.get("/ranking-rules")
+async def get_ranking_rules():
+    """
+    Правила позиції у видачі - ті самі числа, за якими сервер рахує
+    rank_score. Вітрина бере ваги звідси, а не тримає власних копій.
+    """
+    return ranking.ranking_rules()
+
+
 @router.get("/", response_model=List[BusinessOut])
 async def list_businesses(
     limit: int = Query(50, ge=1, le=200, description="Максимум записів (за замовчуванням 50, ліміт 200)"),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
-    # Бізнеси з активним radar-бустом підіймаються вище (аналог "піднято" на OLX) -
-    # підзапит перевіряє наявність не протермінованого активного буста.
-    radar_subq = (
-        select(RadarBoost.business_id)
-        .where(RadarBoost.status == "active", RadarBoost.expires_at > utc_now())
-        .subquery()
+    # Порядок - за позицією: якість (рейтинг із поправкою на відгуки) плюс
+    # бонус, поки активний Радар. Було «Радар вище, решта за id»: заклад із
+    # оплаченим пакетом ставав першим навіть із жахливим рейтингом, а решта
+    # йшла в довільному порядку.
+    eligible = (
+        Business.is_active == True,
+        # Заклади без чинної підписки в каталозі не показуємо: вони
+        # однаково не приймуть запис, і клієнт лише марно згає час.
+        Business.subscription_plan.in_(["trial", "active"]),
     )
+    rows = (await db.execute(
+        select(Business.id, Business.rating, Business.reviews_count).where(*eligible)
+    )).all()
+    boosted = await ranking.active_radar_ids(db, [r.id for r in rows])
+    scores = {r.id: ranking.rank_score(r.rating, r.reviews_count, r.id in boosted) for r in rows}
+    page_ids = [i for i, _ in sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))][offset:offset + limit]
+    if not page_ids:
+        return []
+
     stmt = (
         select(Business)
-        .where(
-            Business.is_active == True,
-            # Заклади без чинної підписки в каталозі не показуємо: вони
-            # однаково не приймуть запис, і клієнт лише марно згає час.
-            Business.subscription_plan.in_(["trial", "active"]),
-        )
+        .where(Business.id.in_(page_ids))
         # Графік потрібен у списку: картка показує, відчинено зараз
         # чи ні, і без нього писала б «Відкрито» о третій ночі.
         .options(selectinload(Business.services), selectinload(Business.hours))
-        .order_by(Business.id.in_(select(radar_subq.c.business_id)).desc(), Business.id)
-        .limit(limit)
-        .offset(offset)
     )
-    res = await db.execute(stmt)
-    businesses = res.scalars().all()
+    by_id = {b.id: b for b in (await db.execute(stmt)).scalars().all()}
+    businesses = [by_id[i] for i in page_ids if i in by_id]
 
     out = []
     for b in businesses:
         response = BusinessOut.model_validate(b, from_attributes=True)
+        response.is_radar_active = b.id in boosted
+        response.rank_score = scores[b.id]
+        response.radar_bonus_km = ranking.RADAR_BONUS_KM if b.id in boosted else 0
         response.working_hours = [
             WorkingDayOut(
                 weekday=h.weekday,
@@ -205,6 +222,14 @@ async def search_available_businesses(
         if has_free_slot:
             available_businesses.append(biz)
 
+    # Позначка Радара й якість - для картки та сортування на вітрині.
+    boosted = await ranking.active_radar_ids(db, [b.id for b in available_businesses])
+    for biz in available_businesses:
+        radar = biz.id in boosted
+        biz.is_radar_active = radar
+        biz.rank_score = ranking.rank_score(biz.rating, biz.reviews_count, radar)
+        biz.radar_bonus_km = ranking.RADAR_BONUS_KM if radar else 0
+
     # Сортування за відстанню, якщо відома точка людини.
     #
     # Формула гаверсинуса - точна для сфери. Спрощені варіанти
@@ -260,7 +285,9 @@ async def search_available_businesses(
             # людина має розуміти, наскільки числу можна вірити.
             biz.distance_is_road = biz.id in road_km
 
-        available_businesses.sort(key=distance_km)
+        # Заклад із Радаром рахується ближчим на RADAR_BONUS_KM - так само, як
+        # на вітрині у «Найближчих» (див. app/services/ranking.py).
+        available_businesses.sort(key=lambda b: distance_km(b) - b.radar_bonus_km)
 
     return available_businesses
 
@@ -311,6 +338,10 @@ async def get_business_by_slug_or_id(
         )
         for h in hours_res.scalars().all()
     ]
+    radar = business.id in await ranking.active_radar_ids(db, [business.id])
+    response.is_radar_active = radar
+    response.rank_score = ranking.rank_score(business.rating, business.reviews_count, radar)
+    response.radar_bonus_km = ranking.RADAR_BONUS_KM if radar else 0
     return response
 
 # === Улюблені заклади клієнта ===

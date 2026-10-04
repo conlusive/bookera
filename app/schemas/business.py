@@ -182,6 +182,14 @@ class BusinessOut(BusinessBase):
     rating: Optional[Decimal] = Decimal("5.0")
     reviews_count: Optional[int] = 0
     is_active: bool = True
+    # Просування «Радар». is_radar_active - чи чинний пакет (на картці
+    # з'являється позначка «Реклама»). rank_score - якість + Радар за
+    # правилами app/services/ranking.py; вітрина додає до нього відстань
+    # і вільні вікна. radar_bonus_km - на скільки кілометрів заклад
+    # «ближчий» у сортуванні за відстанню (0 без Радара).
+    is_radar_active: bool = False
+    rank_score: Optional[float] = None
+    radar_bonus_km: float = 0
     services: Optional[List[ServiceOut]] = []
     accent_color: Optional[str] = None
     layout_config: Optional[dict] = None

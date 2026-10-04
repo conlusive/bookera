@@ -45,23 +45,16 @@ async def award_points_for_new_client(
 async def charge_commission_if_applicable(db: AsyncSession, appointment: Appointment, business: Business) -> None:
     """
     Викликається, коли запис переходить у статус 'completed'. Комісія
-    нараховується, якщо клієнт прийшов з маркетплейсу АБО поки в закладу
-    активний radar-буст (тоді комісія йде з усіх записів, це і є ціна буста).
+    нараховується лише за клієнта, який прийшов з вітрини Bookera
+    (source == 'marketplace'). Власні клієнти - за прямим посиланням,
+    з розсилки, внесені вручну - безкоштовні завжди.
+
+    Радар - це окрема плата за показ, а не друга комісія: раніше, поки
+    пакет був активний, 10% стягувалось з УСІХ візитів закладу, тобто
+    власник платив двічі й за власних клієнтів теж.
     """
-    from app.models import RadarBoost  # локальний імпорт, щоб уникнути циклу
-
-    radar_res = await db.execute(
-        select(RadarBoost).where(
-            RadarBoost.business_id == business.id,
-            RadarBoost.status == "active",
-            RadarBoost.expires_at > utc_now(),
-        )
-    )
-    radar_active = radar_res.scalars().first() is not None
-
-    is_marketplace = appointment.source == "marketplace"
-    if not is_marketplace and not radar_active:
-        return  # прямий клієнт, radar не активний - комісії немає
+    if appointment.source != "marketplace":
+        return  # не з вітрини - комісії немає
 
     already = await db.execute(
         select(ReferralCommission.id).where(ReferralCommission.appointment_id == appointment.id)
@@ -81,7 +74,7 @@ async def charge_commission_if_applicable(db: AsyncSession, appointment: Appoint
             appointment_id=appointment.id,
             amount=amount,
             rate_applied=rate,
-            reason="radar_active" if radar_active else "marketplace_source",
+            reason="marketplace_source",
         )
     )
     logger.info(f"Нараховано комісію {amount} UAH business_id={business.id} appointment_id={appointment.id}")

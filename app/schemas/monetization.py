@@ -40,13 +40,56 @@ class GiftCertificateRedeemResponse(BaseModel):
 
 
 class RadarActivateRequest(BaseModel):
+    # Лише з пакетів ranking.RADAR_PACKAGES (7 / 14 / 30). Перевіряє обробник.
     days: int = Field(7, ge=1, le=90)
+
+
+class RadarPackageOut(BaseModel):
+    days: int
+    price_uah: int
+    price_points: int
+    per_day_uah: float
+    discount_percent: int
+    can_afford_points: bool
+
+
+class RadarPositionOut(BaseModel):
+    total: int
+    position: int
+    position_without_radar: int
+    position_with_radar: int
+
+
+class RadarResultsOut(BaseModel):
+    # Записи з вітрини Bookera (не з прямого посилання) за останні 30 днів
+    # і за попередні 30 - щоб було з чим порівняти.
+    storefront_bookings_30d: int
+    storefront_bookings_prev_30d: int
+
+
+class RadarHistoryItem(BaseModel):
+    started_at: Optional[datetime] = None
+    expires_at: datetime
+    paid_with: str
+    points_spent: Optional[int] = None
+    amount_uah: Optional[float] = None
+    is_active: bool
 
 
 class RadarStatusResponse(BaseModel):
     active: bool
     expires_at: Optional[datetime] = None
     points_balance: int
+    days_left: int = 0
+    packages: List[RadarPackageOut] = []
+    position: Optional[RadarPositionOut] = None
+    results: Optional[RadarResultsOut] = None
+    history: List[RadarHistoryItem] = []
+    rules: Optional[dict] = None
+    # Лише для відповіді на оплату карткою
+    activated: Optional[bool] = None
+    checkout: Optional[dict] = None
+    checkout_url: Optional[str] = None
 
 
 class PointsLedgerItem(BaseModel):

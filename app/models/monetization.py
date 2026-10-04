@@ -47,7 +47,7 @@ class ReferralCommission(Base):
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=False, unique=True)
     amount = Column(Numeric(10, 2), nullable=False)
     rate_applied = Column(Numeric(5, 2), nullable=False)
-    reason = Column(String, nullable=False)  # 'marketplace_source' або 'radar_active'
+    reason = Column(String, nullable=False)  # завжди 'marketplace_source': комісія лише за клієнтів з вітрини
     status = Column(String, default="pending", nullable=False)  # pending, invoiced, paid, waived
     created_at = Column(DateTime, default=utc_now)
 

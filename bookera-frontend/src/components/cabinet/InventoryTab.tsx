@@ -51,7 +51,8 @@ export default function InventoryTab({ business }: any) {
   const [period, setPeriod] = useState<Period>('month');
   const [anchor, setAnchor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [catFilter, setCatFilter] = useState<string | null>(null);
-  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'low' | 'out'>('all');
+  const [stockSort, setStockSort] = useState<{ key: 'name' | 'qty' | 'price' | 'value'; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' });
 
   // Вікна
   const [expModal, setExpModal] = useState<any | null>(null);     // {} - нова, {...} - зміна
@@ -148,17 +149,31 @@ export default function InventoryTab({ business }: any) {
   const isOut = (i: any) => num(i.quantity) <= 0;
   const stockValue = items.reduce((s, i) => s + Math.max(0, num(i.quantity)) * num(i.cost_per_unit), 0);
   const toOrder = items.filter(i => isOut(i) || isLow(i)).sort((a, b) => num(a.quantity) - num(b.quantity));
+  const sortStock = (key: 'name' | 'qty' | 'price' | 'value') =>
+    setStockSort(prev => prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' });
+  const stockOf = (i: any, key: string) => key === 'qty' ? num(i.quantity)
+    : key === 'price' ? num(i.cost_per_unit)
+    : Math.max(0, num(i.quantity)) * num(i.cost_per_unit);
   const shownItems = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const sign = stockSort.dir === 'asc' ? 1 : -1;
     return items
-      .filter(i => stockFilter === 'all' || (stockFilter === 'out' ? isOut(i) : isLow(i)))
+      .filter(i => stockFilter === 'all' || (stockFilter === 'in' ? !isOut(i) && !isLow(i) : stockFilter === 'out' ? isOut(i) : isLow(i)))
       .filter(i => !q || String(i.name).toLowerCase().includes(q))
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'uk'));
+      .sort((a, b) => stockSort.key === 'name'
+        ? sign * String(a.name).localeCompare(String(b.name), 'uk')
+        : sign * (stockOf(a, stockSort.key) - stockOf(b, stockSort.key)) || String(a.name).localeCompare(String(b.name), 'uk'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, stockFilter, search]);
+  }, [items, stockFilter, search, stockSort]);
+  const SortIcon = ({ k }: { k: string }) => stockSort.key !== k
+    ? <span style={{ opacity: 0.3, marginLeft: '4px' }}>↕</span>
+    : <span style={{ color: '#0f172a', marginLeft: '4px', fontWeight: 'bold' }}>{stockSort.dir === 'asc' ? '↑' : '↓'}</span>;
 
   const saveItem = async (f: any) => {
     if (!String(f.name || '').trim()) return notify('Вкажіть назву товару', 'error', { field: 'inv-name' });
+    const negative = [['inv-qty', f.quantity], ['inv-cost', f.cost_per_unit], ['inv-min', f.low_stock_threshold]]
+      .find(([, v]) => num(String(v ?? '').replace(',', '.')) < 0);
+    if (negative) return notify('Значення не може бути від’ємним', 'error', { field: negative[0] as string });
     setSaving(true);
     try {
       const t = await getAuthToken();
@@ -269,7 +284,7 @@ export default function InventoryTab({ business }: any) {
             ))}
           </>
         ) : (
-          ([['all', 'Усі', items.length], ['low', 'Закінчуються', items.filter(isLow).length], ['out', 'Немає', items.filter(isOut).length]] as const).map(([id, label, n]) => (
+          ([['all', 'Усі', items.length], ['in', 'В наявності', items.filter(i => !isOut(i) && !isLow(i)).length], ['low', 'Закінчуються', items.filter(isLow).length], ['out', 'Немає', items.filter(isOut).length]] as const).map(([id, label, n]) => (
             <button key={id} type="button" className={`category-pill ${stockFilter === id ? 'active' : ''}`} onClick={() => setStockFilter(id)}>
               {label} <span className="iv-c">{n}</span>
             </button>
@@ -312,27 +327,27 @@ export default function InventoryTab({ business }: any) {
               shownItems.length === 0 ? (
                 <div className="iv-empty"><b>{items.length ? 'Нічого не знайдено' : 'Склад порожній'}</b><span>{items.length ? 'Змініть запит чи фільтр.' : 'Додайте матеріали — і привʼяжіть їх до послуг, щоб списувались самі.'}</span></div>
               ) : (
-                <table className="service-table">
+                <table className="service-table iv-stock">
                   <thead><tr>
-                    <th>Товар</th>
-                    <th style={{ textAlign: 'right' }}>Залишок</th>
+                    <th className="sortable" onClick={() => sortStock('name')}>Товар <SortIcon k="name" /></th>
+                    <th className="sortable" onClick={() => sortStock('qty')} style={{ textAlign: 'right' }}>Залишок <SortIcon k="qty" /></th>
                     <th style={{ textAlign: 'right' }}>Мін. запас <HelpTip>Коли залишок опуститься до цього числа, товар зʼявиться в «Потрібно замовити».</HelpTip></th>
-                    <th style={{ textAlign: 'right' }}>Ціна за од.</th>
-                    <th style={{ textAlign: 'right' }}>Вартість</th>
+                    <th className="iv-col-price sortable" onClick={() => sortStock('price')} style={{ textAlign: 'right' }}>Ціна за од. <SortIcon k="price" /></th>
+                    <th className="sortable" onClick={() => sortStock('value')} style={{ textAlign: 'right' }}>Вартість <SortIcon k="value" /></th>
                     <th aria-label="Дії" style={{ width: 1 }} />
                   </tr></thead>
                   <tbody>
                     {shownItems.map(i => (
                       <tr key={i.id} className="service-row" onClick={() => void openHistory(i)}>
-                        <td><b className="iv-name">{i.name}</b></td>
+                        <td><b className="iv-name" title={i.name}>{i.name}</b></td>
                         <td style={{ textAlign: 'right' }}>
                           <span className={`iv-qty ${isOut(i) ? 'out' : isLow(i) ? 'low' : ''}`}>{fmtQty(num(i.quantity))} {i.unit}</span>
                         </td>
                         <td style={{ textAlign: 'right', color: '#64748b' }}>{i.low_stock_threshold != null ? `${fmtQty(num(i.low_stock_threshold))} ${i.unit}` : '—'}</td>
-                        <td style={{ textAlign: 'right', color: '#64748b' }}>{num(i.cost_per_unit) ? money(num(i.cost_per_unit)) : '—'}</td>
+                        <td className="iv-col-price" style={{ textAlign: 'right', color: '#64748b' }}>{num(i.cost_per_unit) ? money(num(i.cost_per_unit)) : '—'}</td>
                         <td style={{ textAlign: 'right', fontWeight: 700 }}>{money(Math.max(0, num(i.quantity)) * num(i.cost_per_unit))}</td>
                         <td className="iv-acts" onClick={ev => ev.stopPropagation()}>
-                          <button type="button" className="clean-btn-ghost" onClick={() => setRestock({ item: i, quantity: '', cost_per_unit: num(i.cost_per_unit) ? String(num(i.cost_per_unit)) : '', add_expense: true })}>+ Прихід</button>
+                          <button type="button" className="iv-rowbtn" onClick={() => setRestock({ item: i, quantity: '', cost_per_unit: num(i.cost_per_unit) ? String(num(i.cost_per_unit)) : '', add_expense: true })}>+ Прихід</button>
                         </td>
                       </tr>
                     ))}
@@ -344,7 +359,8 @@ export default function InventoryTab({ business }: any) {
         </div>
 
         {/* --- БІЧНА КОЛОНКА --- */}
-        <aside className="custom-scroll iv-side">
+        <aside className="iv-side">
+          <div className="custom-scroll iv-side-scroll">
           {mode === 'expenses' ? (
             <>
               <div className="widget-card">
@@ -401,6 +417,7 @@ export default function InventoryTab({ business }: any) {
               )}
             </>
           )}
+          </div>
           <div className="iv-hint">
             <div className="iv-hint-t">✦ Підказка</div>
             <b>{hint.t}</b>
@@ -470,16 +487,16 @@ export default function InventoryTab({ business }: any) {
             </Field>
             <div className="fm-row">
               <Field label={itemModal.id ? 'Фактичний залишок' : 'Скільки є зараз'} hint={itemModal.id ? 'Змінюйте лише після перерахунку — у історії буде «Інвентаризація».' : undefined}>
-                <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="0" value={itemModal.quantity}
+                <span className="fm-affix"><input className="fm-input" data-field="inv-qty" inputMode="decimal" placeholder="0" value={itemModal.quantity}
                   onChange={e => setItemModal({ ...itemModal, quantity: e.target.value.replace(/[^\d.,-]/g, '').slice(0, 10) })} /><span>{itemModal.unit}</span></span>
               </Field>
               <Field label="Ціна за одиницю">
-                <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="0" value={itemModal.cost_per_unit}
+                <span className="fm-affix"><input className="fm-input" data-field="inv-cost" inputMode="decimal" placeholder="0" value={itemModal.cost_per_unit}
                   onChange={e => setItemModal({ ...itemModal, cost_per_unit: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>₴</span></span>
               </Field>
             </div>
             <Field label="Мінімальний запас" hint="Коли залишиться стільки чи менше — товар зʼявиться в «Потрібно замовити». Порожньо — не стежити.">
-              <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="напр., 5" value={itemModal.low_stock_threshold ?? ''}
+              <span className="fm-affix"><input className="fm-input" data-field="inv-min" inputMode="decimal" placeholder="напр., 5" value={itemModal.low_stock_threshold ?? ''}
                 onChange={e => setItemModal({ ...itemModal, low_stock_threshold: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>{itemModal.unit}</span></span>
             </Field>
           </FormSection>
@@ -491,23 +508,34 @@ export default function InventoryTab({ business }: any) {
         <FormModal open onClose={() => setRestock(null)} title="Прихід товару" subtitle={`${restock.item.name} · зараз ${fmtQty(num(restock.item.quantity))} ${restock.item.unit}`} width={480}
           primary={{ label: 'Записати прихід', onClick: () => void saveRestock(restock), loading: saving }}>
           <FormSection>
+            <p className="iv-rs-note">Купили або отримали товар? Вкажіть, скільки прийшло, — кількість додасться до залишку. Ціну можна оновити, якщо вона змінилась.</p>
             <div className="fm-row">
               <Field label="Скільки прийшло" required>
                 <span className="fm-affix"><input className="fm-input" data-field="rs-qty" inputMode="decimal" autoFocus placeholder="0" value={restock.quantity}
                   onChange={e => setRestock({ ...restock, quantity: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>{restock.item.unit}</span></span>
               </Field>
-              <Field label="Ціна за одиницю">
+              <Field label={`Ціна за 1 ${restock.item.unit}`}>
                 <span className="fm-affix"><input className="fm-input" inputMode="decimal" placeholder="0" value={restock.cost_per_unit}
                   onChange={e => setRestock({ ...restock, cost_per_unit: e.target.value.replace(/[^\d.,]/g, '').slice(0, 10) })} /><span>₴</span></span>
               </Field>
             </div>
             {(() => {
-              const sum = num(String(restock.quantity).replace(',', '.')) * num(String(restock.cost_per_unit).replace(',', '.'));
+              const qty = num(String(restock.quantity).replace(',', '.'));
+              const sum = qty * num(String(restock.cost_per_unit).replace(',', '.'));
+              const now = num(restock.item.quantity);
               return (
+                <>
+                {qty > 0 && (
+                  <div className="iv-rs-result">
+                    Залишок: <b>{fmtQty(now)}</b> → <b>{fmtQty(now + qty)} {restock.item.unit}</b>
+                  </div>
+                )}
                 <label className="iv-check">
                   <input type="checkbox" className="fm-check" checked={restock.add_expense} onChange={e => setRestock({ ...restock, add_expense: e.target.checked })} />
                   <span>Записати у витрати «Матеріали»{sum > 0 ? ` — ${money(sum)}` : ''}</span>
                 </label>
+                <p className="iv-rs-note small">{restock.add_expense ? 'Гроші за закупівлю з’являться у вкладці «Витрати».' : 'У витрати нічого не запишеться — зміниться лише кількість на складі.'}</p>
+                </>
               );
             })()}
           </FormSection>
@@ -542,13 +570,14 @@ export default function InventoryTab({ business }: any) {
         .iv-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
         .iv-left, .iv-right { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
         .iv-seg { display: inline-flex; background: #f1f5f9; border-radius: 10px; padding: 3px; }
-        .iv-seg button { position: relative; height: 32px; padding: 0 0.95rem; border: none; background: transparent; border-radius: 8px; font-family: inherit; font-size: 0.85rem; font-weight: 500; color: #475569; cursor: pointer; }
-        .iv-seg button.on { background: #fff; color: #0f172a; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .iv-seg button { position: relative; height: 32px; padding: 0 0.95rem; border: none; background: transparent; border-radius: 8px; font-size: 0.8rem; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; }
+        .iv-seg button:hover { color: #0f172a; }
+        .iv-seg button.on { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
         .iv-seg.small button { height: 28px; padding: 0 0.7rem; font-size: 0.8rem; }
         .iv-seg.wide { display: flex; width: 100%; }
         .iv-seg.wide button { flex: 1; height: 36px; }
         .iv-dot { position: absolute; top: 5px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; }
-        .iv-search { position: relative; width: 260px; max-width: 100%; }
+        .iv-search { position: relative; width: 280px; max-width: 100%; }
         .iv-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
         .iv-search .clean-input { padding-left: 2.2rem; }
         .iv-period { display: flex; align-items: center; gap: 0.35rem; }
@@ -559,29 +588,69 @@ export default function InventoryTab({ business }: any) {
         .iv-c { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
         .iv-sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.4rem; vertical-align: 1px; }
 
-        .clean-input { width: 100%; box-sizing: border-box; height: 36px; padding: 0 0.8rem; border-radius: 10px; border: 1px solid #e2e8f0; font-family: inherit; font-size: 0.875rem; outline: none; transition: border-color .15s; background: #fff; }
-        .clean-input:focus { border-color: #0f172a; }
-        .clean-btn { height: 36px; padding: 0 1rem; border-radius: 10px; border: none; background: #0f172a; color: #fff; font-family: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .clean-input { width: 100%; padding: 0.5rem 0.8rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fafafa; font-size: 0.85rem; color: #0f172a; outline: none; transition: all 0.2s; }
+        .clean-input:focus { border-color: #436b49; background: #fff; }
+        .clean-btn { background: #0f172a; color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
         .clean-btn:hover { background: #1e293b; }
-        .clean-btn-ghost { height: 32px; padding: 0 0.8rem; border-radius: 9px; border: 1px solid #e2e8f0; background: #fff; color: #0f172a; font-family: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
-        .clean-btn-ghost:hover { background: #f8fafc; }
-        .category-pill { height: 32px; padding: 0 0.9rem; border-radius: 999px; border: 1px solid #e2e8f0; background: #fff; font-family: inherit; font-size: 0.82rem; color: #334155; cursor: pointer; white-space: nowrap; transition: all .15s; }
-        .category-pill:hover { border-color: #cbd5e1; }
-        .category-pill.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+        .clean-btn-ghost { background: transparent; color: #64748b; border: 1px solid #e2e8f0; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+        .clean-btn-ghost:hover { background: #f8fafc; color: #0f172a; }
+        .category-pill { padding: 0.4rem 1.2rem; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; color: #64748b; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0; }
+        .category-pill:hover { background: #f8fafc; color: #0f172a; }
+        .category-pill.active { background: #0f172a; color: #fff; border-color: #0f172a; }
 
         .iv-grid { display: grid; grid-template-columns: 1fr 300px; flex: 1; min-height: 0; overflow: hidden; }
         .iv-main { overflow-y: auto; border-right: 1px solid #f1f5f9; display: flex; justify-content: center; }
         .iv-main-inner { width: 100%; max-width: 1200px; padding: 0 1.25rem 1rem; box-sizing: border-box; }
-        .iv-side { padding: 1.2rem; overflow-y: auto; }
+        .iv-side { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+        .iv-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 1.2rem 1.2rem 0.4rem; }
+        .iv-side .iv-hint { flex: none; margin: 0.4rem 1.2rem 1.2rem; }
         @media (max-width: 1100px) { .iv-grid { grid-template-columns: 1fr; } .iv-side { display: none; } .iv-main { border-right: none; } }
 
-        .service-table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
-        .service-table th { text-align: left; font-size: 0.75rem; font-weight: 600; color: #64748b; padding: 0.75rem 1rem 0.25rem; position: sticky; top: 0; background: #fff; z-index: 1; }
-        .service-table td { padding: 0.85rem 1rem; font-size: 0.875rem; color: #0f172a; background: #fff; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; }
-        .service-table tr.service-row { cursor: pointer; }
+        .service-table { 
+          width: 100%; 
+          border-collapse: separate; 
+          border-spacing: 0 4px; 
+          text-align: left; 
+        }
+        .service-table th { 
+          padding: 0.75rem 1rem; 
+          color: #94a3b8; 
+          font-size: 0.7rem; 
+          font-weight: 700; 
+          text-transform: uppercase; 
+          letter-spacing: 0.05em; 
+          border-bottom: 1px solid #f1f5f9; 
+          position: sticky; 
+          top: 0; 
+          background: #fff; 
+          z-index: 10; 
+          transition: color 0.2s; 
+        }
+        .service-table th.sortable:hover { color: #0f172a; cursor: pointer; }
+        
+        .service-table td { 
+          padding: 0.95rem 1rem; 
+          border-bottom: 1px solid #f8fafc; 
+          border-top: 1px solid transparent;
+          vertical-align: middle; 
+          transition: background 0.15s ease; 
+        }
+        .service-table tr { cursor: pointer; transition: 0.15s; }
         .service-table tr.service-row:hover td { background: #f8fafc; }
-        .service-table tr.service-row td:first-child { border-left: 1px solid #f1f5f9; border-radius: 12px 0 0 12px; }
-        .service-table tr.service-row td:last-child { border-right: 1px solid #f1f5f9; border-radius: 0 12px 12px 0; }
+
+        /* Плавні заокруглення лівого та правого краю рядка */
+        .service-table tr.service-row td:first-child {
+          border-top-left-radius: 12px;
+          border-bottom-left-radius: 12px;
+          padding-left: 1.25rem;
+        }
+        .service-table tr.service-row td:last-child {
+          border-top-right-radius: 12px;
+          border-bottom-right-radius: 12px;
+          padding-right: 1.25rem;
+        }
+        .service-table td { color: #0f172a; }
+        .service-table th { color: #64748b; }
         .iv-date { white-space: nowrap; }
         .iv-date small, .iv-desc small { display: block; font-size: 0.72rem; color: #94a3b8; margin-top: 1px; }
         .iv-rec { color: #6366f1 !important; font-weight: 600; }
@@ -589,9 +658,15 @@ export default function InventoryTab({ business }: any) {
         .iv-cat i { width: 8px; height: 8px; border-radius: 50%; }
         .iv-muted { color: #cbd5e1; }
         .iv-name { font-weight: 600; }
+        .iv-stock th, .iv-stock td { white-space: nowrap; padding-left: 0.6rem; padding-right: 0.6rem; }
+        .iv-stock th:first-child, .iv-stock td:first-child { white-space: normal; min-width: 130px; padding-left: 1rem; overflow-wrap: anywhere; }
+        .iv-stock .iv-acts { padding-right: 0.8rem; }
+        @media (max-width: 1350px) { .iv-stock .iv-col-price { display: none; } }
         .iv-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
         .iv-qty.low { color: #d97706; }
         .iv-qty.out { color: #dc2626; }
+        .iv-rowbtn { height: 32px; padding: 0 0.8rem; border-radius: 9px; border: 1px solid #e2e8f0; background: #fff; color: #0f172a; font-family: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all .15s; }
+        .iv-rowbtn:hover { background: #f8fafc; border-color: #cbd5e1; }
         .iv-acts { white-space: nowrap; padding-left: 0 !important; }
         .iv-empty { text-align: center; padding: 5rem 2rem; color: #64748b; display: flex; flex-direction: column; gap: 0.4rem; }
         .iv-empty.small { padding: 1.5rem 0; }
@@ -615,6 +690,9 @@ export default function InventoryTab({ business }: any) {
         .iv-bar em { display: block; height: 100%; border-radius: 3px; transition: width .5s ease; }
         .iv-link { border: none; background: none; padding: 0; font-family: inherit; font-size: 0.8rem; font-weight: 600; color: #436b49; cursor: pointer; white-space: nowrap; }
         .iv-link.danger { color: #dc2626; align-self: flex-start; }
+        .iv-rs-note { margin: 0 0 0.9rem; font-size: 0.82rem; line-height: 1.45; color: #64748b; }
+        .iv-rs-note.small { margin: 0.35rem 0 0 1.7rem; font-size: 0.75rem; }
+        .iv-rs-result { margin: 0.2rem 0 0.8rem; padding: 0.55rem 0.8rem; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 0.85rem; }
         .iv-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
         .iv-hint-t { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
         .iv-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }

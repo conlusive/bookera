@@ -53,7 +53,8 @@ function resolveField(field: string | HTMLElement | null | undefined): HTMLEleme
 
 /** Куди вставити текст помилки: після поля або після його обгортки (+380, ₴). */
 function anchorOf(el: HTMLElement): HTMLElement {
-  const wrap = el.closest('[data-error-anchor]') as HTMLElement | null;
+  // fm-affix - поле з одиницею (₴, мл): помилка під усією обгорткою, інакше одиниця зсувається вниз
+  const wrap = el.closest('[data-error-anchor], .fm-affix') as HTMLElement | null;
   if (wrap) return wrap;
   const parent = el.parentElement;
   // Поле в рядку з префіксом чи одиницею («+380 [   ]», «[   ] ₴») - під усім рядком

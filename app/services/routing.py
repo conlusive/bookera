@@ -83,7 +83,8 @@ async def _table_request(base: str, coords: str) -> Optional[List[Optional[float
             logger.warning("Маршрутизатор %s відповів %s", base, response.status_code)
             return None
         data = response.json()
-        if data.get("code") != "Ok":
+        # Відсутнє поле code вважаємо успіхом: важливо, щоб були distances.
+        if data.get("code", "Ok") != "Ok":
             logger.warning("Маршрутизатор %s: %s", base, data.get("code"))
             return None
         return (data.get("distances") or [[]])[0]

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, assert_section
 from app.core.rate_limit import rate_limit
-from app.core.time_utils import utc_now
+from app.core.time_utils import to_local, utc_now
 from app.models import Review, InventoryItem, Expense
 from app.schemas.extras import (
     ReviewCreate, ReviewReply, ReviewResponse,
@@ -172,6 +172,8 @@ async def delete_inventory_item(item_id: int, db: AsyncSession = Depends(get_db)
     if not item:
         raise HTTPException(status_code=404, detail="Позицію не знайдено")
     await assert_section(db, current_user, item.business_id, "inventory")
+    from app.services.audit import record as _audit
+    await _audit(db, item.business_id, str(current_user.id), "inventory", "item_deleted", f"Видалено зі складу: {item.name}")
     await db.delete(item)
     await db.commit()
 
@@ -251,7 +253,8 @@ async def update_expense(expense_id: int, payload: ExpenseUpdate, db: AsyncSessi
     for field, value in data.items():
         setattr(expense, field, value)
 
-    if apply_to_future and expense.recurrence_group_id and ("expense_date" in data or "amount" in data):
+    series_fields = {"expense_date", "amount", "category", "description"}
+    if apply_to_future and expense.recurrence_group_id and series_fields & data.keys():
         day_delta = (expense.expense_date - old_date).days
         future_res = await db.execute(
             select(Expense).where(
@@ -265,6 +268,10 @@ async def update_expense(expense_id: int, payload: ExpenseUpdate, db: AsyncSessi
                 future_exp.expense_date = future_exp.expense_date + timedelta(days=day_delta)
             if "amount" in data:
                 future_exp.amount = expense.amount
+            if "category" in data:
+                future_exp.category = expense.category
+            if "description" in data:
+                future_exp.description = expense.description
 
     await db.commit()
     await db.refresh(expense)
@@ -435,7 +442,8 @@ async def list_inventory_movements(
             "service": srv.get(a.service_id) if a else None,
             "client": a.client_name if a else None,
             "visit_at": a.start_time.isoformat() if a and a.start_time else None,
-            "created_at": m.created_at,
+            # Час закладу, а не UTC: інакше нічний рух показується вчорашнім днем
+            "created_at": to_local(m.created_at).isoformat() if m.created_at else None,
         })
     return out
 

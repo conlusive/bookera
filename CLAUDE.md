@@ -19,7 +19,7 @@ Tests need a real Postgres with `btree_gist` (the default URL in `tests/conftest
 DATABASE_URL=postgresql+asyncpg://... pytest tests/ -v
 DATABASE_URL=... pytest tests/test_slots.py::test_name -v   # single test
 ```
-`conftest.py` TRUNCATEs a hard-coded list of tables before every test — when you add a table that tests write to, add it to that list. Tokens in tests are HS256 JWTs signed with `SUPABASE_JWT_SECRET` (`make_token` / `auth_headers` fixtures).
+`conftest.py` TRUNCATEs a hard-coded list of tables before every test — when you add a table that tests write to, add it to that list. Tokens in tests are HS256 JWTs signed with `SUPABASE_JWT_SECRET` (`make_token` / `auth_headers` fixtures). `pytest.ini` uses `asyncio_mode = auto` (no `@pytest.mark.asyncio` needed) with a session-scoped loop.
 
 ### Frontend (`cd bookera-frontend`)
 ```bash
@@ -54,3 +54,4 @@ Backend `.env` (see `.env.example`, heavily commented) — required: `DATABASE_U
 - The cabinet UI is a set of tab components under `src/components/cabinet/` (Calendar, Clients, Services, Team, Inventory, Stats, Marketing, Settings, Storefront, Master*…); `components/profile/` is the end-client account (wallet, visits, work).
 - **Auth is Supabase on the frontend** (`@supabase/ssr`, `src/middleware.ts` refreshes the session; `lib/supabase/`, `lib/auth-token-*.ts`), and the access token is sent as a Bearer token to the FastAPI backend. There are no Next.js API routes — all data comes from the FastAPI backend through `src/lib/api.ts` (also holds the shared TS types mirroring backend schemas; keep them in sync with `app/schemas/`).
 - Role helpers live in `src/lib/roles.ts` (`isBusinessRole`, `isOwnerRole`, `roleLabel`) — use them instead of comparing role strings, mirroring the backend's multiple owner-role aliases.
+- Project skills in `.claude/skills/`: use `supabase-postgres-best-practices` for migrations/RLS and `vercel-react-best-practices` for React/Next work.

@@ -12,6 +12,9 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine
 
 os.environ.setdefault("SUPABASE_JWT_SECRET", "test-secret-for-pytest-only")
+# Тести не ходять у публічний OSRM: інакше результат залежить від інтернету
+# (з мережею - дорожня відстань, без - пряма). Недоступна адреса = завжди пряма.
+os.environ["OSRM_URL"] = "http://127.0.0.1:9"
 JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
 DB_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/bookera_test")
 

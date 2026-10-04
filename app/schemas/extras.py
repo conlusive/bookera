@@ -1,6 +1,6 @@
 from datetime import date as dt_date, datetime
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ReviewCreate(BaseModel):
@@ -32,19 +32,37 @@ class ReviewResponse(BaseModel):
 
 class InventoryItemCreate(BaseModel):
     business_id: int
-    name: str
-    quantity: float = 0
-    unit: str = "шт"
-    low_stock_threshold: Optional[float] = None
-    cost_per_unit: Optional[float] = None
+    name: str = Field(..., min_length=1, max_length=120)
+    quantity: float = Field(0, ge=0, le=1_000_000)
+    unit: str = Field("шт", min_length=1, max_length=20)
+    low_stock_threshold: Optional[float] = Field(None, ge=0, le=1_000_000)
+    cost_per_unit: Optional[float] = Field(None, ge=0, le=1_000_000)
+
+    @field_validator("name", "unit")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Поле не може бути порожнім")
+        return v
 
 
 class InventoryItemUpdate(BaseModel):
-    name: Optional[str] = None
-    quantity: Optional[float] = None
-    unit: Optional[str] = None
-    low_stock_threshold: Optional[float] = None
-    cost_per_unit: Optional[float] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    quantity: Optional[float] = Field(None, ge=0, le=1_000_000)
+    unit: Optional[str] = Field(None, min_length=1, max_length=20)
+    low_stock_threshold: Optional[float] = Field(None, ge=0, le=1_000_000)
+    cost_per_unit: Optional[float] = Field(None, ge=0, le=1_000_000)
+
+    @field_validator("name", "unit")
+    @classmethod
+    def _strip(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Поле не може бути порожнім")
+        return v
 
 
 class InventoryItemResponse(InventoryItemCreate):
@@ -54,17 +72,17 @@ class InventoryItemResponse(InventoryItemCreate):
 
 class ExpenseCreate(BaseModel):
     business_id: int
-    category: Optional[str] = None
-    description: Optional[str] = None
-    amount: float
+    category: Optional[str] = Field(None, max_length=60)
+    description: Optional[str] = Field(None, max_length=200)
+    amount: float = Field(..., gt=0, le=10_000_000)
     expense_date: dt_date = Field(default_factory=dt_date.today)
     recurrence: Literal["none", "weekly", "monthly"] = "none"
 
 
 class ExpenseUpdate(BaseModel):
-    category: Optional[str] = None
-    description: Optional[str] = None
-    amount: Optional[float] = None
+    category: Optional[str] = Field(None, max_length=60)
+    description: Optional[str] = Field(None, max_length=200)
+    amount: Optional[float] = Field(None, gt=0, le=10_000_000)
     expense_date: Optional[dt_date] = None
     recurrence: Optional[Literal["none", "weekly", "monthly"]] = None
     # Якщо true і ця витрата - частина повторюваної серії, застосовує ту саму

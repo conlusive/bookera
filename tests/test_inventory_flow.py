@@ -78,3 +78,57 @@ async def test_restock_adds_stock_expense_and_history(client, auth_headers):
     r = await client.post(f"/crm/inventory/{item_id}/restock", json={"quantity": 5, "add_expense": False}, headers=h)
     assert float(r.json()["quantity"]) == 60
     assert len((await client.get("/crm/expenses", params={"business_id": bid}, headers=h)).json()) == 1, "без витрати - на вимогу"
+
+
+@pytest.mark.asyncio
+async def test_inventory_and_expense_validation(client, auth_headers):
+    bid, sid, item_id, h = await _setup(client, auth_headers, "val")
+    bad_items = [
+        {"name": "  ", "quantity": 1},
+        {"name": "X", "quantity": -1},
+        {"name": "X", "cost_per_unit": -5},
+        {"name": "X", "low_stock_threshold": -1},
+    ]
+    for body in bad_items:
+        r = await client.post("/crm/inventory", json={"business_id": bid, **body}, headers=h)
+        assert r.status_code == 422, body
+    assert (await client.patch(f"/crm/inventory/{item_id}", json={"quantity": -3}, headers=h)).status_code == 422
+
+    for amount in (0, -100):
+        r = await client.post("/crm/expenses", json={"business_id": bid, "amount": amount}, headers=h)
+        assert r.status_code == 422, amount
+    r = await client.post("/crm/expenses", json={"business_id": bid, "amount": 100}, headers=h)
+    assert r.status_code == 201
+    assert (await client.patch(f"/crm/expenses/{r.json()['id']}", json={"amount": 0}, headers=h)).status_code == 422
+    assert (await client.post(f"/crm/inventory/{item_id}/restock", json={"quantity": 0}, headers=h)).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_series_edit_applies_category_and_description(client, auth_headers):
+    bid, sid, item_id, h = await _setup(client, auth_headers, "ser")
+    first = (await client.post("/crm/expenses", json={
+        "business_id": bid, "category": "Оренда", "description": "Старе", "amount": 100,
+        "expense_date": "2026-09-01", "recurrence": "monthly"}, headers=h)).json()
+    r = await client.patch(f"/crm/expenses/{first['id']}", json={
+        "category": "Комунальні", "description": "Нове", "apply_to_future": True}, headers=h)
+    assert r.status_code == 200
+    rows = [e for e in (await client.get("/crm/expenses", params={"business_id": bid}, headers=h)).json()
+            if e["recurrence_group_id"] == first["recurrence_group_id"]]
+    assert len(rows) == 13
+    assert all(e["category"] == "Комунальні" and e["description"] == "Нове" for e in rows)
+
+
+@pytest.mark.asyncio
+async def test_other_business_cannot_touch_inventory(client, auth_headers):
+    bid, sid, item_id, h = await _setup(client, auth_headers, "iso")
+    h2 = auth_headers("iso-intruder")
+    await client.post("/crm/businesses", json={"name": "Other", "city": "Львів"}, headers=h2)
+    for method, url, body in [
+        ("patch", f"/crm/inventory/{item_id}", {"quantity": 1}),
+        ("post", f"/crm/inventory/{item_id}/restock", {"quantity": 1}),
+        ("get", f"/crm/inventory/{item_id}/movements", None),
+        ("delete", f"/crm/inventory/{item_id}", None),
+    ]:
+        r = await getattr(client, method)(url, headers=h2, **({"json": body} if body else {}))
+        assert r.status_code in (403, 404), (method, url, r.status_code)
+    assert float(await _qty(client, bid, item_id, h)) > 0

@@ -4,7 +4,7 @@ from sqlalchemy import (
     Column, Integer, String, Boolean, ForeignKey,
     DateTime, Numeric, JSON, Text, Time, SmallInteger, UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 
 from app.core.time_utils import utc_now
 from app.models.base import Base
@@ -55,6 +55,10 @@ class Business(Base):
     direct_link_token = Column(String, unique=True, index=True, nullable=True)
     commission_rate = Column(Numeric(5, 2), default=10.00, nullable=False)  # % з завершеного візиту
     points_balance = Column(Integer, default=0, nullable=False)
+    # Ціль доходу на місяць (вкладка «Аналітика»). deferred: звичайні запити
+    # до закладу її не вибирають, тож база без цього стовпця (до міграції)
+    # не ламає решту системи - помилка лише там, де ціль справді читають.
+    monthly_revenue_goal = deferred(Column(Numeric(12, 2), nullable=True))
 
     # Чи показувати телефон клієнтам. Приватний майстер удома часто не
     # хоче публікувати особистий номер, але він потрібен нам для звʼязку -

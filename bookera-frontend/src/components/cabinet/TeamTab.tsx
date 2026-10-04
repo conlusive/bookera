@@ -646,7 +646,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   });
 
   return (
-    <div style={{ display: 'flex', height: '100%', width: '100%', backgroundColor: colors.bg, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flex: 1, minHeight: 0, width: '100%', backgroundColor: colors.bg, overflow: 'hidden' }}>
 
       <style>{`
         @keyframes spin {

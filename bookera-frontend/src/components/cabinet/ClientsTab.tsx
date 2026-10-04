@@ -499,7 +499,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const isClientLost = !!viewingClient && segmentOf('lost', viewingClient);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, width: '100%', background: '#fff' }}>
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }

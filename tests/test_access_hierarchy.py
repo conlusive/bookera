@@ -138,12 +138,12 @@ async def test_audit_log_and_visibility(client, auth_headers):
     await client.put(f"/crm/businesses/{bid}/staff/{p['master']}/access", json={"sections": {"services": True}}, headers=owner)
     await client.patch(f"/services/{sid}", json={"price": 700}, headers=h["master"])  # дія майстра
 
-    owner_log = (await client.get(f"/crm/businesses/{bid}/audit", headers=owner)).json()
+    owner_log = (await client.get(f"/crm/businesses/{bid}/audit", headers=owner)).json()["items"]
     summaries = [e["summary"] for e in owner_log]
     assert any("Стрижка" in s and "700" in s for s in summaries)
     assert any("Доступ для Олена" in s and "Послуги й ціни: відкрито" in s for s in summaries)
 
-    admin_log = (await client.get(f"/crm/businesses/{bid}/audit", headers=h["admin"])).json()
+    admin_log = (await client.get(f"/crm/businesses/{bid}/audit", headers=h["admin"])).json()["items"]
     assert all(e["actor_role"] != "owner" for e in admin_log), "адміністратор не бачить дій власника"
     assert any(e["actor_role"] == "master" for e in admin_log)
     assert (await client.get(f"/crm/businesses/{bid}/audit", headers=h["master"])).status_code == 403

@@ -12,6 +12,16 @@ from app.models.appointment import Appointment
 from app.services.monetization import award_points_for_new_client
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.services.client_stats import apply_stats, client_stats, phone_tail
+from app.services.audit import changes_text, diff_changes, record as _audit
+
+CLIENT_LABELS = {
+    "name": "Імʼя", "phone": "Телефон", "email": "Пошта", "notes": "Нотатки", "allergies": "Алергії",
+    "tags": "Теги", "is_blacklisted": "Чорний список", "medical_pdf_url": "Медична картка",
+    "birthday": "День народження", "instagram": "Instagram", "formulas": "Формули",
+    "consent_photo": "Згода на фото", "consent_procedure": "Згода на процедуру", "balance": "Баланс",
+}
+# Приватне: у журналі лише факт зміни, без самого тексту
+CLIENT_PRIVATE = ("notes", "allergies", "medical_pdf_url", "formulas")
 
 router = APIRouter(prefix="/crm/clients", tags=["CRM - Clients"])
 
@@ -129,6 +139,8 @@ async def create_client(
     client = Client(**client_in.model_dump())
     db.add(client)
     await db.flush()
+    await _audit(db, client.business_id, str(current_user.id), "clients", "client_created",
+                 f"Додано клієнта: {client.name}" + (f" ({client.phone})" if client.phone else ""))
 
     if client_in.phone:
         biz_res = await db.execute(select(Business).where(Business.id == client_in.business_id))
@@ -158,8 +170,14 @@ async def update_client(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     client = await _get_owned_client(db, current_user, client_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    before = {f: getattr(client, f, None) for f in data}
+    for field, value in data.items():
         setattr(client, field, value)
+    changes = diff_changes(before, data, CLIENT_LABELS, hide_values=CLIENT_PRIVATE)
+    if changes:
+        await _audit(db, client.business_id, str(current_user.id), "clients", "client_updated",
+                     f"Змінено клієнта {client.name}: {changes_text(changes)}"[:500], meta={"client_id": client.id, "changes": changes})
     await db.commit()
     _cl = await _load_with_links(db, client_id)
     return (await _with_stats(db, _cl.business_id, [_cl]))[0]
@@ -236,6 +254,8 @@ async def delete_client(
                    "видалення заборонене. Використайте is_blacklisted замість видалення.",
         )
 
+    await _audit(db, client.business_id, str(current_user.id), "clients", "client_deleted",
+                 f"Видалено клієнта: {client.name}" + (f" ({client.phone})" if client.phone else ""))
     await db.delete(client)
     await db.commit()
 

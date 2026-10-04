@@ -6,12 +6,12 @@
   PUT /crm/businesses/{bid}/staff/{uid}/access     - змінити (лише власник)
   GET /crm/businesses/{bid}/audit                  - журнал дій
 """
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import (
@@ -21,7 +21,7 @@ from app.core.auth import (
 from app.core.database import get_db
 from app.models import Business, StaffMembership, User
 from app.models.master_tools import AuditEvent
-from app.services.audit import record
+from app.services.audit import CATEGORIES, record
 
 router = APIRouter(tags=["Access & audit"])
 
@@ -146,7 +146,32 @@ async def set_staff_access(
     return {"role": m.role, "sections": effective_permissions(m.role, m.permissions)}
 
 
-CATEGORIES = {"bookings", "services", "team", "money", "settings", "inventory", "requests"}
+def _audit_filters(biz, owner: bool, date_from, date_to, q):
+    """Спільні умови для списку й лічильників: період, пошук і правило видимості."""
+    from datetime import time as _time
+    from app.core.time_utils import to_utc
+    conds = [AuditEvent.business_id == biz.id]
+    if not owner:
+        # Адміністратор не бачить дій власника
+        conds.append(AuditEvent.actor_role != "owner")
+    if date_from:
+        conds.append(AuditEvent.created_at >= to_utc(datetime.combine(date_from, _time.min), biz))
+    if date_to:
+        conds.append(AuditEvent.created_at <= to_utc(datetime.combine(date_to, _time.max), biz))
+    if q and q.strip():
+        like = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        # Текст події або імʼя того, хто діяв: «Олена» знаходить усе, що робила Олена
+        conds.append(or_(AuditEvent.summary.ilike(f"%{like}%", escape="\\"),
+                         AuditEvent.actor_name.ilike(f"%{like}%", escape="\\")))
+    return conds
+
+
+def _event_out(e: AuditEvent) -> dict:
+    return {
+        "id": e.id, "category": e.category, "action": e.action, "summary": e.summary, "meta": e.meta,
+        "actor_id": e.actor_id, "actor_name": e.actor_name, "actor_role": e.actor_role,
+        "created_at": e.created_at.isoformat() + "Z" if e.created_at else None,
+    }
 
 
 @router.get("/crm/businesses/{business_id}/audit")
@@ -154,7 +179,10 @@ async def audit_log(
     business_id: int,
     category: Optional[str] = Query(None),
     actor_id: Optional[str] = Query(None),
-    before: Optional[datetime] = Query(None, description="Для підвантаження старіших"),
+    q: Optional[str] = Query(None, max_length=100, description="Пошук у тексті події"),
+    date_from: Optional[date] = Query(None, description="З цього дня (за часом закладу)"),
+    date_to: Optional[date] = Query(None, description="По цей день включно"),
+    before_id: Optional[int] = Query(None, description="Курсор: показати події старіші за цей id"),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -162,21 +190,56 @@ async def audit_log(
     """
     Журнал дій. Власник бачить усе, адміністратор - без дій власника.
     Майстрові журнал недоступний.
+
+    Сторінки - за курсором (before_id), а не за зсувом: поки людина читає,
+    з'являються нові події, і зсув показував би одні й ті самі рядки двічі.
     """
     await assert_business_admin(db, current_user, business_id)
+    biz = await db.get(Business, business_id)
     owner = await _is_owner(db, business_id, str(current_user.id))
-    q = select(AuditEvent).where(AuditEvent.business_id == business_id)
-    if not owner:
-        q = q.where(AuditEvent.actor_role != "owner")
+    conds = _audit_filters(biz, owner, date_from, date_to, q)
     if category in CATEGORIES:
-        q = q.where(AuditEvent.category == category)
+        conds.append(AuditEvent.category == category)
     if actor_id:
-        q = q.where(AuditEvent.actor_id == actor_id)
-    if before:
-        q = q.where(AuditEvent.created_at < before.replace(tzinfo=None))
-    rows = (await db.execute(q.order_by(AuditEvent.created_at.desc()).limit(limit))).scalars().all()
-    return [{
-        "id": e.id, "category": e.category, "action": e.action, "summary": e.summary,
-        "actor_id": e.actor_id, "actor_name": e.actor_name, "actor_role": e.actor_role,
-        "created_at": e.created_at.isoformat() + "Z" if e.created_at else None,
-    } for e in rows]
+        conds.append(AuditEvent.actor_id == actor_id)
+    if before_id:
+        conds.append(AuditEvent.id < before_id)
+    rows = (await db.execute(
+        select(AuditEvent).where(*conds).order_by(AuditEvent.id.desc()).limit(limit + 1)
+    )).scalars().all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return {
+        "items": [_event_out(e) for e in rows],
+        "has_more": has_more,
+        "next_before_id": rows[-1].id if rows and has_more else None,
+    }
+
+
+@router.get("/crm/businesses/{business_id}/audit/summary")
+async def audit_summary(
+    business_id: int,
+    q: Optional[str] = Query(None, max_length=100),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Скільки подій за період: загалом, за розділами й за людьми - для фільтрів і бічної колонки."""
+    from sqlalchemy import func
+    await assert_business_admin(db, current_user, business_id)
+    biz = await db.get(Business, business_id)
+    owner = await _is_owner(db, business_id, str(current_user.id))
+    conds = _audit_filters(biz, owner, date_from, date_to, q)
+    by_cat = dict((await db.execute(
+        select(AuditEvent.category, func.count(AuditEvent.id)).where(*conds).group_by(AuditEvent.category)
+    )).all())
+    people = (await db.execute(
+        select(AuditEvent.actor_id, func.max(AuditEvent.actor_name), func.max(AuditEvent.actor_role), func.count(AuditEvent.id))
+        .where(*conds).group_by(AuditEvent.actor_id).order_by(func.count(AuditEvent.id).desc()).limit(20)
+    )).all()
+    return {
+        "total": sum(by_cat.values()),
+        "by_category": {c: by_cat.get(c, 0) for c in CATEGORIES},
+        "by_actor": [{"actor_id": a, "name": n, "role": r, "count": c} for a, n, r, c in people],
+    }

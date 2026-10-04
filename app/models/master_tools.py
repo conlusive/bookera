@@ -1,7 +1,7 @@
 """
 Інструменти майстра: запити до салону й портфоліо.
 """
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, JSON, String, Text
 
 from app.models.base import Base
 from app.core.time_utils import utc_now
@@ -61,6 +61,9 @@ class AuditEvent(Base):
     category - для фільтра, meta - подробиці.
     """
     __tablename__ = "audit_events"
+    # Список і лічильники завжди беруть події одного закладу, найновіші
+    # першими, - цей індекс робить це швидким і на мільйоні рядків.
+    __table_args__ = (Index("ix_audit_events_business_id_id", "business_id", "id"),)
 
     id = Column(Integer, primary_key=True, index=True)
     business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)

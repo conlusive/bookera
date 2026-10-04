@@ -224,6 +224,9 @@ async def activate_radar_with_points(
         business_id=business_id, amount=-cost, reason="radar_purchase", balance_after=business.points_balance,
     ))
     await ranking.grant_radar(db, business_id, package["days"], paid_with="points", points_spent=cost)
+    from app.services.audit import record as _audit
+    await _audit(db, business_id, str(current_user.id), "marketing", "radar_activated",
+                 f"Підключено Радар: {package['days']} днів, {cost} балів")
     await db.commit()
     await db.refresh(business)
     return await _radar_overview(db, business)
@@ -264,6 +267,9 @@ async def checkout_radar(
     if intent.status == "completed":
         await complete_radar_payment(db, payment)
         activated = True
+        from app.services.audit import record as _audit
+        await _audit(db, business_id, str(current_user.id), "marketing", "radar_activated",
+                     f"Підключено Радар: {package['days']} днів, {package['price_uah']} ₴ карткою")
     await db.commit()
     await db.refresh(business)
     return await _radar_overview(db, business, activated=activated, checkout=intent.checkout, checkout_url=intent.checkout_url)
@@ -487,6 +493,10 @@ async def transfer_ownership(
     old_owner_res = await db.execute(select(User).where(User.id == current_user.id))
     old_owner = old_owner_res.scalars().first()
 
+    from app.services.audit import record as _audit
+    # Спершу запис, поки поточний власник ще власник: інакше в журналі він уже «адміністратор».
+    await _audit(db, business_id, str(current_user.id), "team", "ownership_transferred",
+                 f"Передано права власника: {target.full_name or target.email}")
     business.owner_id = target.id
     target.role = "business_owner"
     if old_owner:

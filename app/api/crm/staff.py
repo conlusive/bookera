@@ -13,6 +13,15 @@ from app.core.time_utils import utc_now
 from app.models import StaffInvite, User, Business, StaffMembership
 from app.schemas.staff import StaffInviteCreate, StaffInviteResponse, InviteAccept, StaffUpdate, StaffResponse
 
+STAFF_LABELS = {
+    "full_name": "Імʼя", "phone": "Телефон", "specialization": "Спеціалізація", "role": "Роль",
+    "commission_rate": "Відсоток від виручки, %", "fixed_salary": "Фіксована ставка, ₴", "tax_rate": "Податок, %",
+    "payment_method": "Спосіб виплати", "payout_period": "Період виплат", "payout_day": "День виплати",
+    "tips_full": "Чайові майстрові", "deduct_materials": "Віднімати матеріали", "auto_reset_balance": "Автоскидання балансу",
+    "provides_services": "Надає послуги", "show_in_storefront": "Показувати у вітрині", "assigned_services": "Послуги майстра",
+    "avatar_url": "Фото", "is_active": "Активний",
+}
+
 router = APIRouter(tags=["CRM - Staff"])
 
 INVITE_EXPIRY_DAYS = 7
@@ -329,8 +338,17 @@ async def update_staff(
 
     # Графік - за закладом (членство), не за людиною.
     new_shifts = data.pop("shifts", None) if "shifts" in data else ...
+    before = {f: getattr(staff, f, None) for f in data}
     for field, value in data.items():
         setattr(staff, field, value)
+    from app.services.audit import changes_text, diff_changes, record as _audit_rec
+    staff_changes = diff_changes(before, data, STAFF_LABELS)
+    if new_shifts is not ...:
+        staff_changes.append({"field": "shifts", "label": "Графік роботи"})
+    if staff_changes:
+        who = staff.full_name or staff.email or "співробітника"
+        await _audit_rec(db, ctx_business_id, str(current_user.id), "team", "staff_updated",
+                         f"Змінено {who}: {changes_text(staff_changes)}"[:500], meta={"staff_id": str(staff.id), "changes": staff_changes})
     if new_shifts is not ...:
         if membership is None:
             membership = StaffMembership(user_id=str(staff.id), business_id=ctx_business_id,

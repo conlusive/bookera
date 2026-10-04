@@ -165,7 +165,7 @@ async def export_clients(
             ", ".join(c.tags or []), c.notes or "", "так" if c.is_blacklisted else "",
         ])
     from app.services.audit import record
-    await record(db, business_id, str(current_user.id), "settings", "clients_exported", f"Експорт бази клієнтів: {len(rows)}")
+    await record(db, business_id, str(current_user.id), "clients", "clients_exported", f"Експорт бази клієнтів: {len(rows)}")
     await db.commit()
     return _xlsx_response(EXPORT_HEADERS, rows, f"Клієнти {date.today():%d.%m.%Y}.xlsx", EXPORT_WIDTHS)
 
@@ -248,7 +248,7 @@ async def import_clients(
     for c in create:
         db.add(Client(business_id=business_id, **c))
     from app.services.audit import record
-    await record(db, business_id, str(current_user.id), "settings", "clients_imported",
+    await record(db, business_id, str(current_user.id), "clients", "clients_imported",
                  f"Імпорт клієнтів: додано {len(create)}, пропущено {len(skipped)}")
     await db.commit()
     return {**result, "created": len(create)}
@@ -356,7 +356,7 @@ async def merge_clients(
     for o in others:
         await db.delete(o)
     from app.services.audit import record
-    await record(db, keep.business_id, str(current_user.id), "settings", "clients_merged",
+    await record(db, keep.business_id, str(current_user.id), "clients", "clients_merged",
                  f"Обʼєднано дублі клієнта {keep.name}: {len(others)}")
     await db.commit()
     return {"id": keep_id, "merged": len(others)}

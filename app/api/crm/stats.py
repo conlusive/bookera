@@ -179,4 +179,8 @@ async def set_goal(
     except DBAPIError:
         await db.rollback()
         raise HTTPException(status_code=503, detail="Потрібне оновлення бази даних (alembic upgrade head)")
+    from app.services.audit import record as _audit
+    await _audit(db, business_id, str(current_user.id), "settings", "goal_set",
+                 f"Ціль доходу на місяць: {amount:g} ₴" if amount else "Ціль доходу на місяць прибрано")
+    await db.commit()
     return await month_progress(db, business_id, amount or None)

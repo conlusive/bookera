@@ -166,7 +166,7 @@ async def test_review_email_immediately_when_master_completes(client, auth_heade
     async with AsyncSessionLocal() as db:
         assert await send_review_requests(db, "https://bookera.test") == 0, "цикл не надсилає вдруге"
 
-    log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()
+    log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()["items"]
     assert any("завершено" in e["summary"] for e in log), "зміна статусу - у журналі дій"
 
 
@@ -196,7 +196,7 @@ async def test_calendar_route_also_sends_right_away(client, auth_headers, monkey
     r = await client.patch(f"/appointments/{aid}/status", json={"status": "completed"}, headers=owner)
     assert r.status_code == 200, r.text
     assert sent == ["cal@example.com"]
-    log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()
+    log = (await client.get(f"/crm/businesses/{bid}/audit", params={"category": "bookings"}, headers=owner)).json()["items"]
     assert any("завершено" in e["summary"] for e in log)
 
 

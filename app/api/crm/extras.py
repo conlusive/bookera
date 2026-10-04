@@ -74,6 +74,9 @@ async def reply_to_review(
 
 # === Склад ===
 
+ITEM_LABELS = {"name": "Назва", "quantity": "Залишок", "unit": "Одиниця", "low_stock_threshold": "Мін. запас", "cost_per_unit": "Ціна за од., ₴"}
+EXPENSE_LABELS = {"category": "Категорія", "description": "Опис", "amount": "Сума, ₴", "expense_date": "Дата", "recurrence": "Повтор"}
+
 
 @router.get("/crm/inventory", response_model=List[InventoryItemResponse])
 async def list_inventory(business_id: int = Query(...), db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
@@ -118,8 +121,14 @@ async def update_inventory_item(item_id: int, payload: InventoryItemUpdate, db: 
         if delta != 0:
             db.add(InventoryMovement(business_id=item.business_id, inventory_item_id=item.id,
                                      quantity_delta=delta, cost_at_moment=item.cost_per_unit, reason="adjustment"))
+    from app.services.audit import changes_text, diff_changes, record as _audit
+    before = {f: getattr(item, f, None) for f in data}
     for field, value in data.items():
         setattr(item, field, value)
+    changes = diff_changes(before, data, ITEM_LABELS)
+    if changes:
+        await _audit(db, item.business_id, str(current_user.id), "inventory", "item_updated",
+                     f"Змінено товар {item.name}: {changes_text(changes)}"[:500], meta={"item_id": item.id, "changes": changes})
     await db.commit()
     await db.refresh(item)
     return item
@@ -250,8 +259,15 @@ async def update_expense(expense_id: int, payload: ExpenseUpdate, db: AsyncSessi
     old_date = expense.expense_date
     apply_to_future = payload.apply_to_future
     data = payload.model_dump(exclude_unset=True, exclude={"apply_to_future"})
+    from app.services.audit import changes_text, diff_changes, record as _audit
+    before = {f: getattr(expense, f, None) for f in data}
     for field, value in data.items():
         setattr(expense, field, value)
+    changes = diff_changes(before, data, EXPENSE_LABELS)
+    if changes:
+        scope = " (і всі наступні)" if apply_to_future and expense.recurrence_group_id else ""
+        await _audit(db, expense.business_id, str(current_user.id), "inventory", "expense_updated",
+                     f"Змінено витрату{scope}: {changes_text(changes)}"[:500], meta={"expense_id": expense.id, "changes": changes})
 
     series_fields = {"expense_date", "amount", "category", "description"}
     if apply_to_future and expense.recurrence_group_id and series_fields & data.keys():
@@ -291,6 +307,10 @@ async def delete_expense(
         raise HTTPException(status_code=404, detail="Витрату не знайдено")
     await assert_section(db, current_user, expense.business_id, "inventory")
 
+    from app.services.audit import record as _audit
+    await _audit(db, expense.business_id, str(current_user.id), "inventory", "expense_deleted",
+                 f"Видалено витрату: {expense.amount} ₴" + (f" - {expense.description}" if expense.description else "")
+                 + (" (і всі наступні)" if delete_future and expense.recurrence_group_id else ""))
     if delete_future and expense.recurrence_group_id:
         await db.execute(
             Expense.__table__.delete().where(
@@ -393,6 +413,9 @@ async def set_service_materials(
             inventory_item_id=m.inventory_item_id,
             quantity_per_use=m.quantity_per_use,
         ))
+    from app.services.audit import record as _audit
+    await _audit(db, service.business_id, str(current_user.id), "services", "materials_set",
+                 f"Матеріали послуги {service.name}: {len(materials)} {'позиція' if len(materials) == 1 else 'позицій'}")
     await db.commit()
 
     return await list_service_materials(service_id, db, current_user)
@@ -650,6 +673,12 @@ async def send_campaign(
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
 
     clients, selected = await _campaign_audience(db, payload.business_id, payload.audience)
+    from app.services.audit import record as _audit
+    audience_label = {"all": "усі", "regular": "постійні", "lapsed": "давно не були"}.get(payload.audience, payload.audience)
+    await _audit(db, payload.business_id, str(current_user.id), "marketing", "campaign_sent",
+                 f"Розсилка «{payload.subject[:80]}»: {len(selected)} листів (аудиторія: {audience_label})",
+                 meta={"queued": len(selected), "audience": payload.audience})
+    await db.commit()
 
     for c in selected:
         background_tasks.add_task(

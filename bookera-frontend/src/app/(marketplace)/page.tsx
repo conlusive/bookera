@@ -25,5 +25,14 @@ export default async function HomePage() {
     console.error('Помилка завантаження салонів:', error);
   }
 
-  return <HomePageClient initialBusinesses={businesses} />;
+  // Правила позиції (ваги якості, відстані, вільних вікон і Радара) -
+  // з сервера: вітрина не має власних копій, тож «що дає Радар» не розійдеться.
+  let rankingRules: Awaited<ReturnType<typeof api.getRankingRules>> | null = null;
+  try {
+    rankingRules = await api.getRankingRules(60);
+  } catch (error) {
+    console.error('Не вдалося завантажити правила видачі:', error);
+  }
+
+  return <HomePageClient initialBusinesses={businesses} rankingRules={rankingRules} />;
 }

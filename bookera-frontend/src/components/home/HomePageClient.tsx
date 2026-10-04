@@ -1,5 +1,6 @@
 'use client';
 
+import type { RankingRules } from '@/lib/api';
 import { Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
@@ -399,7 +400,7 @@ function SearchParamsSync({ onChange }: { onChange: (sp: URLSearchParams) => voi
   return null;
 }
 
-export default function HomePageClient({ initialBusinesses }: { initialBusinesses: any[] }) {
+export default function HomePageClient({ initialBusinesses, rankingRules = null }: { initialBusinesses: any[]; rankingRules?: RankingRules | null }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
@@ -466,7 +467,10 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     return km < 1 ? `${prefix}${Math.round(km * 100) * 10} м` : `${prefix}${km.toFixed(1)} км`;
   };
 
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Що означає число на картці. Дорожня відстань - маршрут автомобілем від
+  // вашого місця; пряма - лише коли жоден маршрутизатор не відповів.
+  const distanceHint = (bizId: number): string =>
+    isRoadDistance[bizId] ? 'Відстань дорогою від вашого місця' : 'По прямій: маршрут тимчасово недоступний';
   const [nearbySlots, setNearbySlots] = useState<Record<number, string[]>>({});
   const [isLoadingNearbySlots, setIsLoadingNearbySlots] = useState<boolean>(true);
 
@@ -561,26 +565,35 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
   const collectionsScrollRef = useRef<HTMLDivElement>(null);
   const isAutoSearchRun = useRef(false);
 
-  // Геолокація
+  // Місто за місцем людини - з тієї самої точки, що й відстані (хук
+  // useNearbyPrompt). Окремого звернення до геолокації тут немає: воно
+  // питало б дозвіл повз єдине правило «один раз» і дублювало б його.
+  // Відповідь запам'ятовуємо за точністю ~1 км: той самий район - те саме
+  // місто, і зайвих запитів до сторонньої служби не буде.
+  const cityKey = nearbyPoint ? `${nearbyPoint.lat.toFixed(2)},${nearbyPoint.lng.toFixed(2)}` : null;
   useEffect(() => {
-    if (typeof window !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const { latitude, longitude } = position.coords;
-            setUserCoords({ lat: latitude, lng: longitude }); // зберігаємо точні координати
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=uk`);
-            const data = await res.json();
-            const city = data.address?.city || data.address?.town || data.address?.village || data.address?.state;
-            if (city) setSearchWhere(city);
-          } catch (error) {
-            console.error('Не вдалося визначити локацію:', error);
-          }
-        },
-        (error) => console.log('Локація:', error.message)
-      );
-    }
-  }, []);
+    if (!nearbyPoint || !cityKey) return;
+    let cancelled = false;
+    try {
+      const cached = JSON.parse(localStorage.getItem('bookera_city') || 'null');
+      if (cached?.key === cityKey && cached.city) { setSearchWhere(cached.city); return; }
+    } catch { /* без кешу */ }
+
+    void (async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${nearbyPoint.lat}&lon=${nearbyPoint.lng}&accept-language=uk`);
+        const data = await res.json();
+        const city = data.address?.city || data.address?.town || data.address?.village || data.address?.state;
+        if (!city || cancelled) return;
+        setSearchWhere(city);
+        try { localStorage.setItem('bookera_city', JSON.stringify({ key: cityKey, city })); } catch { /* пропускаємо */ }
+      } catch (error) {
+        console.error('Не вдалося визначити місто:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityKey]);
 
   // Ініціалізація
   useEffect(() => {
@@ -980,13 +993,21 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
     // Рейтинг без відгуків нічого не вартий - раніше заклад з однією
     // пʼятіркою стояв вище за 4.8 зі ста відгуків.
     const tier = (x: any) => { const n = reviews(x); return n >= 50 ? 3 : n >= 10 ? 2 : n >= 1 ? 1 : 0; };
-    const byDistance = dist(a) - dist(b);
+    // Обидва без відстані: Infinity - Infinity = NaN, а порівнювач має повернути число.
+    const byDistance = (dist(a) - dist(b)) || 0;
+
+    // Радар: у «Найближчих» заклад рахується ближчим на radar_bonus_km,
+    // у «Рекомендованих» отримує бали (вони вже в rank_score з сервера).
+    // Значення - з /businesses/ranking-rules, а не з цього файлу.
+    const radarKm = (x: any) => (x.is_radar_active ? (x.radar_bonus_km ?? rankingRules?.radar_bonus_km ?? 0) : 0);
+    const radarFirst = (a.is_radar_active ? 1 : 0) !== (b.is_radar_active ? 1 : 0)
+      ? (a.is_radar_active ? -1 : 1) : 0;
 
     if (sortBy === 'distance') {
       // Відстань відома хоча б для одного - сортуємо за нею.
       // Infinity - Infinity дає NaN, тож заклади без координат
       // порівнюємо окремо, інакше порядок став би непередбачуваним.
-      const da = dist(a), db = dist(b);
+      const da = dist(a) - radarKm(a), db = dist(b) - radarKm(b);
       if (Number.isFinite(da) || Number.isFinite(db)) {
         if (!Number.isFinite(da)) return 1;
         if (!Number.isFinite(db)) return -1;
@@ -1000,23 +1021,33 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
       const pa = getMinPrice(a);
       const pb = getMinPrice(b);
       if (pa !== pb) return pa - pb;
-      return byDistance;
+      // Однакова ціна: спершу той, хто просувається, потім ближчий.
+      return radarFirst || byDistance;
     }
 
-    // Рекомендовані - розумне поєднання, у такому порядку:
-    //   1. є вільні вікна сьогодні - людина прийшла записатись
-    //   2. якість: сходинка відгуків, потім рейтинг
-    //   3. відстань
-    // Вільні вікна беруться лише зі слотів: статус «відчинено»
-    // тут недоступний - функцію оголошено нижче, і виклик із цього
-    // місця впав би під час рендера.
-    const freeA = (nearbySlots[a.id]?.length ?? 0) > 0 ? 1 : 0;
-    const freeB = (nearbySlots[b.id]?.length ?? 0) > 0 ? 1 : 0;
-    if (freeA !== freeB) return freeB - freeA;
+    // Рекомендовані - позиція в балах (разом 100), правила з сервера:
+    //   якість + Радар (rank_score, рахує сервер)
+    //   + «поруч» (до proximity_max, чим ближче, тим більше)
+    //   + «є вільні вікна сьогодні» (free_slots)
+    // Без правил із сервера (збій запиту) - стара послідовність:
+    // вільні вікна, сходинка відгуків, рейтинг, відстань.
+    const free = (x: any) => ((nearbySlots[x.id]?.length ?? 0) > 0 ? 1 : 0);
+    if (rankingRules && a.rank_score != null && b.rank_score != null) {
+      const w = rankingRules.weights;
+      const score = (x: any) => {
+        const d = dist(x);
+        const near = Number.isFinite(d) ? w.proximity_max * Math.max(0, 1 - d / rankingRules.proximity_radius_km) : 0;
+        return (x.rank_score ?? 0) + near + free(x) * w.free_slots;
+      };
+      const diff = score(b) - score(a);
+      if (Math.abs(diff) > 0.001) return diff;
+      return byDistance;
+    }
+    if (free(a) !== free(b)) return free(b) - free(a);
     if (tier(a) !== tier(b)) return tier(b) - tier(a);
     if (rating(a) !== rating(b)) return rating(b) - rating(a);
     return byDistance;
-  }, [sortBy, distanceById, nearbySlots, getMinPrice]);
+  }, [sortBy, distanceById, nearbySlots, getMinPrice, rankingRules]);
 
   // Фільтрація каталогу
 
@@ -1397,13 +1428,14 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
 
 
   // Картка закладу - спільний компонент (components/ui/BusinessCard).
-  const renderCard = (biz: any, options?: { distanceTag?: string; showTimeSlots?: boolean }) => (
+  const renderCard = (biz: any, options?: { distanceTag?: string; distanceTitle?: string; showTimeSlots?: boolean }) => (
     <BusinessCard
       key={biz.id}
       biz={biz}
       isFavorite={favorites.includes(biz.id)}
       onToggleFavorite={toggleFavorite}
       distanceTag={options?.distanceTag}
+      distanceTitle={options?.distanceTitle}
       showTimeSlots={options?.showTimeSlots}
       slots={nearbySlots[biz.id]}
     />
@@ -1559,15 +1591,15 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
         /* СІТКА КАТАЛОГУ */
         .salons-layout {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 1.75rem 1.5rem;
           width: 100%;
         }
-        @media (max-width: 1120px) { .salons-layout { grid-template-columns: repeat(3, 1fr); }
+        @media (max-width: 1120px) { .salons-layout { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         }
-        @media (max-width: 820px) { .salons-layout { grid-template-columns: repeat(2, 1fr); }
+        @media (max-width: 820px) { .salons-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
-        @media (max-width: 560px) { .salons-layout { grid-template-columns: 1fr; }
+        @media (max-width: 560px) { .salons-layout { grid-template-columns: minmax(0, 1fr); }
         }
 
         /* ОДНАКОВИЙ РОЗМІР КАРТОК У КАРУСЕЛІ */
@@ -2326,6 +2358,7 @@ export default function HomePageClient({ initialBusinesses }: { initialBusinesse
                   <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
                     {renderCard(biz, {
                       distanceTag: distance,
+                      distanceTitle: distance ? distanceHint(biz.id) : undefined,
                       showTimeSlots: true
                     })}
                   </div>

@@ -39,6 +39,10 @@ export interface Business {
   working_hours?: string;
   workplace_photos?: string[];
   is_radar_active?: boolean;
+  /** Якість + Радар за правилами сервера; вітрина додає відстань і вільні вікна. */
+  rank_score?: number;
+  /** На скільки км заклад «ближчий» у сортуванні за відстанню (0 без Радара). */
+  radar_bonus_km?: number;
   virtual_balance?: number;
   cal_settings?: CalendarSettings;
   tasks?: TaskItem[];

@@ -23,6 +23,7 @@ export default function BusinessCard({
   isFavorite,
   onToggleFavorite,
   distanceTag,
+  distanceTitle,
   showTimeSlots,
   slots,
 }: {
@@ -30,6 +31,8 @@ export default function BusinessCard({
   isFavorite: boolean;
   onToggleFavorite: (bizId: number) => void;
   distanceTag?: string;
+  /** Підказка до відстані: дорогою чи по прямій. */
+  distanceTitle?: string;
   showTimeSlots?: boolean;
   slots?: string[];
 }) {
@@ -91,13 +94,32 @@ export default function BusinessCard({
 
         <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: '6px', zIndex: 2 }}>
           {distanceTag ? (
-            <div className="glass-pill">
+            <div className="glass-pill" title={distanceTitle}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                 <circle cx="12" cy="10" r="3" />
               </svg>
               <span>{distanceTag}</span>
             </div>
+          ) : null}
+          {/* Заклад просувається через «Радар» - це реклама, і про це є позначка:
+              маленький символ із підказкою. Не текстова плашка: вона
+              займала місце відстані й кричала. Підказка - при наведенні,
+              на телефоні - при дотику (фокус); перехід за карткою не
+              спрацьовує. */}
+          {biz.is_radar_active ? (
+            <span
+              className="ad-mark"
+              role="img"
+              tabIndex={0}
+              aria-label="Реклама: заклад просувається в Bookera"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M12 2.5c.5 4.6 2.4 7 7.5 9.5-5.1 2.5-7 4.9-7.5 9.5-.5-4.6-2.4-7-7.5-9.5 5.1-2.5 7-4.9 7.5-9.5z" />
+              </svg>
+              <span className="ad-tip">Реклама · заклад просувається в Bookera</span>
+            </span>
           ) : null}
           {/* Плашку «Топ вибір» прибрано.
               Умова була `!hasRating || rank >= 4.8` - тобто заклад
@@ -124,35 +146,35 @@ export default function BusinessCard({
       </div>
 
       <div className="card-body">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
-          <h3 className="card-heading">{biz.name}</h3>
-          <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#111827', whiteSpace: 'nowrap' }}>
-            {minPrice ? `від ${minPrice} ₴` : 'від 450 ₴'}
-          </span>
+        <div className="card-title-row">
+          <h3 className="card-heading" title={biz.name}>{biz.name}</h3>
+          {/* Ціни немає - нічого не показуємо. Раніше стояло «від 450 ₴» для
+              будь-якого закладу без послуг: вигадана ціна, як колись «5.0». */}
+          {minPrice ? <span className="card-price">від {minPrice} ₴</span> : null}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
+        <div className="card-meta-row" style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
           {displayRank && reviewCount > 0 ? (
             <>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '600' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#111827', fontWeight: '600', flex: 'none', whiteSpace: 'nowrap' }}>
                 <span style={{ color: '#f59e0b' }}>★</span> {displayRank}
                 <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.75rem' }}>({reviewCount})</span>
               </span>
-              <span>•</span>
+              <span style={{ flex: 'none' }}>•</span>
             </>
           ) : (
             /* Новий заклад - так і кажемо. Це чесно й навіть
                працює на нього: людина розуміє, що відгуків немає
                не через погану роботу. */
             <>
-              <span style={{ color: '#94a3b8' }}>Новий заклад</span>
-              <span>•</span>
+              <span style={{ color: '#94a3b8', flex: 'none', whiteSpace: 'nowrap' }}>Новий заклад</span>
+              <span style={{ flex: 'none' }}>•</span>
             </>
           )}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{category}</span>
+          <span className="card-ellipsis" title={category}>{category}</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
+        <div className="card-meta-row" style={{ gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
           {(() => {
             const status = getOpenStatus(biz);
             if (!status.label) return null;
@@ -161,23 +183,23 @@ export default function BusinessCard({
               : '#94a3b8';
             return (
               <>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, display: 'inline-block' }}></span>
-                <span style={{ color, fontWeight: '600' }}>{status.label}</span>
-                <span>•</span>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, display: 'inline-block', flex: 'none' }}></span>
+                <span style={{ color, fontWeight: '600', flex: 'none', whiteSpace: 'nowrap' }}>{status.label}</span>
+                <span style={{ flex: 'none' }}>•</span>
               </>
             );
           })()}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{locationText}</span>
+          <span className="card-ellipsis" title={locationText}>{locationText}</span>
         </div>
 
         {/* РЕАЛЬНІ СЛОТИ ЧАСУ НА СЬОГОДНІ */}
         {showTimeSlots ? (
-          <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.72rem', color: '#8fae92', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div className="card-foot" style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+            <span style={{ fontSize: '0.72rem', color: '#8fae92', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em', flex: 'none' }}>
               Сьогодні:
             </span>
             {salonSlots.length > 0 ? (
-              <div style={{ display: 'flex', gap: '5px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '5px' }}>
                 {salonSlots.map(time => (
                   <button
                     key={time}
@@ -202,13 +224,13 @@ export default function BusinessCard({
                 ))}
               </div>
             ) : (
-              <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: '500' }}>
+              <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: '500', textAlign: 'right' }}>
                 Немає слотів на сьогодні
               </span>
             )}
           </div>
         ) : (
-          <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="card-foot" style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
             <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '500' }}>
               Швидкий запис
             </span>
@@ -244,7 +266,15 @@ export function BusinessCardStyles() {
           text-decoration: none;
           position: relative;
           box-sizing: border-box;
+          /* Без цього довга назва чи адреса розтягувала колонку сітки
+             (min-width: auto) і картки «стрибали» по ширині. */
+          min-width: 0;
         }
+        .card-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; min-width: 0; }
+        .card-price { flex: none; font-size: 0.85rem; font-weight: 800; color: #111827; white-space: nowrap; }
+        .card-meta-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .card-ellipsis { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 41px; }
         /* При наведенні рухається ЛИШЕ фото - легке наближення.
            Підйом усієї картки зсуває сусідні рядки й ламає сітку. */
         .apple-biz-card:hover .card-photo-img {
@@ -274,6 +304,22 @@ export function BusinessCardStyles() {
           transform: scale(1.04);
         }
         /* СКЛЯНИЙ БЕЙДЖ */
+        .ad-mark {
+          position: relative; display: inline-flex; align-items: center; justify-content: center;
+          width: 22px; height: 22px; border-radius: 50%; outline: none; cursor: help;
+          color: #64748b; opacity: .8; transition: opacity .15s, color .15s;
+          background: rgba(255, 255, 255, 0.72);
+          backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        }
+        .ad-mark:hover, .ad-mark:focus { opacity: 1; color: #334155; }
+        .ad-tip {
+          position: absolute; top: calc(100% + 8px); left: 0; width: max-content; max-width: 190px;
+          padding: 0.5rem 0.7rem; border-radius: 8px; background: #334155; color: #fff;
+          font-size: 0.72rem; font-weight: 500; line-height: 1.4; text-align: left;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15); pointer-events: none;
+          opacity: 0; visibility: hidden; transform: translateY(-4px); transition: all .18s;
+        }
+        .ad-mark:hover .ad-tip, .ad-mark:focus .ad-tip { opacity: 1; visibility: visible; transform: none; }
         .glass-pill {
           background: rgba(255, 255, 255, 0.85);
           backdrop-filter: blur(16px);
@@ -326,6 +372,8 @@ export function BusinessCardStyles() {
           overflow: hidden;
           text-overflow: ellipsis;
           letter-spacing: -0.015em;
+          flex: 1 1 auto;
+          min-width: 0;
         }
         .card-action-link {
           font-size: 0.85rem;

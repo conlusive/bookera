@@ -17,6 +17,7 @@ OSRM (Open Source Routing Machine) — безкоштовний і без клю
 import asyncio
 import math
 import os
+import time
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -27,6 +28,17 @@ from app.core.logging_config import logger
 # сервера OSRM, коли публічного стане замало.
 OSRM_URL = os.getenv("OSRM_URL", "https://router.project-osrm.org")
 
+# Запасні маршрутизатори (через кому), з тим самим API. Демо-сервер OSRM
+# не дає гарантій доступності: коли він не відповідає, пробуємо наступний,
+# а до прямої відстані повертаємось лише якщо не відповів жоден.
+# Дзеркало FOSSGIS віддає ті самі числа (перевірено на тих самих точках).
+# Порожнє значення вимикає запасні.
+OSRM_FALLBACK_URLS = [
+    u.strip().rstrip("/")
+    for u in os.getenv("OSRM_FALLBACK_URLS", "https://routing.openstreetmap.de/routed-car").split(",")
+    if u.strip()
+]
+
 # Скільки точок питаємо за раз. OSRM обмежує розмір таблиці, і
 # сто закладів одним запитом він відхилить.
 MAX_DESTINATIONS = 50
@@ -35,10 +47,13 @@ MAX_DESTINATIONS = 50
 #
 # Координати людини округлюються до 4 знаків (~11 метрів) - точніше
 # за похибку самої геолокації, тож на відстань це не впливає.
-_cache: Dict[str, float] = {}
+# Значення - (кілометри, коли записано). Дороги змінюються рідко, але
+# вічний кеш показував би закриту вулицю назавжди.
+_cache: Dict[str, Tuple[float, float]] = {}
 _cache_lock = asyncio.Lock()
 
 CACHE_LIMIT = 10000
+CACHE_TTL_SECONDS = 7 * 24 * 3600
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -55,6 +70,35 @@ def _cache_key(lat: float, lng: float, dest_lat: float, dest_lng: float) -> str:
     # двоє людей за 100 м одне від одного отримували ту саму відстань
     # із кешу, і похибка сягала сотні метрів.
     return f"{lat:.4f},{lng:.4f}->{dest_lat:.4f},{dest_lng:.4f}"
+
+
+async def _table_request(base: str, coords: str) -> Optional[List[Optional[float]]]:
+    """Одне звернення до маршрутизатора. None - не вийшло (мережа, код, формат)."""
+    # sources=0 - рахуємо від першої точки (людини) до решти.
+    url = f"{base.rstrip('/')}/table/v1/driving/{coords}?sources=0&annotations=distance"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(url)
+        if response.status_code != 200:
+            logger.warning("Маршрутизатор %s відповів %s", base, response.status_code)
+            return None
+        data = response.json()
+        if data.get("code") != "Ok":
+            logger.warning("Маршрутизатор %s: %s", base, data.get("code"))
+            return None
+        return (data.get("distances") or [[]])[0]
+    except Exception as exc:
+        logger.warning("Маршрутизатор %s недоступний: %s", base, exc)
+        return None
+
+
+async def _fetch_distances(coords: str) -> Optional[List[Optional[float]]]:
+    """Основний маршрутизатор, а коли не відповів - запасні, по черзі."""
+    for base in [OSRM_URL, *OSRM_FALLBACK_URLS]:
+        distances = await _table_request(base, coords)
+        if distances is not None:
+            return distances
+    return None
 
 
 async def road_distances_km(
@@ -76,10 +120,11 @@ async def road_distances_km(
     to_fetch: List[Tuple[int, float, float]] = []
 
     async with _cache_lock:
+        now = time.time()
         for biz_id, lat, lng in destinations:
             cached = _cache.get(_cache_key(from_lat, from_lng, lat, lng))
-            if cached is not None:
-                result[biz_id] = cached
+            if cached is not None and now - cached[1] < CACHE_TTL_SECONDS:
+                result[biz_id] = cached[0]
             else:
                 to_fetch.append((biz_id, lat, lng))
 
@@ -95,46 +140,34 @@ async def road_distances_km(
         coords = ";".join(
             [f"{from_lng},{from_lat}"] + [f"{lng},{lat}" for _, lat, lng in chunk]
         )
-        # sources=0 - рахуємо від першої точки (людини) до решти.
-        url = f"{OSRM_URL}/table/v1/driving/{coords}?sources=0&annotations=distance"
 
-        try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                response = await client.get(url)
-
-            if response.status_code != 200:
-                logger.warning("OSRM відповів %s", response.status_code)
-                continue
-
-            data = response.json()
-            distances = (data.get("distances") or [[]])[0]
-
-            # Перший елемент - відстань до себе (нуль), решта - до закладів.
-            async with _cache_lock:
-                for i, (biz_id, lat, lng) in enumerate(chunk, start=1):
-                    if i >= len(distances):
-                        break
-                    meters = distances[i]
-                    if meters is None:
-                        # Маршруту немає - буває для точок на островах
-                        # або посеред води через помилку в координатах.
-                        continue
-
-                    km = meters / 1000.0
-                    result[biz_id] = km
-
-                    # Простий захист від нескінченного росту: коли кеш
-                    # переповнився, чистимо повністю. Складніше витіснення
-                    # тут не варте ускладнення - дані дешеві й швидко
-                    # набираються знову.
-                    if len(_cache) >= CACHE_LIMIT:
-                        _cache.clear()
-                    _cache[_cache_key(from_lat, from_lng, lat, lng)] = km
-
-        except Exception as exc:
-            # Маршрутизатор недоступний - не біда: викликач візьме
-            # пряму відстань. Показати приблизне краще, ніж нічого.
-            logger.warning("OSRM недоступний: %s", exc)
+        distances = await _fetch_distances(coords)
+        if distances is None:
+            # Не відповів жоден маршрутизатор - викликач візьме пряму
+            # відстань. Показати приблизне краще, ніж нічого.
             continue
+
+        # Перший елемент - відстань до себе (нуль), решта - до закладів.
+        async with _cache_lock:
+            now = time.time()
+            for i, (biz_id, lat, lng) in enumerate(chunk, start=1):
+                if i >= len(distances):
+                    break
+                meters = distances[i]
+                if meters is None:
+                    # Маршруту немає - буває для точок на островах
+                    # або посеред води через помилку в координатах.
+                    continue
+
+                km = meters / 1000.0
+                result[biz_id] = km
+
+                # Простий захист від нескінченного росту: коли кеш
+                # переповнився, чистимо повністю. Складніше витіснення
+                # тут не варте ускладнення - дані дешеві й швидко
+                # набираються знову.
+                if len(_cache) >= CACHE_LIMIT:
+                    _cache.clear()
+                _cache[_cache_key(from_lat, from_lng, lat, lng)] = (km, now)
 
     return result

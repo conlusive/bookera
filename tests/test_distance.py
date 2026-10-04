@@ -198,3 +198,61 @@ async def test_distances_endpoint_skips_business_without_coords(client, auth_hea
     })
     assert r.status_code == 200, r.text
     assert str(business_id) not in r.json()
+
+
+# ---------- резервний маршрутизатор і кеш ----------
+
+@pytest.mark.asyncio
+async def test_second_router_is_used_when_the_first_is_down(monkeypatch):
+    from app.services import routing
+
+    routing._cache.clear()
+    calls = []
+
+    async def fake_table(base, coords):
+        calls.append(base)
+        return None if base == "http://primary" else [0, 301.5, 1038.3]
+
+    monkeypatch.setattr(routing, "OSRM_URL", "http://primary")
+    monkeypatch.setattr(routing, "OSRM_FALLBACK_URLS", ["http://backup"])
+    monkeypatch.setattr(routing, "_table_request", fake_table)
+
+    km = await routing.road_distances_km(49.8397, 24.0297, [(1, 49.8399, 24.0269), (2, 49.8358, 24.0348)])
+    assert calls == ["http://primary", "http://backup"], "основний не відповів - пробуємо запасний"
+    assert km == {1: 0.3015, 2: 1.0383}
+
+    calls.clear()
+    again = await routing.road_distances_km(49.8397, 24.0297, [(1, 49.8399, 24.0269)])
+    assert again == {1: 0.3015} and calls == [], "повторний запит - із кешу, без звернення до мережі"
+
+
+@pytest.mark.asyncio
+async def test_no_router_at_all_gives_no_road_distance(monkeypatch):
+    from app.services import routing
+
+    routing._cache.clear()
+
+    async def down(base, coords):
+        return None
+
+    monkeypatch.setattr(routing, "_table_request", down)
+    assert await routing.road_distances_km(49.8397, 24.0297, [(1, 49.8399, 24.0269)]) == {}
+
+
+@pytest.mark.asyncio
+async def test_cached_distance_expires(monkeypatch):
+    from app.services import routing
+
+    routing._cache.clear()
+    answers = iter([[0, 500.0], [0, 900.0]])
+
+    async def fake_table(base, coords):
+        return next(answers)
+
+    monkeypatch.setattr(routing, "_table_request", fake_table)
+    first = await routing.road_distances_km(49.84, 24.03, [(1, 49.85, 24.04)])
+    # «Постаріле» значення в кеші не береться
+    key = routing._cache_key(49.84, 24.03, 49.85, 24.04)
+    routing._cache[key] = (routing._cache[key][0], routing._cache[key][1] - routing.CACHE_TTL_SECONDS - 1)
+    second = await routing.road_distances_km(49.84, 24.03, [(1, 49.85, 24.04)])
+    assert first == {1: 0.5} and second == {1: 0.9}

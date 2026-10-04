@@ -567,6 +567,58 @@ class CampaignRequest(BaseModel):
     audience: str = Field("all", description="all | regular | lapsed")
 
 
+async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
+    """
+    Кому піде розсилка: (усі клієнти закладу, ті, кому лист справді піде).
+    Одне правило і для підрахунку перед відправкою, і для самої розсилки -
+    число в інтерфейсі не може розійтись із фактом.
+    """
+    from app.models import Client
+    from app.services.client_stats import client_stats
+    from app.core.time_utils import local_now as _local_now
+
+    clients = (await db.execute(select(Client).where(
+        Client.business_id == business_id, Client.is_blacklisted.isnot(True),
+    ))).scalars().all()
+    # Візити й останній візит - із записів. Збережені лічильники ніхто не
+    # оновлював: «постійним» не знаходилось нікого, а «давно не були»
+    # падала на неіснуючому полі last_visit.
+    stats = await client_stats(db, business_id, clients)
+    today = _local_now().date()
+    selected = []
+    for c in clients:
+        if not c.email:
+            continue
+        s = stats.get(c.id, {})
+        if audience == "regular" and s.get("visits_count", 0) < 3:
+            continue
+        if audience == "lapsed":
+            # «Давно не був» - понад 60 днів і без майбутнього запису. Тим,
+            # хто був учора чи записаний на завтра, «ми скучили» - безглуздо.
+            last = s.get("last_visit_at")
+            if not last or s.get("next_visit_at") or (today - last.date()).days < 60:
+                continue
+        selected.append(c)
+    return clients, selected
+
+
+@router.get("/crm/campaigns/audience")
+async def campaign_audience(
+    business_id: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Скільки людей отримає розсилку для кожної аудиторії - до відправки."""
+    await assert_section(db, current_user, business_id, "analytics")
+    out = {}
+    for key in ("all", "regular", "lapsed"):
+        clients, selected = await _campaign_audience(db, business_id, key)
+        out[key] = len(selected)
+    out["total_clients"] = len(clients)
+    out["without_email"] = sum(1 for c in clients if not c.email)
+    return out
+
+
 @router.post("/crm/campaigns")
 async def send_campaign(
     payload: CampaignRequest,
@@ -597,35 +649,7 @@ async def send_campaign(
     if not business:
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
 
-    stmt = select(Client).where(
-        Client.business_id == payload.business_id,
-        Client.is_blacklisted.isnot(True),
-    )
-    result = await db.execute(stmt)
-    clients = result.scalars().all()
-
-    now = utc_now()
-    # Візити й останній візит - із записів. Збережені лічильники ніхто не
-    # оновлював: «постійним» не знаходилось нікого, а «давно не були»
-    # падала на неіснуючому полі last_visit.
-    from app.services.client_stats import client_stats
-    from app.core.time_utils import local_now as _local_now
-    stats = await client_stats(db, payload.business_id, clients)
-    today = _local_now().date()
-    selected = []
-    for c in clients:
-        if not c.email:
-            continue
-        s = stats.get(c.id, {})
-        if payload.audience == "regular" and s.get("visits_count", 0) < 3:
-            continue
-        if payload.audience == "lapsed":
-            # «Давно не був» - понад 60 днів і без майбутнього запису. Тим,
-            # хто був учора чи записаний на завтра, «ми скучили» - безглуздо.
-            last = s.get("last_visit_at")
-            if not last or s.get("next_visit_at") or (today - last.date()).days < 60:
-                continue
-        selected.append(c)
+    clients, selected = await _campaign_audience(db, payload.business_id, payload.audience)
 
     for c in selected:
         background_tasks.add_task(

@@ -171,6 +171,34 @@ export interface BusinessStats {
   top_services: { service_id: number; name: string; bookings_count: number; revenue: number }[];
 }
 
+export interface AnalyticsSummary {
+  revenue: number; completed: number; cancelled: number; no_show: number; upcoming: number;
+  avg_check: number; cancel_rate: number; clients: number; new_clients: number; returning_clients: number; tips: number;
+}
+
+export interface Analytics {
+  period: { start: string; end: string; days: number };
+  previous_period: { start: string; end: string; elapsed_days: number | null };
+  current: AnalyticsSummary;
+  previous: AnalyticsSummary;
+  series: { date: string; revenue: number; completed: number }[];
+  money: {
+    revenue: number; expenses: number; profit: number; tips: number;
+    expenses_by_category: { category: string; amount: number }[];
+    expenses_through: string | null;
+  };
+  monthly: { month: string; revenue: number; expenses: number; profit: number }[];
+  clients: {
+    active: number; new: number; returning: number; returning_share: number; regular: number; lapsed: number;
+    avg_gap_days: number | null; avg_lifetime_value: number; top: { name: string; visits: number; spent: number }[];
+  };
+  services: { service_id: number; name: string; count: number; revenue: number; avg_price: number; share: number }[];
+  staff: { staff_id: string | null; name: string; completed: number; revenue: number; avg_check: number; share: number; cancel_rate: number; tips: number }[];
+  sources: { label: string; count: number; revenue: number; share: number }[];
+  load: { heatmap: number[][]; weekday_totals: number[]; busiest_weekday: number | null; quietest_weekday: number | null };
+  goal: { goal: number | null; month_start: string; month_revenue: number; percent: number | null; days_left: number };
+}
+
 export interface MonetizationSummary {
   points_balance: number;
   direct_link_token?: string;
@@ -1042,6 +1070,19 @@ export const api = {
   },
 
   // === CRM: СТАТИСТИКА ===
+
+  /** Аналітика за період - усі цифри рахує сервер. Дати: YYYY-MM-DD. */
+  async getAnalytics(
+    token: string, businessId: number, dateFrom: string, dateTo: string, compare?: { from: string; to: string },
+  ): Promise<Analytics> {
+    const extra = compare ? `&compare_from=${compare.from}&compare_to=${compare.to}` : '';
+    return authFetch(`/crm/businesses/${businessId}/analytics?date_from=${dateFrom}&date_to=${dateTo}${extra}`, token);
+  },
+
+  /** Ціль доходу на місяць (null - прибрати). */
+  async setMonthlyGoal(token: string, businessId: number, amount: number | null): Promise<Analytics['goal']> {
+    return authFetch(`/crm/businesses/${businessId}/analytics/goal`, token, { method: 'PUT', body: JSON.stringify({ amount }) });
+  },
 
   async getBusinessStats(token: string, businessId: number, dateFrom?: string, dateTo?: string): Promise<BusinessStats> {
     const query = new URLSearchParams();

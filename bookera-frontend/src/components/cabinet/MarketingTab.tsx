@@ -319,6 +319,7 @@ export default function MarketingTab({ business }: { business: any }) {
                   ))}
                 </div>
 
+                <div className="mk-campaign">
                 <div className="mk-form">
                   <div className="mk-chips">
                     <span>Шаблон:</span>
@@ -337,6 +338,16 @@ export default function MarketingTab({ business }: { business: any }) {
                     <button type="button" className="clean-btn" onClick={askSend}>Надіслати</button>
                   </div>
                   {sent && <div className="mk-ok" role="status">{sent}</div>}
+                </div>
+
+                <div className="mk-mail">
+                  <small>Так виглядатиме лист</small>
+                  <div className="mk-mail-card">
+                    <div className="mk-mail-from">{business?.name}</div>
+                    <div className="mk-mail-subj">{subject.trim() || `Новини від ${business?.name || 'закладу'}`}</div>
+                    <div className="mk-mail-body">{message.trim() || 'Тут з’явиться ваш текст — пишіть ліворуч…'}</div>
+                  </div>
+                </div>
                 </div>
               </>
             )}
@@ -463,8 +474,8 @@ export default function MarketingTab({ business }: { business: any }) {
         .mk-balance b { color: #0f172a; font-variant-numeric: tabular-nums; }
 
         .mk-grid { display: grid; grid-template-columns: 1fr 300px; flex: 1; min-height: 0; overflow: hidden; }
-        .mk-main { overflow-y: auto; border-right: 1px solid #f1f5f9; display: flex; justify-content: center; }
-        .mk-main-inner { width: 100%; max-width: 920px; padding: 1.4rem 1.25rem 2rem; box-sizing: border-box; }
+        .mk-main { overflow-y: auto; border-right: 1px solid #f1f5f9; }
+        .mk-main-inner { width: 100%; padding: 1.4rem 2rem 2rem; box-sizing: border-box; }
         .mk-side { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
         .mk-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 1.2rem 1.2rem 0.4rem; }
         @media (max-width: 1100px) { .mk-grid { grid-template-columns: 1fr; } .mk-side { display: none; } .mk-main { border-right: none; } .mk-toolbar { padding: 0.8rem 1rem; } }
@@ -529,7 +540,8 @@ export default function MarketingTab({ business }: { business: any }) {
         .mk-weights { border: 1px solid #f1f5f9; border-radius: 14px; padding: 1.1rem 1.2rem; background: #fff; }
         .mk-bar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; gap: 2px; margin-bottom: 1rem; }
         .mk-bar i { display: block; }
-        .mk-weights ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1.4rem; }
+        .mk-weights ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem 1.6rem; }
+        @media (max-width: 1400px) { .mk-weights ul { grid-template-columns: 1fr 1fr; } }
         @media (max-width: 760px) { .mk-weights ul { grid-template-columns: 1fr; } }
         .mk-weights li { display: grid; grid-template-columns: 10px auto 1fr; column-gap: 0.55rem; align-items: baseline; font-size: 0.85rem; color: #0f172a; }
         .mk-weights li i { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
@@ -547,13 +559,20 @@ export default function MarketingTab({ business }: { business: any }) {
         .mk-chip:hover { border-style: solid; border-color: #94a3b8; color: #0f172a; }
         .mk-lbl { font-size: 0.78rem; font-weight: 600; color: #475569; margin-top: 0.5rem; display: flex; justify-content: space-between; }
         .mk-lbl small { color: #94a3b8; font-weight: 500; }
+        .mk-campaign { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 2rem; align-items: start; }
+        @media (max-width: 1250px) { .mk-campaign { grid-template-columns: 1fr; } }
+        .mk-mail small { display: block; font-size: 0.72rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.6rem; }
+        .mk-mail-card { border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; padding: 1.2rem 1.3rem; }
+        .mk-mail-from { font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; }
+        .mk-mail-subj { font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid #e2e8f0; }
+        .mk-mail-body { white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; color: #334155; min-height: 120px; overflow-wrap: anywhere; }
         .mk-text { min-height: 190px; resize: vertical; line-height: 1.5; }
         .mk-send-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 0.9rem; flex-wrap: wrap; }
         .mk-reach { font-size: 0.85rem; color: #64748b; } .mk-reach b { color: #0f172a; }
         .mk-ok { margin-top: 0.8rem; padding: 0.7rem 1rem; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 0.85rem; font-weight: 600; }
 
         /* Посилання */
-        .mk-links { display: flex; flex-direction: column; gap: 1rem; }
+        .mk-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1rem; align-items: start; }
         .mk-link-card { display: flex; gap: 1.4rem; align-items: center; justify-content: space-between; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.3rem 1.4rem; background: #fff; flex-wrap: wrap; }
         .mk-link-card.plain { background: #f8fafc; }
         .mk-link-main { flex: 1; min-width: 260px; }

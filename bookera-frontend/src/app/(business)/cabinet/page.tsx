@@ -1450,7 +1450,7 @@ export default function BusinessCabinet() {
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}
         {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 
-        {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} />}
+        {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} onNavigate={setActiveTab} />}
 
         {activeTab === 'MyEarnings' && business?.id && userProfile?.id && (
 

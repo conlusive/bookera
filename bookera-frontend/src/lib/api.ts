@@ -199,6 +199,36 @@ export interface Analytics {
   goal: { goal: number | null; month_start: string; month_revenue: number; percent: number | null; days_left: number };
 }
 
+export interface AuditEvent {
+  id: number;
+  category: string;
+  action: string;
+  summary: string;
+  meta?: { changes?: { field: string; label: string; from?: string; to?: string }[] } & Record<string, any> | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_role: string | null;
+  created_at: string;
+}
+
+export interface AuditPage { items: AuditEvent[]; has_more: boolean; next_before_id: number | null }
+
+export interface AuditSummary {
+  total: number;
+  by_category: Record<string, number>;
+  by_actor: { actor_id: string | null; name: string | null; role: string | null; count: number }[];
+}
+
+export interface AuditQuery {
+  category?: string; actor_id?: string; q?: string; date_from?: string; date_to?: string; before_id?: number; limit?: number;
+}
+
+function auditQs(params: AuditQuery): string {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '' && v !== null) q.set(k, String(v)); });
+  return q.toString() ? `?${q}` : '';
+}
+
 export interface MonetizationSummary {
   points_balance: number;
   direct_link_token?: string;
@@ -489,10 +519,14 @@ export const api = {
   async escalateStaffRequest(token: string, businessId: number, id: number, note?: string): Promise<any> {
     return authFetch(`/crm/businesses/${businessId}/staff-requests/${id}/escalate`, token, { method: 'POST', body: JSON.stringify({ note }) });
   },
-  async getAuditLog(token: string, businessId: number, params: { category?: string; actor_id?: string; before?: string } = {}): Promise<any[]> {
-    const q = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => { if (v) q.set(k, v); });
-    return authFetch(`/crm/businesses/${businessId}/audit${q.toString() ? `?${q}` : ''}`, token);
+  /** Журнал дій: сторінка подій за курсором (before_id) з фільтрами. */
+  async getAuditLog(token: string, businessId: number, params: AuditQuery = {}): Promise<AuditPage> {
+    return authFetch(`/crm/businesses/${businessId}/audit${auditQs(params)}`, token);
+  },
+
+  /** Скільки подій за період: загалом, за розділами й за людьми. */
+  async getAuditSummary(token: string, businessId: number, params: Pick<AuditQuery, 'q' | 'date_from' | 'date_to'> = {}): Promise<AuditSummary> {
+    return authFetch(`/crm/businesses/${businessId}/audit/summary${auditQs(params)}`, token);
   },
 
   // --- Інструменти майстра ---

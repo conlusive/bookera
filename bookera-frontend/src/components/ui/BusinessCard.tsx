@@ -102,25 +102,6 @@ export default function BusinessCard({
               <span>{distanceTag}</span>
             </div>
           ) : null}
-          {/* Заклад просувається через «Радар» - це реклама, і про це є позначка:
-              маленький символ із підказкою. Не текстова плашка: вона
-              займала місце відстані й кричала. Підказка - при наведенні,
-              на телефоні - при дотику (фокус); перехід за карткою не
-              спрацьовує. */}
-          {biz.is_radar_active ? (
-            <span
-              className="ad-mark"
-              role="img"
-              tabIndex={0}
-              aria-label="Реклама: заклад просувається в Bookera"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                <path d="M12 2.5c.5 4.6 2.4 7 7.5 9.5-5.1 2.5-7 4.9-7.5 9.5-.5-4.6-2.4-7-7.5-9.5 5.1-2.5 7-4.9 7.5-9.5z" />
-              </svg>
-              <span className="ad-tip">Реклама · заклад просувається в Bookera</span>
-            </span>
-          ) : null}
           {/* Плашку «Топ вибір» прибрано.
               Умова була `!hasRating || rank >= 4.8` - тобто заклад
               БЕЗ ЖОДНОГО рейтингу теж отримував «Топ вибір».
@@ -190,6 +171,7 @@ export default function BusinessCard({
             );
           })()}
           <span className="card-ellipsis" title={locationText}>{locationText}</span>
+          {biz.is_radar_active ? <span className="ad-label" title="Заклад просувається в Bookera («Радар»)">Реклама</span> : null}
         </div>
 
         {/* РЕАЛЬНІ СЛОТИ ЧАСУ НА СЬОГОДНІ */}
@@ -304,22 +286,8 @@ export function BusinessCardStyles() {
           transform: scale(1.04);
         }
         /* СКЛЯНИЙ БЕЙДЖ */
-        .ad-mark {
-          position: relative; display: inline-flex; align-items: center; justify-content: center;
-          width: 22px; height: 22px; border-radius: 50%; outline: none; cursor: help;
-          color: #64748b; opacity: .8; transition: opacity .15s, color .15s;
-          background: rgba(255, 255, 255, 0.72);
-          backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-        }
-        .ad-mark:hover, .ad-mark:focus { opacity: 1; color: #334155; }
-        .ad-tip {
-          position: absolute; top: calc(100% + 8px); left: 0; width: max-content; max-width: 190px;
-          padding: 0.5rem 0.7rem; border-radius: 8px; background: #334155; color: #fff;
-          font-size: 0.72rem; font-weight: 500; line-height: 1.4; text-align: left;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15); pointer-events: none;
-          opacity: 0; visibility: hidden; transform: translateY(-4px); transition: all .18s;
-        }
-        .ad-mark:hover .ad-tip, .ad-mark:focus .ad-tip { opacity: 1; visibility: visible; transform: none; }
+        /* Позначка «Реклама» - дрібний сірий підпис у картці, як «Ad» у пошуку: чесно, але тихо */
+        .ad-label { flex: none; margin-left: auto; padding-left: 0.5rem; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.02em; color: #b0b7c0; cursor: help; white-space: nowrap; }
         .glass-pill {
           background: rgba(255, 255, 255, 0.85);
           backdrop-filter: blur(16px);

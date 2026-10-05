@@ -169,6 +169,9 @@ export default function BusinessCabinet() {
   const [dragConfirmData, setDragConfirmData] = useState<{app: any, targetDate: Date, newStart: string, newEnd: string} | null>(null);
 
   const [clientsList, setClientsList] = useState<any[]>([]);
+  // Для якого закладу база клієнтів уже завантажена. Вантажимо її, лише коли відкрито
+  // вкладку «Клієнти» (раніше - при кожному вході в кабінет, навіть на календарі).
+  const [clientsReadyFor, setClientsReadyFor] = useState<string | null>(null);
   const [viewingClient, setViewingClient] = useState<any>(null);
   const [editingClientNotes, setEditingClientNotes] = useState('');
   const [editingClientAllergies, setEditingClientAllergies] = useState('');
@@ -212,8 +215,17 @@ export default function BusinessCabinet() {
       setClientsList(data);
     } catch (err) {
       console.error("Помилка завантаження клієнтів:", err);
+    } finally {
+      setClientsReadyFor(String(bizId));
     }
   };
+
+  useEffect(() => {
+    if (activeTab === 'Clients' && business?.id && clientsReadyFor !== String(business.id)) {
+      void fetchClientsFromDB(business.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, business?.id, clientsReadyFor]);
 
   const handleSaveNewClient = async () => {
     if (!business) return showToast('Заклад не обрано', 'error');
@@ -394,16 +406,15 @@ export default function BusinessCabinet() {
         const savedCal = localStorage.getItem(`bookera_cal_settings_${targetBiz.id}`);
         if (savedCal) setCalSettings(JSON.parse(savedCal));
 
-        const [srvsData, teamData, clientsData, hoursData] = await Promise.all([
+        const [srvsData, teamData, hoursData] = await Promise.all([
           api.getBusinessServices(targetBiz.id),
           api.listStaff(token, targetBiz.id),
-          api.listClients(token, targetBiz.id),
-          api.getBusinessHours(targetBiz.id),
+                    api.getBusinessHours(targetBiz.id),
         ]);
 
         setServices(srvsData || []);
         setTeam(normalizeStaff(teamData));
-        if (clientsData) setClientsList(clientsData);
+        setClientsList([]); setClientsReadyFor(null);
         if (hoursData && hoursData.length > 0) {
           const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
           const byWeekday = new Map(hoursData.map(h => [h.weekday, h]));
@@ -484,17 +495,16 @@ export default function BusinessCabinet() {
           const savedCal = localStorage.getItem(`bookera_cal_settings_${me.business.id}`);
           if (savedCal) setCalSettings(JSON.parse(savedCal));
 
-          const [srvsData, teamData, clientsData, hoursData] = await Promise.all([
+          const [srvsData, teamData, hoursData] = await Promise.all([
             api.getBusinessServices(me.business.id),
             api.listStaff(token, me.business.id),
-            api.listClients(token, me.business.id),
-            api.getBusinessHours(me.business.id),
+                        api.getBusinessHours(me.business.id),
           ]);
 
           if (isMounted) {
             setServices(srvsData || []);
             setTeam(normalizeStaff(teamData));
-            if (clientsData) setClientsList(clientsData);
+            setClientsList([]); setClientsReadyFor(null);
             if (hoursData && hoursData.length > 0) {
               const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
               const byWeekday = new Map(hoursData.map(h => [h.weekday, h]));
@@ -1435,7 +1445,7 @@ export default function BusinessCabinet() {
 
         {activeTab === 'Calendar' && <CalendarTab business={business} team={team} services={services} userProfile={userProfile} />}
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
-        {activeTab === 'Clients' && <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} />}
+        {activeTab === 'Clients' && (clientsReadyFor === String(business?.id) ? <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} /> : <TabLoading />)}
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}
         {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} shifts={shifts} onSaved={(patch) => setBusiness(b => (b ? { ...b, ...patch } : b))} onEditHours={() => { setShiftsFromCalSettings(false); setShowShiftsModal(true); }} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 

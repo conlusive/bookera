@@ -205,7 +205,7 @@ async def test_client_deletes_own_review(client, auth_headers):
     """Свій відгук - видалити можна; рейтинг перераховується; чужий - ні."""
     bid, sid, owner, m = await _setup(client, auth_headers, "del")
     a1, t1 = await _done(bid, sid, m, 3)
-    a2, t2 = await _done(bid, sid, m, 4)
+    a2, t2 = await _done(bid, sid, m, 4, email="other@example.com")
     await client.post(f"/appointments/{a1}/review", json={"token": t1, "master_rating": 5, "salon_rating": 1})
     await client.post(f"/appointments/{a2}/review", json={"token": t2, "master_rating": 5, "salon_rating": 5})
 

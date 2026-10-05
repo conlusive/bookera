@@ -8,11 +8,16 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import { ALL_AMENITIES } from '@/lib/amenities';
 import { storefrontMap } from '@/lib/storefront-map';
+import WorkingHours from '@/components/salon/WorkingHours';
+import { openStatus } from '@/lib/salon-time';
 import SmartImage from '@/components/ui/SmartImage';
 import { formatDuration } from '@/lib/duration';
 
 interface StorefrontTabProps {
   onNavigate?: (tab: string, view?: string) => void;
+  /** Графік зі стану кабінету: {day, active, start, end}[] у порядку Пн..Нд */
+  shifts?: { day: string; active: boolean; start: string; end: string }[];
+  onEditHours?: () => void;
   business: any;
   services: any[];
   team: any[];
@@ -22,7 +27,7 @@ interface StorefrontTabProps {
 
 // Список усіх доступних зручностей для салону з покращеними SVG-іконками
 
-export default function StorefrontTab({ business, services, team, Icons, setActiveTab, onNavigate }: StorefrontTabProps) {
+export default function StorefrontTab({ business, services, team, Icons, setActiveTab, onNavigate, shifts, onEditHours }: StorefrontTabProps) {
   const { showToast } = useToast();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -295,6 +300,11 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
   const map = useMemo(() => storefrontMap(business), [business?.address, business?.city, business?.latitude, business?.longitude]);
 
+  const hoursRows = useMemo(() => (shifts || []).map((sh, i) => ({ weekday: i, is_open: sh.active, open_time: sh.start, close_time: sh.end })), [shifts]);
+  const [clientNow, setClientNow] = useState<Date | null>(null);
+  useEffect(() => { setClientNow(new Date()); const t = setInterval(() => setClientNow(new Date()), 60_000); return () => clearInterval(t); }, []);
+  const openNow = useMemo(() => (clientNow && hoursRows.length ? openStatus(hoursRows, clientNow) : null), [hoursRows, clientNow]);
+
   return (
     <>
       <style dangerouslySetInnerHTML={{__html: `
@@ -517,6 +527,29 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     placeholder="Розкажіть історію вашого закладу..."
                   />
                 </div>
+
+                {/* Графік роботи: редагується там само, де й календар (вікно «Графік»). */}
+                <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', margin: 0, color: '#1D1D1F', letterSpacing: '-0.01em' }}>Графік роботи</h2>
+                    {openNow && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, padding: '3px 8.5px', borderRadius: '6px', color: openNow.open ? '#065F46' : '#86868B', background: openNow.open ? 'rgba(16, 185, 129, 0.08)' : '#f5f5f7' }}>
+<span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: openNow.open ? '#10B981' : '#cbd5e1', flexShrink: 0 }} />
+                        {openNow.text}
+                      </span>
+                    )}
+                  </div>
+                  {hoursRows.length > 0 ? (
+                    <WorkingHours rows={hoursRows} now={clientNow} />
+                  ) : (
+                    <div style={{ color: '#94a3b8', fontSize: '0.92rem' }}>Графік ще не налаштований. Клієнти бачитимуть лише слоти для запису.</div>
+                  )}
+                  {onEditHours && (
+                    <div className="edit-overlay" style={{ borderRadius: '24px' }} onClick={onEditHours}>
+                      <button className="edit-btn"><Icons.Edit /> Змінити графік</button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Сайдбар (Команда, Карта та Зручності) */}
@@ -547,7 +580,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                             зникла зі списку, виглядає як помилка. Видно
                             і що вона в команді, і що клієнт її не побачить. */}
                         {orderedTeam.map((staff, idx) => (
-                          <div key={idx} title={staff.show_in_storefront === false ? 'Не показується на сторінці закладу' : undefined} style={{ opacity: staff.show_in_storefront === false ? 0.45 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '76px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
+                          <div key={idx} title={staff.show_in_storefront === false ? 'Не показується на сторінці закладу' : undefined} style={{ opacity: staff.show_in_storefront === false ? 0.45 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '92px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
                               {staff.avatar_url ? (
                                 <SmartImage src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
@@ -555,10 +588,10 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                                 <div style={{ display: 'flex', width: '20px', height: '20px', color: '#86868B' }}><Icons.User /></div>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={staff.name}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', lineHeight: 1.25, width: '100%', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere', wordBreak: 'break-word' }} title={staff.name}>
                               {staff.name}
                             </div>
-                            <div style={{ fontSize: '0.74rem', color: '#86868B', marginTop: '2px', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={formatRole(staff.role)}>
+                            <div style={{ fontSize: '0.74rem', color: '#86868B', marginTop: '2px', lineHeight: 1.25, width: '100%', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere', wordBreak: 'break-word' }} title={formatRole(staff.role)}>
                               {staff.show_in_storefront === false ? 'Приховано' : formatRole(staff.role)}
                             </div>
                           </div>

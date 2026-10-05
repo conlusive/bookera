@@ -145,3 +145,5 @@ class MyAppointmentResponse(AppointmentResponse):
     manage_token: Optional[str] = None
     # Чи людина вже оцінила цей візит - щоб не пропонувати оцінку вдруге.
     has_review: bool = False
+    # Сервер прийме відгук на цей візит (не ручний запис, не власна команда, не надто часто)
+    can_review: bool = False

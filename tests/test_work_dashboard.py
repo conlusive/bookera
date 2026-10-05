@@ -66,3 +66,47 @@ async def test_client_without_work_gets_empty(client, auth_headers):
     """Звичайний клієнт - без розділу: список салонів порожній."""
     w = (await client.get("/work/me", headers=auth_headers("just-client"))).json()
     assert w == {"workplaces": []}
+
+
+@pytest.mark.asyncio
+async def test_stats_per_salon_and_period(client, auth_headers):
+    a, b = await _setup(client, auth_headers)
+    h = auth_headers(M)
+
+    both = (await client.get("/work/me/stats", params={"days": 30}, headers=h)).json()
+    assert both["visits"] == 4 and both["revenue"] == 2200 and both["avg_check"] == 550
+    assert both["bucket"] == "day" and len(both["series"]) == 30
+    assert sum(x["visits"] for x in both["series"]) == 4
+
+    assert len(both["load"]) == 7 and all(len(r) == 24 for r in both["load"]) and sum(map(sum, both["load"])) == 4
+
+    only_a = (await client.get("/work/me/stats", params={"days": 30, "business_id": a}, headers=h)).json()
+    assert only_a["visits"] == 3 and only_a["revenue"] == 1500, "лише Салон А"
+    assert only_a["top_services"][0]["name"] == "Стрижка" and only_a["top_services"][0]["visits"] == 3
+
+    week = (await client.get("/work/me/stats", params={"days": 7, "business_id": b}, headers=h)).json()
+    assert week["visits"] == 1 and len(week["series"]) == 7
+
+    quarter = (await client.get("/work/me/stats", params={"days": 90}, headers=h)).json()
+    assert quarter["bucket"] == "week" and sum(x["visits"] for x in quarter["series"]) == 4
+
+    # чужий заклад - не мій
+    other = await _salon(client, auth_headers("work-owner-c"), "Салон В")
+    r = await client.get("/work/me/stats", params={"business_id": other}, headers=h)
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_calendar_and_agenda_across_all_salons(client, auth_headers):
+    a, b = await _setup(client, auth_headers)
+    h = auth_headers(M)
+    today = local_now().date()
+
+    cal = (await client.get("/work/me/calendar", params={"month": today.strftime("%Y-%m")}, headers=h)).json()
+    assert cal.get(today.isoformat()) == 2, "обидва салони разом"
+    only_a = (await client.get("/work/me/calendar", params={"month": today.strftime("%Y-%m"), "business_id": a}, headers=h)).json()
+    assert only_a.get(today.isoformat()) == 1
+
+    day = (await client.get("/work/me/agenda", params={"date": today.isoformat()}, headers=h)).json()
+    assert {x["business_name"] for x in day} == {"Салон А", "Салон Б"}
+    assert all(x["client_name"] != "Чужий" for x in day)

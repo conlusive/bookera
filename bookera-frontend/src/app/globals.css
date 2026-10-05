@@ -484,3 +484,7 @@
   15%, 75% { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, -4px); }
 }
+
+/* Вікно на весь екран відкрите: сторінка за ним не прокручується (ModalScrollLock) */
+html.modal-scroll-locked { overflow: hidden; }
+html.modal-scroll-locked body { overflow: hidden; padding-right: var(--scrollbar-comp, 0px); }

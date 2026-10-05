@@ -338,6 +338,8 @@ export default function BusinessCabinet() {
 
   const [showCalSettingsModal, setShowCalSettingsModal] = useState(false);
   const [showShiftsModal, setShowShiftsModal] = useState(false);
+  // Звідки відкрили «Робочі години»: з налаштувань календаря - стрілка повертає туди, з вітрини - просто закриває
+  const [shiftsFromCalSettings, setShiftsFromCalSettings] = useState(false);
 
   const [calSettings, setCalSettings] = useState({
     defaultView: 'day',
@@ -635,6 +637,7 @@ export default function BusinessCabinet() {
       }
     }
     setShowShiftsModal(false);
+    setShiftsFromCalSettings(false);
   };
 
   const handleSaveAppointment = async () => {
@@ -1448,7 +1451,7 @@ export default function BusinessCabinet() {
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
         {activeTab === 'Clients' && <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} />}
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}
-        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
+        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} shifts={shifts} onEditHours={() => { setShiftsFromCalSettings(false); setShowShiftsModal(true); }} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 
         {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} onNavigate={setActiveTab} />}
 
@@ -2163,6 +2166,7 @@ export default function BusinessCabinet() {
                 <button
                   onClick={() => {
                     setShowCalSettingsModal(false);
+                    setShiftsFromCalSettings(true);
                     setShowShiftsModal(true);
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', color: '#0f172a', transition: '0.2s' }}
@@ -2179,12 +2183,12 @@ export default function BusinessCabinet() {
 
       {/* МОДАЛКА НАЛАШТУВАННЯ РОБОЧИХ ЗМІН */}
       {showShiftsModal && (
-        <div className="modal-overlay" onClick={() => setShowShiftsModal(false)}>
+        <div className="modal-overlay" onClick={() => { setShowShiftsModal(false); setShiftsFromCalSettings(false); }}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ animation: 'slideUp 0.3s ease', maxWidth: '600px', padding: '0' }}>
             <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                 <button
-                  onClick={() => { setShowShiftsModal(false); setShowCalSettingsModal(true); }}
+                  onClick={() => { setShowShiftsModal(false); if (shiftsFromCalSettings) setShowCalSettingsModal(true); setShiftsFromCalSettings(false); }}
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', color: '#64748b' }}
                 >
                   <Icons.ChevronLeft />
@@ -2209,19 +2213,19 @@ export default function BusinessCabinet() {
                     <div style={{ fontWeight: '700', color: shift.active ? '#0f172a' : '#94a3b8', fontSize: '1rem' }}>{shift.day}</div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '240px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '280px' }}>
                     {shift.active ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', width: '100%', justifyContent: 'space-between' }}>
                         <input
                           type="time" value={shift.start}
                           onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].start = e.target.value; setShifts(newShifts); }}
-                          style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '100px', textAlign: 'center' }}
+                          style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '122px', textAlign: 'center', boxSizing: 'border-box' }}
                         />
                         <span style={{ color: '#94a3b8', fontWeight: '800' }}>—</span>
                         <input
                           type="time" value={shift.end}
                           onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].end = e.target.value; setShifts(newShifts); }}
-                          style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '100px', textAlign: 'center' }}
+                          style={{ padding: '0.5rem 0.8rem', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', color: '#0f172a', fontSize: '0.95rem', background: '#fff', outline: 'none', transition: '0.2s', width: '122px', textAlign: 'center', boxSizing: 'border-box' }}
                         />
                       </div>
                     ) : (

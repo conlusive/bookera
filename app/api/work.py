@@ -102,6 +102,8 @@ async def my_work(
 
     today = [appt_out(a) for a in upcoming if a.start_time < day_end]
     next_up = next((appt_out(a) for a in upcoming if a.start_time >= now), None)
+    # Найближчі дні (без сьогодні) - щоб бачити тиждень уперед, а не лише один день
+    later = [appt_out(a) for a in upcoming if a.start_time >= day_end][:40]
 
     # --- Останні 30 днів ---
     done = (await db.execute(
@@ -165,6 +167,7 @@ async def my_work(
             "revenue_30d": round(per_biz[b.id]["revenue"], 2),
         } for m, b in rows],
         "today": today,
+        "later": later,
         "next": next_up,
         "stats_30d": {
             "visits": len(done),
@@ -176,6 +179,7 @@ async def my_work(
         "reviews": int(rating_row[1] or 0),
         "unpaid": unpaid,
         "payouts": [{
+            "business_id": p.business_id,
             "business_name": biz_by_id[p.business_id].name if p.business_id in biz_by_id else None,
             "amount": _f(p.payout_amount),
             "paid_at": p.paid_at.isoformat() if p.paid_at else None,
@@ -183,6 +187,110 @@ async def my_work(
         } for p in payouts],
     }
 
+
+
+@router.get("/me/stats")
+async def my_work_stats(
+    business_id: Optional[int] = Query(None, description="Один заклад; без параметра - усі мої"),
+    days: int = Query(30, description="Період: 7, 30 або 90 днів"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Статистика майстра за період - окремо по закладу або по всіх разом.
+
+    Лише ВЛАСНІ візити людини (де вона майстер). Виручка - ціна завершених
+    візитів (як в аналітиці закладу), порівняння - з попереднім періодом тієї
+    самої довжини. Для 90 днів графік тижневий: 90 стовпчиків нічого не скажуть.
+    """
+    days = days if days in (7, 30, 90) else 30
+    me = str(current_user.id)
+    rows = (await db.execute(
+        select(StaffMembership.business_id).where(
+            StaffMembership.user_id == me, StaffMembership.is_active.is_(True),
+            *([StaffMembership.business_id == business_id] if business_id else []),
+        )
+    )).all()
+    biz_ids = [r[0] for r in rows]
+    if not biz_ids:
+        raise HTTPException(status_code=403, detail="Ви не працюєте в цьому закладі")
+
+    now = local_now().replace(tzinfo=None)
+    today = now.date()
+    start = datetime.combine(today - timedelta(days=days - 1), time.min)
+    end = datetime.combine(today + timedelta(days=1), time.min)
+    prev_start = start - timedelta(days=days)
+
+    appts = (await db.execute(
+        select(Appointment).where(
+            Appointment.master_id == me, Appointment.business_id.in_(biz_ids),
+            Appointment.start_time >= prev_start, Appointment.start_time < end,
+            Appointment.status.in_(["completed", "cancelled", "no-show"]),
+        )
+    )).scalars().all()
+
+    cur = [a for a in appts if a.start_time >= start]
+    prev_done = [a for a in appts if a.start_time < start and a.status == "completed"]
+    done = [a for a in cur if a.status == "completed"]
+    revenue = sum(_f(a.price) for a in done)
+    prev_revenue = sum(_f(a.price) for a in prev_done)
+
+    # Ряд для графіка
+    weekly = days > 30
+    buckets: dict = {}
+    d0 = start.date()
+    for i in range(days):
+        d = d0 + timedelta(days=i)
+        key = (d - timedelta(days=(d - d0).days % 7)) if weekly else d
+        buckets.setdefault(key, {"date": key.isoformat(), "visits": 0, "revenue": 0.0})
+    for a in done:
+        d = a.start_time.date()
+        key = (d - timedelta(days=(d - d0).days % 7)) if weekly else d
+        if key in buckets:
+            buckets[key]["visits"] += 1
+            buckets[key]["revenue"] += _f(a.price)
+    series = [{**b, "revenue": round(b["revenue"], 2)} for _, b in sorted(buckets.items())]
+
+    # Найпопулярніші послуги за період
+    # Групуємо за НАЗВОЮ: «Стрижка» у двох салонах - та сама послуга для майстра
+    ids = {a.service_id for a in done if a.service_id}
+    names = {}
+    if ids:
+        names = {sv.id: sv.name for sv in (await db.execute(select(Service).where(Service.id.in_(ids)))).scalars().all()}
+    by_service = defaultdict(lambda: {"visits": 0, "revenue": 0.0})
+    for a in done:
+        name = names.get(a.service_id) or "Без послуги"
+        by_service[name]["visits"] += 1
+        by_service[name]["revenue"] += _f(a.price)
+    top = sorted(by_service.items(), key=lambda kv: (-kv[1]["visits"], -kv[1]["revenue"]))[:5]
+
+    rating_row = (await db.execute(
+        select(func.avg(func.coalesce(Review.master_rating, Review.rating)), func.count(Review.id))
+        .join(Appointment, Appointment.id == Review.appointment_id)
+        .where(Appointment.master_id == me, Appointment.business_id.in_(biz_ids))
+    )).one()
+
+    # Карта завантаження: скільки завершених візитів припало на кожну годину кожного дня тижня
+    # (0 = понеділок). Показує, коли майстер найзайнятіший, а коли є вільні вікна.
+    load = [[0] * 24 for _ in range(7)]
+    for a in done:
+        load[a.start_time.weekday()][a.start_time.hour] += 1
+
+    return {
+        "load": load,
+        "days": days,
+        "bucket": "week" if weekly else "day",
+        "visits": len(done),
+        "revenue": round(revenue, 2),
+        "avg_check": round(revenue / len(done), 2) if done else 0,
+        "no_shows": sum(1 for a in cur if a.status == "no-show"),
+        "cancelled": sum(1 for a in cur if a.status == "cancelled"),
+        "prev": {"visits": len(prev_done), "revenue": round(prev_revenue, 2)},
+        "series": series,
+        "top_services": [{"name": name, "visits": v["visits"], "revenue": round(v["revenue"], 2)} for name, v in top],
+        "rating": round(float(rating_row[0]), 1) if rating_row[0] is not None else None,
+        "reviews": int(rating_row[1] or 0),
+    }
 
 
 # --- Календар і особистий час майстра ---------------------------------
@@ -198,16 +306,27 @@ async def _my_membership(db: AsyncSession, me: str, business_id: int):
     return m
 
 
+async def _my_business_ids(db: AsyncSession, me: str, business_id: Optional[int]) -> list[int]:
+    """Заклади, у яких людина працює: один (з перевіркою членства) або всі її."""
+    if business_id is not None:
+        await _my_membership(db, me, business_id)
+        return [business_id]
+    rows = (await db.execute(
+        select(StaffMembership.business_id).where(StaffMembership.user_id == me, StaffMembership.is_active.is_(True))
+    )).all()
+    return [r[0] for r in rows]
+
+
 @router.get("/me/calendar")
 async def my_calendar(
-    business_id: int = Query(...),
+    business_id: Optional[int] = Query(None, description="Без параметра - усі мої заклади"),
     month: str = Query(..., description="YYYY-MM"),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Скільки моїх записів у кожен день місяця - для крапок у календарику."""
     me = str(current_user.id)
-    await _my_membership(db, me, business_id)
+    biz_ids = await _my_business_ids(db, me, business_id)
     try:
         y, mo = (int(x) for x in month.split("-"))
         first = datetime(y, mo, 1)
@@ -216,7 +335,7 @@ async def my_calendar(
     nxt = datetime(y + (mo == 12), 1 if mo == 12 else mo + 1, 1)
     rows = (await db.execute(
         select(func.date(Appointment.start_time), func.count(Appointment.id))
-        .where(Appointment.master_id == me, Appointment.business_id == business_id,
+        .where(Appointment.master_id == me, Appointment.business_id.in_(biz_ids),
                Appointment.start_time >= first, Appointment.start_time < nxt,
                Appointment.status.notin_(["cancelled", "no-show", "blocked", "time_off"]))
         .group_by(func.date(Appointment.start_time))
@@ -226,21 +345,21 @@ async def my_calendar(
 
 @router.get("/me/agenda")
 async def my_agenda(
-    business_id: int = Query(...),
+    business_id: Optional[int] = Query(None, description="Без параметра - усі мої заклади"),
     date_: str = Query(..., alias="date", description="YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Мої записи й особистий час на день - по порядку."""
     me = str(current_user.id)
-    await _my_membership(db, me, business_id)
+    biz_ids = await _my_business_ids(db, me, business_id)
     try:
         day = datetime.strptime(date_, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="Дата у форматі YYYY-MM-DD")
     items = (await db.execute(
         select(Appointment).where(
-            Appointment.master_id == me, Appointment.business_id == business_id,
+            Appointment.master_id == me, Appointment.business_id.in_(biz_ids),
             Appointment.start_time >= day, Appointment.start_time < day + timedelta(days=1),
             Appointment.status.notin_(["cancelled", "blocked"]),
         ).order_by(Appointment.start_time)
@@ -249,8 +368,10 @@ async def my_agenda(
     names = {}
     if srv_ids:
         names = {s.id: s.name for s in (await db.execute(select(Service).where(Service.id.in_(srv_ids)))).scalars().all()}
+    biz_names = {b.id: b.name for b in (await db.execute(select(Business).where(Business.id.in_(biz_ids)))).scalars().all()}
     return [{
         "id": a.id, "status": a.status,
+        "business_id": a.business_id, "business_name": biz_names.get(a.business_id),
         "start_time": a.start_time.isoformat(), "end_time": a.end_time.isoformat() if a.end_time else None,
         "service_name": names.get(a.service_id), "client_name": a.client_name,
         "client_phone": a.client_phone, "price": float(a.price) if a.price is not None else None,

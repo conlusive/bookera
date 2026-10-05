@@ -19,6 +19,7 @@ class ReviewResponse(BaseModel):
     id: int
     business_id: int
     appointment_id: Optional[int] = None
+    master_id: Optional[str] = None  # кому з майстрів адресований відгук (з візиту)
     author_name: Optional[str] = None
     rating: int
     master_rating: Optional[int] = None

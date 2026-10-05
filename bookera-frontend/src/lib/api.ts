@@ -268,8 +268,10 @@ export interface Review {
   id: number;
   business_id: number;
   appointment_id?: number;
+  master_id?: string | null;
   author_name?: string;
   rating: number;
+  master_rating?: number | null;
   comment?: string;
   business_reply?: string;
   created_at?: string;
@@ -575,13 +577,13 @@ export const api = {
   },
 
   /** Скільки моїх записів у кожен день місяця: {"2026-09-24": 3}. */
-  async getMyCalendar(token: string, businessId: number, month: string): Promise<Record<string, number>> {
-    return authFetch(`/work/me/calendar?business_id=${businessId}&month=${month}`, token);
+  async getMyCalendar(token: string, businessId: number | null | undefined, month: string): Promise<Record<string, number>> {
+    return authFetch(`/work/me/calendar?month=${month}${businessId ? `&business_id=${businessId}` : ''}`, token);
   },
 
   /** Мої записи й особистий час на день. */
-  async getMyAgenda(token: string, businessId: number, date: string): Promise<any[]> {
-    return authFetch(`/work/me/agenda?business_id=${businessId}&date=${date}`, token);
+  async getMyAgenda(token: string, businessId: number | null | undefined, date: string): Promise<any[]> {
+    return authFetch(`/work/me/agenda?date=${date}${businessId ? `&business_id=${businessId}` : ''}`, token);
   },
 
   async addTimeOff(token: string, payload: { business_id: number; start_time: string; end_time: string; note?: string }): Promise<any> {
@@ -598,6 +600,10 @@ export const api = {
   },
 
   /** «Моя робота». З businessId - лише один заклад (для кабінету майстра). */
+  async getMyWorkStats(token: string, days: number, businessId?: number): Promise<any> {
+    return authFetch(`/work/me/stats?days=${days}${businessId ? `&business_id=${businessId}` : ""}`, token);
+  },
+
   async getMyWork(token: string, businessId?: number): Promise<any> {
     return authFetch(businessId ? `/work/me?business_id=${businessId}` : '/work/me', token);
   },
@@ -831,7 +837,7 @@ export const api = {
     return publicFetch(`/services/business/${businessId}`);
   },
 
-  async listPublicMasters(businessId: number): Promise<{ id: string; full_name?: string; specialization?: string; avatar_url?: string ; show_in_storefront?: boolean}[]> {
+  async listPublicMasters(businessId: number): Promise<{ id: string; full_name?: string; specialization?: string; avatar_url?: string ; show_in_storefront?: boolean; rating?: number | null; reviews_count?: number}[]> {
     return publicFetch(`/crm/businesses/${businessId}/masters`);
   },
 

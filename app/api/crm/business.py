@@ -70,9 +70,27 @@ async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_d
             or_(User.provides_services.is_(None), User.provides_services == True),
         )
     )
+    users = result.scalars().all()
+
+    # Рейтинг кожного майстра: середня «оцінка майстра» з відгуків на його візити
+    # (для старих відгуків без окремої оцінки - загальна). Один запит на всіх.
+    from sqlalchemy import func
+    from app.models import Appointment, Review
+    ratings = {}
+    if users:
+        rows = await db.execute(
+            select(Appointment.master_id, func.avg(func.coalesce(Review.master_rating, Review.rating)), func.count(Review.id))
+            .join(Appointment, Appointment.id == Review.appointment_id)
+            .where(Review.business_id == business_id, Appointment.master_id.in_([str(u.id) for u in users]))
+            .group_by(Appointment.master_id)
+        )
+        ratings = {mid: (round(float(avg), 1), int(cnt)) for mid, avg, cnt in rows.all()}
+
     return [
         {
             "id": u.id,
+            "rating": ratings.get(str(u.id), (None, 0))[0],
+            "reviews_count": ratings.get(str(u.id), (None, 0))[1],
             "full_name": u.full_name,
             "specialization": u.specialization,
             "avatar_url": u.avatar_url,
@@ -86,7 +104,7 @@ async def list_public_masters(business_id: int, db: AsyncSession = Depends(get_d
             "assigned_services": u.assigned_services,
             "provides_services": u.provides_services,
         }
-        for u in result.scalars().all()
+        for u in users
     ]
 
 

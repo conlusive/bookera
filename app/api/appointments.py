@@ -1174,10 +1174,18 @@ async def list_my_appointments(
         rows = await db.execute(select(User).where(User.id.in_(master_ids)))
         masters = {str(u.id): u for u in rows.scalars().all()}
 
+    from app.services.review_rules import review_block_reason, team_identities
+    team_cache: dict = {}
     for appointment in appointments:
         response = MyAppointmentResponse.model_validate(appointment, from_attributes=True)
         response.manage_token = appointment.manage_token
         response.has_review = appointment.id in reviewed
+        # Чи сторінка салону має пропонувати оцінку: лише завершений, ще не оцінений
+        # візит, який сервер справді прийме (review_rules). Для решти - тиша.
+        if appointment.status == "completed" and appointment.id not in reviewed and appointment.manage_token:
+            if appointment.business_id not in team_cache:
+                team_cache[appointment.business_id] = await team_identities(db, appointment.business_id)
+            response.can_review = (await review_block_reason(db, appointment, team_cache[appointment.business_id])) is None
 
         business = businesses.get(appointment.business_id)
         if business:
@@ -1377,6 +1385,11 @@ async def create_review_by_client(
     existing = await db.execute(select(Review).where(Review.appointment_id == appointment.id))
     if existing.scalars().first():
         raise HTTPException(status_code=409, detail="Ви вже оцінили цей візит")
+
+    from app.services.review_rules import review_block_reason
+    blocked = await review_block_reason(db, appointment)
+    if blocked:
+        raise HTTPException(status_code=403, detail=blocked)
 
     if appointment.master_id and master_r is None:
         raise HTTPException(status_code=400, detail="Оцініть майстра")

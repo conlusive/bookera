@@ -83,3 +83,71 @@ async def test_anonymous_public_review_is_closed(client, auth_headers):
     bid = r.json()["id"]
     r = await client.post("/public/reviews", json={"business_id": bid, "rating": 1, "author_name": "Конкурент"})
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_master_rating_and_review_master_are_public(client, auth_headers):
+    """На сторінці салону видно рейтинг кожного майстра і кому адресований відгук."""
+    bid, aid, token = await _visit(client, auth_headers("rev-master"))
+    conn = await asyncpg.connect(DB)
+    try:
+        uid = await conn.fetchval("SELECT id FROM users WHERE business_id = $1", bid)
+        await conn.execute("UPDATE appointments SET master_id = $1 WHERE id = $2", uid, aid)
+    finally:
+        await conn.close()
+    r = await client.post(f"/appointments/{aid}/review", json={"token": token, "rating": 4, "master_rating": 5, "comment": "Чудово"})
+    assert r.status_code == 200, r.text
+
+    masters = (await client.get(f"/crm/businesses/{bid}/masters")).json()
+    me = next(m for m in masters if m["id"] == uid)
+    assert me["rating"] == 5.0 and me["reviews_count"] == 1
+
+    reviews = (await client.get("/public/reviews", params={"business_id": bid})).json()
+    assert reviews[0]["master_id"] == uid
+
+
+async def _set(sql, *args):
+    conn = await asyncpg.connect(DB)
+    try:
+        return await conn.fetchval(sql, *args)
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_manual_visit_cannot_be_reviewed(client, auth_headers):
+    """Візит, який вніс у календар сам заклад, - не підстава для відгуку."""
+    bid, aid, token = await _visit(client, auth_headers("rev-manual"))
+    await _set("UPDATE appointments SET source = 'manual' WHERE id = $1 RETURNING id", aid)
+    r = await client.post(f"/appointments/{aid}/review", json={"token": token, "rating": 5})
+    assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_owner_cannot_review_own_business(client, auth_headers):
+    """Власник «записався» на власний заклад - відгук не приймається."""
+    bid, aid, token = await _visit(client, auth_headers("rev-owner"))
+    email = await _set("SELECT email FROM users WHERE business_id = $1", bid)
+    assert email
+    await _set("UPDATE appointments SET client_email = $1 WHERE id = $2 RETURNING id", email, aid)
+    r = await client.post(f"/appointments/{aid}/review", json={"token": token, "rating": 5})
+    assert r.status_code == 403, r.text
+    assert "власний заклад" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_same_person_cannot_stack_reviews(client, auth_headers):
+    """Дві візити однієї людини поспіль - лише один відгук за період."""
+    bid, aid, token = await _visit(client, auth_headers("rev-stack"))
+    r = await client.post(f"/appointments/{aid}/review", json={"token": token, "rating": 5})
+    assert r.status_code == 200, r.text
+    start = local_now().replace(tzinfo=None, microsecond=0) - timedelta(days=1)
+    aid2 = await _set(
+        """INSERT INTO appointments (business_id, service_id, start_time, end_time, status,
+                                     client_name, client_email, manage_token, source)
+           SELECT business_id, service_id, $2, $3, 'completed', 'Марія', 'maria@example.com', 'tok2-x', 'online'
+           FROM appointments WHERE id = $1 RETURNING id""",
+        aid, start, start + timedelta(hours=1),
+    )
+    r = await client.post(f"/appointments/{aid2}/review", json={"token": "tok2-x", "rating": 5})
+    assert r.status_code == 403, r.text

@@ -16,6 +16,8 @@ import { useToast } from '@/context/ToastContext';
 import { isBusinessRole } from '@/lib/roles';
 import { ALL_AMENITIES } from '@/lib/amenities';
 import { storefrontMap } from '@/lib/storefront-map';
+import WorkingHours from '@/components/salon/WorkingHours';
+import { dayBlockedReason, formatUtcAsKyiv, formatUtcDateKyiv, kyivNow, kyivToday, openStatus, weekdayName } from '@/lib/salon-time';
 import Avatar from '@/components/ui/Avatar';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import SmartImage from '@/components/ui/SmartImage';
@@ -38,6 +40,14 @@ const sortOptionsList = [
   { value: 'duration', label: 'Швидші', hint: 'Від найкоротшої за часом' },
 ];
 
+// «2026-10-05» -> «понеділок, 5 жовтня» (рік - лише якщо не поточний)
+const fmtLongDate = (key: string) => {
+  const d = new Date(`${key}T12:00:00`);
+  if (isNaN(d.getTime())) return key;
+  const sameYear = d.getFullYear() === kyivToday().getFullYear();
+  return d.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long', ...(sameYear ? {} : { year: 'numeric' }) });
+};
+
 const fmtDate = (d: Date) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -45,56 +55,19 @@ const fmtDate = (d: Date) => {
   return `${y}-${m}-${day}`;
 };
 
-// Точна перевірка вихідного дня (Python-індекси 0=Пн..6=Нд та JS 0=Нд..6=Сб)
-/**
- * Чи заклад не працює цього дня.
- *
- * Джерело - working_hours, та сама таблиця business_hours, з якою
- * працює CRM. Раніше тут читалось поле days_off: заклад міняв графік
- * у кабінеті, а сторінка салону про це не знала й показувала суботу
- * закритою.
- *
- * Якщо графік ще не заповнений - вважаємо, що заклад працює. Порожній
- * графік означає «не налаштовано», а не «зачинено назавжди»: новий
- * заклад не має виглядати закритим одразу після реєстрації.
- */
-const isSalonDayOff = (date: Date, salonObj: any): boolean => {
-  const hours = salonObj?.working_hours;
-  if (!Array.isArray(hours) || hours.length === 0) return false;
-
-  // weekday у базі: 0 = понеділок ... 6 = неділя.
-  // getDay(): 0 = неділя ... 6 = субота.
-  const weekday = (date.getDay() + 6) % 7;
-  const day = hours.find((h: any) => Number(h.weekday) === weekday);
-  if (!day) return false;
-  return !day.is_open;
-};
-
 const getFirstAvailableWorkingDate = (salonObj: any) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < 45; i++) {
+  const today = kyivToday();
+  // Перший день, який справді можна обрати: не вихідний, не закритий період, у межах горизонту
+  for (let i = 0; i < 120; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    if (!isSalonDayOff(d, salonObj)) {
-      return fmtDate(d);
-    }
+    if (!dayBlockedReason(d, salonObj)) return fmtDate(d);
   }
   return fmtDate(today);
 };
 
-const formatReviewDateTime = (dateStr: string) => {
-  if (!dateStr) return '';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const date = d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const time = d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-    return `${date} о ${time}`;
-  } catch {
-    return dateStr;
-  }
-};
+// created_at у базі - UTC без пояса; показуємо київський час (lib/salon-time.ts)
+const formatReviewDateTime = (dateStr: string) => formatUtcAsKyiv(dateStr);
 
 const getReviewAuthorName = (r: any) => {
   return (
@@ -165,6 +138,30 @@ export default function SalonClient({
   const [services] = useState<any[]>(initialServices || []);
   const [team] = useState<any[]>(initialTeam || []);
   const [reviews, setReviews] = useState<any[]>(initialReviews || []);
+  // Команда: згорнута до першого ряду, розгортається; клік по майстру - його рейтинг і відгуки
+  const [teamExpanded, setTeamExpanded] = useState(false);
+  // Права колонка залипає при прокрутці. Якщо вона вища за екран, її нижні блоки (карта, зручності)
+  // були б недосяжні, поки не домотаєш усю сторінку. Тому відступ вимірюємо: висока колонка
+  // прокручується разом зі сторінкою, а її низ зупиняється біля нижнього краю екрана.
+  const sideRef = useRef<HTMLDivElement>(null);
+  const [sideTop, setSideTop] = useState(96);
+  useEffect(() => {
+    const el = sideRef.current;
+    if (!el) return;
+    const calc = () => setSideTop(Math.min(96, Math.round(window.innerHeight - el.offsetHeight - 40)));
+    calc();
+    const ro = new ResizeObserver(calc);
+    ro.observe(el);
+    window.addEventListener('resize', calc);
+    return () => { ro.disconnect(); window.removeEventListener('resize', calc); };
+  }, []);
+  const [openMaster, setOpenMaster] = useState<any | null>(null);
+  const [masterShown, setMasterShown] = useState(5);
+  const [masterOnlyComments, setMasterOnlyComments] = useState(false);
+  const openMasterCard = (staff: any) => { setMasterShown(5); setMasterOnlyComments(false); setOpenMaster(staff); };
+  const TEAM_PREVIEW = 3;
+  // Категорії послуг (ті самі, що у вкладці «Послуги» кабінету) - швидкий пошук
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // --- Стейт юзера ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -210,6 +207,18 @@ export default function SalonClient({
   // Лічильник: після оцінки чи видалення - перечитати візити з сервера
   const [visitsNonce, setVisitsNonce] = useState(0);
   const [feedbackVisit, setFeedbackVisit] = useState<any | null>(null);
+  // «Не зараз» на пропозиції оцінити візит - пам'ятаємо в браузері, щоб не нагадувати щоразу
+  const [dismissedReviewIds, setDismissedReviewIds] = useState<number[]>([]);
+  useEffect(() => {
+    try { setDismissedReviewIds(JSON.parse(localStorage.getItem('bookera_review_dismissed') || '[]')); } catch { /* ігноруємо */ }
+  }, []);
+  const dismissReviewPrompt = (id: number) => {
+    setDismissedReviewIds(prev => {
+      const next = [...prev, id].slice(-50);
+      try { localStorage.setItem('bookera_review_dismissed', JSON.stringify(next)); } catch { /* ігноруємо */ }
+      return next;
+    });
+  };
   const [confirmDeleteReview, setConfirmDeleteReview] = useState<number | null>(null);
   useEffect(() => {
     if (!isLoggedIn || !salon?.id) { setMyVisitsHere(null); return; }
@@ -522,7 +531,7 @@ export default function SalonClient({
         const data: Record<string, string> = await api.getNearestSlots(salon.id);
         if (cancelled) return;
 
-        const today = new Date();
+        const today = kyivToday();
         const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const todayKey = dayKey(today);
         const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
@@ -578,7 +587,7 @@ export default function SalonClient({
 
   useEffect(() => {
     setVisibleServicesCount(SERVICES_PER_PAGE);
-  }, [searchQuery, sortOrder]);
+  }, [searchQuery, sortOrder, selectedCategory]);
 
   useEffect(() => {
     // Раніше і перевірка, і збереження йшли НАПРЯМУ в таблицю favorites
@@ -735,6 +744,8 @@ const formatRole = (role?: string) => {
       name: getStaffName(t),
       role: t.specialization || t.title || formatRole(t.role),
       photo: t.avatar_url || t.photo || t.profiles?.avatar_url || t.profile?.avatar_url || null,
+      rating: t.rating ?? null,
+      reviewsCount: t.reviews_count ?? 0,
     }));
   }, [activeTeam]);
 
@@ -763,8 +774,22 @@ const formatRole = (role?: string) => {
     }
   }, [availableStaffersForService, selectedMasterId]);
 
+  const OTHER_CATEGORY = 'Інше';
+  const serviceCategories = useMemo(() => {
+    const seen: string[] = [];
+    services.forEach((srv: any) => {
+      const c = String(srv.category || '').trim() || OTHER_CATEGORY;
+      if (!seen.includes(c)) seen.push(c);
+    });
+    // «Інше» - в кінці, решта в порядку послуг із кабінету
+    return [...seen.filter(c => c !== OTHER_CATEGORY), ...seen.filter(c => c === OTHER_CATEGORY)];
+  }, [services]);
+
   const processedServices = useMemo(() => {
     let result = [...services];
+    if (selectedCategory) {
+      result = result.filter((srv: any) => (String(srv.category || '').trim() || OTHER_CATEGORY) === selectedCategory);
+    }
     if (searchQuery.trim()) {
       const lowerQuery = searchQuery.toLowerCase();
       result = result.filter((s) => s.name.toLowerCase().includes(lowerQuery));
@@ -773,7 +798,7 @@ const formatRole = (role?: string) => {
     else if (sortOrder === 'price_desc') result.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
     else if (sortOrder === 'duration') result.sort((a, b) => (a.duration_minutes || 0) - (b.duration_minutes || 0));
     return result;
-  }, [services, searchQuery, sortOrder]);
+  }, [services, searchQuery, sortOrder, selectedCategory]);
 
   const modalFilteredServices = useMemo(() => {
     if (!modalServiceSearch.trim()) return services;
@@ -875,7 +900,32 @@ const formatRole = (role?: string) => {
     }
   };
 
+  const bookingBlockedText = (() => {
+    const r = salon?.booking_settings || {};
+    if (r.is_paused_emergency === true) return 'Заклад тимчасово не приймає онлайн-записи';
+    if (r.is_active === false) return 'Онлайн-запис у цьому закладі вимкнено';
+    return null;
+  })();
+
+  // «Зараз» - лише в браузері (на сервері час інший, і розмітка не збіглась би при гідратації); оновлюється щохвилини
+  const [clientNow, setClientNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setClientNow(new Date());
+    const t = setInterval(() => setClientNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const salonOpenNow = useMemo(() => (clientNow ? openStatus(salon?.working_hours, clientNow) : null), [salon?.working_hours, clientNow]);
+  const todayClosedPeriod = useMemo(() => {
+    if (!clientNow) return null;
+    const key = kyivNow(clientNow).key;
+    const p = (salon?.booking_settings?.closed_periods || []).find((x: any) => x?.start && x?.end && x.start <= key && key <= x.end);
+    if (!p) return null;
+    const until = new Date(`${p.end}T00:00:00`).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+    return `Заклад закритий до ${until}${p.reason ? ` · ${p.reason}` : ''}`;
+  }, [salon?.booking_settings?.closed_periods, clientNow]);
+
   const openModal = (service?: any) => {
+    if (bookingBlockedText) { showToast(bookingBlockedText, 'info'); return; }
     const firstWorkingDate = getFirstAvailableWorkingDate(salon);
 
     setSelectedService(service || services[0] || null);
@@ -1120,8 +1170,7 @@ const formatRole = (role?: string) => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDay = new Date(year, month, 1).getDay();
     const startDay = firstDay === 0 ? 6 : firstDay - 1;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = kyivToday();
     const days = [];
 
     for (let i = 0; i < startDay; i++) days.push(<div key={`empty-${i}`} style={{ padding: '0.2rem' }}></div>);
@@ -1170,8 +1219,7 @@ const formatRole = (role?: string) => {
     const firstDay = new Date(year, month, 1).getDay();
     const startOffset = firstDay === 0 ? 6 : firstDay - 1;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = kyivToday();
 
     const days = [];
 
@@ -1182,9 +1230,8 @@ const formatRole = (role?: string) => {
     for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
       const cellDate = new Date(year, month, dayNum);
       const cellDateFormatted = fmtDate(cellDate);
-      const isPast = cellDate < today;
-      const isDayOff = isSalonDayOff(cellDate, salon);
-      const isUnavailable = isPast || isDayOff;
+      // минулі дні, вихідні, закриті періоди (відпустка) і дні за межею горизонту запису
+      const isUnavailable = dayBlockedReason(cellDate, salon) !== null;
       const isSelected = selectedDate === cellDateFormatted;
       const isToday = cellDate.getTime() === today.getTime();
 
@@ -1244,6 +1291,94 @@ const formatRole = (role?: string) => {
       color: '#222222',
       paddingTop: '86px'
     }}>
+
+      {openMaster && (() => {
+        const all = reviews.filter((r: any) => r.master_id && String(r.master_id) === String(openMaster.id));
+        const score = (r: any) => Number(r.master_rating || r.rating || 0);
+        const dist = [5, 4, 3, 2, 1].map(n => ({ n, c: all.filter(r => Math.round(score(r)) === n).length }));
+        const maxC = Math.max(1, ...dist.map(d => d.c));
+        const list = (masterOnlyComments ? all.filter((r: any) => (r.comment || '').trim()) : all);
+        const shown = list.slice(0, masterShown);
+        const withComments = all.filter((r: any) => (r.comment || '').trim()).length;
+        const stars = (v: number) => '★★★★★'.slice(0, Math.round(v)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(v));
+        return (
+          <div onClick={() => setOpenMaster(null)} style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '520px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Шапка не прокручується: імʼя й закриття завжди під рукою */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', padding: '1.4rem 1.5rem 1rem' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#f1f5f9', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {openMaster.photo ? <Image {...imageLoadProps(openMaster.photo)} src={openMaster.photo} alt={openMaster.name} fill sizes="52px" style={{ objectFit: 'cover' }} /> : <div style={{ width: 22, height: 22, color: '#86868B', display: 'flex' }}><Icons.User /></div>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1D1D1F', overflowWrap: 'anywhere' }}>{openMaster.name}</div>
+                  <div style={{ fontSize: '0.85rem', color: '#86868B', marginTop: '2px' }}>{openMaster.role}</div>
+                </div>
+                <button type="button" onClick={() => setOpenMaster(null)} aria-label="Закрити" style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', fontSize: '1rem', color: '#475569', flex: 'none' }}>✕</button>
+              </div>
+
+              <div className="hide-scrollbar" style={{ overflowY: 'auto', padding: '0 1.5rem 1.5rem' }}>
+                {openMaster.rating ? (
+                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', padding: '1rem 0 1.25rem', borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ textAlign: 'center', flex: 'none' }}>
+                      <div style={{ fontSize: '2.4rem', fontWeight: 800, color: '#1D1D1F', lineHeight: 1 }}>{Number(openMaster.rating).toFixed(1)}</div>
+                      <div style={{ color: '#f59e0b', letterSpacing: '1px', fontSize: '0.95rem', marginTop: '4px' }}>{stars(openMaster.rating)}</div>
+                      <div style={{ color: '#86868B', fontSize: '0.78rem', marginTop: '2px' }}>{openMaster.reviewsCount} {openMaster.reviewsCount === 1 ? 'оцінка' : openMaster.reviewsCount < 5 ? 'оцінки' : 'оцінок'}</div>
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      {dist.map(d => (
+                        <div key={d.n} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#64748b' }}>
+                          <span style={{ width: 10, textAlign: 'right' }}>{d.n}</span>
+                          <div style={{ flex: 1, height: 6, borderRadius: 999, background: '#f1f5f9', overflow: 'hidden' }}>
+                            <div style={{ width: `${(d.c / maxC) * 100}%`, height: '100%', background: '#f59e0b', borderRadius: 999 }} />
+                          </div>
+                          <span style={{ width: 22 }}>{d.c}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '1.25rem 0', borderTop: '1px solid #f1f5f9', color: '#86868B', fontSize: '0.9rem' }}>Оцінок про цього майстра поки немає.</div>
+                )}
+
+                {all.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      {[{ v: false, t: `Усі (${all.length})` }, { v: true, t: `З коментарем (${withComments})` }].map(o => (
+                        <button key={String(o.v)} type="button" onClick={() => { setMasterOnlyComments(o.v); setMasterShown(5); }}
+                          style={{ padding: '0.35rem 0.9rem', borderRadius: 999, border: `1px solid ${masterOnlyComments === o.v ? '#0f172a' : '#e2e8f0'}`, background: masterOnlyComments === o.v ? '#0f172a' : '#fff', color: masterOnlyComments === o.v ? '#fff' : '#475569', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {o.t}
+                        </button>
+                      ))}
+                    </div>
+                    {shown.map((r: any) => (
+                      <div key={r.id} style={{ borderTop: '1px solid #f1f5f9', padding: '0.95rem 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'baseline' }}>
+                          <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1D1D1F' }}>{r.author_name || 'Клієнт'}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#a1a1a6', whiteSpace: 'nowrap' }}>{formatUtcDateKyiv(r.created_at)}</span>
+                        </div>
+                        <div style={{ color: '#f59e0b', fontSize: '0.85rem', letterSpacing: '1px', margin: '2px 0' }}>{stars(score(r))}</div>
+                        {r.comment && <div style={{ fontSize: '0.9rem', color: '#475569', lineHeight: 1.5, overflowWrap: 'anywhere' }}>{r.comment}</div>}
+                        {r.business_reply && (
+                          <div style={{ marginTop: '0.5rem', padding: '0.55rem 0.8rem', background: '#f8fafc', borderRadius: 10, fontSize: '0.82rem', color: '#64748b', lineHeight: 1.45 }}>
+                            <b style={{ color: '#475569' }}>Відповідь закладу:</b> {r.business_reply}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {list.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.88rem', padding: '1rem 0' }}>Відгуків із коментарем ще немає.</div>}
+                    {list.length > masterShown && (
+                      <button type="button" onClick={() => setMasterShown(n => n + 5)}
+                        style={{ width: '100%', marginTop: '0.5rem', padding: '0.7rem', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', color: '#1D1D1F', fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Показати ще ({list.length - masterShown})
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {isPreview && (
         <div style={{ position: 'fixed', left: '50%', bottom: '1.5rem', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.6rem 0.6rem 0.6rem 1.25rem', background: '#0f172a', color: '#fff', borderRadius: '999px', boxShadow: '0 12px 32px rgba(15,23,42,0.28)', fontSize: '0.88rem', maxWidth: 'calc(100vw - 2rem)' }}>
@@ -1891,6 +2026,17 @@ const formatRole = (role?: string) => {
           </div>
         )}
 
+        {bookingBlockedText && (
+          <div role="status" style={{ marginBottom: '1.5rem', padding: '0.9rem 1.2rem', borderRadius: '14px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: '0.92rem', fontWeight: 600 }}>
+            {bookingBlockedText}. Спробуйте пізніше або зв’яжіться із закладом.
+          </div>
+        )}
+        {!bookingBlockedText && todayClosedPeriod && (
+          <div role="status" style={{ marginBottom: '1.5rem', padding: '0.9rem 1.2rem', borderRadius: '14px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: '0.92rem', fontWeight: 600 }}>
+            {todayClosedPeriod}
+          </div>
+        )}
+
         {/* ШАПКА ЗАКЛАДУ */}
         <div style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -1908,7 +2054,7 @@ const formatRole = (role?: string) => {
             </div>
             <div style={{ color: '#86868B', fontSize: '0.92rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <div style={{ display: 'flex', width: '16px', height: '16px', color: '#86868B' }}><Icons.MapPin /></div>
-              {salon ? salon.address : "Адреса завантажується..."}
+              {salon ? [salon.address, salon.city].map((x: any) => String(x || '').trim()).filter(Boolean).join(', ') : "Адреса завантажується..."}
             </div>
 
             {salon?.phone && salon?.show_phone_publicly !== false && (
@@ -2053,6 +2199,26 @@ const formatRole = (role?: string) => {
                 </div>
               </div>
 
+              {serviceCategories.length > 1 && (
+                <div className="hide-scrollbar" role="tablist" aria-label="Категорії послуг" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', marginBottom: '1.25rem', paddingBottom: '2px' }}>
+                  {[null, ...serviceCategories].map(cat => {
+                    const on = selectedCategory === cat;
+                    return (
+                      <button
+                        key={cat ?? '__all'}
+                        type="button"
+                        role="tab"
+                        aria-selected={on}
+                        onClick={() => setSelectedCategory(cat)}
+                        style={{ padding: '0.45rem 1.1rem', borderRadius: '999px', border: `1px solid ${on ? '#0f172a' : '#e2e8f0'}`, background: on ? '#0f172a' : '#fff', color: on ? '#fff' : '#475569', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, fontFamily: 'inherit' }}
+                      >
+                        {cat ?? 'Усі'}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               <div>
                 {processedServices.length === 0 ? (
                   <div style={{ color: '#94a3b8', padding: '2rem 0', fontSize: '1rem', textAlign: 'center', background: '#f8fafc', borderRadius: '16px', fontWeight: '600' }}>За вашим запитом послуг не знайдено.</div>
@@ -2069,6 +2235,7 @@ const formatRole = (role?: string) => {
                                 <div style={{ color: '#64748b', fontSize: '0.88rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                   <div style={{ display: 'flex', width: '14px', height: '14px' }}><Icons.Clock /></div> {formatDuration(service.duration_minutes || service.duration || 60)}
                                 </div>
+                                {availText && (
                                 <div style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
@@ -2084,6 +2251,7 @@ const formatRole = (role?: string) => {
                                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#10B981', flexShrink: 0 }} />
                                   <span>{availText}</span>
                                 </div>
+                                )}
                               </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
@@ -2112,6 +2280,22 @@ const formatRole = (role?: string) => {
               </p>
             </div>
 
+            {/* ГРАФІК РОБОТИ - з тієї ж таблиці, що й календар у кабінеті */}
+            {Array.isArray(salon?.working_hours) && salon.working_hours.length > 0 && (
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                  <h2 className="section-title" style={{ margin: 0 }}>Графік роботи</h2>
+                  {salonOpenNow && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, padding: '3px 8.5px', borderRadius: '6px', color: salonOpenNow.open ? '#065F46' : '#86868B', background: salonOpenNow.open ? 'rgba(16, 185, 129, 0.08)' : '#f5f5f7' }}>
+<span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: salonOpenNow.open ? '#10B981' : '#cbd5e1', flexShrink: 0 }} />
+                      {salonOpenNow.text}
+                    </span>
+                  )}
+                </div>
+                <WorkingHours rows={salon.working_hours} now={clientNow} />
+              </div>
+            )}
+
             {/* ВІДГУКИ КЛІЄНТІВ ТА ВІДПОВІДІ */}
             <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -2126,45 +2310,34 @@ const formatRole = (role?: string) => {
               {/* Відгук - прямо тут, але лише про справжній візит: сторінка
                   знаходить ваші завершені візити в цей заклад. Так рейтинг
                   не накрутити без запису, а оцінити не треба йти в профіль. */}
-              <div style={{ padding: '1.1rem 1.3rem', borderRadius: '18px', background: '#F4FAF5', border: '1px solid #E4EBE3', marginBottom: '1.5rem' }}>
-                {!isLoggedIn ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontSize: '0.975rem', fontWeight: 600, color: '#1D1D1F' }}>Були тут?</div>
-                      <div style={{ fontSize: '0.875rem', color: '#5C6B5E', marginTop: '2px' }}>Увійдіть, щоб оцінити свій візит і подякувати майстрові.</div>
+              {/* Пропозиція оцінити - лише ОДИН, найсвіжіший візит, який сервер справді
+                  прийме, ще не оцінений, не старший за 14 днів і не відкладений.
+                  Раніше тут висів список усіх візитів з кнопками, який не зникав. */}
+              {(() => {
+                const cutoff = Date.now() - 14 * 24 * 3600 * 1000;
+                const v = (myVisitsHere || []).find((x: any) =>
+                  x.can_review && !x.has_review && !dismissedReviewIds.includes(Number(x.id)) &&
+                  new Date(x.start_time).getTime() >= cutoff);
+                if (!v) return null;
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', padding: '0.85rem 1.1rem', borderRadius: '16px', background: '#F4FAF5', border: '1px solid #E4EBE3', marginBottom: '1.25rem' }}>
+                    <div style={{ fontSize: '0.92rem', color: '#1D1D1F' }}>
+                      Як пройшов візит <b>{v.service_name || ''}</b>
+                      <span style={{ color: '#6B756A' }}> · {new Date(v.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}</span>?
                     </div>
-                    <button type="button" onClick={() => setIsAuthModalOpen(true)}
-                      style={{ height: '38px', padding: '0 1.1rem', borderRadius: '11px', border: 'none', background: '#1D1D1F', color: '#fff', fontFamily: 'inherit', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' }}>
-                      Увійти
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => setFeedbackVisit(v)}
+                        style={{ height: '34px', padding: '0 1rem', borderRadius: '10px', border: 'none', background: '#1D1D1F', color: '#fff', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                        Оцінити
+                      </button>
+                      <button type="button" onClick={() => dismissReviewPrompt(Number(v.id))}
+                        style={{ height: '34px', padding: '0 0.8rem', borderRadius: '10px', border: 'none', background: 'transparent', color: '#6B756A', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                        Не зараз
+                      </button>
+                    </div>
                   </div>
-                ) : myVisitsHere === null ? (
-                  <div style={{ fontSize: '0.875rem', color: '#5C6B5E' }}>Шукаємо ваші візити…</div>
-                ) : myVisitsHere.length === 0 ? (
-                  <div style={{ fontSize: '0.875rem', color: '#5C6B5E' }}>
-                    Оцінити заклад можна після візиту — відгуки тут лише від тих, хто справді був.
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ fontSize: '0.975rem', fontWeight: 600, color: '#1D1D1F', marginBottom: '0.6rem' }}>Ваші візити</div>
-                    {myVisitsHere.slice(0, 3).map(v => {
-                      const reviewed = !!v.has_review;
-                      return (
-                        <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.55rem 0', borderTop: '1px solid #E4EBE3' }}>
-                          <div style={{ fontSize: '0.9rem', color: '#1D1D1F' }}>
-                            {v.service_name || 'Візит'}
-                            <span style={{ color: '#6B756A' }}> · {new Date(v.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}</span>
-                          </div>
-                          <button type="button" onClick={() => setFeedbackVisit(v)}
-                            style={{ height: '34px', padding: '0 0.95rem', borderRadius: '10px', border: reviewed ? '1px solid #D5E2D3' : 'none', background: reviewed ? '#fff' : '#1D1D1F', color: reviewed ? '#1D1D1F' : '#fff', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            {reviewed ? 'Ваш відгук' : 'Оцінити'}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
+                );
+              })()}
 
               {feedbackVisit && (
                 <div onClick={() => setFeedbackVisit(null)}
@@ -2442,7 +2615,7 @@ const formatRole = (role?: string) => {
 
           {/* ПРАВА КОЛОНКА (ЛИПКИЙ СКРОЛ STICKY) */}
           <div>
-            <div style={{ position: 'sticky', top: '96px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div ref={sideRef} style={{ position: 'sticky', top: `${sideTop}px`, alignSelf: 'start', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
               {/* НАША КОМАНДА
                   showTeam перевіряється тут, а не лише в редакторі вітрини:
@@ -2455,40 +2628,27 @@ const formatRole = (role?: string) => {
               <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                   <h3 className="section-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
-                  {staffers.length > 4 && (
-                    <span style={{ fontSize: '0.74rem', color: '#86868B', fontWeight: 500 }}>
-                      Свайп →
-                    </span>
+                  {storefrontTeam.length > TEAM_PREVIEW && (
+                    <button
+                      type="button"
+                      onClick={() => setTeamExpanded(v => !v)}
+                      style={{ background: 'transparent', border: 'none', color: '#475569', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {teamExpanded ? 'Згорнути' : `Показати всіх (${storefrontTeam.length})`}
+                    </button>
                   )}
                 </div>
 
-                <div
-                  className="hide-scrollbar"
-                  style={{
-                    display: 'flex',
-                    gap: '1.25rem',
-                    overflowX: 'auto',
-                    paddingBottom: '0.25rem',
-                    scrollSnapType: 'x mandatory',
-                    WebkitOverflowScrolling: 'touch',
-                  }}
-                >
-                  {/* Блок «Наша команда» бере activeTeam - список БЕЗ
-                      прихованих. staffers тут не годиться: він для вибору
-                      майстра при бронюванні й містить повний склад плюс
-                      службовий пункт «Будь-який майстер». */}
-                  {storefrontTeam.map((staff: any, idx: number) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        width: '76px',
-                        textAlign: 'center',
-                        flexShrink: 0,
-                        scrollSnapAlign: 'start',
-                      }}
+                {/* Блок «Наша команда» бере activeTeam - список БЕЗ прихованих.
+                    staffers тут не годиться: він для вибору майстра при бронюванні. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: '1.25rem 0.75rem' }}>
+                  {(teamExpanded ? storefrontTeam : storefrontTeam.slice(0, TEAM_PREVIEW)).map((staff: any) => (
+                    <button
+                      key={staff.id}
+                      type="button"
+                      onClick={() => openMasterCard(staff)}
+                      title="Рейтинг і відгуки"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
                     >
                       <div className="team-avatar" style={{ width: '50px', height: '50px', borderRadius: '50%', marginBottom: '0.45rem', position: 'relative', flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {staff.photo ? (
@@ -2497,13 +2657,21 @@ const formatRole = (role?: string) => {
                           <div style={{ display: 'flex', width: '22px', height: '22px', color: '#86868B' }}><Icons.User /></div>
                         )}
                       </div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', lineHeight: '1.2', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={staff.name}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1D1D1F', lineHeight: '1.25', width: '100%', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere', wordBreak: 'break-word' }} title={staff.name}>
                         {staff.name}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#86868B', marginTop: '2px', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={staff.role}>
+                      <div style={{ fontSize: '0.72rem', color: '#86868B', marginTop: '2px', lineHeight: 1.25, width: '100%', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere', wordBreak: 'break-word' }} title={staff.role}>
                         {staff.role}
                       </div>
-                    </div>
+                      {staff.rating ? (
+                        <div style={{ marginTop: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '999px', background: '#f5f5f7', fontSize: '0.76rem', fontWeight: 700, color: '#1D1D1F' }}>
+                          <span style={{ color: '#f59e0b', fontSize: '0.8rem' }}>★</span>{Number(staff.rating).toFixed(1)}
+                          <span style={{ color: '#86868B', fontWeight: 500 }}>· {staff.reviewsCount}</span>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: '6px', fontSize: '0.72rem', color: '#b0b0b6' }}>Без оцінок</div>
+                      )}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -2967,7 +3135,7 @@ const formatRole = (role?: string) => {
                   </div>
                   <h3 style={{ fontSize: '1.55rem', fontWeight: '700', color: '#1D1D1F', margin: '0 0 0.5rem 0' }}>Запис підтверджено</h3>
                   <p style={{ color: '#86868B', fontSize: '0.95rem', maxWidth: '380px', lineHeight: '1.5', margin: 0 }}>
-                    Чекаємо на вас <strong>{selectedDate.split('-').reverse().join('.')}</strong> о <strong>{selectedTime}</strong>.
+                    Чекаємо на вас <strong>{fmtLongDate(selectedDate)}</strong> о <strong>{selectedTime}</strong>.
                   </p>
                 </div>
 
@@ -3010,7 +3178,7 @@ const formatRole = (role?: string) => {
                                 {srv.name}
                               </div>
                               <div style={{ color: '#86868B', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>{isSelected && selectedAddonIds.length > 0 ? totalCalculatedDuration : (srv.duration_minutes || srv.duration || 60)} хв</span>
+                                <span>{formatDuration(isSelected && selectedAddonIds.length > 0 ? totalCalculatedDuration : (srv.duration_minutes || srv.duration || 60))}</span>
                                 {hasAddons && !isSelected && (
                                   <span style={{ background: '#F5F5F7', padding: '1px 6px', borderRadius: '6px', fontSize: '0.74rem', color: '#5C6B5E' }}>
                                     є дод. послуги
@@ -3217,7 +3385,7 @@ const formatRole = (role?: string) => {
                           Вільний час
                         </div>
                         <div style={{ fontSize: '0.82rem', color: '#86868B', marginTop: '2px' }}>
-                          {selectedDate.split('-').reverse().join('.')}
+                          {fmtLongDate(selectedDate)}
                         </div>
                       </div>
 
@@ -3292,14 +3460,14 @@ const formatRole = (role?: string) => {
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#86868B', fontSize: '0.88rem' }}>Дата та час</span>
                           <span style={{ fontWeight: '600', color: '#1D1D1F', fontSize: '0.92rem' }}>
-                            {selectedDate.split('-').reverse().join('.')} о {selectedTime}
+                            {fmtLongDate(selectedDate)} о {selectedTime}
                           </span>
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#86868B', fontSize: '0.88rem' }}>Тривалість</span>
                           <span style={{ fontWeight: '600', color: '#1D1D1F', fontSize: '0.92rem' }}>
-                            ~{totalCalculatedDuration} хв
+                            ~{formatDuration(totalCalculatedDuration)}
                           </span>
                         </div>
 

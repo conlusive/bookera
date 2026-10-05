@@ -38,8 +38,8 @@ import SmartImage from '@/components/ui/SmartImage';
 import { loadFavorites, setFavorite } from '@/lib/favorites';
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { categoryTitle, normalizeCategory } from '@/lib/categories';
+import WorkDashboard from '@/components/work/WorkDashboard';
 import WalletTab from '@/components/profile/WalletTab';
-import WorkTab from '@/components/profile/WorkTab';
 import { resolveDisplayName } from '@/lib/displayName';
 import { formatDuration } from '@/lib/duration';
 import VisitFeedback from '@/components/visit/VisitFeedback';
@@ -1131,6 +1131,9 @@ function ProfileContent() {
                   {userRole === 'vendor' && (
                     <Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', color: '#334155' }}>Панель салону</Link>
                   )}
+                  {worksSomewhere && (
+                    <button onClick={() => { setActiveTab('work'); setIsHeaderProfileOpen(false); }} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', border: 'none', background: 'transparent', fontSize: '0.85rem', fontWeight: 550, color: '#334155', cursor: 'pointer' }}>Моя робота</button>
+                  )}
                   <button onClick={() => { setActiveTab('settings'); setIsHeaderProfileOpen(false); }} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', border: 'none', background: 'transparent', fontSize: '0.85rem', fontWeight: '550', color: '#334155', cursor: 'pointer' }}>Налаштування</button>
                   <button onClick={handleLogout} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', border: 'none', background: 'transparent', fontSize: '0.85rem', fontWeight: '550', color: '#ef4444', cursor: 'pointer', borderTop: '1px solid #f1f5f9', marginTop: '2px' }}>Вийти з акаунту</button>
                 </div>
@@ -1183,14 +1186,6 @@ function ProfileContent() {
                   </span>
                 )}
               </button>
-              {worksSomewhere && (
-                <button onClick={() => setActiveTab('work')} className={`nav-item anim ${activeTab === 'work' ? 'active' : ''}`}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                    <Briefcase className="w-4 h-4 text-slate-400" />
-                    <span>Моя робота</span>
-                  </div>
-                </button>
-              )}
 
 
 
@@ -1223,6 +1218,20 @@ function ProfileContent() {
                   <span>Налаштування</span>
                 </div>
               </button>
+
+              {/* Робота - окремою групою, не серед особистих розділів. Відкривається тут же, без переходу на іншу сторінку. */}
+              {worksSomewhere && (
+                <>
+                  <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '0.4rem 0' }}></div>
+                  <div style={{ padding: '0.35rem 0.75rem 0.1rem', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94a3b8' }}>Робота</div>
+                  <button onClick={() => setActiveTab('work')} className={`nav-item anim ${activeTab === 'work' ? 'active' : ''}`}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <Briefcase className="w-4 h-4 text-slate-400" />
+                      <span>Моя робота</span>
+                    </div>
+                  </button>
+                </>
+              )}
             </aside>
 
             {/* ПРАВА КОЛОНКА (КОНТЕНТ) */}
@@ -1547,7 +1556,7 @@ function ProfileContent() {
 
               {/* 4. ВКЛАДКА: УЛЮБЛЕНІ ЗАКЛАДИ */}
               {activeTab === 'work' && worksSomewhere && (
-                <WorkTab getToken={walletToken} />
+                <WorkDashboard getToken={walletToken} firstName={(fullName || '').split(' ')[0]} />
               )}
 
               {activeTab === 'wallet' && (

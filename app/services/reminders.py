@@ -250,8 +250,12 @@ async def send_review_requests(db: AsyncSession, frontend_url: str = "") -> int:
 
     sent = 0
     base = (frontend_url or "").rstrip("/")
+    from app.services.review_rules import review_block_reason
     for a in rows:
         a.review_requested_at = utc_now()
+        # Просити відгук там, де сервер його однаково не прийме (ручний запис, своя команда), нема сенсу
+        if await review_block_reason(db, a):
+            continue
         try:
             biz = await db.get(Business, a.business_id)
             srv = await db.get(Service, a.service_id) if a.service_id else None
@@ -291,6 +295,9 @@ async def request_review_now(db: AsyncSession, appointment, frontend_url: str = 
     if (await db.execute(select(Review.id).where(Review.appointment_id == a.id))).first():
         return None
     a.review_requested_at = utc_now()
+    from app.services.review_rules import review_block_reason
+    if await review_block_reason(db, a):
+        return None
     biz = await db.get(Business, a.business_id)
     srv = await db.get(Service, a.service_id) if a.service_id else None
     master = (await db.execute(select(User).where(User.id == str(a.master_id)))).scalars().first() if a.master_id else None

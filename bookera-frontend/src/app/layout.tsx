@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import Tracker from '@/components/Tracker';
 import { ToastProvider } from '@/context/ToastContext';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
+import ModalScrollLock from '@/components/ui/ModalScrollLock';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,6 +53,7 @@ export default function RootLayout({
           </Suspense>
 
           {children}
+          <ModalScrollLock />
         </ToastProvider>
 
         {/* Реєстрація Service Worker - у клієнтському компоненті, а не

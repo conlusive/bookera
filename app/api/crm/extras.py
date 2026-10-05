@@ -49,11 +49,19 @@ async def list_reviews(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models import Appointment
     result = await db.execute(
-        select(Review).where(Review.business_id == business_id)
+        select(Review, Appointment.master_id)
+        .outerjoin(Appointment, Appointment.id == Review.appointment_id)
+        .where(Review.business_id == business_id)
         .order_by(Review.created_at.desc()).limit(limit).offset(offset)
     )
-    return result.scalars().all()
+    out = []
+    for review, master_id in result.all():
+        item = ReviewResponse.model_validate(review)
+        item.master_id = master_id
+        out.append(item)
+    return out
 
 
 @router.patch("/crm/reviews/{review_id}/reply", response_model=ReviewResponse)

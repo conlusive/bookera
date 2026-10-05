@@ -35,3 +35,21 @@ async def test_admin_cannot_remove_the_owner(client, auth_headers):
     # а звичайного майстра - може, як і раніше
     r = await client.delete(f"/crm/staff/prot-master?business_id={business_id}", headers=admin)
     assert r.status_code == 204, r.text
+
+
+@pytest.mark.asyncio
+async def test_only_owner_can_remove_an_admin(client, auth_headers):
+    owner = auth_headers("adm-owner")
+    business_id = (await client.post("/crm/businesses", json={"name": "AdminRules", "city": "Львів"}, headers=owner)).json()["id"]
+    await _make_staff("adm-one", business_id, "admin")
+    await _make_staff("adm-two", business_id, "admin")
+
+    # один адміністратор не може звільнити іншого
+    r = await client.delete(f"/crm/staff/adm-two?business_id={business_id}", headers=auth_headers("adm-one", "admin"))
+    assert r.status_code == 403, r.text
+    ids = {s["id"] for s in (await client.get(f"/crm/businesses/{business_id}/staff", headers=owner)).json()}
+    assert "adm-two" in ids
+
+    # власник - може
+    r = await client.delete(f"/crm/staff/adm-two?business_id={business_id}", headers=owner)
+    assert r.status_code == 204, r.text

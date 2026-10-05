@@ -1764,9 +1764,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                       <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: colors.red, margin: 0 }}>Звільнення співробітника</h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0 }}>Назавжди видалити доступ цієї особи до системи. Історія записів залишиться в базі.</p>
                     </div>
-                    <Button variant="danger" onClick={handleDeleteStaff}>
-                      Звільнити майстра
-                    </Button>
+                    {String(currentStaff?.role) === 'admin' && !isSystemOwner ? (
+                      <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#991b1b', padding: '0.8rem 1.5rem', background: '#FBF0EF', border: '1px solid #fca5a5', borderRadius: '10px' }}>
+                        Лише власник
+                      </div>
+                    ) : (
+                      <Button variant="danger" onClick={handleDeleteStaff}>
+                        Звільнити майстра
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', padding: '1rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

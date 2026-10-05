@@ -412,6 +412,19 @@ async def remove_staff(
             detail="Власника не можна звільнити. Спершу передайте права власності іншій людині.",
         )
 
+    # Адміністраторів звільняє лише власник: ролі міняє тільки він, тож і прибрати адміністратора
+    # (а з ним - усе, що він налаштував) не може інший адміністратор.
+    target_role = (await db.execute(
+        select(StaffMembership.role).where(
+            StaffMembership.user_id == str(staff.id),
+            StaffMembership.business_id == target_business_id,
+            StaffMembership.is_active.is_(True),
+        )
+    )).scalar() or staff.role
+    caller_is_owner = owner_row is not None and owner_row[0] is not None and str(owner_row[0]) == str(current_user.id)
+    if target_role == "admin" and not caller_is_owner:
+        raise HTTPException(status_code=403, detail="Адміністратора може звільнити лише власник закладу")
+
     # Закриваємо членство саме в ЦЬОМУ закладі, а не звільняємо людину
     # звідусіль: вона може працювати ще десь, і той заклад тут ні до чого.
     m_res = await db.execute(

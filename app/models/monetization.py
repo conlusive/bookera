@@ -1,7 +1,6 @@
 import enum
-from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric, Boolean, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric, Text
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -23,7 +22,7 @@ class PointsLedgerEntry(Base):
     __tablename__ = "points_ledger"
 
     id = Column(Integer, primary_key=True, index=True)
-    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
     amount = Column(Integer, nullable=False)  # +/-
     reason = Column(String, nullable=False)
     reference_client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
@@ -43,7 +42,7 @@ class ReferralCommission(Base):
     __tablename__ = "referral_commissions"
 
     id = Column(Integer, primary_key=True, index=True)
-    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=False, unique=True)
     amount = Column(Numeric(10, 2), nullable=False)
     rate_applied = Column(Numeric(5, 2), nullable=False)
@@ -60,7 +59,7 @@ class RadarBoost(Base):
     __tablename__ = "radar_boosts"
 
     id = Column(Integer, primary_key=True, index=True)
-    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
     started_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=False)
     paid_with = Column(String, nullable=False)  # 'points' або 'payment'
@@ -107,7 +106,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
-    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
     purpose = Column(String, nullable=False)  # radar_boost, gift_certificate_purchase
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String, default="UAH", nullable=False)
@@ -127,8 +126,8 @@ class StaffPayout(Base):
     __tablename__ = "staff_payouts"
 
     id = Column(Integer, primary_key=True, index=True)
-    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
-    staff_id = Column(String, ForeignKey("users.id"), nullable=False)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    staff_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
 
     period_start = Column(DateTime, nullable=False)
     period_end = Column(DateTime, nullable=False)

@@ -12,7 +12,6 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta
 from typing import Optional
 from pydantic import BaseModel, Field
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select

@@ -10,7 +10,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +27,6 @@ from app.services.subscription import (
     assert_platform_admin,
     has_access,
     subscription_state,
-    subscription_status,
 )
 
 router = APIRouter(prefix="/platform", tags=["Platform Admin"])

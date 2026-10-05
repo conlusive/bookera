@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -121,6 +122,11 @@ app = FastAPI(
 _allowed_origins = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()
 ]
+
+# Стискаємо відповіді від 1 КБ: список закладів, календар і аналітика - це сотні
+# КБ JSON, який чудово стискається (у 5-10 разів). Додається ПЕРЕД CORS, тож
+# CORS-заголовки лишаються зовні й на стиснутих відповідях теж.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,

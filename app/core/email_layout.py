@@ -60,7 +60,7 @@ def info_row(label: str, value: str, strike: bool = False, big: bool = False) ->
     """Рядок «підпис — значення» всередині картки."""
     value_style = f"font-size:{'20px' if big else '15px'};font-weight:{'700' if big else '500'};color:{INK};letter-spacing:-0.01em;"
     if strike:
-        value_style = f"font-size:15px;color:#A5AEA3;text-decoration:line-through;"
+        value_style = "font-size:15px;color:#A5AEA3;text-decoration:line-through;"
     return f"""
     <tr>
       <td style="padding:0 0 4px;font-family:{FONT};font-size:13px;color:{MUTED};">{esc(label)}</td>

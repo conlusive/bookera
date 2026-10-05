@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, assert_section
+from app.core.auth import CurrentUser, get_current_user, assert_section
 from app.models import Business, Service, ServiceAddon
 from app.schemas import ServiceCreate, ServiceResponse, ServiceUpdate
 

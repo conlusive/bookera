@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 import os
 import secrets
@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import and_, delete, func, or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate, MyAppointmentResponse
@@ -21,13 +21,11 @@ from app.schemas.appointment import (
     AvailableSlotsResponse,
     LockSlotRequest,
     ManageBookingRequest,
-    ManualAppointmentCreate,
     SlotStatusItem,
 )
 from app.core.email import send_booking_confirmation_email, send_new_booking_to_staff
 from app.services.subscription import has_access
-from app.services.monetization import charge_commission_if_applicable, award_points_for_new_client
-from app.services.inventory import consume_materials_for_appointment, revert_materials_for_appointment
+from app.services.monetization import award_points_for_new_client
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -36,7 +34,7 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 LOCK_TIMEOUT_MINUTES = 10
 
 
-from app.core.time_utils import utc_now as get_utc_now, local_now, to_utc, to_local
+from app.core.time_utils import utc_now as get_utc_now, local_now
 
 
 def normalize_master_id(raw) -> Optional[str]:
@@ -387,6 +385,15 @@ async def get_available_slots(
 
 # === 2. БЛОКУВАННЯ ТА РОЗБЛОКУВАННЯ ===
 
+def _is_slot_race(exc: DBAPIError) -> bool:
+    """
+    Дві одночасні вставки на один слот: БД віддає або порушення exclusion constraint,
+    або deadlock (SQLSTATE 40P01), залежно від того, хто кого встиг дочекатись. Для
+    клієнта це одне й те саме - «час щойно зайняли», а не помилка сервера.
+    """
+    return getattr(exc.orig, "sqlstate", None) == "40P01"
+
+
 @router.post("/lock")
 async def lock_time_slot(
     request: LockSlotRequest,
@@ -497,7 +504,9 @@ async def lock_time_slot(
     db.add(new_lock)
     try:
         await db.commit()
-    except IntegrityError:
+    except (IntegrityError, DBAPIError) as exc:
+        if not isinstance(exc, IntegrityError) and not _is_slot_race(exc):
+            raise
         # Спрацював exclusion constraint на рівні БД (no_overlapping_bookings) -
         # хтось інший щойно зайняв цей самий слот між нашою перевіркою і вставкою.
         # Це і є справжній, надійний захист від подвійного бронювання: перевірка
@@ -795,7 +804,9 @@ async def create_appointment(
 
     try:
         await db.commit()
-    except IntegrityError:
+    except (IntegrityError, DBAPIError) as exc:
+        if not isinstance(exc, IntegrityError) and not _is_slot_race(exc):
+            raise
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
     await db.refresh(appointment)
@@ -810,13 +821,6 @@ async def create_appointment(
         m_res = await db.execute(select(User).where(User.id == str(appointment.master_id)))
         master = m_res.scalars().first()
         master_display_name = (master.full_name or "") if master else ""
-
-    total_minutes = int((appointment.end_time - appointment.start_time).total_seconds() // 60)
-    hours, minutes = divmod(max(total_minutes, 0), 60)
-    duration_text = " ".join(filter(None, [
-        f"{hours} год" if hours else "",
-        f"{minutes} хв" if minutes else "",
-    ]))
 
     # Сповіщення ЗАКЛАДУ. Раніше лист ішов лише клієнту, а заклад
     # дізнавався про запис, коли відкривав календар - для майстра без

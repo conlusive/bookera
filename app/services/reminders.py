@@ -188,9 +188,6 @@ async def complete_past_appointments(db: AsyncSession) -> int:
         # Комісію нараховує та сама функція, що й при ручному завершенні:
         # два шляхи до одного стану неминуче розійшлися б, і частина
         # візитів лишилась би без комісії.
-        biz_res = await db.execute(select(Business).where(Business.id == appointment.business_id))
-        business = biz_res.scalars().first()
-
         _old_status = appointment.status
         appointment.status = "completed"
         # Бонуси BookEra: нарахувати за завершений візит або повернути,

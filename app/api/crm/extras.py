@@ -670,7 +670,7 @@ async def send_campaign(
     - без email клієнта пропускаємо мовчки, але рахуємо: власник має
       бачити, скільки контактів насправді досяжні
     """
-    from app.models import Business, Client
+    from app.models import Business
     from app.core.email import send_campaign_email
 
     await assert_section(db, current_user, payload.business_id, "analytics")

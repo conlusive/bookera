@@ -1,5 +1,4 @@
 from decimal import Decimal
-from typing import Optional
 
 from app.core.time_utils import to_local
 from sqlalchemy import select

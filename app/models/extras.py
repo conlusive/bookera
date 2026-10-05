@@ -1,4 +1,4 @@
-from datetime import datetime, date as dt_date
+from datetime import date as dt_date
 
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Numeric, Text, SmallInteger, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -11,8 +11,8 @@ class Review(Base):
     __tablename__ = "reviews"
 
     id = Column(Integer, primary_key=True, index=True)
-    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
-    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False, index=True)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True, index=True)
     author_name = Column(String, nullable=True)
     rating = Column(SmallInteger, nullable=False)  # 1-5
     # Окремо майстер і заклад - щоб оцінювати обʼєктивно: майстер міг

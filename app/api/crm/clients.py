@@ -6,9 +6,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import has_section, is_limited_to_own_schedule, CurrentUser, assert_business_access, get_current_user
+from app.core.auth import has_section, CurrentUser, assert_business_access, get_current_user
 from app.models import Client, ClientLink, Business, PointsLedgerEntry, Appointment
-from app.models.appointment import Appointment
 from app.services.monetization import award_points_for_new_client
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.services.client_stats import apply_stats, client_stats, phone_tail

@@ -75,18 +75,3 @@ def default_booking_settings(category: str | None, business_type: str | None,
         settings["max_advance_days"] = 90
 
     return settings
-
-
-def is_solo_business(business) -> bool:
-    """
-    Чи це майстер-одинак.
-
-    Впливає на те, які частини CRM показувати: керування командою,
-    виплати майстрам і колонки в календарі не мають сенсу, поки
-    людина працює сама.
-
-    Перевіряємо і тип, і фактичну кількість людей: тип обирають один
-    раз при реєстрації, а команда може зʼявитись пізніше - і тоді
-    ховати вкладку вже неправильно.
-    """
-    return business.business_type == "individual"

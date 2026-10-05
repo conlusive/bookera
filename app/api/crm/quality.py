@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, assert_business_admin, get_current_user
 from app.core.database import get_db
 from app.core.time_utils import local_now
-from app.models import Appointment, Business, Service, StaffMembership, User
+from app.models import Appointment, Service, StaffMembership, User
 from app.models.extras import Review
 
 router = APIRouter(tags=["Staff quality"])

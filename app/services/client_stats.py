@@ -10,8 +10,6 @@
 Звʼязок запису з клієнтом: client_id, а для записів без нього (старі
 онлайн-записи) - за останніми 9 цифрами телефону.
 """
-from datetime import datetime
-from decimal import Decimal
 from typing import Dict, Iterable, Optional
 
 from sqlalchemy import func, select

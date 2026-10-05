@@ -1,4 +1,3 @@
-from datetime import datetime, date
 
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date, Numeric, Text, JSON
 from sqlalchemy.orm import relationship
@@ -60,5 +59,5 @@ class ClientLink(Base):
     __tablename__ = "client_links"
 
     id = Column(Integer, primary_key=True, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
-    linked_client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    linked_client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)

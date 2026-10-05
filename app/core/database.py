@@ -2,7 +2,6 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import declarative_base
 
 load_dotenv()
 

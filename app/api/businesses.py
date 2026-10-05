@@ -1,6 +1,6 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, delete
@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, get_current_user
 from app.core.time_utils import utc_now
-from app.models import Business, User, RoleEnum, Appointment, Service, BusinessHours, Favorite
+from app.models import Business, User, RoleEnum, Appointment, BusinessHours, Favorite
 from app.services import ranking
 from app.schemas.business import BusinessOut, WorkingDayOut
 
@@ -31,15 +31,25 @@ def parse_time_period(period: Optional[str]):
 
 
 @router.get("/ranking-rules")
-async def get_ranking_rules():
+async def get_ranking_rules(response: Response):
     """
     Правила позиції у видачі - ті самі числа, за якими сервер рахує
     rank_score. Вітрина бере ваги звідси, а не тримає власних копій.
     """
+    # Числа - константи коду й міняються лише з релізом: браузеру й CDN можна кешувати
+    response.headers["Cache-Control"] = "public, max-age=300"
     return ranking.ranking_rules()
 
 
-@router.get("/", response_model=List[BusinessOut])
+# Поля, які картці каталогу не потрібні: внутрішні налаштування закладу (безпека,
+# платежі, сповіщення), власник, оформлення сторінки й галерея. Їх віддає лише
+# GET /businesses/{slug}. У списку з 100 закладів це прибирає найважчі частини
+# відповіді - і не віддає чужі налаштування кожному відвідувачу.
+# Ключ "__all__": для списку Pydantic застосовує виключення до кожного елемента, а не до індексів.
+LIST_EXCLUDE = {"__all__": {"security_settings", "notification_settings", "payments_settings", "layout_config", "workplace_photos", "owner_id"}}
+
+
+@router.get("/", response_model=List[BusinessOut], response_model_exclude=LIST_EXCLUDE)
 async def list_businesses(
     limit: int = Query(50, ge=1, le=200, description="Максимум записів (за замовчуванням 50, ліміт 200)"),
     offset: int = Query(0, ge=0),
@@ -97,6 +107,7 @@ async def list_businesses(
 @router.get(
     "/search-available",
     response_model=List[BusinessOut],
+    response_model_exclude=LIST_EXCLUDE,
     summary="Пошук закладів із вільними слотами на обрану дату та час",
 )
 async def search_available_businesses(

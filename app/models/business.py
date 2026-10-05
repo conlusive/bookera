@@ -1,4 +1,4 @@
-from datetime import datetime, time as dt_time
+from datetime import time as dt_time
 
 from sqlalchemy import (
     Column, Integer, String, Boolean, ForeignKey,
@@ -14,7 +14,7 @@ class Business(Base):
     __tablename__ = "businesses"
 
     id = Column(Integer, primary_key=True, index=True)
-    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     slug = Column(String, unique=True, index=True, nullable=False)
     category = Column(String, default="other")

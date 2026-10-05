@@ -141,11 +141,7 @@ export default function BusinessCard({
                 aria-label="Реклама: заклад просувається в Bookera"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z" />
-                  <path d="M15.5 9a4 4 0 0 1 0 6" />
-                  <path d="M18 6.5a8 8 0 0 1 0 11" />
-                </svg>
+                <span className="ad-badge" aria-hidden>Ad</span>
                 <span className="ad-tip">Реклама</span>
               </span>
             ) : null}
@@ -308,8 +304,10 @@ export function BusinessCardStyles() {
         /* СКЛЯНИЙ БЕЙДЖ */
         .card-title-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 0; }
         .card-title-main .card-heading { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-        .ad-icon { position: relative; flex: none; display: inline-flex; align-self: center; color: #c3c9d1; outline: none; cursor: help; transition: color .15s; }
+        .ad-icon { position: relative; flex: none; display: inline-flex; align-self: center; color: #b4bbc4; outline: none; cursor: help; transition: color .15s; }
         .ad-icon:hover, .ad-icon:focus { color: #64748b; }
+        /* «Ad» - знайома всім позначка реклами (як у пошуку): крихітна рамка, без звуку-рупора й без «i» */
+        .ad-badge { font-size: 0.58rem; font-weight: 700; line-height: 1; letter-spacing: 0.02em; padding: 2px 4px; border: 1px solid currentColor; border-radius: 4px; }
         .ad-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px; background: #334155; color: #fff; font-size: 0.7rem; font-weight: 500; white-space: nowrap; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .15s; }
         .ad-icon:hover .ad-tip, .ad-icon:focus .ad-tip { opacity: 1; visibility: visible; }
         .glass-pill {

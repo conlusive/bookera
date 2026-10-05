@@ -151,3 +151,57 @@ async def test_pay_terms_change_is_logged_for_the_team(client, auth_headers):
     assert r.status_code == 200, r.text
     ev = next(e for e in (await _log(client, h, bid, category="team"))["items"] if e["action"] == "staff_updated")
     assert "Олена" in ev["summary"] and "Відсоток від виручки, %: 30 → 40" in ev["summary"]
+
+
+@pytest.mark.asyncio
+async def test_settings_changes_are_described_and_noops_are_not_logged(client, auth_headers):
+    h, bid = await _setup(client, auth_headers, "set")
+    base = (await _log(client, h, bid))["items"]
+    r = await client.patch(f"/crm/businesses/{bid}", json={"notification_settings": {"auto_approve": False, "notify_client_booking": True}}, headers=h)
+    assert r.status_code == 200, r.text
+    ev = next(e for e in (await _log(client, h, bid, category="settings"))["items"] if e["action"] == "business_updated")
+    assert "Авто-підтвердження записів" in ev["summary"] and "ні" in ev["summary"]
+    n = len((await _log(client, h, bid, limit=100))["items"])
+
+    # те саме значення вдруге - нічого не змінилось, запису немає
+    await client.patch(f"/crm/businesses/{bid}", json={"notification_settings": {"auto_approve": False, "notify_client_booking": True}}, headers=h)
+    assert len((await _log(client, h, bid, limit=100))["items"]) == n
+
+    await client.patch(f"/crm/businesses/{bid}", json={"payments_settings": {"require_deposit": True, "deposit_type": "percent", "deposit_amount": 20}}, headers=h)
+    summ = (await _log(client, h, bid, category="settings"))["items"][0]["summary"]
+    assert "Передоплата" in summ and "Тип передоплати" in summ
+
+
+@pytest.mark.asyncio
+async def test_cover_photo_can_be_removed(client, auth_headers):
+    h, bid = await _setup(client, auth_headers, "cover")
+    r = await client.patch(f"/crm/businesses/{bid}", json={"cover_photo": "https://x.test/a.jpg"}, headers=h)
+    assert r.status_code == 200 and r.json()["cover_photo"] == "https://x.test/a.jpg"
+    r = await client.patch(f"/crm/businesses/{bid}", json={"cover_photo": None}, headers=h)
+    assert r.status_code == 200 and r.json()["cover_photo"] is None
+
+
+@pytest.mark.asyncio
+async def test_address_change_moves_the_point_automatically(client, auth_headers, monkeypatch):
+    calls = []
+
+    async def fake_geocode(city, address):
+        calls.append((city, address))
+        return (50.45, 30.52) if "Київ" in (city or "") else (49.84, 24.03)
+
+    monkeypatch.setattr("app.services.geocoding.geocode_address", fake_geocode)
+    h, bid = await _setup(client, auth_headers, "geo")
+    r = await client.patch(f"/crm/businesses/{bid}", json={"city": "Львів", "address": "Дорошенка 1"}, headers=h)
+    assert (float(r.json()["latitude"]), float(r.json()["longitude"])) == (49.84, 24.03)
+
+    # нова адреса без координат у запиті - точка переїжджає сама
+    r = await client.patch(f"/crm/businesses/{bid}", json={"city": "Київ", "address": "Хрещатик 1"}, headers=h)
+    assert (float(r.json()["latitude"]), float(r.json()["longitude"])) == (50.45, 30.52)
+
+    # ручна мітка в тому ж запиті важливіша за пошук
+    r = await client.patch(f"/crm/businesses/{bid}", json={"address": "Хрещатик 2", "latitude": 50.1, "longitude": 30.1}, headers=h)
+    assert float(r.json()["latitude"]) == 50.1
+
+    # адресу стерли - точки теж немає
+    r = await client.patch(f"/crm/businesses/{bid}", json={"address": ""}, headers=h)
+    assert r.json()["latitude"] is None

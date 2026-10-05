@@ -56,6 +56,7 @@ def default_booking_settings(category: str | None, business_type: str | None,
         # Саме через невраховані 10-15 хвилин майстри й спізнюються -
         # календар обіцяє час, якого фізично немає.
         "buffer_minutes": 10 if category in ("nails", "hair", "spa", "massage") else 5,
+        "cancel_before_hours": 24,
         "cancellation_policy": "Скасування можливе не пізніше ніж за 24 години до візиту.",
     }
 

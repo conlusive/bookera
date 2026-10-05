@@ -20,12 +20,13 @@ from app.core.auth import CurrentUser, get_current_user
 from app.core.logging_config import logger
 from app.core.time_utils import utc_now
 from app.models import Business, Payment, User
-from app.services.payments import create_payment_intent, verify_callback_signature
+from app.services.payments import create_payment_intent, is_live, verify_callback_signature
 from app.services.subscription import (
     STATUS_ACTIVE,
     STATUS_EXPIRED,
     assert_platform_admin,
     has_access,
+    subscription_state,
     subscription_status,
 )
 
@@ -217,6 +218,9 @@ class SubscriptionCheckoutResponse(BaseModel):
     # true, коли підписка продовжена без переходу на оплату (немає
     # ключів провайдера). Інтерфейс має оновити стан, а не редіректити.
     activated: bool = False
+    # Підписана форма WayForPay (POST на сторінку оплати) - потрібна для справжніх
+    # грошей: перехід за посиланням WayForPay не підтримує.
+    checkout: Optional[dict] = None
     order_id: str
     amount: float
     period_days: int
@@ -287,13 +291,8 @@ async def create_subscription_payment(
     # Умова навмисно прив'язана до ВІДСУТНОСТІ ключів, а не до прапорця
     # «режим розробки»: у продакшні ключі є завжди, тому безкоштовну
     # підписку так не отримаєш. Кожен такий випадок пишеться в лог.
-    if intent.checkout_url is None:
-        payment.status = "completed"
-        payment.completed_at = utc_now()
-        base = business.subscription_until
-        start_from = base if (base and base > utc_now()) else utc_now()
-        business.subscription_plan = STATUS_ACTIVE
-        business.subscription_until = start_from + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
+    if intent.checkout_url is None and intent.checkout is None:
+        await complete_subscription_payment(db, payment)
         await db.commit()
         logger.warning(
             "Підписку продовжено БЕЗ реальної оплати (немає ключів провайдера): business_id=%s",
@@ -309,10 +308,65 @@ async def create_subscription_payment(
 
     return SubscriptionCheckoutResponse(
         payment_url=intent.checkout_url,
+        checkout=intent.checkout,
         order_id=order_id,
         amount=float(SUBSCRIPTION_PRICE_UAH),
         period_days=SUBSCRIPTION_PERIOD_DAYS,
     )
+
+
+async def complete_subscription_payment(db: AsyncSession, payment: Payment) -> None:
+    """
+    Оплату підписки підтверджено: фіксуємо платіж і продовжуємо доступ.
+
+    Від БІЛЬШОЇ дати: якщо підписка ще діє, нові 30 днів додаються до залишку,
+    а не з'їдають його. Повторне підтвердження нічого не продовжує вдруге.
+    """
+    if payment.status == "completed":
+        return
+    payment.status = "completed"
+    payment.completed_at = utc_now()
+    business = (await db.execute(select(Business).where(Business.id == payment.business_id))).scalars().first()
+    if business:
+        base = business.subscription_until
+        start_from = base if (base and base > utc_now()) else utc_now()
+        business.subscription_plan = STATUS_ACTIVE
+        business.subscription_until = start_from + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
+        business.subscription_note = None  # це вже не ручна видача
+        logger.info("Підписку продовжено оплатою: business_id=%s до %s", payment.business_id, business.subscription_until)
+
+
+@router.get("/subscription")
+async def subscription_overview(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Підписка для вкладки «Налаштування»: стан, ціна й історія оплат.
+    Бачить лише власник - це гроші закладу. Без перевірки чинної підписки:
+    платити й дивитись історію треба й тоді, коли доступ уже закінчився.
+    """
+    business = (await db.execute(select(Business).where(Business.id == business_id))).scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Заклад не знайдено")
+    if str(business.owner_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Підписку бачить лише власник закладу")
+    payments = (await db.execute(
+        select(Payment).where(Payment.business_id == business_id, Payment.purpose == "subscription")
+        .order_by(Payment.created_at.desc()).limit(12)
+    )).scalars().all()
+    return {
+        **subscription_state(business),
+        "price_uah": float(SUBSCRIPTION_PRICE_UAH),
+        "period_days": SUBSCRIPTION_PERIOD_DAYS,
+        "live_payments": is_live(),
+        "manual_note": business.subscription_note,
+        "payments": [{
+            "id": p.id, "date": (p.completed_at or p.created_at).isoformat() + "Z" if (p.completed_at or p.created_at) else None,
+            "amount": float(p.amount), "status": p.status,
+        } for p in payments],
+    }
 
 
 @router.post("/subscription/callback")
@@ -351,20 +405,18 @@ async def subscription_payment_callback(
     if payment.status == "completed":
         return {"status": "already_processed"}
 
-    payment.status = "completed"
-    payment.completed_at = utc_now()
+    # Підпис каже лише, що запит від провайдера; оплата може бути і відхиленою.
+    tx_status = payload.get("transactionStatus")
+    if tx_status is not None and str(tx_status) != "Approved":
+        payment.status = "failed" if str(tx_status) in ("Declined", "Expired", "Refunded", "Voided") else payment.status
+        await db.commit()
+        return {"status": "not_approved"}
+    paid = payload.get("amount")
+    if paid is not None and Decimal(str(paid)) != Decimal(payment.amount):
+        logger.warning("Сума підписки не збігається: %s проти %s (%s)", paid, payment.amount, order_id)
+        raise HTTPException(status_code=400, detail="Сума не збігається")
 
-    biz_res = await db.execute(select(Business).where(Business.id == payment.business_id))
-    business = biz_res.scalars().first()
-    if business:
-        base = business.subscription_until
-        start_from = base if (base and base > utc_now()) else utc_now()
-        business.subscription_plan = STATUS_ACTIVE
-        business.subscription_until = start_from + timedelta(days=SUBSCRIPTION_PERIOD_DAYS)
-        business.subscription_note = None  # це вже не ручна видача
-
+    await complete_subscription_payment(db, payment)
     await db.commit()
-    logger.info("Підписку продовжено оплатою: business_id=%s до %s",
-                payment.business_id, business.subscription_until if business else "-")
 
     return {"status": "ok"}

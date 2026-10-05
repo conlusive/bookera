@@ -17,6 +17,29 @@ from app.core.logging_config import logger
 from app.models import Business, RoleEnum, BusinessHours, User
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessOut, BusinessHoursItem
 
+FIELD_LABELS = {
+    "name": "Назва", "city": "Місто", "address": "Адреса", "phone": "Телефон", "email": "Пошта", "description": "Опис",
+    "category": "Категорія", "business_type": "Тип бізнесу", "workspace_type": "Формат роботи",
+    "show_phone_publicly": "Показувати телефон клієнтам", "tags": "Теги", "cover_photo": "Обкладинка", "logo": "Логотип",
+    "accent_color": "Колір", "layout_config": "Вигляд вітрини", "workplace_photos": "Фото робочого місця",
+}
+FIELD_HIDE = ("description", "cover_photo", "logo", "layout_config", "workplace_photos")
+SETTINGS_BLOCKS = {
+    "booking_settings": {
+        "is_active": "Онлайн-запис увімкнено", "is_paused_emergency": "Тимчасово призупинити запис",
+        "min_advance_hours": "Мінімум часу до візиту, год", "max_advance_days": "Горизонт планування, днів",
+        "time_step": "Крок сітки, хв", "default_duration": "Тривалість візиту за замовчуванням, хв", "buffer_minutes": "Буфер після візиту, хв",
+        "closed_periods": "Закриті періоди", "cancel_before_hours": "Скасування онлайн за, год", "cancellation_policy": "Умови скасування",
+    },
+    "notification_settings": {
+        "auto_approve": "Авто-підтвердження записів", "notify_client_booking": "Лист-підтвердження клієнту",
+        "notify_client_reminder_sms": "Нагадування за 24 години", "notify_staff_booking": "Листи про нові записи",
+    },
+    "security_settings": {"block_no_shows": "Блокувати за неявки", "require_phone_verification": "Підтвердження телефону"},
+    "payments_settings": {"require_deposit": "Передоплата", "deposit_type": "Тип передоплати", "deposit_amount": "Сума / відсоток передоплати", "currency": "Валюта"},
+}
+SETTINGS_HIDE = ("closed_periods", "cancellation_policy")
+
 router = APIRouter(prefix="/crm/businesses", tags=["CRM - Business"])
 
 # ПРИМІТКА: тут навмисно немає DELETE /{business_id}. У моделі Business
@@ -276,6 +299,7 @@ async def update_business(
         or ("city" in data and data["city"] != business.city)
     )
 
+    before = {f: getattr(business, f, None) for f in data}
     for field, value in data.items():
         setattr(business, field, value)
 
@@ -304,12 +328,31 @@ async def update_business(
             # показувався б у пошуку не там, де він є.
             business.latitude = None
             business.longitude = None
+    elif address_changed and not business.address and not coords_set_manually:
+        # Адресу стерли - точка від неї втратила сенс
+        business.latitude = None
+        business.longitude = None
 
-    # Журнал дій
+    # Журнал дій: що саме змінилось («було → стало»). Якщо нічого - запису немає:
+    # автозбереження шле весь блок налаштувань, і без цієї перевірки журнал
+    # засмічували б записи «змінено налаштування», де нічого не змінилось.
+    from app.services.audit import changes_text, diff_changes, record as _audit
 
-    from app.services.audit import record as _audit
-
-    await _audit(db, business.id, str(current_user.id), "settings", "business_updated", "Змінено налаштування закладу: " + ", ".join(sorted(data.keys()))[:200])
+    changes = []
+    for field, new in data.items():
+        old = before.get(field)
+        if field in SETTINGS_BLOCKS and isinstance(new, dict):
+            old = old if isinstance(old, dict) else {}
+            changes += diff_changes(old, new, SETTINGS_BLOCKS[field], hide_values=SETTINGS_HIDE)
+        elif field in ("latitude", "longitude"):
+            continue
+        else:
+            changes += diff_changes({field: old}, {field: new}, FIELD_LABELS, hide_values=FIELD_HIDE)
+    if "latitude" in data and ("latitude" in before) and (before.get("latitude") != data.get("latitude") or before.get("longitude") != data.get("longitude")):
+        changes.append({"field": "location", "label": "Точка на мапі"})
+    if changes:
+        await _audit(db, business.id, str(current_user.id), "settings", "business_updated",
+                     f"Налаштування: {changes_text(changes)}"[:500], meta={"changes": changes})
 
     await db.commit()
 

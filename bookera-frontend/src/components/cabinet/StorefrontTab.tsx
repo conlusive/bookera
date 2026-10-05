@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import { ALL_AMENITIES } from '@/lib/amenities';
+import { storefrontMap } from '@/lib/storefront-map';
 import SmartImage from '@/components/ui/SmartImage';
 import { formatDuration } from '@/lib/duration';
 
@@ -30,6 +31,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
   const [formData, setFormData] = useState({ name: '', category: '', city: '', address: '', description: '', phone: '', email: '' });
   const [accentColor, setAccentColor] = useState('#0f172a');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle');
 
   const [layoutConfig, setLayoutConfig] = useState({
     showTeam: true,
@@ -38,9 +40,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
   });
 
   const [teamOrder, setTeamOrder] = useState<string[]>([]);
-  const [amenities, setAmenities] = useState<string[]>([
-    'parking', 'card_payment', 'wifi', 'accessibility', 'coffee_tea'
-  ]);
+  const [amenities, setAmenities] = useState<string[]>([]);
 
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [workplacePhotos, setWorkplacePhotos] = useState<string[]>([]);
@@ -158,6 +158,8 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
   const handleSaveBusinessInfo = async (silent = false) => {
     if (!business?.id) return;
+    // Порожню назву не зберігаємо: поки людина стерла текст, щоб набрати нову, закладу без імені бути не повинно
+    if (!formData.name.trim()) return;
     setIsSaving(true);
 
     try {
@@ -174,7 +176,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         description: formData.description,
         accent_color: accentColor,
         layout_config: updatedLayoutConfig,
-        cover_photo: coverPhoto ?? undefined,
+        cover_photo: coverPhoto,
         logo: coverPhoto ?? null,
         workplace_photos: workplacePhotos,
         amenities: amenities,
@@ -187,7 +189,9 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
       business.amenities = amenities;
       business.cover_photo = coverPhoto;
       business.workplace_photos = workplacePhotos;
+      setSaveState('saved');
     } catch (err: any) {
+      setSaveState('error');
       console.error("Помилка збереження:", err);
       showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
     } finally {
@@ -289,10 +293,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
     return ALL_AMENITIES.filter(a => amenities.includes(a.id));
   }, [amenities]);
 
-  const mapIframeUrl = useMemo(() => {
-    const mapQuery = encodeURIComponent(`${fullAddress || 'Львів'}, Україна`);
-    return `https://maps.google.com/maps?q=${mapQuery}&t=m&z=17&ie=UTF8&iwloc=&output=embed`;
-  }, [fullAddress]);
+  const map = useMemo(() => storefrontMap(business), [business?.address, business?.city, business?.latitude, business?.longitude]);
 
   return (
     <>
@@ -313,9 +314,9 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
       <div className="hide-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fafbfc', overflowY: 'auto', position: 'relative' }}>
 
         {/* Хедер */}
-        <header style={{ padding: '1.5rem 3rem', borderBottom: '1px solid rgba(226, 232, 240, 0.6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 50 }}>
+        <header style={{ padding: '1.25rem 3rem', whiteSpace: 'nowrap', borderBottom: '1px solid rgba(226, 232, 240, 0.6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 50 }}>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', margin: 0 }}>Редактор профілю закладу</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', margin: 0, whiteSpace: 'nowrap' }}>Редактор вітрини</h1>
           </div>
           <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
 
@@ -330,17 +331,15 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
             <div style={{ width: '1px', height: '24px', background: '#cbd5e1', margin: '0 0.5rem' }}></div>
 
             <button
-              onClick={() => router.push(`/${business?.slug || business?.id}`)}
+              onClick={() => router.push(`/${business?.slug || business?.id}?preview=1`)}
               style={{ padding: '0.5rem 1rem', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', fontWeight: '500', color: '#475569', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.95rem' }}
             >
               <Icons.Globe style={{ width: '18px', height: '18px' }} /> Переглянути
             </button>
 
-            {isSaving && (
-              <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 500 }}>
-                Збереження…
-              </span>
-            )}
+            <span role="status" style={{ fontSize: '0.85rem', fontWeight: 500, minWidth: '110px', textAlign: 'right', color: saveState === 'error' ? '#dc2626' : saveState === 'saved' && !isSaving ? '#059669' : '#94a3b8' }}>
+              {isSaving ? 'Збереження…' : saveState === 'error' ? 'Не збережено' : saveState === 'saved' ? 'Збережено ✓' : 'Автозбереження'}
+            </span>
           </div>
         </header>
 
@@ -466,20 +465,6 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                                   <Icons.Clock style={{ width: '14px', height: '14px', color: '#94a3b8' }} />
                                   {formatServiceDuration(durationVal)}
                                 </span>
-                                <span style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  color: '#065F46',
-                                  backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                                  padding: '2px 8px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: '600'
-                                }}>
-                                  <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: '#10B981' }}></span>
-                                  Є вільні слоти
-                                </span>
                               </div>
                             </div>
 
@@ -594,9 +579,9 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                   <div className="editable-block" style={{ opacity: layoutConfig.showMap ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', background: '#e2e8f0' }}>
                       <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
-                        <iframe
-                          key={fullAddress}
-                          src={mapIframeUrl}
+                        {map ? <iframe
+                          key={map.embedUrl}
+                          src={map.embedUrl}
                           style={{
                             width: '100%',
                             height: '100%',
@@ -606,7 +591,11 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                           allowFullScreen={false}
                           loading="lazy"
                           referrerPolicy="no-referrer-when-downgrade"
-                        />
+                        /> : (
+                          <div style={{ position: 'absolute', inset: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: '#94a3b8', fontSize: '0.88rem', padding: '0 1rem' }}>
+                            Вкажіть адресу, щоб на сторінці з’явилась карта
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
@@ -615,7 +604,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                       </span>
                       <button
                         type="button"
-                        onClick={() => onNavigate?.('Settings', 'profile')}
+                        onClick={() => (map ? window.open(map.link, '_blank', 'noopener') : onNavigate?.('Settings', 'profile'))}
                         style={{ padding: '0.45rem 0.9rem', fontSize: '0.82rem', fontWeight: 600, background: '#F5F5F7', border: 'none', borderRadius: '10px', cursor: 'pointer', color: '#1D1D1F' }}
                       >
                         Карта ↗
@@ -931,7 +920,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #e2e8f0' }}>
                     <div>
                       <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '0.92rem' }}>Блок "Карта"</div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Інтерактивна Google Карта</div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Карта з адресою закладу</div>
                     </div>
                     <div
                       onClick={() => setLayoutConfig(prev => ({ ...prev, showMap: !prev.showMap }))}

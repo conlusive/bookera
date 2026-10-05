@@ -1,6 +1,7 @@
 import asyncpg
 import os
 import pytest
+from app.core.time_utils import local_now
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -16,7 +17,7 @@ async def _setup_with_appointment(client, headers, hours_ahead: float, name: str
     }, headers=headers)
     service_id = r.json()["id"]
 
-    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=hours_ahead)
+    start = local_now().replace(tzinfo=None) + timedelta(hours=hours_ahead)
     r = await client.post("/appointments", json={
         "business_id": business_id, "service_id": service_id,
         "start_time": start.isoformat(),

@@ -2,6 +2,8 @@ import asyncpg
 import pytest
 from datetime import datetime, timedelta, timezone
 
+from app.core.time_utils import local_now
+
 DB_URL_RAW = "postgresql://postgres:postgres@localhost:5432/bookera_test"
 
 
@@ -48,7 +50,7 @@ async def test_booking_disabled_blocks_new_appointments(client, auth_headers):
     зберігалось, але бронювання все одно проходило."""
     headers = auth_headers("rules-owner-1")
     business_id, service_id = await _setup(client, headers, "Disabled Salon")
-    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
 
     # Поки увімкнено - запис проходить
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
@@ -66,7 +68,7 @@ async def test_emergency_pause_blocks_bookings(client, auth_headers):
     business_id, service_id = await _setup(client, headers, "Paused Salon")
     await _set_rules(business_id, booking={"is_active": True, "is_paused_emergency": True})
 
-    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
     assert r.status_code == 403
     assert "тимчасово" in r.json()["detail"]
@@ -79,7 +81,7 @@ async def test_min_advance_hours_enforced(client, auth_headers):
     business_id, service_id = await _setup(client, headers, "MinAdvance Salon")
     await _set_rules(business_id, booking={"is_active": True, "min_advance_hours": 4})
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = local_now().replace(tzinfo=None)
 
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, now + timedelta(hours=1)))
     assert r.status_code == 400
@@ -95,7 +97,7 @@ async def test_max_advance_days_enforced(client, auth_headers):
     business_id, service_id = await _setup(client, headers, "MaxAdvance Salon")
     await _set_rules(business_id, booking={"is_active": True, "max_advance_days": 14})
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = local_now().replace(tzinfo=None)
 
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, now + timedelta(days=30)))
     assert r.status_code == 400
@@ -121,7 +123,7 @@ async def test_blacklisted_client_cannot_book(client, auth_headers):
     client_id = r.json()["id"]
     await client.patch(f"/crm/clients/{client_id}", json={"is_blacklisted": True}, headers=headers)
 
-    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
     assert r.status_code == 403
     assert "чорн" not in r.json()["detail"].lower(), "не повідомляємо причину клієнту"
@@ -181,7 +183,7 @@ async def test_profile_rules_actually_block_booking(client, auth_headers):
     }, headers=headers)
     service_id = r.json()["id"]
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = local_now().replace(tzinfo=None)
 
     # Манікюр - мінімум 3 години наперед
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, now + timedelta(hours=1)))
@@ -212,7 +214,7 @@ async def test_auto_approve_off_puts_booking_on_hold(client, auth_headers):
     finally:
         await conn.close()
 
-    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "pending_approval"
@@ -266,7 +268,7 @@ async def test_deposit_amount_is_recorded_on_booking(client, auth_headers):
     finally:
         await conn.close()
 
-    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
     assert r.status_code == 200, r.text
 
@@ -288,7 +290,7 @@ async def test_closed_period_blocks_booking(client, auth_headers):
     headers = auth_headers("closed-owner")
     business_id, service_id = await _setup(client, headers, "Closed Salon")
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = local_now().replace(tzinfo=None)
     vacation_start = (now + timedelta(days=10)).date()
     vacation_end = (now + timedelta(days=17)).date()
 
@@ -398,7 +400,7 @@ async def test_client_can_view_and_cancel_own_booking(client, auth_headers):
     headers = auth_headers("manage-owner")
     business_id, service_id = await _setup(client, headers, "Manage Salon")
 
-    start = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=3)
+    start = local_now().replace(tzinfo=None) + timedelta(days=3)
     r = await client.post("/appointments", json=_book_payload(business_id, service_id, start))
     assert r.status_code == 200, r.text
     appointment_id = r.json()["id"]

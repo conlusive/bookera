@@ -14,7 +14,7 @@ async def _booking(client, headers):
     await client.put(f"/crm/businesses/{bid}/hours", json=[
         {"weekday": d, "is_closed": False, "is_open": True, "open_time": "09:00", "close_time": "20:00"} for d in range(7)
     ], headers=headers)
-    tomorrow = (local_now() + timedelta(days=1)).replace(tzinfo=None, hour=10, minute=0, second=0, microsecond=0)
+    tomorrow = (local_now() + timedelta(days=3)).replace(tzinfo=None, hour=10, minute=0, second=0, microsecond=0)
     conn = await asyncpg.connect(DB)
     try:
         sid = await conn.fetchval("INSERT INTO services (business_id, name, duration_minutes, price) VALUES ($1,'Стрижка',60,400) RETURNING id", bid)

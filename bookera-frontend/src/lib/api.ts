@@ -229,6 +229,19 @@ function auditQs(params: AuditQuery): string {
   return q.toString() ? `?${q}` : '';
 }
 
+export interface SubscriptionOverview {
+  status: 'trial' | 'active' | 'expired';
+  has_access: boolean;
+  is_trial: boolean;
+  until: string | null;
+  days_left: number | null;
+  price_uah: number;
+  period_days: number;
+  live_payments: boolean;
+  manual_note: string | null;
+  payments: { id: number; date: string | null; amount: number; status: 'completed' | 'pending' | 'failed' | string }[];
+}
+
 export interface MonetizationSummary {
   points_balance: number;
   direct_link_token?: string;
@@ -765,8 +778,14 @@ export const api = {
   async createSubscriptionCheckout(token: string, businessId: number): Promise<{
     payment_url: string | null; order_id: string; amount: number; period_days: number;
     activated?: boolean;
+    checkout?: { action: string; fields: Record<string, string> } | null;
   }> {
     return authFetch(`/platform/subscription/checkout?business_id=${businessId}`, token, { method: 'POST' });
+  },
+
+  /** Підписка для «Налаштувань»: стан, ціна, історія оплат (лише власник). */
+  async getSubscriptionOverview(token: string, businessId: number): Promise<SubscriptionOverview> {
+    return authFetch(`/platform/subscription?business_id=${businessId}`, token);
   },
 
   async registerBusiness(

@@ -10,6 +10,7 @@ import LocationPicker from '@/components/ui/LocationPicker';
 import { categoryTitle } from '@/lib/categories';
 import { formatDuration } from '@/lib/duration';
 import HelpTip from '@/components/ui/HelpTip';
+import SubscriptionPanel from '@/components/cabinet/SubscriptionPanel';
 
 interface SettingsTabProps {
   onNavigate?: (tab: string) => void;
@@ -42,12 +43,12 @@ const SvgCreditCardPlus = (p:any) => <SvgIcon {...p}><rect x="1" y="4" width="22
 
 
 const businessSettingsCards = [
-  { id: 'profile', title: 'Профіль закладу', desc: 'Тип бізнесу, напрям і спосіб роботи.', icon: SvgStorefront, color: '#0f766e', bg: '#f0fdfa' },
-  { id: 'booking', title: 'Онлайн-бронювання', desc: 'Правила сітки, зупинка запису та скасування.', icon: SvgGlobe, color: '#6F9273', bg: '#F4FAF5' },
-  { id: 'security', title: 'Безпека та Чорний список', desc: 'Захист від фейкових записів та спаму.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
-  { id: 'payments', title: 'Платежі та Каса', desc: 'Депозити, передоплата та валюта.', icon: SvgCreditCard, color: '#10b981', bg: '#ecfdf5' },
-  { id: 'notifications', title: 'Системні сповіщення', desc: 'SMS-нагадування, підтвердження та пуші.', icon: SvgBell, color: '#f59e0b', bg: '#fffbeb' },
-  { id: 'billing', title: 'Підписка та Білінг', desc: 'Поточний тариф, ліміти та методи оплати.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
+  { id: 'profile', title: 'Профіль закладу', desc: 'Назва, контакти, адреса й тип бізнесу.', icon: SvgStorefront, color: '#3b82f6', bg: '#eff6ff' },
+  { id: 'booking', title: 'Онлайн-запис', desc: 'Сітка, відпустки, мінімум часу до візиту.', icon: SvgGlobe, color: '#16a34a', bg: '#f0fdf4' },
+  { id: 'notifications', title: 'Листи й сповіщення', desc: 'Підтвердження, нагадування, сповіщення команді.', icon: SvgBell, color: '#f59e0b', bg: '#fffbeb' },
+  { id: 'security', title: 'Захист від неявок', desc: 'Автоблокування онлайн-запису для порушників.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
+  { id: 'payments', title: 'Передоплата', desc: 'Депозит за візит: сума або відсоток.', icon: SvgCreditCard, color: '#ec4899', bg: '#fdf2f8' },
+  { id: 'billing', title: 'Підписка', desc: 'Скільки діє доступ, оплата й історія.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
 ];
 
 export default function SettingsTab({ business, onNavigate, initialView }: SettingsTabProps) {
@@ -56,18 +57,18 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
   // 🟢 Відновлення активного розділу при перезавантаженні сторінки
   const [settingsView, setSettingsView] = useState<'main' | 'profile' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
+  // Стан автозбереження - щоб було видно, що зміна дійшла до сервера
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isReady, setIsReady] = useState(false);
-
-  const [searchQuery, setSearchQuery] = useState('');
+  const [showPlansView, setShowPlansView] = useState(false);
 
   // СТАНИ НАЛАШТУВАНЬ
   const [bookingSettings, setBookingSettings] = useState({
     is_active: true, is_paused_emergency: false, min_advance_hours: 2, max_advance_days: 30, time_step: 30,
     default_duration: 60, buffer_minutes: 0, closed_periods: [] as { start: string; end: string; reason?: string }[],
-    cancellation_policy: 'Скасування можливе не пізніше ніж за 24 години до візиту.'
+    cancel_before_hours: 24,
+    cancellation_policy: ''
   });
-
-  const [showPlansView, setShowPlansView] = useState(false);
 
   const [notificationSettings, setNotificationSettings] = useState({
     auto_approve: true, notify_client_booking: true, notify_client_reminder_sms: true, notify_staff_booking: true
@@ -76,9 +77,6 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   const [securitySettings, setSecuritySettings] = useState({
     block_no_shows: true, require_phone_verification: false,
   });
-
-  const [isEditingCard, setIsEditingCard] = useState(false);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   const [paymentsSettings, setPaymentsSettings] = useState({
     currency: 'UAH', require_deposit: false, deposit_amount: 100, deposit_type: 'fixed'
@@ -103,7 +101,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   // 🟢 1. Відновлення розділу при завантаженні без перезаписування в localStorage
   useEffect(() => {
     try {
-      if (initialView && initialView !== 'main') {
+      if (initialView && initialView !== 'main' && ['profile', 'payments', 'billing', 'notifications', 'booking', 'security'].includes(initialView)) {
         setSettingsView(initialView as any);
         localStorage.setItem('bookera_settings_view', initialView);
       } else {
@@ -180,11 +178,14 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
       business[column] = data;
     }
     clearTimeout(saveTimers.current[column]);
+    setSaveState('saving');
     saveTimers.current[column] = setTimeout(async () => {
       try {
         const token = await getAuthToken();
         await api.updateBusiness(token, business.id, { [column]: data });
+        setSaveState('saved');
       } catch (err: any) {
+        setSaveState('error');
         showToast(err?.message || 'Не вдалося зберегти зміни', 'error');
       }
     }, 300);
@@ -207,6 +208,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
       business.workspace_type = profileSettings.workspace_type;
     }
     clearTimeout(saveTimers.current['profile']);
+    setSaveState('saving');
     saveTimers.current['profile'] = setTimeout(async () => {
       try {
         const token = await getAuthToken();
@@ -214,7 +216,9 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
           business_type: profileSettings.business_type,
           workspace_type: profileSettings.workspace_type,
         });
+        setSaveState('saved');
       } catch (err: any) {
+        setSaveState('error');
         showToast(err?.message || 'Не вдалося зберегти профіль', 'error');
       }
     }, 300);
@@ -225,20 +229,62 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
     autoSave('notification_settings', notificationSettings);
   }, [notificationSettings, autoSave]);
 
+  // Контакти й адреса зберігаються автоматично. Точку на мапі шукає сервер за
+  // адресою: тому координати НЕ надсилаємо, поки власник сам не пересунув мітку.
+  // Раніше разом з адресою їхали старі координати, сервер вважав їх ручними
+  // і не шукав нову точку - адресу доводилось міняти ще й у блоці «Точка на мапі».
+  const pinMoved = useRef(false);
+  const lastSavedContacts = useRef('');
+  const contactsKey = (c: typeof contactSettings) =>
+    JSON.stringify([c.name, c.city.trim(), c.address.trim(), c.phone, c.email, c.show_phone_publicly]);
+  useEffect(() => {
+    if (business?.id) lastSavedContacts.current = contactsKey(contactSettings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business?.id]);
+
+  const [isLocating, setIsLocating] = useState(false);
   useEffect(() => {
     if (!canAutoSave.current || !business?.id || !contactSettings.name.trim()) return;
+    const key = contactsKey(contactSettings);
+    if (key === lastSavedContacts.current && !pinMoved.current) return;
+    const addressChanged = (() => {
+      try {
+        const prev = JSON.parse(lastSavedContacts.current || '[]');
+        return prev[1] !== contactSettings.city.trim() || prev[2] !== contactSettings.address.trim();
+      } catch { return false; }
+    })();
     if (business) {
-      Object.assign(business, contactSettings);
+      const { latitude: _la, longitude: _lo, ...rest } = contactSettings;
+      Object.assign(business, rest);
     }
     clearTimeout(saveTimers.current['contacts']);
+    setSaveState('saving');
+    if (addressChanged) setIsLocating(true);
+    // Адресу даємо дописати: пошук точки - це запит до зовнішнього сервісу, не на кожну літеру
     saveTimers.current['contacts'] = setTimeout(async () => {
       try {
         const token = await getAuthToken();
-        await api.updateBusiness(token, business.id, contactSettings);
+        const { latitude, longitude, ...fields } = contactSettings;
+        const sendPin = pinMoved.current && !addressChanged;
+        const saved = await api.updateBusiness(token, business.id, sendPin ? { ...fields, latitude, longitude } : fields);
+        pinMoved.current = false;
+        lastSavedContacts.current = key;
+        const lat = saved?.latitude != null ? Number(saved.latitude) : null;
+        const lng = saved?.longitude != null ? Number(saved.longitude) : null;
+        business.latitude = lat;
+        business.longitude = lng;
+        setContactSettings(prev => (prev.latitude === lat && prev.longitude === lng ? prev : { ...prev, latitude: lat, longitude: lng }));
+        setSaveState('saved');
+        if (addressChanged && fields.address) {
+          if (lat == null) showToast('Точку за цією адресою не знайдено - уточніть адресу або поставте мітку вручну', 'info');
+        }
       } catch (err: any) {
+        setSaveState('error');
         showToast(err?.message || 'Не вдалося зберегти контакти', 'error');
+      } finally {
+        setIsLocating(false);
       }
-    }, 400);
+    }, addressChanged ? 1200 : 500);
   }, [contactSettings, business, showToast]);
 
   useEffect(() => {
@@ -246,10 +292,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
     autoSave('payments_settings', paymentsSettings);
   }, [paymentsSettings, autoSave]);
 
-  const filteredCards = businessSettingsCards.filter(card =>
-    String(card?.title ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase()) ||
-    String(card?.desc ?? '').toLowerCase().includes(String(searchQuery ?? '').toLowerCase())
-  );
+  const current = businessSettingsCards.find(c => c.id === settingsView) || businessSettingsCards[0];
 
   return (
     <>
@@ -257,34 +300,47 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideUpRightFade { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         
+        .sx-shell { display: flex; flex: 1; min-height: 0; width: 100%; background: #fff; font-family: Inter, -apple-system, sans-serif; }
+        .sx-main { flex: 1; min-width: 0; overflow-y: auto; }
+        .sx-inner { padding: 2rem 3rem 3rem; max-width: 950px; box-sizing: border-box; }
+        .sx-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+        .sx-head h2 { margin: 0; font-size: 1.4rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+        .sx-back { background: transparent; border: none; color: #1d1d1f; cursor: pointer; display: flex; align-items: center; padding: 0.4rem; margin-right: 0.4rem; }
+        .sx-save { font-size: 0.78rem; color: #94a3b8; white-space: nowrap; } .sx-save.saved { color: #059669; } .sx-save.error { color: #dc2626; font-weight: 600; } .sx-save.saving { color: #64748b; }
         .settings-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; cursor: pointer; display: flex; align-items: flex-start; gap: 1.25rem; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
         .settings-card:hover { border-color: #cbd5e1; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04); transform: translateY(-3px); }
-        .settings-icon-wrapper { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: 0.2s; }
-        
-        .clean-panel {
-          background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;
-          margin-bottom: 2rem; box-shadow: 0 2px 10px rgba(0,0,0,0.01);
-          position: relative;
-        }
-        .panel-title { font-size: 1.1rem; font-weight: 800; color: #0f172a; padding: 1.5rem 2rem 0.5rem 2rem; margin: 0; }
-        .panel-subtitle { font-size: 0.9rem; color: #64748b; padding: 0 2rem 1rem 2rem; margin: 0; border-bottom: 1px solid #f1f5f9; }
-        
-        .list-row { padding: 1.5rem 2rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; }
-        .list-row:hover { background: #fcfcfd; }
-        .list-row:last-child { border-bottom: none; }
+        .settings-icon-wrapper { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        @media (max-width: 900px) { .sx-inner { padding: 1.2rem 1rem 2rem; } }
+
+        /* Розділи без карток: лише тонкі лінії між блоками */
+        .sx-inner .clean-panel { background: transparent; border: none; border-radius: 0; box-shadow: none; padding: 0 0 2rem; margin: 0 0 2rem; border-bottom: 1px solid #f1f5f9; position: relative; }
+        .sx-inner .clean-panel:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .panel-title { font-size: 1.05rem; font-weight: 800; color: #0f172a; padding: 0; margin: 0 0 0.3rem; }
+        .panel-subtitle { font-size: 0.88rem; color: #64748b; padding: 0; margin: 0 0 1rem; line-height: 1.5; max-width: 680px; }
+        .list-row { padding: 0.9rem 0; display: flex; justify-content: space-between; align-items: center; gap: 2rem; min-height: 64px; }
+        .list-row + .list-row { border-top: 1px solid #f1f5f9; }
+        .list-row-info { flex: 1; min-width: 0; }
+        .list-row > .ios-toggle, .list-row > button { flex: none; }
+        .danger-zone { background: #fff1f2; border: 1px dashed #fca5a5; border-radius: 12px; padding: 0.5rem 1.5rem; margin: 2rem 0 0; }
+        .sx-inner .danger-zone:first-child { margin-top: 0; margin-bottom: 2rem; }
+        .danger-zone .list-row { padding: 0.9rem 0; border-top: none; }
+        .danger-zone h4, .danger-zone p { color: #991b1b; } .danger-zone p { opacity: 0.9; }
         .list-row-info h4 { margin: 0 0 0.3rem 0; font-size: 1rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 8px; }
-        .list-row-info p { margin: 0; font-size: 0.85rem; color: #64748b; line-height: 1.5; max-width: 90%; }
+        .list-row-info p { margin: 0; font-size: 0.85rem; color: #64748b; line-height: 1.5; max-width: 640px; }
         .badge { background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #e2e8f0;}
 
-        .setting-input { width: 100%; padding: 0.85rem 1rem; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 0.95rem; color: #0f172a; transition: 0.2s; outline: none; background: #ffffff; }
+        .setting-input { width: 100%; height: 44px; box-sizing: border-box; padding: 0 1rem; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 0.95rem; color: #0f172a; transition: 0.2s; outline: none; background: #ffffff; }
         .setting-input:hover:not(:disabled) { border-color: #cbd5e1; }
         .setting-input:focus:not(:disabled) { border-color: #436b49; box-shadow: 0 0 0 3px rgba(67, 107, 73, 0.12); }
+        input[type=number].setting-input { -moz-appearance: textfield; appearance: textfield; padding-right: 2.5rem; }
+        input[type=number].setting-input::-webkit-outer-spin-button, input[type=number].setting-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        textarea.setting-input { height: auto; padding: 0.75rem 1rem; line-height: 1.5; }
         .setting-input:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
         
         .setting-label {
           font-size: 0.85rem; font-weight: 700; color: #334155;
           margin-bottom: 0.5rem; display: flex; align-items: flex-start; gap: 0.35rem;
-          min-height: 2.6em; line-height: 1.3;
+          line-height: 1.3;
         }
         
         .custom-select { appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 12 15 18 9"></polyline></svg>'); background-repeat: no-repeat; background-position: right 1rem center; background-size: 18px; padding-right: 2.5rem; cursor: pointer; }
@@ -303,83 +359,54 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         .save-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; box-shadow: none; }
       `}} />
 
-      <div style={{ padding: '2rem 3rem', flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '1000px', fontFamily: 'Inter, -apple-system, sans-serif' }}>
-
-        {/* ГОЛОВНЕ МЕНЮ НАЛАШТУВАНЬ */}
-        {settingsView === 'main' && (
-          <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.35rem 0', letterSpacing: '-0.03em' }}>Налаштування</h2>
-                <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Системні параметри, безпека та правила вашого закладу.</p>
+      <div className="sx-shell">
+        <div className="custom-scroll sx-main">
+          <div className="sx-inner">
+            {settingsView === 'main' ? (
+              <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                <div style={{ marginBottom: '2rem' }}>
+                  <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.35rem', letterSpacing: '-0.03em' }}>Налаштування</h2>
+                  <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Системні параметри, безпека та правила вашого закладу.</p>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.5rem' }}>
+                  {businessSettingsCards.map(card => {
+                    const IconComponent = card.icon;
+                    return (
+                      <div key={card.id} onClick={() => setSettingsView(card.id as any)} className="settings-card">
+                        <div className="settings-icon-wrapper" style={{ background: card.bg, color: card.color }}><IconComponent /></div>
+                        <div>
+                          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.4rem' }}>{card.title}</h3>
+                          <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: 1.4 }}>{card.desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-
-              <div style={{ position: 'relative', width: '240px', marginTop: '0.75rem' }}>
-                <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', display: 'flex' }}><SvgSearch size={18} /></div>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Пошук налаштувань..."
-                  className="setting-input"
-                  style={{ height: '38px', paddingLeft: '2.4rem', fontSize: '0.875rem', background: '#f8fafc', borderRadius: '10px' }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.5rem' }}>
-              {filteredCards.map(card => {
-                const IconComponent = card.icon;
-                return (
-                  <div key={card.id} onClick={() => setSettingsView(card.id as any)} className="settings-card">
-                    <div className="settings-icon-wrapper" style={{ background: card.bg, color: card.color }}>
-                       <IconComponent />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a', margin: '0 0 0.4rem 0' }}>{card.title}</h3>
-                      <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: '1.4' }}>{card.desc}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ШАПКА ДЛЯ ПІДМЕНЮ */}
-        {settingsView !== 'main' && (
-          <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', animation: 'fadeIn 0.2s ease-out', maxWidth: '850px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <button
-                onClick={() => {
-                  if (settingsView === 'billing' && showPlansView) {
-                    setShowPlansView(false);
-                  } else {
-                    setSettingsView('main');
-                    setShowPlansView(false);
-                  }
-                }}
-                style={{ background: 'transparent', border: 'none', color: '#1d1d1f', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.4rem' }}
-              >
-                <SvgChevronLeft size={24} />
-              </button>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1d1d1f', margin: 0, letterSpacing: '-0.02em' }}>
-                {showPlansView && settingsView === 'billing' ? 'Перегляд планів' : businessSettingsCards.find(c => c.id === settingsView)?.title}
-              </h2>
-            </div>
-          </div>
-        )}
+            ) : (
+              <header className="sx-head">
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <button type="button" className="sx-back" onClick={() => { if (settingsView === 'billing' && showPlansView) setShowPlansView(false); else setSettingsView('main'); }} aria-label="Назад до налаштувань"><SvgChevronLeft size={24} /></button>
+                  <h2>{settingsView === 'billing' && showPlansView ? 'Перегляд планів' : current.title}</h2>
+                </div>
+                {settingsView !== 'billing' && (
+                  <span className={`sx-save ${saveState}`} role="status">
+                    {saveState === 'saving' ? 'Зберігаємо…' : saveState === 'error' ? 'Не збережено' : saveState === 'saved' ? 'Збережено ✓' : 'Зміни зберігаються автоматично'}
+                  </span>
+                )}
+              </header>
+            )}
 
         {/* 1. БРОНЮВАННЯ ТА КАЛЕНДАР */}
         {settingsView === 'profile' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div className="clean-panel">
               <h3 className="panel-title">Чим ви займаєтесь</h3>
               <p className="panel-subtitle">
                 Тип бізнесу й спосіб роботи. Разом із напрямом із «Вітрини» вони визначають типові
                 значення: крок сітки, тривалість візиту й запас часу до запису.
               </p>
-              <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+              <div style={{ padding: '1rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
                 <div>
                   <label className="setting-label">Напрям <HelpTip>Основна категорія закладу - за нею вас знаходять у пошуку.</HelpTip></label>
                   <div style={{
@@ -422,7 +449,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             <div className="clean-panel">
               <h3 className="panel-title">Назва, адреса й контакти</h3>
               <p className="panel-subtitle">Ці дані бачать клієнти на сторінці закладу та в листах.</p>
-              <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+              <div style={{ padding: '1rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label className="setting-label">Назва закладу</label>
                   <input
@@ -455,20 +482,6 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                     value={contactSettings.phone}
                     onChange={e => setContactSettings({ ...contactSettings, phone: e.target.value })}
                   />
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginTop: '0.7rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Показувати клієнтам</span>
-                    <label className="ios-toggle" style={{ flexShrink: 0 }}>
-                      <input
-                        type="checkbox"
-                        checked={contactSettings.show_phone_publicly !== false}
-                        onChange={e => setContactSettings({ ...contactSettings, show_phone_publicly: e.target.checked })}
-                      />
-                      <span
-                        className="ios-slider"
-                        style={{ backgroundColor: contactSettings.show_phone_publicly !== false ? '#22c55e' : '#cbd5e1' }}
-                      ></span>
-                    </label>
-                  </div>
                 </div>
                 <div>
                   <label className="setting-label">Пошта закладу</label>
@@ -483,6 +496,16 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                   </p>
                 </div>
               </div>
+              <div className="list-row" style={{ borderTop: '1px solid #f1f5f9', marginTop: '0.5rem' }}>
+                <div className="list-row-info">
+                  <h4>Показувати телефон клієнтам</h4>
+                  <p>Номер буде видно на сторінці закладу. Вимкніть, якщо клієнти мають записуватись лише онлайн.</p>
+                </div>
+                <label className="ios-toggle">
+                  <input type="checkbox" checked={contactSettings.show_phone_publicly !== false} onChange={e => setContactSettings({ ...contactSettings, show_phone_publicly: e.target.checked })} />
+                  <span className="ios-slider"></span>
+                </label>
+              </div>
             </div>
 
             {/* Мітка на мапі.
@@ -495,16 +518,18 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                 коли власник сам захотів уточнити вхід. */}
             <div className="clean-panel">
               <h3 className="panel-title">
-                {hasCoords ? 'Точка на мапі' : 'Не вдалося знайти адресу на мапі'}
+                {isLocating ? 'Шукаємо адресу на мапі…' : hasCoords ? 'Точка на мапі' : 'Не вдалося знайти адресу на мапі'}
               </h3>
               <p className="panel-subtitle">
-                {hasCoords
-                  ? 'Знайдено за адресою. Відкрийте мапу, якщо вхід не з фасаду.'
+                {isLocating
+                  ? 'Точка оновиться сама, щойно ви допишете адресу.'
+                  : hasCoords
+                  ? 'Ставиться сама за вашою адресою. Відкрийте мапу, якщо вхід не з фасаду.'
                   : 'Поставте мітку вручну — без неї заклад не потрапляє в пошук «поруч зі мною».'}
               </p>
 
               {hasCoords && !isMapOpen ? (
-                <div style={{ padding: '1.25rem 2rem' }}>
+                <div style={{ padding: '1rem 0' }}>
                   <button
                     onClick={() => setIsMapOpen(true)}
                     style={{
@@ -517,7 +542,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                   </button>
                 </div>
               ) : (
-              <div style={{ padding: '1.5rem 2rem' }}>
+              <div style={{ padding: '1rem 0' }}>
                 {/* Коли точки немає - спершу пропонуємо знайти її ще раз за
                     адресою. Пошук тепер розумніший (прибирає офіс, поверх,
                     розгортає «вул.»), і для багатьох адрес, що не знайшлись
@@ -549,33 +574,21 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                       ? { lat: Number(contactSettings.latitude), lng: Number(contactSettings.longitude) }
                       : null
                   }
-                  onChange={({ lat, lng }) =>
-                    setContactSettings(prev => ({ ...prev, latitude: lat, longitude: lng }))
-                  }
+                  onChange={({ lat, lng }) => {
+                    pinMoved.current = true;
+                    setContactSettings(prev => ({ ...prev, latitude: lat, longitude: lng }));
+                  }}
                 />
               </div>
               )}
             </div>
 
             <div className="clean-panel">
-              <h3 className="panel-title">Що з цього випливає <HelpTip>Налаштування, які система підібрала за вашим типом бізнесу й способом роботи. Їх можна змінити окремо.</HelpTip></h3>
-              <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {[
-                  ['Крок сітки', `${bookingSettings.time_step} хв`],
-                  ['Тривалість візиту', formatDuration(bookingSettings.default_duration)],
-                  ['Буфер після візиту', bookingSettings.buffer_minutes ? `${bookingSettings.buffer_minutes} хв` : 'без буфера'],
-                  ['Мінімум часу до візиту', bookingSettings.min_advance_hours ? `${bookingSettings.min_advance_hours} год` : 'без обмежень'],
-                  ['Горизонт планування', `${bookingSettings.max_advance_days} днів`],
-                ].map(([label, value]) => (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.9rem' }}>
-                    <span style={{ color: '#64748b' }}>{label}</span>
-                    <span style={{ color: '#0f172a', fontWeight: 600 }}>{value}</span>
-                  </div>
-                ))}
-                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.5rem 0 0', lineHeight: 1.5 }}>
-                  Ці значення можна змінити вручну в розділі «Онлайн-бронювання».
-                </p>
-
+              <div className="list-row">
+                <div className="list-row-info">
+                  <h4>Типові значення для вашого напряму <HelpTip>Крок сітки, тривалість візиту, буфер і межі запису, які система підбирає за типом бізнесу й способом роботи. Поточні значення видно й міняються в розділі «Онлайн-запис».</HelpTip></h4>
+                  <p>Скинути крок сітки, тривалість, буфер і межі запису до рекомендованих для вашого напряму.</p>
+                </div>
                 <button
                   onClick={async () => {
                     if (!business?.id) return;
@@ -594,7 +607,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                     }
                   }}
                   style={{
-                    alignSelf: 'flex-start', marginTop: '0.75rem', height: '38px', padding: '0 1rem',
+                    whiteSpace: 'nowrap', height: '38px', padding: '0 1rem',
                     borderRadius: '10px', border: '1px solid rgba(34,34,34,0.16)', background: '#fff',
                     color: '#222222', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
                   }}
@@ -605,12 +618,12 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             </div>
 
             {/* Видалення закладу */}
-            <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', marginBottom: '2rem' }}>
-              <h3 className="panel-title" style={{ color: '#991b1b', borderBottom: 'none' }}>Видалити заклад</h3>
-              <p className="panel-subtitle" style={{ color: '#991b1b', opacity: 0.9, borderBottom: '1px dashed #fca5a5' }}>
-                Разом із закладом зникнуть записи, клієнти, послуги й історія. Дію не можна скасувати.
-              </p>
-              <div style={{ padding: '1.25rem 2rem' }}>
+            <div className="danger-zone">
+              <div className="list-row" style={{ alignItems: isDeleting ? 'flex-start' : 'center' }}>
+                <div className="list-row-info">
+                  <h4><SvgAlertCircle size={18} /> Видалити заклад</h4>
+                  <p>Разом із закладом зникнуть записи, клієнти, послуги й історія. Дію не можна скасувати.</p>
+                </div>
                 {!isDeleting ? (
                   <button
                     onClick={() => setIsDeleting(true)}
@@ -684,13 +697,13 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
         {/* 2. ОНЛАЙН-БРОНЮВАННЯ */}
         {settingsView === 'booking' && (
-          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', animation: 'fadeIn 0.3s ease-out' }}>
 
-            <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', marginBottom: '2rem' }}>
-              <div className="list-row" style={{ background: 'transparent', borderBottom: 'none' }}>
+            <div className="danger-zone">
+              <div className="list-row">
                 <div className="list-row-info">
-                  <h4 style={{ color: '#991b1b' }}><SvgAlertCircle size={18} /> Тимчасово призупинити запис</h4>
-                  <p style={{ color: '#991b1b', opacity: 0.9 }}>Клієнти побачать повідомлення "Заклад тимчасово не приймає онлайн-записи". Ви та ваші майстри зможете додавати записи вручну.</p>
+                  <h4><SvgAlertCircle size={18} /> Тимчасово призупинити запис</h4>
+                  <p>Клієнти побачать повідомлення "Заклад тимчасово не приймає онлайн-записи". Ви та ваші майстри зможете додавати записи вручну.</p>
                 </div>
                 <label className="ios-toggle">
                   <input type="checkbox" checked={bookingSettings.is_paused_emergency} onChange={e => setBookingSettings({...bookingSettings, is_paused_emergency: e.target.checked})} />
@@ -699,10 +712,30 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               </div>
             </div>
 
+            <div className="clean-panel">
+              <div className="list-row">
+                <div className="list-row-info">
+                  <h4>Посилання для запису</h4>
+                  <p>Вставте його в Instagram, Telegram чи Google-карти: клієнт одразу потрапить на вашу сторінку запису.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const url = `${window.location.origin}/${business?.slug || business?.id}`;
+                    try { await navigator.clipboard.writeText(url); showToast('Посилання скопійовано', 'success'); }
+                    catch { showToast(url, 'success'); }
+                  }}
+                  style={{ height: '38px', padding: '0 1rem', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  Скопіювати посилання
+                </button>
+              </div>
+            </div>
+
             <div className="clean-panel" style={{ opacity: bookingSettings.is_paused_emergency ? 0.6 : 1, pointerEvents: bookingSettings.is_paused_emergency ? 'none' : 'auto' }}>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Приймати онлайн-записи <span className="badge">Базове</span></h4>
+                  <h4>Приймати онлайн-записи</h4>
                   <p>Дозвольте клієнтам самостійно бронювати вільний час через вашу сторінку або віджет.</p>
                 </div>
                 <label className="ios-toggle">
@@ -716,7 +749,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               <h3 className="panel-title">Доступність вікон для запису</h3>
               <p className="panel-subtitle">Ці налаштування визначають, які саме слоти часу клієнти бачитимуть у віджеті.</p>
 
-              <div style={{ padding: '1.5rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
+              <div style={{ padding: '1rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
                 <div>
                   <label className="setting-label">
                     <span style={{ display: 'inline-flex', alignItems: 'center' }}>Інтервал часу <HelpTip>Час, який пропонується клієнту на вибір. Визначає щільність записів.</HelpTip></span>
@@ -823,7 +856,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
             <div className="clean-panel">
               <h3 className="panel-title">Закриті періоди</h3>
               <p className="panel-subtitle">Відпустка, санітарні дні, ремонт. У ці дати клієнти не зможуть записатись.</p>
-              <div style={{ padding: '1.5rem 2rem' }}>
+              <div style={{ padding: '1rem 0' }}>
                 {(bookingSettings.closed_periods || []).length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
                     {bookingSettings.closed_periods.map((period: any, idx: number) => (
@@ -880,7 +913,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                       });
                       setNewPeriod({ start: '', end: '', reason: '' });
                     }}
-                    style={{ height: '42px', padding: '0 1.1rem', borderRadius: '10px', border: 'none', background: '#222222', color: '#fff', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                    style={{ height: '44px', padding: '0 1.1rem', borderRadius: '10px', border: 'none', background: '#222222', color: '#fff', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
                   >
                     Додати
                   </button>
@@ -890,16 +923,31 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
             <div className="clean-panel">
               <h3 className="panel-title">Умови скасування</h3>
-              <p className="panel-subtitle">Клієнт побачить цей текст перед підтвердженням.</p>
-              <div style={{ padding: '1.5rem 2rem' }}>
-                <textarea
-                  value={bookingSettings.cancellation_policy}
-                  onChange={e => setBookingSettings({...bookingSettings, cancellation_policy: e.target.value})}
-                  className="setting-input"
-                  style={{ minHeight: '100px', resize: 'none' }}
-                  placeholder="Наприклад: Скасування можливе не пізніше ніж за 24 години до візиту."
+              <p className="panel-subtitle">Це правило діє на сторінці керування записом: після цього часу клієнт уже не скасує запис онлайн, а лише за дзвінком. Ви та майстри можете скасувати будь-коли.</p>
+              <div style={{ padding: '0.5rem 0 1rem', maxWidth: '420px' }}>
+                <label className="setting-label" style={{ minHeight: 'auto' }}>Клієнт може скасувати онлайн</label>
+                <AppSelect
+                  value={bookingSettings.cancel_before_hours}
+                  onChange={v => setBookingSettings({ ...bookingSettings, cancel_before_hours: Number(v) })}
+                  options={[
+                    { value: 0, label: 'Будь-коли до візиту' },
+                    { value: 2, label: 'Не пізніше ніж за 2 години' },
+                    { value: 6, label: 'Не пізніше ніж за 6 годин' },
+                    { value: 12, label: 'Не пізніше ніж за 12 годин' },
+                    { value: 24, label: 'Не пізніше ніж за 24 години' },
+                    { value: 48, label: 'Не пізніше ніж за 2 доби' },
+                    { value: 72, label: 'Не пізніше ніж за 3 доби' },
+                  ]}
                 />
               </div>
+              <label className="setting-label" style={{ minHeight: 'auto' }}>Пояснення для клієнта <span style={{ color: '#94a3b8', fontWeight: 500 }}>(необов’язково)</span></label>
+              <textarea
+                value={bookingSettings.cancellation_policy}
+                onChange={e => setBookingSettings({...bookingSettings, cancellation_policy: e.target.value})}
+                className="setting-input"
+                style={{ minHeight: '90px', resize: 'none' }}
+                placeholder="Наприклад: передоплата за пізнє скасування не повертається."
+              />
             </div>
 
           </div>
@@ -907,23 +955,12 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
         {/* 3. БЕЗПЕКА ТА ЧОРНИЙ СПИСОК */}
         {settingsView === 'security' && (
-          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <h3 className="panel-title">Захист від фейків</h3>
-              <p className="panel-subtitle">Запобігайте спаму та порожнім записам.</p>
-
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Верифікація номеру (OTP) <span className="badge" style={{color: '#f59e0b', borderColor: '#fde68a', background: '#fffbeb'}}>В розробці</span></h4>
-                  <p>Клієнти повинні підтвердити свій телефон по SMS перед записом.</p>
-                </div>
-                <label className="ios-toggle"><input type="checkbox" disabled checked={securitySettings.require_phone_verification} onChange={e => setSecuritySettings({...securitySettings, require_phone_verification: e.target.checked})} /><span className="ios-slider"></span></label>
-              </div>
-
-              <div className="list-row">
-                <div className="list-row-info">
-                  <h4>Авто-блокування неявок <span className="badge">Рекомендовано</span></h4>
-                  <p>Система заборонить онлайн-запис клієнтам, які мають 2+ неявки.</p>
+                  <h4>Блокувати за неявки</h4>
+                  <p>Онлайн-запис для номера, за яким відмічено 3 і більше неявок, буде закрито. Записати такого клієнта зможете лише ви вручну.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={securitySettings.block_no_shows} onChange={e => setSecuritySettings({...securitySettings, block_no_shows: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
@@ -933,38 +970,38 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
         {/* 4. СИСТЕМНІ СПОВІЩЕННЯ */}
         {settingsView === 'notifications' && (
-          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <h3 className="panel-title">Робота з клієнтами</h3>
-              <p className="panel-subtitle">Автоматичні повідомлення для збільшення явки.</p>
+              <h3 className="panel-title">Клієнти</h3>
+              <p className="panel-subtitle">Листи, які клієнт отримує автоматично.</p>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Авто-підтвердження записів <span className="badge">Система</span></h4>
-                  <p>Нові записи з онлайну будуть автоматично підтверджені.</p>
+                  <h4>Авто-підтвердження записів</h4>
+                  <p>Нові записи з онлайну одразу стають підтвердженими. Вимкніть, щоб підтверджувати кожен запис вручну.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.auto_approve} onChange={e => setNotificationSettings({...notificationSettings, auto_approve: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Підтвердження візиту (SMS)</h4>
-                  <p>Відправляти повідомлення з деталями одразу після бронювання.</p>
+                  <h4>Лист-підтвердження клієнту</h4>
+                  <p>Одразу після запису клієнт отримує лист із деталями візиту та посиланням, щоб його перенести чи скасувати.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.notify_client_booking} onChange={e => setNotificationSettings({...notificationSettings, notify_client_booking: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Нагадування за 24 години (SMS) <span className="badge">Конверсія</span></h4>
-                  <p>Автоматична відправка нагадування. Зменшує кількість неявок.</p>
+                  <h4>Нагадування за 24 години (лист)</h4>
+                  <p>За добу до візиту клієнт отримує лист-нагадування.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.notify_client_reminder_sms} onChange={e => setNotificationSettings({...notificationSettings, notify_client_reminder_sms: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
             </div>
             <div className="clean-panel">
-              <h3 className="panel-title">Сповіщення команди</h3>
+              <h3 className="panel-title">Команда</h3>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Сповіщати майстра про новий запис</h4>
-                  <p>Майстер отримає Push-сповіщення у додатку або SMS.</p>
+                  <h4>Листи про нові записи</h4>
+                  <p>Заклад (і майстер, якщо в нього є своя пошта) отримує лист про кожен новий запис.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.notify_staff_booking} onChange={e => setNotificationSettings({...notificationSettings, notify_staff_booking: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
@@ -974,31 +1011,21 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
 
         {/* 5. ПЛАТЕЖІ ТА КАСА */}
         {settingsView === 'payments' && (
-          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.3s ease-out' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <h3 className="panel-title">Фінансові налаштування</h3>
-              <div style={{ padding: '1.5rem 2rem' }}>
-                <label className="setting-label">Валюта</label>
-                <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, marginTop: '0.4rem' }}>
-                  Гривня (₴)
-                </div>
-              </div>
-            </div>
-
-            <div className="clean-panel">
-              <h3 className="panel-title">Захист від неявок (Онлайн-оплата)</h3>
-              <div className="list-row" style={{ background: paymentsSettings.require_deposit ? '#f8fafc' : '#fff' }}>
+              <p className="panel-subtitle">Сума, яку клієнт має внести наперед. Вона фіксується в записі й видна вам у календарі — оплату ви приймаєте своїм способом (переказ, готівка), а онлайн-оплата карткою з’явиться пізніше.</p>
+              <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Брати передоплату (Депозит)</h4>
-                  <p>Клієнти повинні будуть оплатити частину вартості онлайн.</p>
+                  <h4>Вказувати передоплату в записі</h4>
+                  <p>Кожен онлайн-запис отримає суму передоплати за правилами нижче.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={paymentsSettings.require_deposit} onChange={e => setPaymentsSettings({...paymentsSettings, require_deposit: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>
 
               {paymentsSettings.require_deposit && (
-                <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', borderTop: '1px solid #e2e8f0', background: '#fafafa' }}>
+                <div style={{ padding: '1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', borderTop: '1px solid #f1f5f9' }}>
                   <div>
-                    <label className="setting-label">Тип депозиту <HelpTip>Фіксована сума (наприклад, 200 ₴) або відсоток від вартості послуги.</HelpTip></label>
+                    <label className="setting-label" style={{ minHeight: "auto" }}>Тип депозиту <HelpTip>Фіксована сума (наприклад, 200 ₴) або відсоток від вартості послуги. Передоплата не буває більшою за саму послугу.</HelpTip></label>
                     <AppSelect
                       value={paymentsSettings.deposit_type}
                       onChange={v => setPaymentsSettings({ ...paymentsSettings, deposit_type: String(v) })}
@@ -1009,274 +1036,31 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                     />
                   </div>
                   <div>
-                    <label className="setting-label">Сума / Відсоток</label>
+                    <label className="setting-label" style={{ minHeight: "auto" }}>Сума / Відсоток</label>
                     <div style={{ position: 'relative' }}>
-                      <input type="number" className="setting-input" value={paymentsSettings.deposit_amount} onChange={e => setPaymentsSettings({...paymentsSettings, deposit_amount: Number(e.target.value)})} />
+                      <input type="number" className="setting-input" value={paymentsSettings.deposit_amount ? paymentsSettings.deposit_amount : ''} placeholder="0" inputMode="decimal" min={0} max={paymentsSettings.deposit_type === 'percent' ? 100 : undefined} onChange={e => setPaymentsSettings({...paymentsSettings, deposit_amount: Math.max(0, paymentsSettings.deposit_type === 'percent' ? Math.min(100, Number(e.target.value) || 0) : Number(e.target.value) || 0)})} />
                       <span style={{ position: 'absolute', right: '15px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '800' }}>
-                        {paymentsSettings.deposit_type === 'percent' ? '%' : paymentsSettings.currency}
+                        {paymentsSettings.deposit_type === 'percent' ? '%' : '₴'}
                       </span>
                     </div>
                   </div>
+                  <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                    Приклад: послуга за 1 000 ₴ → передоплата{' '}
+                    <b style={{ color: '#0f172a' }}>
+                      {Math.round(paymentsSettings.deposit_type === 'percent' ? 1000 * Math.min(paymentsSettings.deposit_amount || 0, 100) / 100 : Math.min(paymentsSettings.deposit_amount || 0, 1000)).toLocaleString('uk-UA')} ₴
+                    </b>
+                  </p>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* 6. ПІДПИСКА ТА БІЛІНГ */}
-        {settingsView === 'billing' && (() => {
-          const createdAt = business?.created_at ? new Date(business.created_at) : new Date();
-          const trialEndDate = new Date(createdAt);
-          trialEndDate.setDate(trialEndDate.getDate() + 90);
+        {/* 6. ПІДПИСКА - справжні дані з сервера */}
+        {settingsView === 'billing' && <SubscriptionPanel businessId={Number(business?.id)} showPlans={showPlansView} onShowPlans={setShowPlansView} />}
 
-          const isTrialActive = !business?.subscription?.active && (new Date() < trialEndDate);
-          const planName = isTrialActive ? 'Безкоштовний період' : (business?.subscription?.plan_name || 'Базовий');
-          const baseMonthlyPrice = business?.subscription?.price || 15;
-          const baseYearlyPrice = baseMonthlyPrice * 12 * 0.8;
-          const planPrice = isTrialActive ? 0 : baseMonthlyPrice;
-
-          const nextDateRaw = business?.subscription?.next_billing_date;
-          const nextBillingDate = isTrialActive
-            ? trialEndDate.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })
-            : (nextDateRaw ? new Date(nextDateRaw).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }) : '-');
-
-          const paymentMethod = business?.payment_methods?.[0] || { brand: 'VISA', last4: '4242', exp: '12/28' };
-          const invoices = business?.invoices || [];
-
-          if (showPlansView) {
-            const currentProPrice = billingCycle === 'monthly' ? baseMonthlyPrice : (baseYearlyPrice / 12);
-            const currentProLabel = billingCycle === 'monthly' ? '/ міс' : '/ міс (рахується щорічно)';
-
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '850px', animation: 'fadeIn 0.2s ease-out' }}>
-                <p style={{ color: '#86868b', fontSize: '0.95rem', margin: '0 0 1.5rem 0', textAlign: 'center' }}>Оберіть тариф, який найкраще підходить для вашого бізнесу.</p>
-
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2.5rem' }}>
-                  <div style={{ background: '#f5f5f7', padding: '4px', borderRadius: '12px', display: 'inline-flex', gap: '4px' }}>
-                    <button
-                      onClick={() => setBillingCycle('monthly')}
-                      style={{ padding: '0.5rem 1.5rem', background: billingCycle === 'monthly' ? '#fff' : 'transparent', color: billingCycle === 'monthly' ? '#1d1d1f' : '#86868b', border: 'none', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', boxShadow: billingCycle === 'monthly' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none', transition: '0.2s' }}>
-                      Щомісяця
-                    </button>
-                    <button
-                      onClick={() => setBillingCycle('yearly')}
-                      style={{ padding: '0.5rem 1.5rem', background: billingCycle === 'yearly' ? '#fff' : 'transparent', color: billingCycle === 'yearly' ? '#1d1d1f' : '#86868b', border: 'none', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', boxShadow: billingCycle === 'yearly' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none', transition: '0.2s' }}>
-                      Щорічно <span style={{ color: '#34c759', marginLeft: '4px' }}>-20%</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                  <div style={{ background: '#ffffff', border: '2px solid #436b49', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 8px 24px rgba(67, 107, 73, 0.1)', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: '#436b49', color: '#fff', padding: '0.2rem 0.8rem', borderRadius: '12px', fontSize: '0.65rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Рекомендовано
-                    </div>
-                    <h4 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#1d1d1f', margin: '0.5rem 0 0.3rem 0' }}>Pro Business</h4>
-                    <p style={{ color: '#86868b', margin: '0 0 1rem 0', fontSize: '0.85rem' }}>Повний доступ до всіх функцій.</p>
-
-                    <div style={{ fontSize: '2rem', fontWeight: '800', color: '#1d1d1f', letterSpacing: '-1px', marginBottom: '0.2rem', transition: '0.3s' }}>
-                      ${currentProPrice.toFixed(0)} <span style={{ fontSize: '0.85rem', color: '#86868b', fontWeight: '500', letterSpacing: '0' }}>{currentProLabel}</span>
-                    </div>
-                    {billingCycle === 'yearly' && (
-                      <div style={{ fontSize: '0.8rem', color: '#34c759', fontWeight: '600', marginBottom: '1.5rem' }}>Списання ${baseYearlyPrice.toFixed(0)} раз на рік</div>
-                    )}
-                    {billingCycle === 'monthly' && <div style={{ marginBottom: '1.5rem' }}></div>}
-
-                    <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.8rem', flex: 1 }}>
-                      <li style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1d1d1f', fontSize: '0.85rem', fontWeight: '500' }}><SvgCheck size={16} color="#436b49" /> Онлайн-бронювання</li>
-                      <li style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1d1d1f', fontSize: '0.85rem', fontWeight: '500' }}><SvgCheck size={16} color="#436b49" /> Необмежені майстри</li>
-                      <li style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1d1d1f', fontSize: '0.85rem', fontWeight: '500' }}><SvgCheck size={16} color="#436b49" /> SMS-нагадування</li>
-                      <li style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1d1d1f', fontSize: '0.85rem', fontWeight: '500' }}><SvgCheck size={16} color="#436b49" /> Аналітика</li>
-                    </ul>
-                    <button onClick={() => { showToast('План обрано'); setShowPlansView(false); }} style={{ width: '100%', padding: '0.8rem', background: '#436b49', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '700', cursor: 'pointer', transition: '0.2s' }}>
-                      Обрати тариф
-                    </button>
-                  </div>
-
-                  <div style={{ background: '#f5f5f7', border: '1px solid #e5e5ea', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', opacity: 0.7 }}>
-                    <h4 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#1d1d1f', margin: '0.5rem 0 0.3rem 0' }}>Premium</h4>
-                    <p style={{ color: '#86868b', margin: '0 0 1rem 0', fontSize: '0.85rem' }}>Для великих мереж.</p>
-                    <div style={{ fontSize: '2rem', fontWeight: '800', color: '#86868b', letterSpacing: '-1px', marginBottom: '1.5rem' }}>
-                      ???
-                    </div>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.8rem', flex: 1 }}>
-                      <li style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#86868b', fontSize: '0.85rem', fontWeight: '500' }}><SvgCheck size={16} color="#86868b" /> Індивідуальна розробка</li>
-                      <li style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#86868b', fontSize: '0.85rem', fontWeight: '500' }}><SvgCheck size={16} color="#86868b" /> Персональний менеджер</li>
-                    </ul>
-                    <button disabled style={{ width: '100%', padding: '0.8rem', background: '#e5e5ea', color: '#86868b', border: 'none', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '700', cursor: 'not-allowed' }}>
-                      Скоро
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '850px', animation: 'fadeIn 0.2s ease-out' }}>
-              <div style={{ background: '#ffffff', border: '1px solid #e5e5ea', borderRadius: '16px', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)' }}>
-                <div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: isTrialActive ? '#ff9500' : '#34c759', fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                    {isTrialActive ? <SvgGift size={14} strokeWidth={2.5} /> : <SvgCheck size={14} strokeWidth={3} />}
-                    {isTrialActive ? 'Промо-період' : 'Активний тариф'}
-                  </div>
-                  <h3 style={{ fontSize: '1.8rem', fontWeight: '800', margin: '0 0 0.3rem 0', letterSpacing: '-0.5px', color: '#1d1d1f' }}>
-                    {planName}
-                  </h3>
-                  <p style={{ color: '#86868b', margin: 0, fontSize: '0.9rem', fontWeight: '500' }}>
-                    {isTrialActive ? 'Безкоштовно до:' : 'Наступне списання:'} <b style={{color: '#1d1d1f', fontWeight: '600'}}>{nextBillingDate}</b>
-                  </p>
-                </div>
-
-                <div style={{ textAlign: 'right' }}>
-                   <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1d1d1f', letterSpacing: '-0.5px' }}>
-                     ${planPrice.toFixed(2)} <span style={{ fontSize: '0.9rem', color: '#86868b', fontWeight: '500' }}>/ міс</span>
-                   </div>
-                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                     <button onClick={() => setShowPlansView(true)} style={{ padding: '0.6rem 1.2rem', background: '#436b49', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}>
-                       Переглянути план
-                     </button>
-                     {!isTrialActive && (
-                       <button onClick={() => showToast('Запит на скасування')} style={{ padding: '0.6rem 1.2rem', background: '#f5f5f7', color: '#ff3b30', border: 'none', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', transition: '0.2s' }}>
-                         Скасувати
-                       </button>
-                     )}
-                   </div>
-                </div>
-              </div>
-
-              <div style={{ background: '#ffffff', border: '1px solid #e5e5ea', borderRadius: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-                    <div style={{ width: '50px', height: '34px', background: '#f5f5f7', border: '1px solid #e5e5ea', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d1d1f' }}>
-                       <span style={{ fontWeight: '800', fontStyle: 'italic', fontSize: '0.75rem' }}>{paymentMethod.brand}</span>
-                    </div>
-                    <div>
-                      <p style={{ margin: '0 0 0.1rem 0', fontWeight: '600', color: '#1d1d1f', fontSize: '0.95rem' }}>•••• •••• •••• {paymentMethod.last4}</p>
-                      <p style={{ margin: 0, color: '#86868b', fontSize: '0.8rem', fontWeight: '500' }}>Термін дії до {paymentMethod.exp}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setIsEditingCard(!isEditingCard)} style={{ background: 'none', border: 'none', color: '#436b49', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem', padding: 0 }}>
-                    {isEditingCard ? 'Скасувати' : 'Змінити картку'}
-                  </button>
-                </div>
-
-                {isEditingCard && (
-                  <div style={{
-                    marginTop: '1.5rem',
-                    paddingTop: '1.5rem',
-                    borderTop: '1px solid #f1f5f9',
-                    animation: 'fadeIn 0.2s ease-out',
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(220px, 1.8fr) 110px 90px auto',
-                    gap: '1rem',
-                    alignItems: 'flex-end'
-                  }}>
-                    <div>
-                      <label className="setting-label" style={{ minHeight: 'auto', marginBottom: '0.4rem' }}>Номер картки</label>
-                      <input
-                        type="text"
-                        placeholder="0000 0000 0000 0000"
-                        className="setting-input"
-                        style={{ height: '44px', boxSizing: 'border-box' }}
-                      />
-                    </div>
-                    <div>
-                      <label className="setting-label" style={{ minHeight: 'auto', marginBottom: '0.4rem' }}>Термін</label>
-                      <input
-                        type="text"
-                        placeholder="ММ/РР"
-                        className="setting-input"
-                        style={{ height: '44px', boxSizing: 'border-box', textAlign: 'center' }}
-                      />
-                    </div>
-                    <div>
-                      <label className="setting-label" style={{ minHeight: 'auto', marginBottom: '0.4rem' }}>CVV</label>
-                      <input
-                        type="password"
-                        placeholder="***"
-                        maxLength={4}
-                        className="setting-input"
-                        style={{ height: '44px', boxSizing: 'border-box', textAlign: 'center' }}
-                      />
-                    </div>
-                    <div>
-                      <button
-                        onClick={() => { showToast('Картку оновлено!'); setIsEditingCard(false); }}
-                        style={{
-                          height: '44px',
-                          padding: '0 1.6rem',
-                          backgroundColor: '#0f172a',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '10px',
-                          fontSize: '0.875rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s ease, transform 0.1s ease',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          whiteSpace: 'nowrap'
-                        }}
-                        onMouseOver={e => e.currentTarget.style.backgroundColor = '#1e293b'}
-                        onMouseOut={e => e.currentTarget.style.backgroundColor = '#0f172a'}
-                      >
-                        Зберегти
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ background: '#ffffff', border: '1px solid #e5e5ea', borderRadius: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', padding: '1.5rem 2rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1d1d1f', margin: '0 0 1.5rem 0' }}>Історія інвойсів</h3>
-
-                {invoices.length > 0 ? (
-                  <div style={{ width: '100%', overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ paddingBottom: '0.8rem', borderBottom: '1px solid #e5e5ea', fontSize: '0.7rem', textTransform: 'uppercase', color: '#86868b', fontWeight: '600' }}>Дата</th>
-                          <th style={{ paddingBottom: '0.8rem', borderBottom: '1px solid #e5e5ea', fontSize: '0.7rem', textTransform: 'uppercase', color: '#86868b', fontWeight: '600' }}>Сума</th>
-                          <th style={{ paddingBottom: '0.8rem', borderBottom: '1px solid #e5e5ea', fontSize: '0.7rem', textTransform: 'uppercase', color: '#86868b', fontWeight: '600' }}>Тариф</th>
-                          <th style={{ paddingBottom: '0.8rem', borderBottom: '1px solid #e5e5ea', fontSize: '0.7rem', textTransform: 'uppercase', color: '#86868b', fontWeight: '600' }}>Статус</th>
-                          <th style={{ paddingBottom: '0.8rem', borderBottom: '1px solid #e5e5ea', fontSize: '0.7rem', textTransform: 'uppercase', color: '#86868b', fontWeight: '600', textAlign: 'right' }}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {invoices.map((invoice: any) => (
-                          <tr key={invoice.id}>
-                            <td style={{ padding: '1rem 0', borderBottom: '1px solid #f5f5f7', fontSize: '0.85rem', color: '#1d1d1f', fontWeight: '500' }}>{invoice.date}</td>
-                            <td style={{ padding: '1rem 0', borderBottom: '1px solid #f5f5f7', fontSize: '0.85rem', color: '#1d1d1f', fontWeight: '600' }}>${invoice.amount.toFixed(2)}</td>
-                            <td style={{ padding: '1rem 0', borderBottom: '1px solid #f5f5f7', fontSize: '0.85rem', color: '#86868b' }}>{invoice.plan}</td>
-                            <td style={{ padding: '1rem 0', borderBottom: '1px solid #f5f5f7' }}>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#34c759', fontSize: '0.75rem', fontWeight: '600' }}>
-                                <SvgCheck size={14} strokeWidth={3} /> {invoice.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '1rem 0', borderBottom: '1px solid #f5f5f7', textAlign: 'right' }}>
-                              <button onClick={() => showToast('Завантаження квитанції...')} style={{ background: 'none', border: 'none', color: '#007aff', cursor: 'pointer', padding: '0.2rem' }}>
-                                <SvgDownload size={18} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '2rem 1rem', background: '#fcfcfd', borderRadius: '12px', border: '1px dashed #e5e5ea' }}>
-                    <p style={{ color: '#1d1d1f', fontWeight: '600', fontSize: '0.9rem', margin: '0 0 0.3rem 0' }}>Інвойсів ще немає</p>
-                    <p style={{ color: '#86868b', fontSize: '0.8rem', margin: 0 }}>Перший платіж з'явиться тут після завершення тріалу.</p>
-                  </div>
-                )}
-              </div>
-
-            </div>
-          );
-        })()}
-
+          </div>
+        </div>
       </div>
     </>
   );

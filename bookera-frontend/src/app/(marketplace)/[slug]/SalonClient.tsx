@@ -15,6 +15,7 @@ import { api, SlotStatusItem } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
 import { isBusinessRole } from '@/lib/roles';
 import { ALL_AMENITIES } from '@/lib/amenities';
+import { storefrontMap } from '@/lib/storefront-map';
 import Avatar from '@/components/ui/Avatar';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import SmartImage from '@/components/ui/SmartImage';
@@ -152,6 +153,8 @@ export default function SalonClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Режим перегляду з редактора вітрини: показуємо кнопку повернення й не створюємо справжніх записів
+  const isPreview = searchParams.get('preview') === '1';
   const supabase = useMemo(() => createClient(), []);
   const { showToast } = useToast();
 
@@ -277,9 +280,8 @@ export default function SalonClient({
 
   const activeAmenities = useMemo(() => {
     const rawList = salon?.layout_config?.amenities ?? salon?.amenities;
-    const list = Array.isArray(rawList)
-      ? rawList
-      : ['parking', 'card_payment', 'wifi', 'accessibility', 'coffee_tea'];
+    // Не обрано нічого - не показуємо нічого: вигадані Wi-Fi й паркування клієнт сприймає як обіцянку
+    const list = Array.isArray(rawList) ? rawList : [];
     return ALL_AMENITIES.filter(a => list.includes(a.id));
   }, [salon?.layout_config, salon?.amenities]);
 
@@ -967,6 +969,10 @@ const formatRole = (role?: string) => {
   };
 
   const handleConfirmBooking = async () => {
+    if (isPreview) {
+      showToast('Це перегляд: запис не створюється', 'info');
+      return;
+    }
     try {
       const directLinkToken = localStorage.getItem('direct_link_token') || undefined;
       const safePhone = localStorage.getItem('userPhone') || '';
@@ -1080,19 +1086,8 @@ const formatRole = (role?: string) => {
     showToast('Посилання скопійовано в буфер обміну!', 'success');
   };
 
-  // ТОЧНА ГЕОЛОКАЦІЯ ДЛЯ GOOGLE MAPS
-  const fullMapQuery = useMemo(() => {
-    const parts: string[] = [];
-    if (salon?.address) parts.push(salon.address.trim());
-    if (salon?.city) parts.push(salon.city.trim());
-    else parts.push('Львів');
-    parts.push('Україна');
-    return parts.join(', ');
-  }, [salon]);
-
-  const mapQuery = encodeURIComponent(fullMapQuery);
-  const mapIframeUrl = `https://maps.google.com/maps?q=${mapQuery}&t=m&z=17&ie=UTF8&iwloc=&output=embed`;
-  const googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
+  // Карта: координати, інакше адреса; без адреси - без карти (lib/storefront-map.ts)
+  const salonMap = useMemo(() => storefrontMap(salon), [salon]);
 
   const realReviewsCount = useMemo(() => {
     if (reviews.length > 0) return reviews.length;
@@ -1249,6 +1244,19 @@ const formatRole = (role?: string) => {
       color: '#222222',
       paddingTop: '86px'
     }}>
+
+      {isPreview && (
+        <div style={{ position: 'fixed', left: '50%', bottom: '1.5rem', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.6rem 0.6rem 0.6rem 1.25rem', background: '#0f172a', color: '#fff', borderRadius: '999px', boxShadow: '0 12px 32px rgba(15,23,42,0.28)', fontSize: '0.88rem', maxWidth: 'calc(100vw - 2rem)' }}>
+          <span style={{ whiteSpace: 'nowrap' }}>Режим перегляду · так бачать вас клієнти</span>
+          <button
+            type="button"
+            onClick={() => router.push('/cabinet')}
+            style={{ padding: '0.55rem 1.1rem', background: '#fff', color: '#0f172a', border: 'none', borderRadius: '999px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            ← До редактора
+          </button>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; position: relative; z-index: 10; }
@@ -2539,12 +2547,12 @@ const formatRole = (role?: string) => {
               {/* КАРТА
                   showMap теж не перевірявся: власник вимикав карту
                   в редакторі, а клієнт її бачив. */}
-              {salon?.layout_config?.showMap !== false && (
+              {salon?.layout_config?.showMap !== false && salonMap && (
               <div className="section-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', borderRadius: '24px 24px 0 0', background: '#e2e8f0' }}>
                   <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
                     <iframe
-                      src={mapIframeUrl}
+                      src={salonMap.embedUrl}
                       style={{
                         width: '100%',
                         height: '100%',
@@ -2567,7 +2575,7 @@ const formatRole = (role?: string) => {
                   </div>
 
                   <a
-                    href={googleMapsLink}
+                    href={salonMap.link}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="apple-btn-secondary anim"

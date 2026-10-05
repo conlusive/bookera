@@ -168,6 +168,21 @@ async def get_available_slots(
     if not service:
         raise HTTPException(status_code=404, detail="Послугу не знайдено")
 
+    # Правила онлайн-запису (app/services/booking_rules.py): ті самі, що й у
+    # створенні запису. Без цього слоти показували час, який запис відхиляв.
+    from app.services import booking_rules
+    _rules = business.booking_settings or {}
+    _empty = AvailableSlotsResponse(
+        date=target_date, service_id=service.id, duration_minutes=service.duration_minutes,
+        slots=[], server_time=local_time_now.strftime("%Y-%m-%d %H:%M"),
+    )
+    if booking_rules.booking_disabled(_rules) or booking_rules.closed_period_reason(_rules, target_date):
+        return _empty
+    _late = booking_rules.latest_start(_rules, local_time_now)
+    if _late and datetime.combine(target_date, time(0, 0)) > _late:
+        return _empty
+    _early = booking_rules.earliest_start(_rules, local_time_now)
+
     # 1.2 Графік роботи цього дня тижня (з нової таблиці business_hours,
     # замість колишнього JSON-поля days_off). weekday: 0=понеділок...6=неділя (ISO)
     iso_weekday = target_date.weekday()  # уже 0=понеділок в Python - без хитрого JS-зсуву
@@ -288,6 +303,10 @@ async def get_available_slots(
         # Плюс невеликий запас: показувати слот, до якого лишилось
         # 5 хвилин, безглуздо - людина не встигне доїхати.
         if target_date == local_time_now.date() and slot_start_dt < local_time_now + timedelta(minutes=5):
+            current_mins += step_minutes
+            continue
+        # «Не раніше ніж за N годин» і «не далі ніж на N днів»
+        if (_early and slot_start_dt < _early) or (_late and slot_start_dt > _late):
             current_mins += step_minutes
             continue
 
@@ -559,43 +578,14 @@ async def create_appointment(
     # її в календарі й може взяти передоплату будь-яким своїм способом,
     # а коли підключиться WayForPay - сума вже буде порахована.
     payments = business_for_rules.payments_settings or {}
-    deposit_due = None
-    if payments.get("require_deposit") is True:
-        amount = payments.get("deposit_amount")
-        if isinstance(amount, (int, float)) and amount > 0:
-            deposit_due = Decimal(str(amount))
 
-    if rules.get("is_active") is False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Онлайн-запис у цьому закладі вимкнено",
-        )
-
-    if rules.get("is_paused_emergency") is True:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Заклад тимчасово не приймає онлайн-записи",
-        )
-
-    # Закриті періоди: відпустка, санітарні дні, ремонт.
-    #
-    # Раніше закрити тиждень означало вимкнути кожен день у графіку
-    # окремо, а потім не забути увімкнути назад - і половина закладів
-    # забувала. Тут це один запис із датами.
-    closed_periods = rules.get("closed_periods") or []
-    booking_day = appointment_in.start_time.date()
-    for period in closed_periods:
-        try:
-            start = date.fromisoformat(str(period.get("start")))
-            end = date.fromisoformat(str(period.get("end")))
-        except (TypeError, ValueError):
-            continue
-        if start <= booking_day <= end:
-            reason = str(period.get("reason") or "").strip()
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Заклад не працює в цей період{f': {reason}' if reason else ''}",
-            )
+    from app.services import booking_rules
+    off = booking_rules.booking_disabled(rules)
+    if off:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=off)
+    closed = booking_rules.closed_period_reason(rules, appointment_in.start_time.date())
+    if closed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=closed)
 
     booking_start = appointment_in.start_time
     if booking_start.tzinfo is not None:
@@ -645,24 +635,10 @@ async def create_appointment(
                     )
             break
 
-    min_hours = rules.get("min_advance_hours")
-    if isinstance(min_hours, (int, float)) and min_hours > 0:
-        earliest = now + timedelta(hours=float(min_hours))
-        if booking_start < earliest:
-            hours_word = int(min_hours)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Записатись можна щонайменше за {hours_word} год до візиту",
-            )
-
-    max_days = rules.get("max_advance_days")
-    if isinstance(max_days, (int, float)) and max_days > 0:
-        latest = now + timedelta(days=float(max_days))
-        if booking_start > latest:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Записатись можна не більше ніж на {int(max_days)} днів наперед",
-            )
+    # Місцевий час закладу, а не UTC: booking_start - теж місцевий.
+    too_soon_or_far = booking_rules.advance_violation(rules, booking_start, local_now(business_for_rules).replace(tzinfo=None))
+    if too_soon_or_far:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=too_soon_or_far)
 
     lock_query = select(Appointment).where(
         Appointment.service_id == appointment_in.service_id,
@@ -774,6 +750,8 @@ async def create_appointment(
             await db.flush()
             await award_points_for_new_client(db, business, appointment_in.client_phone, crm_client.id)
         resolved_client_id = crm_client.id
+
+    deposit_due = booking_rules.deposit_for(payments, final_price)
 
     if not appointment:
         # Створюємо прямий запис, якщо блоку не було
@@ -967,8 +945,14 @@ async def cancel_appointment_by_client(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Це бронювання вже скасоване")
     if appointment.status == "completed":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Візит вже відбувся, скасування неможливе")
-    if appointment.start_time <= get_utc_now():
+    from app.services import booking_rules
+    biz = (await db.execute(select(Business).where(Business.id == appointment.business_id))).scalars().first()
+    now_local = local_now(biz).replace(tzinfo=None)
+    if appointment.start_time <= now_local:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Час візиту вже настав")
+    too_late = booking_rules.cancel_violation((biz.booking_settings or {}) if biz else {}, appointment.start_time, now_local)
+    if too_late:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=too_late)
 
     appointment.status = "cancelled"
     await db.commit()

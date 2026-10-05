@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { api, type SubscriptionState } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
+import { goToCheckout } from '@/lib/checkout';
 import { useToast } from '@/context/ToastContext';
 
 /**
@@ -36,10 +37,8 @@ export default function SubscriptionExpired({
       const token = await getAuthToken();
       const checkout = await api.createSubscriptionCheckout(token, businessId);
 
-      if (checkout.payment_url) {
-        window.location.href = checkout.payment_url;
-        return;
-      }
+      // Справжня оплата: підписана форма WayForPay (або посилання)
+      if (goToCheckout(checkout)) return;
 
       // Провайдер не підключений - підписку продовжено одразу.
       // Перезавантажуємо сторінку: кабінет має відкритись, а цей екран

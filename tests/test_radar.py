@@ -48,6 +48,20 @@ def test_weights_add_up_to_one_hundred():
     assert w["quality_max"] + w["proximity_max"] + w["free_slots"] + w["radar"] == 100
 
 
+def test_radar_helps_but_never_decides():
+    # слабкий (4.0, 3 відгуки) з Радаром не обходить помітно кращого (4.8, 90) без нього
+    weak = ranking.rank_score(4.0, 3, True)
+    strong = ranking.rank_score(4.8, 90, False)
+    assert strong - weak > 8, "різниця в якості не перекривається Радаром"
+    # рівних Радар піднімає
+    assert ranking.rank_score(4.5, 30, True) > ranking.rank_score(4.5, 30, False)
+    # максимум - RADAR_BONUS, мінімум - частка RADAR_QUALITY_FLOOR
+    top = ranking.radar_points(5.0, 10_000)
+    low = ranking.radar_points(3.0, 100)
+    assert top == pytest.approx(ranking.RADAR_BONUS)
+    assert low == pytest.approx(ranking.RADAR_BONUS * ranking.RADAR_QUALITY_FLOOR)
+
+
 def test_longer_packages_are_cheaper_per_day():
     per_day = [p["per_day_uah"] for p in ranking.packages_view()]
     assert per_day == sorted(per_day, reverse=True)
@@ -170,7 +184,7 @@ async def test_radar_lifts_a_place_but_not_above_clearly_better_ones(client, aut
     assert by_id[ids["boosted"]]["is_radar_active"] is True
     assert by_id[ids["boosted"]]["radar_bonus_km"] == ranking.RADAR_BONUS_KM
     assert by_id[ids["plain"]]["is_radar_active"] is False and by_id[ids["plain"]]["radar_bonus_km"] == 0
-    assert by_id[ids["boosted"]]["rank_score"] - by_id[ids["plain"]]["rank_score"] == pytest.approx(ranking.RADAR_BONUS)
+    assert by_id[ids["boosted"]]["rank_score"] - by_id[ids["plain"]]["rank_score"] == pytest.approx(ranking.radar_points(4.0, 30))
 
     r = await client.get(f"/crm/businesses/{ids['boosted']}/radar", headers=auth_headers("rank-boosted"))
     pos = r.json()["position"]

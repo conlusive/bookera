@@ -23,7 +23,7 @@ import SectionHeader from '@/components/home/SectionHeader';
 import HowItWorks from '@/components/home/HowItWorks';
 import BusinessShowcase from '@/components/home/BusinessShowcase';
 import SmartImage from '@/components/ui/SmartImage';
-import { rankBusinesses, type SortContext, type SortMode, type SortScope } from '@/lib/storefront-sort';
+import { rankBusinesses, type RankResult, type SortContext, type SortMode, type SortScope } from '@/lib/storefront-sort';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import { resolveDisplayName } from '@/lib/displayName';
 import { actionError } from '@/lib/feedback';
@@ -505,19 +505,23 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
    * пряму з позначкою, і ми покажемо її зі знаком «~».
    */
   const [isRoadDistance, setIsRoadDistance] = useState<Record<number, boolean>>({});
+  // Чи завершився запит відстаней: порядок будуємо лише коли вони відомі (або запит не вдався)
+  const [distancesStatus, setDistancesStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
 
   useEffect(() => {
     if (!nearbyPoint || businesses.length === 0) {
       setDistanceById({});
       setIsRoadDistance({});
+      setDistancesStatus('ready');
       return;
     }
 
     let cancelled = false;
+    setDistancesStatus('loading');
 
     void (async () => {
       const ids = businesses.filter((b: any) => b.latitude != null).map((b: any) => b.id);
-      if (ids.length === 0) return;
+      if (ids.length === 0) { setDistancesStatus('ready'); return; }
 
       try {
         const data = await api.getDistances(nearbyPoint.lat, nearbyPoint.lng, ids);
@@ -531,7 +535,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         }
         setDistanceById(km);
         setIsRoadDistance(isRoad);
+        setDistancesStatus('ready');
       } catch {
+        if (!cancelled) setDistancesStatus('failed');
         // Маршрутизатор недоступний - лишаємо список без відстаней.
         // Показати вигадане число гірше, ніж не показати жодного.
       }
@@ -1080,24 +1086,94 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     );
   }, [filteredBusinesses, searchWhere, activeCategory, distanceById]);
 
-  // Скільки показано. «Показати ще» додає по вісім: тепер це весь
-  // список, а не шість карток у каруселі.
-  const NEARBY_STEP = 8;
-  const [nearbyVisible, setNearbyVisible] = useState(NEARBY_STEP);
-  useEffect(() => { setNearbyVisible(NEARBY_STEP); }, [activeCategory, sortBy, appliedSearch]);
-
   // Для скількох найближчих закладів одразу вантажити вільні слоти.
   // Далі - стільки, скільки показано: слоти потрібні лише видимим
   // карткам, а запит на кожен заклад міста був би марним.
   // Вікна потрібні сортуванню «Рекомендовані» (бонус за вільний час): беремо ближчих, скільки є, у межах пулу.
   const NEARBY_POOL = 24;
 
+  const nearbySlotTargets = nearbyBase.slice(0, NEARBY_POOL);
+  const [slotsLoadedKey, setSlotsLoadedKey] = useState<string | null>(null);
+  const nearbyIdsKey = nearbySlotTargets.map((b: any) => b.id).sort((a: number, b: number) => a - b).join(',');
+
   // Сортування - на ВЕСЬ список. Раніше варіанти, крім типового,
   // працювали лише серед 12 найближчих, і «Показати ще» зникало після
   // дванадцятого закладу. Фільтр, який тихо обрізає список, - не фільтр.
-  const ranked = useMemo(() => rankBusinesses(nearbyBase, sortCtx), [nearbyBase, sortCtx]);
+  /**
+   * Порядок "заморожується" і міняється лише від дій людини.
+   *
+   * Раніше список перебудовувався щоразу, коли щось дозавантажувалось: прийшли
+   * відстані, прийшли слоти, GPS уточнив місце на кілька метрів - і картки
+   * "стрибали" в людини перед очима. Тепер:
+   *   - перший порядок будуємо, коли відомі відстані й слоти (або минуло 2.5 с);
+   *   - далі порядок міняється лише коли змінилось те, що людина обирає:
+   *     режим, охоплення, категорія, пошук, місце (зсув понад ~300 м) чи склад закладів;
+   *   - слоти й уточнення відстаней, що прийшли пізніше, оновлюють лише текст
+   *     на картках, але не місце картки в списку.
+   */
+  const ctxRef = useRef(sortCtx);
+  ctxRef.current = sortCtx;
+  const pointKey = nearbyPoint ? `${Math.round(nearbyPoint.lat / 0.003)},${Math.round(nearbyPoint.lng / 0.003)}` : 'none';
+  const rankSig = useMemo(
+    () => [sortBy, sortScope, activeCategory, appliedSearch, searchWhere, pointKey,
+      nearbyBase.map((b: any) => b.id).sort((x: number, y: number) => x - y).join(',')].join('|'),
+    [sortBy, sortScope, activeCategory, appliedSearch, searchWhere, pointKey, nearbyBase],
+  );
+  const slotsReady = nearbyBase.length === 0 || slotsLoadedKey === nearbyIdsKey;
+  const inputsReady = distancesStatus !== 'loading' && distancesStatus !== 'idle' && slotsReady;
+  const [waitedTooLong, setWaitedTooLong] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setWaitedTooLong(true), 2500); return () => clearTimeout(t); }, []);
+  const [frozen, setFrozen] = useState<{ sig: string; ranked: RankResult<any> } | null>(null);
+  useEffect(() => {
+    if (frozen?.sig === rankSig) return;
+    // Перший показ чекає на дані (не довше 2.5 с); наступні зміни - одразу
+    if (!frozen && !inputsReady && !waitedTooLong) return;
+    setFrozen({ sig: rankSig, ranked: rankBusinesses(nearbyBase, ctxRef.current) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankSig, inputsReady, waitedTooLong]);
+
+  const isRanking = frozen === null;
+  const ranked: RankResult<any> = frozen?.ranked ?? { items: [], tiered: false, nearCount: 0, farCount: 0 };
   const nearbyBusinesses = useMemo(() => ranked.items.map(i => i.business), [ranked]);
   const zoneById = useMemo(() => new Map(ranked.items.map(i => [i.business.id, i.zone] as const)), [ranked]);
+
+  // Сторінки замість нескінченного списку: довжина сторінки не росте разом із кількістю закладів
+  const PAGE_SIZE = 12;
+  const [nearbyPage, setNearbyPage] = useState(1);
+  useEffect(() => { setNearbyPage(1); }, [rankSig]);
+  const totalPages = Math.max(1, Math.ceil(nearbyBusinesses.length / PAGE_SIZE));
+  const page = Math.min(nearbyPage, totalPages);
+  const pageItems = nearbyBusinesses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const listTopRef = useRef<HTMLDivElement>(null);
+  const goToPage = (n: number) => {
+    setNearbyPage(Math.min(Math.max(1, n), totalPages));
+    // Повертаємо до початку списку, а не лишаємо внизу сторінки
+    requestAnimationFrame(() => listTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
+  // Слоти для карток поточної сторінки, яких немає в пулі найближчих
+  const slotsFetched = useRef<Set<number>>(new Set());
+  const pageIdsKey = pageItems.map((b: any) => b.id).join(',');
+  useEffect(() => {
+    const need = pageItems.map((b: any) => Number(b.id)).filter((id: number) => !slotsFetched.current.has(id));
+    if (need.length === 0) return;
+    need.forEach((id: number) => slotsFetched.current.add(id));
+    let alive = true;
+    void (async () => {
+      const d = new Date();
+      const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const extra: Record<number, string[]> = {};
+      try {
+        for (let i = 0; i < need.length; i += 24) {
+          const data = await api.getTodaySlots(need.slice(i, i + 24), day);
+          for (const [id, times] of Object.entries(data)) extra[Number(id)] = times;
+        }
+      } catch { /* картка без слотів - не біда */ }
+      if (alive && Object.keys(extra).length) setNearbySlots(prev => ({ ...prev, ...extra }));
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageIdsKey]);
 
   // Розрахунок точної відстані від користувача до закладу
   // getSalonDistance прибрано.
@@ -1114,11 +1190,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   // заклад додався або зник.
   // Для яких закладів вантажити слоти: за ВІДСТАННЮ, а не за видимим
   // порядком. Цей набір від слотів не залежить, тому цикл неможливий.
-  const nearbySlotTargets = nearbyBase.slice(0, Math.max(NEARBY_POOL, nearbyVisible));
-  const nearbyIdsKey = nearbySlotTargets.map((b: any) => b.id).sort((a: number, b: number) => a - b).join(',');
 
   useEffect(() => {
-    if (!nearbyBusinesses || nearbyBusinesses.length === 0) return;
+    if (!nearbyBase || nearbyBase.length === 0) return;
 
     let isMounted = true;
     // Локальна дата, НЕ через toISOString.
@@ -1152,8 +1226,10 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       }
 
       if (isMounted) {
+        nearbySlotTargets.forEach((b: any) => slotsFetched.current.add(Number(b.id)));
         setNearbySlots(slotsMap);
         setIsLoadingNearbySlots(false);
+        setSlotsLoadedKey(nearbyIdsKey);
       }
     }
 
@@ -1545,6 +1621,15 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         .sort-scope button { border: none; background: transparent; padding: 0.38rem 0.95rem; border-radius: 999px; font-family: inherit; font-size: 0.82rem; font-weight: 600; color: #6E6E73; cursor: pointer; }
         .sort-scope button.on { background: #fff; color: #1D1D1F; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
         .sort-locate { height: 34px; padding: 0 1rem; border-radius: 999px; border: 1px solid #D2D2D7; background: #fff; color: #1D1D1F; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+        .nearby-skeleton { aspect-ratio: 4 / 5; border-radius: 24px; background: linear-gradient(90deg, #F2F2F4 25%, #F8F8FA 50%, #F2F2F4 75%); background-size: 200% 100%; animation: nearby-shimmer 1.4s infinite linear; }
+        @keyframes nearby-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+        .pager { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 2.5rem; padding-top: 1.2rem; border-top: 1px solid #E8E8ED; }
+        .pager-info { font-size: 0.88rem; color: #86868B; }
+        .pager-btns { display: flex; gap: 0.35rem; align-items: center; }
+        .pager-btns button { min-width: 40px; height: 40px; padding: 0 0.7rem; border-radius: 12px; border: 1px solid #E5E5EA; background: #fff; color: #1D1D1F; font-family: inherit; font-size: 0.92rem; font-weight: 500; cursor: pointer; }
+        .pager-btns button.on { background: #1D1D1F; border-color: #1D1D1F; color: #fff; }
+        .pager-btns button:disabled { opacity: 0.35; cursor: default; }
+        .pager-gap { color: #A1A1A6; padding: 0 0.2rem; }
         .zone-h { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #86868B; padding-top: 0.4rem; }
         .zone-h em { font-style: normal; font-weight: 600; color: #A1A1A6; letter-spacing: 0; }
         .zone-h::after { content: ''; flex: 1; height: 1px; background: #E8E8ED; }
@@ -2258,6 +2343,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   </div>
 </div>
 
+            <div ref={listTopRef} style={{ scrollMarginTop: '90px' }} />
             {/* Правило порядку - прозоро: що саме зараз видно і чому. Перемикач охоплення
                 лише там, де він щось змінює (Дешевші, Рекомендовані). */}
             {(() => {
@@ -2296,7 +2382,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
               );
             })()}
 
-            {nearbyBusinesses.length === 0 && (
+            {!isRanking && nearbyBusinesses.length === 0 && (
               <div className="anim" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '4rem 2rem', backgroundColor: '#f8fafc', borderRadius: '24px', border: '1px dashed #cbd5e1', margin: '1.5rem 0' }}>
                 <div style={{ width: '64px', height: '64px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
@@ -2319,18 +2405,21 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
             {/* Сітка, а не карусель: тепер це весь список закладів,
                 а в каруселі половина ховалась би за краєм. */}
             <div className="salons-layout anim">
-              {nearbyBusinesses.slice(0, nearbyVisible).map((biz: any, idx: number) => {
+              {isRanking && Array.from({ length: 8 }, (_, i) => <div key={`sk-${i}`} className="nearby-skeleton" aria-hidden />)}
+              {pageItems.map((biz: any, idx: number) => {
                 // Справжня відстань, а не вигадана: немає координат - не показуємо нічого.
                 const distance = formatDistance(biz.id);
                 const zone = zoneById.get(biz.id);
-                const prevZone = idx > 0 ? zoneById.get(nearbyBusinesses[idx - 1].id) : null;
+                const prevZone = idx > 0 ? zoneById.get(pageItems[idx - 1].id) : null;
                 const radius = rankingRules?.nearby_radius_km;
                 let heading: ReactNode = null;
-                if (ranked.tiered) {
-                  if (zone === 'near' && idx === 0) {
+                // Заголовок групи - на початку списку й там, де група змінюється; на кожній
+                // сторінці він повторюється зверху, щоб було зрозуміло, де людина.
+                if (ranked.tiered && zone && zone !== prevZone) {
+                  if (zone === 'near') {
                     heading = <>Поруч із вами · до {radius} км <em>{ranked.nearCount}</em></>;
-                  } else if (zone === 'far' && prevZone !== 'far') {
-                    heading = idx === 0
+                  } else {
+                    heading = ranked.nearCount === 0
                       ? <>У радіусі {radius} км закладів немає — показуємо найкращі в місті <em>{ranked.farCount}</em></>
                       : <>Далі від вас <em>{ranked.farCount}</em></>;
                   }
@@ -2350,20 +2439,24 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
               })}
             </div>
 
-            {nearbyBusinesses.length > nearbyVisible && (
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setNearbyVisible(v => v + NEARBY_STEP)}
-                  style={{
-                    height: '44px', padding: '0 1.5rem', borderRadius: '999px',
-                    border: '1px solid #E5E5EA', background: '#fff', color: '#1D1D1F',
-                    fontSize: '0.9375rem', fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
-                  }}
-                >
-                  Показати ще {Math.min(NEARBY_STEP, nearbyBusinesses.length - nearbyVisible)}
-                </button>
-              </div>
+            {totalPages > 1 && (
+              <nav className="pager" aria-label="Сторінки списку">
+                <span className="pager-info">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, nearbyBusinesses.length)} з {nearbyBusinesses.length}</span>
+                <div className="pager-btns">
+                  <button type="button" disabled={page === 1} onClick={() => goToPage(page - 1)} aria-label="Попередня сторінка">‹</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
+                    .reduce<(number | '…')[]>((acc, n) => {
+                      if (acc.length && typeof acc[acc.length - 1] === 'number' && n - (acc[acc.length - 1] as number) > 1) acc.push('…');
+                      acc.push(n);
+                      return acc;
+                    }, [])
+                    .map((n, i) => n === '…'
+                      ? <span key={`e${i}`} className="pager-gap">…</span>
+                      : <button key={n} type="button" className={n === page ? 'on' : ''} aria-current={n === page ? 'page' : undefined} onClick={() => goToPage(n)}>{n}</button>)}
+                  <button type="button" disabled={page === totalPages} onClick={() => goToPage(page + 1)} aria-label="Наступна сторінка">›</button>
+                </div>
+              </nav>
             )}
           </div>
         </section>

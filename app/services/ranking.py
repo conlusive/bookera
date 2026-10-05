@@ -7,10 +7,15 @@
 
 Позиція в «Рекомендованих» - 100 балів:
 
-    якість           до 45   рейтинг із поправкою на кількість відгуків
-    поруч            до 20   чим ближче до людини (до 10 км), тим більше
-    вільні вікна     до 15   є вільний час сьогодні
-    Радар            +20     лише поки пакет активний
+    якість           до 50   рейтинг із поправкою на кількість відгуків
+    поруч            до 22   чим ближче до людини (до 10 км), тим більше
+    вільні вікна     до 18   є вільний час сьогодні
+    Радар            до 10   лише поки пакет активний; залежить від якості (див. нижче)
+
+Радар - ПІДСИЛЕННЯ, а не заміна якості (як «Топ» на OLX чи просування в Booksy):
+він піднімає заклад над рівними собі, але не над помітно кращими. Бонус =
+RADAR_BONUS x (0.4 + 0.6 x частка якості): слабкий заклад отримує менше за сильний,
+тож платний пакет не перекриває різницю в 15-20 балів якості.
 
 Якість і Радар рахує сервер (`rank_score`), відстань і вільні вікна
 відомі лише браузеру людини (геолокація, слоти) - він додає їх до
@@ -38,10 +43,11 @@ from app.core.time_utils import utc_now
 from app.models import Business, RadarBoost
 
 # --- вага компонентів (разом 100) ---
-QUALITY_MAX = 45.0
-PROXIMITY_MAX = 20.0
-FREE_SLOTS_BONUS = 15.0
-RADAR_BONUS = 20.0
+QUALITY_MAX = 50.0
+PROXIMITY_MAX = 22.0
+FREE_SLOTS_BONUS = 18.0
+RADAR_BONUS = 10.0          # максимум; реальний бонус залежить від якості (radar_points)
+RADAR_QUALITY_FLOOR = 0.4   # частка бонусу, яку отримує навіть заклад із нульовою якістю
 
 # --- якість ---
 # Заклад без відгуків не стартує з «ідеальної» п'ятірки: його рейтинг
@@ -98,9 +104,16 @@ def quality_score(rating, reviews_count) -> float:
     return round(QUALITY_MAX * min(max(share, 0.0), 1.0), 2)
 
 
+def radar_points(rating, reviews_count) -> float:
+    """Скільки балів дає Радар цьому закладу: від 40% до 100% максимуму, залежно від якості."""
+    share = quality_score(rating, reviews_count) / QUALITY_MAX
+    return round(RADAR_BONUS * (RADAR_QUALITY_FLOOR + (1 - RADAR_QUALITY_FLOOR) * share), 2)
+
+
 def rank_score(rating, reviews_count, radar_active: bool) -> float:
-    """Частина позиції, яку знає сервер: якість + Радар."""
-    return round(quality_score(rating, reviews_count) + (RADAR_BONUS if radar_active else 0.0), 2)
+    """Частина позиції, яку знає сервер: якість + Радар (з поправкою на якість)."""
+    bonus = radar_points(rating, reviews_count) if radar_active else 0.0
+    return round(quality_score(rating, reviews_count) + bonus, 2)
 
 
 def ranking_rules() -> dict:

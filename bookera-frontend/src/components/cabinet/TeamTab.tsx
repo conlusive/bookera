@@ -484,16 +484,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         const bizId = business?.id;
         let updateSuccess = false;
 
+        // Реальна сигнатура - (token, staffId, payload). Раніше спершу йшов виклик зі зайвим
+        // bizId, який завжди падав із 422, і лише потім - правильний: зайвий запит на кожне збереження.
         try {
-          if (typeof (api as any).updateStaff === 'function') {
-            try {
-              await (api as any).updateStaff(token, bizId, staffIdStr, backendUpdates);
-              updateSuccess = true;
-            } catch {
-              await (api as any).updateStaff(token, staffIdStr, backendUpdates);
-              updateSuccess = true;
-            }
-          }
+          await api.updateStaff(token, staffIdStr, backendUpdates);
+          updateSuccess = true;
         } catch {}
 
         if (!updateSuccess) {

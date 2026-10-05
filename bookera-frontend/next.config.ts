@@ -52,9 +52,30 @@ const nextConfig: NextConfig = {
   // Next.js прямо попереджає про це в консолі:
   // "Setting a custom Cache-Control header can break Next.js development behavior."
   async headers() {
-    if (process.env.NODE_ENV !== 'production') return [];
+    // Заголовки безпеки - для всіх сторінок, у розробці теж (вони нічого не ламають).
+    // geolocation=(self): головна визначає місце людини; камера/мікрофон/платежі не потрібні нікому.
+    // CSP свідомо не ставимо «наосліп»: сторінка тягне Supabase, Nominatim, CDN відео й Unsplash,
+    // а Next і styled-jsx використовують inline-скрипти й стилі - її треба налаштовувати окремо.
+    const security = [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'geolocation=(self), camera=(), microphone=(), payment=()' },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+          ...(process.env.NODE_ENV === 'production'
+            ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' }]
+            : []),
+        ],
+      },
+    ];
+
+    if (process.env.NODE_ENV !== 'production') return security;
 
     return [
+      ...security,
       {
         source: '/_next/static/(.*)',
         headers: [

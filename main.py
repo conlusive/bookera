@@ -109,10 +109,17 @@ async def _warn_if_migrations_pending() -> None:
         logger.warning(f"Не вдалося перевірити версію схеми: {e}")
 
 
+# На продакшні публічна документація (/docs, /redoc, /openapi.json) вимкнена: вона віддає
+# повну карту API кожному, хто знає адресу. Локально лишається для розробки.
+_is_production = os.getenv("APP_ENV", "development").strip().lower() == "production"
+
 app = FastAPI(
     title="BookEra API",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # Раніше було ["http://localhost:3000", "*"] з allow_credentials=True -
@@ -131,7 +138,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    # localhost (будь-який порт) дозволений лише в розробці; на продакшні - тільки явний список ALLOWED_ORIGINS
+    allow_origin_regex=None if _is_production else r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -150,6 +158,10 @@ async def add_request_id_and_timing(request: Request, call_next):
     response = await call_next(request)
     duration_ms = (time.monotonic() - start) * 1000
     response.headers["X-Request-ID"] = request_id
+    # API віддає лише JSON: браузер не повинен «вгадувати» тип чи вбудовувати відповідь у чужі сторінки
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
     if duration_ms > 1000:  # повільні запити - завжди варті окремого логу
         logger.warning(f"[{request_id}] ПОВІЛЬНИЙ запит {request.method} {request.url.path} - {duration_ms:.0f}ms")
     return response

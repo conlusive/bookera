@@ -19,6 +19,11 @@ def send_email_sync(to_email: str, subject: str, html_content: str):
         print(f"[Email Mock] До: {to_email} | Тема: {subject}")
         return
 
+    # Переноси рядків у заголовках - класична ін'єкція (дописати Bcc чи підмінити тему). Тему й адресу
+    # часто складають з назв, які вводили люди, тому прибираємо їх завжди.
+    subject = " ".join(str(subject).splitlines())
+    to_email = "".join(str(to_email).split())
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"BookEra <{SMTP_USER}>"

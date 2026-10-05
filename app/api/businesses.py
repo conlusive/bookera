@@ -7,11 +7,13 @@ from sqlalchemy import select, and_, or_, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, get_current_user
+from app.core.auth import CurrentUser, assert_business_admin, get_current_user, get_optional_user
 from app.core.time_utils import utc_now
 from app.models import Business, User, RoleEnum, Appointment, BusinessHours, Favorite
 from app.services import ranking
 from app.schemas.business import BusinessOut, WorkingDayOut
+
+from app.core.rate_limit import rate_limit
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
@@ -121,6 +123,7 @@ async def search_available_businesses(
     near_lat: Optional[float] = Query(None, ge=-90, le=90),
     near_lng: Optional[float] = Query(None, ge=-180, le=180),
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("search", max_requests=60, window_seconds=60))
 ):
     now = get_utc_now()
     period_start, period_end = parse_time_period(time_period)
@@ -307,6 +310,7 @@ async def search_available_businesses(
 async def get_business_by_slug_or_id(
     slug_or_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user),
 ):
     stmt = (
         select(Business)
@@ -353,6 +357,22 @@ async def get_business_by_slug_or_id(
     response.is_radar_active = radar
     response.rank_score = ranking.rank_score(business.rating, business.reviews_count, radar)
     response.radar_bonus_km = ranking.RADAR_BONUS_KM if radar else 0
+
+    # Внутрішні налаштування (безпека, платежі, сповіщення) і id власника бачать лише власник та
+    # адміністратори цього закладу; кабінет бере їх із захищеного /crm/businesses/me. Решті
+    # (гостям, клієнтам, майстрам) публічна відповідь їх не віддає.
+    can_see_internal = False
+    if current_user is not None:
+        try:
+            await assert_business_admin(db, current_user, business.id)
+            can_see_internal = True
+        except HTTPException:
+            can_see_internal = False
+    if not can_see_internal:
+        response.security_settings = None
+        response.notification_settings = None
+        response.payments_settings = None
+        response.owner_id = None
     return response
 
 # === Улюблені заклади клієнта ===
@@ -429,6 +449,7 @@ class DistancesRequest(BaseModel):
 async def get_distances(
     payload: DistancesRequest,
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("distances", max_requests=60, window_seconds=60))
 ):
     """
     Відстані по дорогах від точки людини до вказаних закладів.

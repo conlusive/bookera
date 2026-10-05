@@ -34,6 +34,14 @@ class ClientUpdate(BaseModel):
     consent_procedure: Optional[bool] = None
     balance: Optional[float] = None
 
+    @field_validator("medical_pdf_url")
+    @classmethod
+    def _medical_url_is_https(cls, v):
+        # Посилання відкривається кліком у кабінеті власника: javascript:/data: адреса була б XSS
+        if v is not None and v != "" and not str(v).lower().startswith("https://"):
+            raise ValueError("Посилання на документ має починатися з https://")
+        return v
+
 
 class ClientResponse(ClientBase):
     id: int

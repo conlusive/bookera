@@ -22,6 +22,8 @@ from app.core.logging_config import logger
 WFP_MERCHANT_LOGIN = os.getenv("WFP_MERCHANT_LOGIN", "")
 WFP_MERCHANT_SECRET = os.getenv("WFP_MERCHANT_SECRET", "")
 WFP_DOMAIN = os.getenv("WFP_DOMAIN", "bookera.ua")
+# development (типово) або production - див. create_payment_intent
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
 
 
 class PaymentIntent:
@@ -121,6 +123,13 @@ def create_payment_intent(amount: Decimal, order_id: str, product_name: str,
                           return_url: Optional[str] = None, client_email: Optional[str] = None) -> PaymentIntent:
     if is_live():
         return _wayforpay_create_intent(amount, order_id, product_name, return_url, client_email)
+    # Mock-оплата підтверджує все одразу, без грошей. На продакшні (APP_ENV=production) без ключів
+    # платіжки це дало б усім безкоштовну підписку, Радар і сертифікати - тому там вона заборонена,
+    # якщо її прямо не ввімкнено (ALLOW_MOCK_PAYMENTS=1, наприклад для демонстрації).
+    if APP_ENV == "production" and os.getenv("ALLOW_MOCK_PAYMENTS") != "1":
+        from fastapi import HTTPException
+        logger.error("Спроба оплати на продакшні без WFP_MERCHANT_LOGIN/WFP_MERCHANT_SECRET - відхилено")
+        raise HTTPException(status_code=503, detail="Онлайн-оплата тимчасово недоступна")
     return _mock_create_intent(amount, order_id)
 
 
@@ -137,8 +146,14 @@ def verify_callback_signature(payload: dict) -> bool:
     завжди, тому реальний обхід так не зробиш.
     """
     if not WFP_MERCHANT_SECRET:
-        logger.warning("WFP_MERCHANT_SECRET не заданий - підпис callback не перевіряється")
-        return True
+        # Без секрету підпис перевірити неможливо. Раніше такі запити ПРИЙМАЛИСЬ: якщо на продакшні
+        # ключ забули, будь-хто міг надіслати «оплату пройшла» й отримати підписку безкоштовно. Тепер
+        # відхиляємо; пропускаємо лише в тестах або за явним прапорцем ALLOW_UNSIGNED_CALLBACKS=1.
+        # Mock-оплата колбеків не використовує (підтверджується одразу), тож їй це не заважає.
+        if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("ALLOW_UNSIGNED_CALLBACKS") == "1":
+            return True
+        logger.warning("Колбек платіжки відхилено: WFP_MERCHANT_SECRET не заданий, підпис не перевірити")
+        return False
 
     received = str(payload.get("merchantSignature") or "")
     if not received:

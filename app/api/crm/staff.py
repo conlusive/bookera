@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user
 from app.core.email import send_email_sync
+from app.core.email_layout import esc
 from app.core.time_utils import utc_now
 from app.models import StaffInvite, User, Business, StaffMembership
 from app.schemas.staff import StaffInviteCreate, StaffInviteResponse, InviteAccept, StaffUpdate, StaffResponse
@@ -21,6 +22,8 @@ STAFF_LABELS = {
     "provides_services": "Надає послуги", "show_in_storefront": "Показувати у вітрині", "assigned_services": "Послуги майстра",
     "avatar_url": "Фото", "is_active": "Активний",
 }
+
+from app.core.rate_limit import rate_limit
 
 router = APIRouter(tags=["CRM - Staff"])
 
@@ -54,7 +57,7 @@ def _invite_email(invite: StaffInvite, business_name: str) -> str:
     <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;color:#1D1D1F">
       <h2 style="font-size:22px;margin:0 0 12px">Вас запросили в команду</h2>
       <p style="font-size:15px;line-height:1.55;color:#3A3A3C;margin:0 0 22px">
-        <b>{business_name}</b> запрошує вас у BookEra як {role}. Ви бачитимете свій
+        <b>{esc(business_name)}</b> запрошує вас у BookEra як {esc(role)}. Ви бачитимете свій
         розклад і записи клієнтів.
       </p>
       <a href="{url}" style="display:inline-block;background:#1D1D1F;color:#fff;text-decoration:none;
@@ -78,6 +81,20 @@ async def create_invite(
     await assert_business_admin(db, current_user, business_id)
     business = (await db.execute(select(Business).where(Business.id == business_id))).scalars().first()
     email = str(invite_in.email).strip().lower()
+
+    # Не більше 30 запрошень на добу з одного закладу: інакше це канал розсилки листів на довільні адреси
+    sent_today = (await db.execute(
+        select(func.count(StaffInvite.id)).where(
+            StaffInvite.business_id == business_id,
+            StaffInvite.created_at > utc_now() - timedelta(days=1),
+        )
+    )).scalar() or 0
+    if sent_today >= 30:
+        raise HTTPException(status_code=429, detail="Забагато запрошень за добу. Спробуйте завтра.")
+
+    # Роль адміністратора видає лише власник - так само, як і зміна ролей (PUT .../access)
+    if invite_in.role == "admin" and not (business and str(business.owner_id) == str(current_user.id)):
+        raise HTTPException(status_code=403, detail="Запросити адміністратора може лише власник закладу")
 
     # Людина вже в команді - друге запрошення їй ні до чого.
     already = await db.execute(
@@ -167,7 +184,7 @@ async def cancel_invite(
 
 
 @router.get("/public/invites/{token}")
-async def invite_info(token: str, db: AsyncSession = Depends(get_db)):
+async def invite_info(token: str, db: AsyncSession = Depends(get_db), _rl=Depends(rate_limit("invite", max_requests=30, window_seconds=600))):
     """
     Що за запрошення - для сторінки прийняття, ще ДО входу. Людина має
     бачити, куди її кличуть, перш ніж реєструватись.
@@ -191,6 +208,7 @@ async def accept_invite(
     payload: InviteAccept,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("invite", max_requests=30, window_seconds=600)),
 ):
     """Публічний ендпоінт (але все одно вимагає залогіненого користувача -
     людина спершу створює акаунт через Supabase, потім приймає запрошення)."""
@@ -205,6 +223,11 @@ async def accept_invite(
         invite.status = "expired"
         await db.commit()
         raise HTTPException(status_code=400, detail="Термін дії запрошення сплив")
+
+    # Запрошення діє лише для тієї пошти, на яку його створено: інакше хто завгодно з посиланням
+    # (воно могло витекти чи бути переслане) отримав би роль у чужому закладі.
+    if invite.email and (current_user.email or "").strip().lower() != str(invite.email).strip().lower():
+        raise HTTPException(status_code=403, detail="Це запрошення створено для іншої електронної адреси. Увійдіть з тією поштою, на яку воно надійшло.")
 
     user_res = await db.execute(select(User).where(User.id == current_user.id))
     user = user_res.scalars().first()

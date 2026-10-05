@@ -131,6 +131,13 @@ def _xlsx_response(headers: list, rows: list, filename: str, widths: Optional[li
         cell.fill = PatternFill("solid", fgColor="F1F5F9")
     for r in rows:
         ws.append(r)
+    # Дані в таблиці - від клієнтів (ім'я, пошта, нотатки з публічної форми бронювання). openpyxl
+    # робить формулою будь-який рядок, що починається з «=», і Excel виконав би її у власника, який
+    # відкрив експорт (HYPERLINK, виклики назовні). Примусово лишаємо такі клітинки текстом.
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            if cell.data_type == "f":
+                cell.data_type = "s"
     for i, w in enumerate(widths or [], start=1):
         ws.column_dimensions[chr(64 + i)].width = w
     ws.freeze_panes = "A2"

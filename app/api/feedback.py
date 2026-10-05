@@ -31,6 +31,8 @@ from app.models.extras import Review
 from app.models.monetization import Payment
 from app.services.payments import create_payment_intent, is_live
 
+from app.core.rate_limit import rate_limit, tokens_equal
+
 router = APIRouter(tags=["Client feedback"])
 
 # Мінімум 10 ₴: 5% від недорогої послуги (200 ₴) - це 10 ₴, і вони мають пройти.
@@ -42,7 +44,7 @@ TIP_WINDOW_DAYS = 14
 
 async def _by_token(db: AsyncSession, appointment_id: int, token: str) -> Appointment:
     a = await db.get(Appointment, appointment_id)
-    if not a or not a.manage_token or a.manage_token != token:
+    if not a or not a.manage_token or not tokens_equal(a.manage_token, token):
         raise HTTPException(status_code=404, detail="Запис не знайдено")
     return a
 
@@ -55,7 +57,7 @@ async def _online_tip(db: AsyncSession, appointment_id: int) -> Optional[Payment
 
 
 @router.get("/appointments/{appointment_id}/feedback")
-async def feedback_info(appointment_id: int, token: str, db: AsyncSession = Depends(get_db)):
+async def feedback_info(appointment_id: int, token: str, db: AsyncSession = Depends(get_db), _rl=Depends(rate_limit("manage", max_requests=60, window_seconds=600))):
     a = await _by_token(db, appointment_id, token)
     biz = await db.get(Business, a.business_id)
     srv = await db.get(Service, a.service_id) if a.service_id else None
@@ -103,7 +105,7 @@ def apply_tip(a: Appointment, amount: Decimal) -> None:
 
 
 @router.post("/appointments/{appointment_id}/tip")
-async def tip_master(appointment_id: int, payload: TipIn, db: AsyncSession = Depends(get_db)):
+async def tip_master(appointment_id: int, payload: TipIn, db: AsyncSession = Depends(get_db), _rl=Depends(rate_limit("manage", max_requests=60, window_seconds=600))):
     a = await _by_token(db, appointment_id, payload.token)
     if a.status != "completed":
         raise HTTPException(status_code=409, detail="Чайові - після візиту")

@@ -13,7 +13,7 @@ from app.schemas.appointment import AppointmentStatusUpdate, MyAppointmentRespon
 
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, assert_can_modify_appointment, get_current_user, require_business_access, is_limited_to_own_schedule
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import rate_limit, tokens_equal
 from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client
 from app.schemas.appointment import (
     AppointmentCreate,
@@ -519,7 +519,7 @@ async def lock_time_slot(
 
 
 @router.post("/unlock")
-async def unlock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(get_db)):
+async def unlock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(get_db), _rl=Depends(rate_limit("unlock", max_requests=60, window_seconds=60))):
     if request.session_token:
         await db.execute(
             delete(Appointment).where(
@@ -538,6 +538,7 @@ async def create_appointment(
     appointment_in: AppointmentCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("book", max_requests=12, window_seconds=600))
 ):
     now = get_utc_now()
 
@@ -898,6 +899,7 @@ async def get_appointment_for_client(
     appointment_id: int,
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("manage", max_requests=60, window_seconds=600))
 ):
     """
     Дозволяє клієнту переглянути СВОЄ бронювання за токеном з листа -
@@ -905,7 +907,7 @@ async def get_appointment_for_client(
     """
     result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
     appointment = result.scalars().first()
-    if not appointment or not appointment.manage_token or appointment.manage_token != token:
+    if not appointment or not appointment.manage_token or not tokens_equal(appointment.manage_token, token):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
 
     # Підтягуємо назви: id послуги нічого не каже людині, яка відкрила
@@ -938,11 +940,12 @@ async def cancel_appointment_by_client(
     appointment_id: int,
     payload: ManageBookingRequest,
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("manage", max_requests=60, window_seconds=600))
 ):
     """Клієнт скасовує власне бронювання за токеном - без авторизації бізнесу."""
     result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
     appointment = result.scalars().first()
-    if not appointment or not appointment.manage_token or appointment.manage_token != payload.token:
+    if not appointment or not appointment.manage_token or not tokens_equal(appointment.manage_token, payload.token):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
 
     if appointment.status == "cancelled":
@@ -1353,6 +1356,7 @@ async def create_review_by_client(
     payload: ClientReviewRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("manage", max_requests=60, window_seconds=600))
 ):
     """
     Відгук клієнта на власний завершений візит.
@@ -1381,7 +1385,7 @@ async def create_review_by_client(
 
     res = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
     appointment = res.scalars().first()
-    if not appointment or not appointment.manage_token or appointment.manage_token != payload.token:
+    if not appointment or not appointment.manage_token or not tokens_equal(appointment.manage_token, payload.token):
         raise HTTPException(status_code=404, detail="Візит не знайдено")
 
     if appointment.status != "completed":
@@ -1453,6 +1457,7 @@ async def delete_review_by_client(
     appointment_id: int,
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("manage", max_requests=60, window_seconds=600))
 ):
     """
     Клієнт видаляє СВІЙ відгук - за токеном свого візиту, як і залишав.
@@ -1461,7 +1466,7 @@ async def delete_review_by_client(
     """
     from app.models.extras import Review
     a = await db.get(Appointment, appointment_id)
-    if not a or not a.manage_token or a.manage_token != token:
+    if not a or not a.manage_token or not tokens_equal(a.manage_token, token):
         raise HTTPException(status_code=404, detail="Відгук не знайдено")
     review = (await db.execute(select(Review).where(Review.appointment_id == a.id))).scalars().first()
     if not review:
@@ -1521,6 +1526,7 @@ async def reschedule_appointment_by_client(
     payload: ClientRescheduleRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("manage", max_requests=60, window_seconds=600))
 ):
     """
     Клієнт переносить власний запис - за токеном керування записом.
@@ -1537,7 +1543,7 @@ async def reschedule_appointment_by_client(
     """
     res = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
     appointment = res.scalars().first()
-    if not appointment or not appointment.manage_token or appointment.manage_token != payload.token:
+    if not appointment or not appointment.manage_token or not tokens_equal(appointment.manage_token, payload.token):
         raise HTTPException(status_code=404, detail="Запис не знайдено")
 
     if appointment.status not in ("confirmed", "pending_approval"):

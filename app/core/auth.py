@@ -143,6 +143,18 @@ async def get_current_user(
     )
 
 
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+) -> Optional[CurrentUser]:
+    """Хто це, якщо людина увійшла; None - гість чи недійсний токен (без помилки: публічні сторінки відкриті всім)."""
+    if credentials is None:
+        return None
+    try:
+        return await get_current_user(credentials)
+    except HTTPException:
+        return None
+
+
 # Ролі, які дають адміністративні права всередині закладу (фінанси,
 # керування персоналом, налаштування). Звичайний майстер їх не має:
 # він бачить свій розклад і своїх клієнтів, але не чужі зарплати.

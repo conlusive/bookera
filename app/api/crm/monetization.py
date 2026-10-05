@@ -12,7 +12,7 @@ from app.core.auth import CurrentUser, assert_business_admin, get_current_user, 
 from app.core.time_utils import utc_now
 from app.core.rate_limit import rate_limit
 from app.models import Appointment, Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
-from app.models import Expense, StaffPayout, User
+from app.models import Expense, StaffMembership, StaffPayout, User
 from app.services import ranking
 from app.services.monetization import calculate_payout_preview
 from app.services.payments import create_payment_intent
@@ -501,6 +501,17 @@ async def transfer_ownership(
     target.role = "business_owner"
     if old_owner:
         old_owner.role = "admin"
+
+    # Роль людини В ЦЬОМУ закладі зберігається ще й у членстві - список команди читає саме її.
+    # Без цього після передачі колишній власник лишався там «Власником», а новий - «Адміністратором».
+    memberships = (await db.execute(
+        select(StaffMembership).where(
+            StaffMembership.business_id == business_id,
+            StaffMembership.user_id.in_([str(target.id), str(current_user.id)]),
+        )
+    )).scalars().all()
+    for m in memberships:
+        m.role = "business_owner" if str(m.user_id) == str(target.id) else "admin"
 
     await db.commit()
     return {"status": "success", "new_owner_id": target.id, "former_owner_id": current_user.id}

@@ -1193,10 +1193,10 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                     max={salonDay?.active ? salonEnd : undefined}
                                     value={formatHHMM(schedule.start)}
                                     onChange={(e) => {
-                                      let val = e.target.value;
-                                      if (salonDay?.active && val < salonStart) {
-                                        val = salonStart;
-                                      }
+                                      // Під час набору годин проміжні значення (01:00 після першої цифри) не
+                                      // можна обрізати - інакше час неможливо ввести. Межі закладу
+                                      // перевіряються при втраті фокуса (onBlur).
+                                      const val = e.target.value;
                                       const newShifts = staffShifts.map((s: any, i: number) =>
                                         i === idx ? { ...s, start: val } : s
                                       );
@@ -1228,10 +1228,8 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                                     max={salonDay?.active ? salonEnd : undefined}
                                     value={formatHHMM(schedule.end)}
                                     onChange={(e) => {
-                                      let val = e.target.value;
-                                      if (salonDay?.active && val > salonEnd) {
-                                        val = salonEnd;
-                                      }
+                                      // Те саме, що й для початку: межі - у onBlur
+                                      const val = e.target.value;
                                       const newShifts = staffShifts.map((s: any, i: number) =>
                                         i === idx ? { ...s, end: val } : s
                                       );

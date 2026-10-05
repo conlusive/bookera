@@ -64,8 +64,39 @@ const SETS: VideoSet[] = [
 /** Скільки набір тримається на екрані. */
 const SET_DURATION_MS = 7000;
 
+/**
+ * Чи варто взагалі вантажити відео-фон.
+ *
+ * Три ролики - майже 19 МБ. Тому:
+ *   - при «економії трафіку», повільній мережі (2G/3G) чи «зменшити рух» лишаємо
+ *     заглушки-градієнти: сторінка виглядає так само, але без важкого вантажу;
+ *   - в іншому разі починаємо ПІСЛЯ повного завантаження сторінки, щоб ролики не
+ *     відбирали канал у каталогу закладів, який людина бачить першим.
+ */
+function useVideoAllowed(): boolean {
+  const [allowed, setAllowed] = useState(false);
+  useEffect(() => {
+    const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
+    const slow = !!nav.connection && (nav.connection.saveData || ['slow-2g', '2g', '3g'].includes(nav.connection.effectiveType || ''));
+    if (slow || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let cancelled = false;
+    const start = () => { if (!cancelled) setAllowed(true); };
+    // Після події load: HTML, скрипти й перші запити вже відпрацювали
+    if (document.readyState === 'complete') {
+      const t = window.setTimeout(start, 300);
+      return () => { cancelled = true; window.clearTimeout(t); };
+    }
+    const onLoad = () => window.setTimeout(start, 300);
+    window.addEventListener('load', onLoad, { once: true });
+    return () => { cancelled = true; window.removeEventListener('load', onLoad); };
+  }, []);
+  return allowed;
+}
+
 export default function HeroVideoBackdrop() {
   const [setIndex, setSetIndex] = useState(0);
+  const videoAllowed = useVideoAllowed();
 
   // Один набір - чергувати нічого, і таймер лише грів би процесор.
   const hasMultipleSets = SETS.length > 1;
@@ -82,7 +113,7 @@ export default function HeroVideoBackdrop() {
           Так наступний уже завантажений до моменту появи - інакше
           зміна сцени щоразу починалася б із порожніх заглушок. */}
       {SETS.map((set, si) => (
-        <VideoRow key={si} set={set} isActive={si === setIndex} />
+        <VideoRow key={si} set={set} isActive={si === setIndex} videoAllowed={videoAllowed} />
       ))}
 
       {/* Затемнення: градієнт, а не суцільний колір - угорі темніше
@@ -105,7 +136,7 @@ export default function HeroVideoBackdrop() {
   );
 }
 
-function VideoRow({ set, isActive }: { set: VideoSet; isActive: boolean }) {
+function VideoRow({ set, isActive, videoAllowed }: { set: VideoSet; isActive: boolean; videoAllowed: boolean }) {
   const [playing, setPlaying] = useState<boolean[]>([false, false, false]);
 
   return (
@@ -140,7 +171,7 @@ function VideoRow({ set, isActive }: { set: VideoSet; isActive: boolean }) {
             }} />
           )}
 
-          <video
+          {videoAllowed && <video
             autoPlay
             loop
             muted
@@ -162,7 +193,7 @@ function VideoRow({ set, isActive }: { set: VideoSet; isActive: boolean }) {
               objectFit: 'cover',
               animation: playing[i] ? `heroKenBurns 20s ease-in-out ${i * -7}s infinite` : 'none',
             }}
-          />
+          />}
         </div>
       ))}
     </div>

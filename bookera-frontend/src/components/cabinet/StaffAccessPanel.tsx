@@ -73,7 +73,7 @@ export default function StaffAccessPanel({ businessId, staffId, onChanged }: { b
         ))}
       </div>
 
-      <div className="sa-head" style={{ marginTop: '1.5rem' }}>
+      <div className="sa-head" style={{ marginTop: '1rem' }}>
         <h3>Доступ до розділів</h3>
       </div>
       <div className="sa-list">
@@ -94,10 +94,10 @@ export default function StaffAccessPanel({ businessId, staffId, onChanged }: { b
 
       <style jsx>{`
         .sa { color: ${C.text}; }
-        .sa-head h3 { font-size: 1.1rem; font-weight: 700; margin: 0 0 0.3rem; }
-        .sa-head p { font-size: 0.9rem; color: ${C.sub}; margin: 0 0 1rem; }
-        .sa-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-        .sa-role { display: flex; gap: 0.75rem; align-items: flex-start; text-align: left; padding: 1.1rem 1.2rem; border-radius: 12px; border: 1.5px solid ${C.border}; background: #fff; cursor: pointer; font-family: inherit; }
+        .sa-head h3 { font-size: 1.1rem; font-weight: 700; margin: 0 0 0.2rem; }
+        .sa-head p { font-size: 0.88rem; color: ${C.sub}; margin: 0 0 0.65rem; }
+        .sa-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+        .sa-role { display: flex; gap: 0.65rem; align-items: flex-start; text-align: left; padding: 0.8rem 1rem; border-radius: 12px; border: 1.5px solid ${C.border}; background: #fff; cursor: pointer; font-family: inherit; }
         .sa-role:disabled { cursor: default; }
         .sa-role.on { border-color: ${C.blue}; background: #f2f7f3; }
         .sa-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #cbd5e1; flex-shrink: 0; margin-top: 2px; position: relative; }
@@ -106,7 +106,7 @@ export default function StaffAccessPanel({ businessId, staffId, onChanged }: { b
         .sa-role b { display: block; font-size: 0.95rem; }
         .sa-role small { display: block; font-size: 0.82rem; color: ${C.sub}; margin-top: 3px; line-height: 1.4; }
         .sa-list { border: 1px solid ${C.border}; border-radius: 12px; background: #fff; }
-        .sa-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 1.2rem; border-top: 1px solid #f1f5f9; }
+        .sa-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.7rem 1rem; border-top: 1px solid #f1f5f9; }
         .sa-row:first-child { border-top: none; }
         .sa-row b { display: block; font-size: 0.925rem; }
         .sa-row small { display: block; font-size: 0.82rem; color: ${C.sub}; margin-top: 2px; }
@@ -115,7 +115,7 @@ export default function StaffAccessPanel({ businessId, staffId, onChanged }: { b
         .sa-switch i { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); transition: left .2s; }
         .sa-switch.on { background: ${C.green}; }
         .sa-switch.on i { left: 20px; }
-        .sa-err { color: #dc2626; font-size: 0.85rem; margin-top: 0.75rem; }
+        .sa-err { color: #dc2626; font-size: 0.85rem; margin-top: 0.6rem; }
         @media (max-width: 640px) { .sa-roles { grid-template-columns: 1fr; } }
       `}</style>
     </div>

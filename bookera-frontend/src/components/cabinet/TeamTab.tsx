@@ -289,9 +289,22 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
         ? raw.map((id: any) => String(id))
         : (services || []).map((s: any) => String(s.id));
       setLocalAssignedServices(assigned);
-      fetchUnpaidAppointments(currentStaff.id, currentStaff.last_payout_date);
     }
   }, [selectedStaffId, currentStaff?.id, services]);
+
+  // Фінанси людини (прев'ю виплати й історія) - лише коли відкрито вкладку «Фінанси».
+  // Раніше вони вантажились при виборі кожного майстра і ще раз при кожній зміні
+  // списку послуг, навіть якщо ця вкладка так і не відкривалась.
+  useEffect(() => {
+    setPayoutPreview(null);
+    setPayoutHistory([]);
+  }, [currentStaff?.id]);
+  useEffect(() => {
+    if (currentStaff && staffActiveTab === 'finance') {
+      fetchUnpaidAppointments(currentStaff.id, currentStaff.last_payout_date);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStaff?.id, staffActiveTab]);
 
   useEffect(() => {
     if (!business?.id || !hasAdminRights) return;
@@ -1719,7 +1732,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
 
             {/* --- 5. ДОСТУП ТА БЕЗПЕКА --- */}
             {activeStaffTab === 'security' && hasAdminRights && (
-              <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+              <div style={{ animation: 'slideUp 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
 
                 {/* Роль і доступи до розділів - змінює лише власник (сервер
                     перевіряє те саме). Адміністратор бачить, але не змінює. */}
@@ -1728,7 +1741,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     onChanged={(role) => handleUpdateLocalStaff({ role })} />
                 )}
 
-                <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '0.95rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div><h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Приймає записи клієнтів <HelpTip>Вимкнено - майстра немає серед варіантів під час онлайн-запису, але він лишається в команді й бачить свій календар.</HelpTip></h3><p style={{ fontSize: '0.8rem', color: colors.textSecondary, margin: 0 }}>Якщо вимкнено, співробітник зникне з онлайн-бронювання та розкладу.</p></div>
                   <div onClick={() => {
                      handleUpdateLocalStaff({ provides_services: !providesServices });
@@ -1741,7 +1754,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     сайті, або бути на заміні. Одне поле на дві потреби
                     змушувало б вимикати прийом записів заради
                     приховування з вітрини. */}
-                <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                <div style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '12px', padding: '0.95rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h3 style={{ fontSize: '1rem', fontWeight: '600', color: colors.textPrimary, margin: '0 0 0.3rem 0' }}>Показувати на сторінці закладу</h3>
                     <p style={{ fontSize: '0.82rem', color: colors.textSecondary, margin: 0 }}>Блок «Наша команда». На запис це не впливає.</p>
@@ -1753,7 +1766,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                 </div>
 
                 {!isOwnerProfile ? (
-                  <div style={{ background: '#fef2f2', border: `1px dashed ${colors.red}`, borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                  <div style={{ background: '#fef2f2', border: `1px dashed ${colors.red}`, borderRadius: '12px', padding: '1rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: colors.red, margin: 0 }}>Звільнення співробітника</h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0 }}>Назавжди видалити доступ цієї особи до системи. Історія записів залишиться в базі.</p>
@@ -1763,7 +1776,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     </Button>
                   </div>
                 ) : (
-                  <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                  <div style={{ background: '#fff1f2', border: '1px dashed #fca5a5', borderRadius: '12px', padding: '1rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#991b1b', margin: '0 0 0.4rem 0' }}>Передача прав власника</h3>
                       <p style={{ fontSize: '0.85rem', color: '#991b1b', margin: 0, maxWidth: '400px', lineHeight: 1.4, opacity: 0.9 }}>Щоб звільнити цей профіль, потрібно спочатку передати права власності на бізнес іншому адміністратору.</p>

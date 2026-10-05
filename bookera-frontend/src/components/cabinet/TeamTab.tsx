@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
@@ -39,7 +38,6 @@ const formatHHMM = (t: any): string => {
 };
 
 export default function TeamTab({ business, team = [], setTeam, services = [], userProfile, setActiveTab, setFilterMaster, globalShifts = [] }: any) {
-  const supabase = useMemo(() => createClient(), []);
 
   // --- СТАНИ КОМАНДИ ---
   const [selectedStaffId, setSelectedStaffId] = useState<string | number | null>(null);

@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
     removeConsole: process.env.NODE_ENV === 'production',
   },
 
+  // Іконки з великих пакетів підтягуємо поштучно, а не весь пакет:
+  // iconsax-react має сотні іконок, а потрібно кілька.
+  experimental: {
+    optimizePackageImports: ['iconsax-react'],
+  },
+
   // 3. Автоматична оптимізація фотографій у сучасні формати (AVIF та WebP)
   images: {
     // Лише WebP. AVIF на ~20% менший, але кодується в кілька разів

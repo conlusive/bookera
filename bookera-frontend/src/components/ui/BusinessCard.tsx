@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { imageLoadProps } from '@/lib/images';
 import { getOpenStatus } from '@/lib/businessStatus';
-import { categoryTitles, categoryTitle } from '@/lib/categories';
+import { categoryTitle } from '@/lib/categories';
 
 /**
  * Картка закладу - ОДНА на весь сайт.
@@ -75,7 +75,6 @@ export default function BusinessCard({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   })();
   const salonSlots = slots || [];
-  const primaryService = biz.services?.[0];
 
   return (
     <Link href={`/${biz.slug || biz.id}`} className="apple-biz-card anim">

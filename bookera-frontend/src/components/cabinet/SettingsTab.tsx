@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import AppSelect from '@/components/ui/AppSelect';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { categoryTitle } from '@/lib/categories';
-import { formatDuration } from '@/lib/duration';
 import HelpTip from '@/components/ui/HelpTip';
 import SubscriptionPanel from '@/components/cabinet/SubscriptionPanel';
 
@@ -24,9 +22,6 @@ const SvgIcon = ({ d, size = 24, color = "currentColor", children, strokeWidth =
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...props}>{d && <path d={d} />}{children}</svg>
 );
 const SvgChevronLeft = (p:any) => <SvgIcon {...p}><polyline points="15 18 9 12 15 6"></polyline></SvgIcon>;
-const SvgSearch = (p:any) => <SvgIcon {...p}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></SvgIcon>;
-const SvgCrown = (p:any) => <SvgIcon {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></SvgIcon>;
-const SvgCheck = (p:any) => <SvgIcon strokeWidth="3" {...p}><polyline points="20 6 9 17 4 12"></polyline></SvgIcon>;
 const SvgAlertCircle = (p:any) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></SvgIcon>;
 
 const SvgStorefront = (p:any) => <SvgIcon {...p}><path d="M3 9l1.5-5h15L21 9"></path><path d="M3 9h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z"></path><path d="M8 21v-7h8v7"></path></SvgIcon>;
@@ -35,11 +30,6 @@ const SvgCreditCard = (p:any) => <SvgIcon {...p}><rect x="1" y="4" width="22" he
 const SvgBell = (p:any) => <SvgIcon {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></SvgIcon>;
 const SvgShieldCheck = (p:any) => <SvgIcon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></SvgIcon>;
 const SvgLock = (p:any) => <SvgIcon {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></SvgIcon>;
-const SvgHelpCircle = (p:any) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></SvgIcon>;
-const SvgWand = (p:any) => <SvgIcon {...p}><path d="M2.7 15.3l16.6-16.6a2.4 2.4 0 0 1 3.4 3.4L6.1 18.7M19 13l2.4-2.4a2.4 2.4 0 0 0-3.4-3.4L15.6 9.6M2 22l3.5-3.5"></path></SvgIcon>;
-const SvgDownload = (p:any) => <SvgIcon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></SvgIcon>;
-const SvgGift = (p:any) => <SvgIcon {...p}><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></SvgIcon>;
-const SvgCreditCardPlus = (p:any) => <SvgIcon {...p}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line><line x1="12" y1="15" x2="12" y2="19"></line><line x1="10" y1="17" x2="14" y2="17"></line></SvgIcon>;
 
 
 const businessSettingsCards = [
@@ -52,7 +42,6 @@ const businessSettingsCards = [
 ];
 
 export default function SettingsTab({ business, onNavigate, initialView }: SettingsTabProps) {
-  const supabase = createClient();
   const { showToast } = useToast();
 
   // 🟢 Відновлення активного розділу при перезавантаженні сторінки

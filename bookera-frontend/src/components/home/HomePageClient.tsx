@@ -2,20 +2,18 @@
 
 import type { RankingRules } from '@/lib/api';
 import { Fragment, Suspense, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
-import SmartImage from '@/components/ui/SmartImage';
 import { imageLoadProps } from '@/lib/images';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
-import { getOpenStatus } from '@/lib/businessStatus';
-import { categoryTitles, categoryTitle, categoryPlace, matchesCategory, CATEGORIES, MAIN_CATEGORIES, MORE_CATEGORIES } from '@/lib/categories';
+import { categoryTitle, categoryPlace, matchesCategory, CATEGORIES, MAIN_CATEGORIES, MORE_CATEGORIES } from '@/lib/categories';
 import { cachedFavoriteIds, loadFavorites, setFavorite } from '@/lib/favorites';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
-import { isBusinessRole, roleLabel } from '@/lib/roles';
+import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import { useMyAvatar, resetAvatarSync } from '@/lib/useMyAvatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
@@ -557,7 +555,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   // так само, як «Рекомендовані».
   const [sortBy, setSortBy] = useState<string>('distance');
   const [isSortOpen, setIsSortOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
 
   const profileRef = useRef<HTMLDivElement>(null);
   const heroWhatRef = useRef<HTMLDivElement>(null);
@@ -570,8 +567,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
   const sortRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
-  const nearbyScrollRef = useRef<HTMLDivElement>(null);
-  const collectionsScrollRef = useRef<HTMLDivElement>(null);
   const isAutoSearchRun = useRef(false);
 
   // Місто за місцем людини - з тієї самої точки, що й відстані (хук
@@ -870,7 +865,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     setIsWhatOpen(false);
     setIsWhereOpen(false);
     setIsDateOpen(false);
-    setIsExpanded(true);
     setActiveSearch(null);
 
     if (searchDate) {
@@ -955,7 +949,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     setActiveCategory(slug);
     setAppliedSearch('');
     setSearchWhat('');
-    setIsExpanded(false);
   };
 
   const { whatSuggestions, whereSuggestions } = useMemo(() => {
@@ -1253,8 +1246,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearbyIdsKey]);
 
-  const displayedBusinesses = isExpanded ? filteredBusinesses : filteredBusinesses.slice(0, 8);
-
   /**
    * Три зони головної, і кожна живе за своїм правилом.
    *
@@ -1269,9 +1260,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
    * РЕКОМЕНДОВАНІ - завжди. Топ за рейтингом не залежить ні від
    * пошуку, ні від категорії: це просто найкращі заклади міста.
    */
-  const isDefaultView = activeCategory === 'all' && !appliedSearch && !searchDate;
   const showNearby = true;
-  const showCollections = true;
 
   const getDisplayDateTime = () => {
     if (!searchDate && !searchTime) return 'Будь-коли';
@@ -1422,18 +1411,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
    *
    * Ця зона відповідає на питання «що взагалі є», а не «що поруч».
    */
-  const getSectionTitle = () => {
-    if (appliedSearch) return `Результати пошуку: «${appliedSearch}»`;
-    if (activeCategory === 'all') return 'Усі заклади';
-    return categoryTitles[activeCategory] || 'Заклади';
-  };
-
-  const getSectionSubtitle = () => {
-    if (appliedSearch) return `Знайдено закладів: ${filteredBusinesses.length}`;
-    if (activeCategory === 'all') return `Усього закладів у місті: ${filteredBusinesses.length}`;
-    return `Усього закладів у цій категорії: ${filteredBusinesses.length}`;
-  };
-
   // 🟢 ЄДИНА КАРТКА ЗАКЛАДУ (ОДНАКОВИЙ РОЗМІР 1:1)
 
 
@@ -1450,26 +1427,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       slots={nearbySlots[biz.id]}
     />
   );
-
-  const scrollNearby = (direction: 'left' | 'right') => {
-    if (nearbyScrollRef.current) {
-      const scrollAmount = 320;
-      nearbyScrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  const scrollCollections = (direction: 'left' | 'right') => {
-    if (collectionsScrollRef.current) {
-      const scrollAmount = 340;
-      collectionsScrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
 
   if (!mounted) return null;
 

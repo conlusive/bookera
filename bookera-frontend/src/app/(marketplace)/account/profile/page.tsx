@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
@@ -10,43 +11,21 @@ import { isBusinessRole } from '@/lib/roles';
 import { api } from '@/lib/api';
 import Avatar from '@/components/ui/Avatar';
 import { resetAvatarSync } from '@/lib/useMyAvatar';
-import VisitsHeatmap from '@/components/profile/VisitsHeatmap';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
-import {
-  CalendarDays,
-  MapPin,
-  Clock,
-  Loader2,
-  RotateCcw,
-  Gift,
-  Coins,
-  Heart,
-  Settings,
-  X,
-  AlertTriangle,
-  Camera,
-  Trash2,
-  CalendarPlus,
-  Download,
-  KeyRound,
-  Mail,
-  User,
-  ShieldAlert,
-  ChevronLeft,
-  ChevronRight,
-  Briefcase,
-} from "lucide-react";
-import SmartImage from '@/components/ui/SmartImage';
+import { CalendarDays, Loader2, Gift, Heart, Settings, X, AlertTriangle, Camera, Trash2, KeyRound, Mail, User, ShieldAlert, Briefcase } from "lucide-react";
 import { loadFavorites, setFavorite } from '@/lib/favorites';
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { categoryTitle, normalizeCategory } from '@/lib/categories';
-import WorkDashboard from '@/components/work/WorkDashboard';
-import WalletTab from '@/components/profile/WalletTab';
 import { resolveDisplayName } from '@/lib/displayName';
 import { formatDuration } from '@/lib/duration';
-import VisitFeedback from '@/components/visit/VisitFeedback';
 import BirthdayInput from '@/components/ui/BirthdayInput';
+
+// Вкладки й модалка відкриваються не одразу - їхній код вантажиться лише тоді, коли потрібен
+const VisitsHeatmap = dynamic(() => import('@/components/profile/VisitsHeatmap'), { ssr: false });
+const WorkDashboard = dynamic(() => import('@/components/work/WorkDashboard'), { ssr: false });
+const WalletTab = dynamic(() => import('@/components/profile/WalletTab'), { ssr: false });
+const VisitFeedback = dynamic(() => import('@/components/visit/VisitFeedback'), { ssr: false });
 
 
 // Клієнтська компресія зображення через HTML5 Canvas (до 500x500 WebP)
@@ -710,14 +689,6 @@ function ProfileContent() {
     setIsSubmittingAction(true);
 
     try {
-      const durationMin = (rescheduleModalAppt.start_time && rescheduleModalAppt.end_time)
-        ? Math.round((new Date(rescheduleModalAppt.end_time).getTime() - new Date(rescheduleModalAppt.start_time).getTime()) / 60000)
-        : (rescheduleModalAppt.services?.duration_minutes || 60);
-
-      const startDt = new Date(`${newRescheduleDate}T${newRescheduleTime}:00`);
-      const endDt = new Date(startDt.getTime() + durationMin * 60000);
-      const pad = (n: number) => String(n).padStart(2, '0');
-
       const startStr = `${newRescheduleDate}T${newRescheduleTime}:00`;
 
       // Через сервер, за токеном керування записом.
@@ -752,78 +723,7 @@ function ProfileContent() {
     }
   };
 
-  // Google Calendar URL
-  const getGoogleCalendarUrl = (app: any) => {
-    const title = encodeURIComponent(`${app.services?.name || 'Візит'} — ${app.businesses?.name || 'Салон'}`);
-    const location = encodeURIComponent(`${app.businesses?.city || ''}, ${app.businesses?.address || ''}`);
-    const dateFormatted = app.date.replace(/-/g, '');
-    const timeFormatted = (app.time?.substring(0, 5) || '12:00').replace(/:/g, '') + '00';
-
-    const duration = app.services?.duration_minutes || 60;
-    const startHour = parseInt(app.time?.substring(0, 2) || '12');
-    const startMin = parseInt(app.time?.substring(3, 5) || '00');
-    const endMinutesTotal = startHour * 60 + startMin + duration;
-    const endHour = String(Math.floor(endMinutesTotal / 60)).padStart(2, '0');
-    const endMin = String(endMinutesTotal % 60).padStart(2, '0');
-    const endTimeFormatted = `${endHour}${endMin}00`;
-
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateFormatted}T${timeFormatted}/${dateFormatted}T${endTimeFormatted}&location=${location}`;
-  };
-
-  // Apple Calendar (.ics)
-  const downloadAppleIcs = (app: any) => {
-    const dateFormatted = app.date.replace(/-/g, '');
-    const timeFormatted = (app.time?.substring(0, 5) || '12:00').replace(/:/g, '') + '00';
-    const duration = app.services?.duration_minutes || 60;
-    const startHour = parseInt(app.time?.substring(0, 2) || '12');
-    const startMin = parseInt(app.time?.substring(3, 5) || '00');
-    const endMinutesTotal = startHour * 60 + startMin + duration;
-    const endHour = String(Math.floor(endMinutesTotal / 60)).padStart(2, '0');
-    const endMin = String(endMinutesTotal % 60).padStart(2, '0');
-    const endTimeFormatted = `${endHour}${endMin}00`;
-
-    const icsContent = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//BookEra Inc//Booking//UA',
-      'BEGIN:VEVENT',
-      `SUMMARY:${app.services?.name || 'Візит'} — ${app.businesses?.name || 'Салон'}`,
-      `LOCATION:${app.businesses?.city || ''}, ${app.businesses?.address || ''}`,
-      `DTSTART:${dateFormatted}T${timeFormatted}`,
-      `DTEND:${dateFormatted}T${endTimeFormatted}`,
-      'DESCRIPTION:Бронювання через сервіс BookEra',
-      'STATUS:CONFIRMED',
-      'END:VEVENT',
-      'END:VCALENDAR'
-    ].join('\r\n');
-
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `visit-${app.date}.ics`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('Календарний файл .ics завантажено', 'success');
-  };
-
-  // Відносні бейджі
-  const getRelativeDateBadge = (dateStr: string) => {
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    const targetDate = new Date(dateStr);
-    targetDate.setHours(0, 0, 0, 0);
-
-    const diffDays = Math.round((targetDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return <span style={{ backgroundColor: '#f0fdf4', color: '#166534', padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700' }}>Сьогодні</span>;
-    if (diffDays === 1) return <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700' }}>Завтра</span>;
-    if (diffDays > 1 && diffDays <= 7) return <span style={{ backgroundColor: '#f8fafc', color: '#475569', padding: '2px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700' }}>Через {diffDays} дн.</span>;
-    return null;
-  };
-
   const today = new Date().toISOString().split('T')[0];
-  const nowIso = new Date().toISOString();
   const filteredAppointments = useMemo(() => {
     // Порівнюємо ДАТИ, а не рядки.
     //
@@ -930,8 +830,6 @@ function ProfileContent() {
     return new Date(app.start_time) >= new Date();
   }).length;
   const displayName = fullName.trim() || resolveDisplayName(profile, null);
-  const nameParts = displayName.split(' ');
-  const initials = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
 
   // Пагінація улюблених
   // Категорії серед улюблених - для фільтра.

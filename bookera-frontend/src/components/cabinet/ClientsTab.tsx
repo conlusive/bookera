@@ -43,7 +43,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const [editingInstagram, setEditingInstagram] = useState('');
   const [editingBirthday, setEditingBirthday] = useState('');
 
-  const [isAddingTagInfo, setIsAddingTagInfo] = useState(false);
   const [newTagInput, setNewTagInput] = useState('');
 
   const [clientCurrentPage, setClientCurrentPage] = useState(1);
@@ -446,7 +445,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     setEditingInstagram(client.instagram || '');
     setEditingBirthday(client.birthday || '');
     setConsents({ photo: client.consent_photo || false, procedure: client.consent_procedure || false });
-    setIsAddingTagInfo(false);
     setNewTagInput('');
     setActiveCardTab('info');
     if (saveToStorage && typeof window !== 'undefined') sessionStorage.setItem('openedClientId', client.id);
@@ -457,21 +455,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     if (typeof window !== 'undefined') sessionStorage.removeItem('openedClientId');
   };
 
-  const handleSaveInlineTag = async () => {
-    if (!viewingClient || !newTagInput.trim()) { setIsAddingTagInfo(false); return; }
-    const cleanTag = newTagInput.trim();
-    const currentTags = viewingClient.tags || [];
-    if (currentTags.includes(cleanTag)) return showToast("Такий тег вже існує", 'error');
-
-    const updatedTags = [...currentTags, cleanTag];
-    try {
-      await api.updateClient(await getAuthToken(), viewingClient.id, { tags: updatedTags });
-      setClientsList(clientsList.map((c: any) => c.id === viewingClient.id ? { ...c, tags: updatedTags } : c));
-      setViewingClient({ ...viewingClient, tags: updatedTags });
-      setNewTagInput('');
-      setIsAddingTagInfo(false);
-    } catch (err: any) { showToast(err?.message || "Помилка додавання тегу", 'error'); }
-  };
 
   const handleRemoveTag = async (tagToRemove: string) => {
      const updatedTags = viewingClient.tags.filter((t: string) => t !== tagToRemove);

@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -13,25 +14,26 @@ import { createClient } from '@/lib/supabase/client';
 import { Icons } from '@/components/shared';
 import { api, SlotStatusItem } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
-import { isBusinessRole, roleLabel } from '@/lib/roles';
+import { isBusinessRole } from '@/lib/roles';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import { ALL_AMENITIES } from '@/lib/amenities';
 import { storefrontMap } from '@/lib/storefront-map';
 import WorkingHours from '@/components/salon/WorkingHours';
-import { dayBlockedReason, formatUtcAsKyiv, formatUtcDateKyiv, kyivNow, kyivToday, openStatus, weekdayName } from '@/lib/salon-time';
+import { dayBlockedReason, formatUtcAsKyiv, formatUtcDateKyiv, kyivNow, kyivToday, openStatus } from '@/lib/salon-time';
 import Avatar from '@/components/ui/Avatar';
 import { useMyAvatar } from '@/lib/useMyAvatar';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import SmartImage from '@/components/ui/SmartImage';
-import GiftCardModal from '@/components/salon/GiftCardModal';
 import { resolveDisplayName } from '@/lib/displayName';
 import { formatDuration } from '@/lib/duration';
-import VisitFeedback from '@/components/visit/VisitFeedback';
+
+// Модалки відкриваються за кліком - код вантажиться лише тоді, коли потрібен
+const GiftCardModal = dynamic(() => import('@/components/salon/GiftCardModal'), { ssr: false });
+const VisitFeedback = dynamic(() => import('@/components/visit/VisitFeedback'), { ssr: false });
 
 // === 1. КОНСТАНТИ ТА ХЕЛПЕРИ ===
 const SERVICES_PER_PAGE = 5;
 const REVIEWS_PER_PAGE = 5;
-const REVIEW_MAX_LENGTH = 500;
 
 // Назви - короткі, у тон фільтру на головній. Пояснення під кожною
 // каже, ЯК саме впорядковано: «За замовчуванням» нічого не пояснювало.
@@ -82,11 +84,6 @@ const getReviewAuthorName = (r: any) => {
     r.user?.full_name ||
     'Клієнт'
   );
-};
-
-const timeToMinutes = (t: string) => {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
 };
 
 const getStaffName = (t: any): string => {
@@ -261,11 +258,6 @@ export default function SalonClient({
       setConfirmDeleteReview(null);
     }
   };
-
-  const [reviewRating, setReviewRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
-  const [reviewText, setReviewText] = useState('');
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const [replyingToReviewId, setReplyingToReviewId] = useState<number | string | null>(null);
   const [replyText, setReplyText] = useState<string>('');

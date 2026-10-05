@@ -1,7 +1,7 @@
 'use client';
 
 import ProfileMenu from '@/components/ui/ProfileMenu';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
@@ -715,12 +715,6 @@ export default function BusinessCabinet() {
       console.error(err);
       showToast(err?.message || 'Не вдалося оновити статус', 'error');
     }
-  };
-
-  const getUserInitials = (name: string) => {
-    if (!name) return 'В';
-    const parts = name.split(' ');
-    return parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
   };
 
   const confirmDragDrop = async () => {

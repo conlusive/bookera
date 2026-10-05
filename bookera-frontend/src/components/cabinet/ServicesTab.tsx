@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import FormModal, { Field, FormDisclosure, FormSection } from '@/components/ui/FormModal';
@@ -11,7 +10,6 @@ import { notify } from '@/lib/feedback';
 
 // Локальні іконки
 const CopyIcon = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>);
-const CheckIcon = () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>);
 const XIcon = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>);
 
 // Зрозуміла іконка з 6 крапок для перетягування
@@ -34,7 +32,6 @@ interface ServicesTabProps {
 }
 
 export default function ServicesTab({ business, services, setServices, Icons }: ServicesTabProps) {
-  const supabase = useMemo(() => createClient(), []);
   const addonDropdownRef = useRef<HTMLDivElement>(null);
 
   // --- СТАНИ ---
@@ -46,7 +43,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
   const [isAiOpen, setIsAiOpen] = useState(false);
 
-  const [selectedServices, setSelectedServices] = useState<number[]>([]);
 
   // Модалка послуги
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
@@ -394,7 +390,6 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       const token = await getAuthToken();
       await api.deleteService(token, id);
       setServices(prev => prev.filter(s => s.id !== id));
-      setSelectedServices(prev => prev.filter(sId => sId !== id));
       showToast("Послугу видалено", "info");
       setIsServiceModalOpen(false);
     } catch (error: any) {

@@ -140,13 +140,6 @@ export const sortOptions = [
   { value: 'nameAsc', label: 'За алфавітом (А-Я)', icon: <Icons.SortAlpha /> },
 ];
 
-export const clientSortOptions = [
-  { value: 'recent', label: 'За останнім візитом', icon: <Icons.Clock /> },
-  { value: 'spent_desc', label: 'За доходом (Найбільше)', icon: <Icons.TrendingUp /> },
-  { value: 'visits_desc', label: 'За кількістю візитів', icon: <Icons.User /> },
-  { value: 'name_asc', label: 'За алфавітом (А-Я)', icon: <Icons.SortAlpha /> },
-];
-
 export const businessSettingsCards = [
   { id: 'payments', title: 'Платежі та каса', desc: 'Налаштуйте методи оплати, депозити та захист від неявок.', icon: Icons.CreditCard },
   { id: 'booking', title: 'Онлайн бронювання', desc: 'Вирішіть, які опції запису будуть доступні клієнтам.', icon: Icons.Globe },
@@ -217,26 +210,3 @@ export const CurrentTimeIndicator = ({ gridStartHour, gridTotalHours, isToday }:
     </div>
   );
 };
-
-export function CabinetSkeleton() {
-  return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#fafafa', fontFamily: 'system-ui, sans-serif' }}>
-      <style>{`
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
-        .skeleton { background: #e2e8f0; animation: pulse 1.5s infinite ease-in-out; border-radius: 8px; }
-      `}</style>
-      <div style={{ width: '260px', borderRight: '1px solid #f1f5f9', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#fff' }}>
-        <div className="skeleton" style={{ width: '140px', height: '32px' }}></div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginTop: '1rem' }}>
-          {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="skeleton" style={{ width: '100%', height: '40px' }}></div>
-          ))}
-        </div>
-      </div>
-      <div style={{ flex: 1, padding: '3rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        <div className="skeleton" style={{ width: '280px', height: '40px' }}></div>
-        <div className="skeleton" style={{ width: '100%', height: '450px', borderRadius: '16px' }}></div>
-      </div>
-    </div>
-  );
-}

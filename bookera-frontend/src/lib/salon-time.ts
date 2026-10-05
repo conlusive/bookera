@@ -8,10 +8,8 @@
  */
 export const SALON_TZ = 'Europe/Kyiv';
 
-const WEEKDAYS = ['понеділок', 'вівторок', 'середа', 'четвер', "п'ятниця", 'субота', 'неділя'];
 const WEEKDAYS_ACC = ['понеділок', 'вівторок', 'середу', 'четвер', "п'ятницю", 'суботу', 'неділю'];
 export const WEEKDAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
-export const weekdayName = (i: number) => WEEKDAYS[i] ?? '';
 
 function parts(d: Date): Record<string, string> {
   const out: Record<string, string> = {};

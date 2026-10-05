@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Icons, MASTER_COLORS, toLocalDateStr, checkSameDay, CurrentTimeIndicator } from '@/components/shared';
 import { isOwnerRole } from '@/lib/roles';
 import { api } from '@/lib/api';
@@ -24,7 +23,6 @@ const TASK_BORDERS = ['#f5d0fe', '#bbf7d0', '#fde68a', '#bae6fd', '#fecdd3'];
 export default function CalendarTab({ business, team = [], services = [], refreshClients, userProfile }: any) {
   // Години роботи закладу - лише власник і адміністратор.
   const canEditSalonHours = isOwnerRole(userProfile?.role) || userProfile?.role === 'admin';
-  const supabase = useMemo(() => createClient(), []);
   const { showToast } = useToast();
   const now = new Date();
 
@@ -228,7 +226,6 @@ export default function CalendarTab({ business, team = [], services = [], refres
       try {
         const token = await getAuthToken();
         const apiData = await api.getBookedAppointments(token, business.id);
-        const currentTime = new Date();
 
         const mapped = apiData.map((app: any) => {
           const start = new Date(app.start_time);
@@ -694,21 +691,6 @@ const handleSaveShifts = async () => {
     return () => clearTimeout(t);
   }, [lastMove]);
 
-  const undoLastMove = async () => {
-    if (!lastMove) return;
-    const { app, prevDate, prevStart, prevEnd, prevStatus } = lastMove;
-    try {
-      const token = await getAuthToken();
-      await api.rescheduleAppointment(token, app.id, new Date(`${prevDate}T${prevStart}`).toISOString());
-      setAppointments(prev => prev.map(a => String(a.id) === String(app.id)
-        ? { ...a, booking_date: prevDate, start_time: prevStart, end_time: prevEnd, status: prevStatus }
-        : a));
-      setLastMove(null);
-      showToast('Запис повернуто на місце', 'info');
-    } catch (err: any) {
-      showToast(err?.message || 'Не вдалося повернути запис', 'error');
-    }
-  };
 
   const openBookingDetails = (app: any, e: React.MouseEvent) => { e.stopPropagation(); setSelectedBooking(app); setIsBookingDetailsModalOpen(true); };
   const handleContextMenu = (e: React.MouseEvent, app: any) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, app }); };

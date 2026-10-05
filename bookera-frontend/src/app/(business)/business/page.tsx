@@ -11,10 +11,9 @@ import SiteFooter from '@/components/ui/SiteFooter';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
-import { isBusinessRole, roleLabel } from '@/lib/roles';
+import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import { useMyAvatar, resetAvatarSync } from '@/lib/useMyAvatar';
-import SmartImage from '@/components/ui/SmartImage';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import { resolveDisplayName } from '@/lib/displayName';
 

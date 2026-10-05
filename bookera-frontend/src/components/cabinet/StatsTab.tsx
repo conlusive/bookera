@@ -30,11 +30,6 @@ type PeriodType = 'week' | 'month' | 'year' | 'custom';
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
 const WEEKDAYS_FULL = ['понеділок', 'вівторок', 'середа', 'четвер', 'пʼятниця', 'субота', 'неділя'];
-const CAT_COLOR: Record<string, string> = {
-  Матеріали: '#8b5cf6', Оренда: '#0ea5e9', Комунальні: '#14b8a6', Зарплата: '#f59e0b',
-  Маркетинг: '#ec4899', Податки: '#64748b', Інше: '#94a3b8',
-};
-
 const money = (n: number) => `${Math.round(n).toLocaleString('uk-UA')} ₴`;
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const parse = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };

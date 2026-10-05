@@ -55,11 +55,15 @@ export default function HeroCards() {
     if (!el) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     let raf = 0;
+    let last = -1;
     const update = () => {
       raf = 0;
       // Падіння прискорюється (p²): спершу ледь помітно, далі швидше - як справжня вага
       const p = Math.min(1, Math.max(0, window.scrollY / 560));
-      el.style.setProperty('--p', String(p * p));
+      const v = Math.round(p * p * 1000) / 1000;
+      if (v === last) return;          // нічого не змінилось - не чіпаємо стилі
+      last = v;
+      el.style.setProperty('--p', String(v));
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
     update();
@@ -99,23 +103,29 @@ export default function HeroCards() {
         })}
       </div>
 
+      <div className="hc-fade" />
+
       <style jsx global>{`
-        .hc-stage { --p: 0; --s: 1; position: relative; width: 100%; height: calc(340px * var(--s) * (1 - var(--p) * .45)); margin: 3.5rem 0 0; overflow: hidden; pointer-events: none;
-          /* Вихід за поля контейнера на всю ширину екрана: картки не обрізаються по боках, а знизу плавно тануть */
-          width: 100vw; margin-left: calc(50% - 50vw);
-          -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 95%); mask-image: linear-gradient(to bottom, #000 55%, transparent 95%); }
+        /* Сцена НЕ міняє розмір при скролі (це перераховувало б розмітку кожен кадр) - лише transform карток.
+           Знизу - накладка-градієнт замість mask-image: маска змушує браузер (особливо Safari) заново
+           композитити всю сцену кожного кадру. */
+        .hc-stage { --p: 0; --s: 1; position: relative; height: calc(340px * var(--s)); margin: 3.5rem 0 0; overflow: hidden; pointer-events: none;
+          width: 100vw; margin-left: calc(50% - 50vw); contain: layout paint; }
+        .hc-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 46%; z-index: 30; pointer-events: none;
+          background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,.88) 70%, #fff 100%); }
         .hc-fan { position: absolute; left: 50%; top: 0; width: 0; height: 340px; transform: scale(var(--s)); transform-origin: top center; }
         .hc-card {
           position: absolute; top: 0; left: -112px; width: 224px; height: 330px;
           transform: translate(calc(var(--x)), calc(var(--y) + var(--p) * var(--fall))) rotate(calc(var(--r) + var(--p) * var(--spin)));
           transform-origin: 50% 100%;
           will-change: transform;
+          backface-visibility: hidden;
         }
         .hc-rise { width: 100%; height: 100%; animation: hcRise 1.1s cubic-bezier(.16,1,.3,1) var(--d) both; }
         @keyframes hcRise { from { transform: translateY(380px) rotate(0deg); opacity: 0; } 30% { opacity: 1; } to { transform: none; opacity: 1; } }
         .hc-face {
           width: 100%; height: 100%; border-radius: 24px; padding: 1.2rem 1.15rem; box-sizing: border-box; overflow: hidden;
-          box-shadow: 0 24px 50px -22px rgba(17, 24, 39, .45), 0 0 0 1px rgba(0,0,0,.04);
+          box-shadow: 0 14px 28px -16px rgba(17, 24, 39, .4), 0 0 0 1px rgba(0,0,0,.04);
           display: flex; flex-direction: column; text-align: left; align-items: flex-start;
         }
         .hc-name { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }

@@ -363,7 +363,7 @@ export default function BusinessLandingPage() {
         }
         
         .reveal-on-scroll { opacity: 0; transform: translateY(30px); transition: opacity 0.8s ease-out, transform 0.8s cubic-bezier(0.25, 0.8, 0.25, 1); will-change: opacity, transform; }
-        .reveal-on-scroll.is-visible { opacity: 1; transform: translate(0, 0); }
+        .reveal-on-scroll.is-visible { opacity: 1; transform: translate(0, 0); will-change: auto; } /* після появи шар більше не тримаємо: десятки постійних шарів гальмують скрол */
         .delay-100 { transition-delay: 100ms; }
 
         .text-glow-bg {

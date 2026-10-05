@@ -24,6 +24,15 @@ const hand = Caveat({ subsets: ['latin', 'cyrillic'], weight: ['500'], display: 
 function useInView<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [inView, setInView] = useState(false);
+  // Нескінченне «плавання» карток крутиться, лише поки блок у вікні: поза екраном воно марно їло кадри
+  const [onScreen, setOnScreen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const o = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting), { rootMargin: '120px' });
+    o.observe(el);
+    return () => o.disconnect();
+  }, []);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -32,7 +41,7 @@ function useInView<T extends HTMLElement>() {
     o.observe(el);
     return () => o.disconnect();
   }, []);
-  return { ref, inView };
+  return { ref, inView, onScreen };
 }
 
 const Icon = {
@@ -53,12 +62,12 @@ const Icon = {
  * на форму створення нового.
  */
 export default function GrowthHero({ onStart, startLabel = 'Спробувати безкоштовно' }: { onStart?: () => void; startLabel?: string }) {
-  const { ref, inView } = useInView<HTMLElement>();
+  const { ref, inView, onScreen } = useInView<HTMLElement>();
 
   return (
     <section className="gh-section">
       <div className="container">
-        <div ref={ref as any} className={`gh ${inView ? 'in' : ''}`}>
+        <div ref={ref as any} className={`gh ${inView ? 'in' : ''} ${onScreen ? '' : 'paused'}`}>
 
           {/* Нотатка від руки */}
           <div className="gh-float gh-note" style={{ ['--d' as string]: '.15s', ['--r' as string]: '-3deg' }}>
@@ -182,6 +191,7 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
           transition: opacity .9s ease var(--d), transform 1.1s cubic-bezier(.16,1,.3,1) var(--d);
         }
         .gh.in .gh-float { opacity: 1; transform: rotate(var(--r)); animation: ghFloat 8s ease-in-out calc(var(--d) + 1.2s) infinite; }
+        .gh.paused .gh-float { animation-play-state: paused; }
         @keyframes ghFloat {
           0%, 100% { translate: 0 0; }
           50% { translate: 0 -7px; }
@@ -191,7 +201,7 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
            а не ще одним прямокутником. */
         .gh-folder {
           position: relative; width: 300px; padding: 2.4rem 1.1rem 1.1rem; border-radius: 26px;
-          background: rgba(243,245,243,.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+          background: rgba(243,245,243,.96);
           border: 1px solid rgba(255,255,255,.9); box-shadow: 0 30px 60px -34px rgba(46,58,48,.3);
         }
         .gh-folder::before {

@@ -195,6 +195,8 @@ async def test_ranking_rules_endpoint_matches_the_service(client):
     r = await client.get("/businesses/ranking-rules")
     assert r.status_code == 200
     assert r.json() == ranking.ranking_rules()
+    # радіус «поруч» (для «Дешевших» і «Рекомендованих») - окреме правило, ширше за радіус балів за близькість
+    assert r.json()["nearby_radius_km"] == ranking.NEARBY_RADIUS_KM > ranking.PROXIMITY_RADIUS_KM
 
 
 # ---------- комісія ----------

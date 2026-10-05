@@ -408,6 +408,7 @@ export interface RadarOverview {
 export interface RankingRules {
   weights: { quality_max: number; proximity_max: number; free_slots: number; radar: number };
   proximity_radius_km: number;
+  nearby_radius_km: number;
   radar_bonus_km: number;
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import type { RankingRules } from '@/lib/api';
-import { Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Fragment, Suspense, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 
@@ -23,6 +23,7 @@ import SectionHeader from '@/components/home/SectionHeader';
 import HowItWorks from '@/components/home/HowItWorks';
 import BusinessShowcase from '@/components/home/BusinessShowcase';
 import SmartImage from '@/components/ui/SmartImage';
+import { rankBusinesses, type SortContext, type SortMode, type SortScope } from '@/lib/storefront-sort';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import { resolveDisplayName } from '@/lib/displayName';
 import { actionError } from '@/lib/feedback';
@@ -539,13 +540,10 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     return () => { cancelled = true; };
   }, [nearbyPoint, businesses]);
 
-  // «Рекомендовані» за замовчуванням: весь список поруч, від
-  // найближчого. Інші пункти уточнюють порядок серед 12 найближчих.
-  // Раніше за замовчуванням стояло «Найкращі оцінки», і тоді «Показати
-  // ще» ніколи не показав би більше дванадцяти.
-  // Типово - найближчі: це головна ідея сторінки, «поруч із вами».
-  // Поки місце невідоме, порядок той самий, що в «Рекомендованих»
-  // (див. sortComparator), тож порожньо чи випадково не буде.
+  // Типово - «Найближчі»: головна ідея сторінки, «поруч із вами». Усі три режими
+  // працюють на весь список і підкоряються одному принципу «найближче до мене»
+  // (правила - lib/storefront-sort.ts). Поки місце невідоме, «Найближчі» впорядковані
+  // так само, як «Рекомендовані».
   const [sortBy, setSortBy] = useState<string>('distance');
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -971,83 +969,19 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     return { whatSuggestions: what, whereSuggestions: where };
   }, [searchWhat, searchWhere, businesses]);
 
-  const getMinPrice = (b: any) => {
-    const prices = (b.services || [])
-      .map((s: any) => parseFloat(s.price))
-      .filter((n: number) => !isNaN(n) && n > 0);
-    return prices.length > 0 ? Math.min(...prices) : Infinity;
-  };
-
   /**
-   * Порівняння для сортування списку.
-   *
-   * Чотири варіанти, і кожен робить рівно те, що каже назва.
-   * Нічия в будь-якому - за відстанню: з двох однаково дешевих
-   * вище той, що ближче.
+   * Порядок закладів - правила в lib/storefront-sort.ts (чиста функція з тестами).
+   * Тут лише збираємо те, що знає браузер: відстань, вільні вікна, місце людини.
    */
-  const sortComparator = useCallback((a: any, b: any): number => {
-    const dist = (x: any) => distanceById[x.id] ?? Infinity;
-    const reviews = (x: any) => parseInt(x.reviews_count) || 0;
-    const rating = (x: any) => parseFloat(x.rating) || 0;
-    // Сходинки за кількістю відгуків: 50+, 10+, 1+, жодного.
-    // Рейтинг без відгуків нічого не вартий - раніше заклад з однією
-    // пʼятіркою стояв вище за 4.8 зі ста відгуків.
-    const tier = (x: any) => { const n = reviews(x); return n >= 50 ? 3 : n >= 10 ? 2 : n >= 1 ? 1 : 0; };
-    // Обидва без відстані: Infinity - Infinity = NaN, а порівнювач має повернути число.
-    const byDistance = (dist(a) - dist(b)) || 0;
-
-    // Радар: у «Найближчих» заклад рахується ближчим на radar_bonus_km,
-    // у «Рекомендованих» отримує бали (вони вже в rank_score з сервера).
-    // Значення - з /businesses/ranking-rules, а не з цього файлу.
-    const radarKm = (x: any) => (x.is_radar_active ? (x.radar_bonus_km ?? rankingRules?.radar_bonus_km ?? 0) : 0);
-    const radarFirst = (a.is_radar_active ? 1 : 0) !== (b.is_radar_active ? 1 : 0)
-      ? (a.is_radar_active ? -1 : 1) : 0;
-
-    if (sortBy === 'distance') {
-      // Відстань відома хоча б для одного - сортуємо за нею.
-      // Infinity - Infinity дає NaN, тож заклади без координат
-      // порівнюємо окремо, інакше порядок став би непередбачуваним.
-      const da = dist(a) - radarKm(a), db = dist(b) - radarKm(b);
-      if (Number.isFinite(da) || Number.isFinite(db)) {
-        if (!Number.isFinite(da)) return 1;
-        if (!Number.isFinite(db)) return -1;
-        if (da !== db) return da - db;
-      }
-      // Місце ще невідоме чи відстань однакова - порядок
-      // «Рекомендованих» нижче.
-    }
-
-    if (sortBy === 'price') {
-      const pa = getMinPrice(a);
-      const pb = getMinPrice(b);
-      if (pa !== pb) return pa - pb;
-      // Однакова ціна: спершу той, хто просувається, потім ближчий.
-      return radarFirst || byDistance;
-    }
-
-    // Рекомендовані - позиція в балах (разом 100), правила з сервера:
-    //   якість + Радар (rank_score, рахує сервер)
-    //   + «поруч» (до proximity_max, чим ближче, тим більше)
-    //   + «є вільні вікна сьогодні» (free_slots)
-    // Без правил із сервера (збій запиту) - стара послідовність:
-    // вільні вікна, сходинка відгуків, рейтинг, відстань.
-    const free = (x: any) => ((nearbySlots[x.id]?.length ?? 0) > 0 ? 1 : 0);
-    if (rankingRules && a.rank_score != null && b.rank_score != null) {
-      const w = rankingRules.weights;
-      const score = (x: any) => {
-        const d = dist(x);
-        const near = Number.isFinite(d) ? w.proximity_max * Math.max(0, 1 - d / rankingRules.proximity_radius_km) : 0;
-        return (x.rank_score ?? 0) + near + free(x) * w.free_slots;
-      };
-      const diff = score(b) - score(a);
-      if (Math.abs(diff) > 0.001) return diff;
-      return byDistance;
-    }
-    if (free(a) !== free(b)) return free(b) - free(a);
-    if (tier(a) !== tier(b)) return tier(b) - tier(a);
-    if (rating(a) !== rating(b)) return rating(b) - rating(a);
-    return byDistance;
-  }, [sortBy, distanceById, nearbySlots, getMinPrice, rankingRules]);
+  const [sortScope, setSortScope] = useState<SortScope>('near');
+  const sortCtx = useMemo<SortContext>(() => ({
+    mode: sortBy as SortMode,
+    scope: sortScope,
+    rules: rankingRules,
+    hasLocation: !!nearbyPoint,
+    distanceKm: (id: number) => distanceById[id],
+    hasFreeSlots: (id: number) => (nearbySlots[id]?.length ?? 0) > 0,
+  }), [sortBy, sortScope, rankingRules, nearbyPoint, distanceById, nearbySlots]);
 
   // Фільтрація каталогу
 
@@ -1089,14 +1023,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
         return inCategory && matchesText && matchesLocation;
       })
-      .sort((a, b) => {
-        const primary = sortComparator(a, b);
-        if (primary !== 0) return primary;
-
-        // Дефолтний fallback: за рейтингом
-        return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
-      });
-  }, [businesses, activeCategory, appliedSearch, sortBy, searchWhere, availableBizIds, nearbyPoint, distanceById, nearbySlots, sortComparator]);
+  }, [businesses, activeCategory, appliedSearch, searchWhere, availableBizIds]);
 
   // Заклади поблизу
   /**
@@ -1162,15 +1089,15 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   // Для скількох найближчих закладів одразу вантажити вільні слоти.
   // Далі - стільки, скільки показано: слоти потрібні лише видимим
   // карткам, а запит на кожен заклад міста був би марним.
-  const NEARBY_POOL = 12;
+  // Вікна потрібні сортуванню «Рекомендовані» (бонус за вільний час): беремо ближчих, скільки є, у межах пулу.
+  const NEARBY_POOL = 24;
 
   // Сортування - на ВЕСЬ список. Раніше варіанти, крім типового,
   // працювали лише серед 12 найближчих, і «Показати ще» зникало після
   // дванадцятого закладу. Фільтр, який тихо обрізає список, - не фільтр.
-  const nearbyBusinesses = useMemo(
-    () => [...nearbyBase].sort(sortComparator),
-    [nearbyBase, sortComparator],
-  );
+  const ranked = useMemo(() => rankBusinesses(nearbyBase, sortCtx), [nearbyBase, sortCtx]);
+  const nearbyBusinesses = useMemo(() => ranked.items.map(i => i.business), [ranked]);
+  const zoneById = useMemo(() => new Map(ranked.items.map(i => [i.business.id, i.zone] as const)), [ranked]);
 
   // Розрахунок точної відстані від користувача до закладу
   // getSalonDistance прибрано.
@@ -1215,8 +1142,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       // до одного сервера, решта стоять у черзі.
       try {
         const ids = nearbySlotTargets.map((b: any) => Number(b.id));
-        if (ids.length > 0) {
-          const data = await api.getTodaySlots(ids, todayStr);
+        // Сервер приймає до 24 закладів за раз - довший список ділимо на частини
+        for (let i = 0; i < ids.length; i += 24) {
+          const data = await api.getTodaySlots(ids.slice(i, i + 24), todayStr);
           for (const [id, times] of Object.entries(data)) slotsMap[Number(id)] = times;
         }
       } catch (err) {
@@ -1376,8 +1304,8 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   // ЯК. «Рекомендовані» без неї незрозумілі - за чим саме?
   const SORT_HINTS: Record<string, string> = {
     distance: 'Від найближчого до вас',
-    recommended: 'Вільні вікна сьогодні й відгуки',
-    price: 'За найдешевшою послугою',
+    recommended: 'Найкращі поруч, далі решта',
+    price: 'Найдешевші поруч, далі решта',
   };
 
   const sortOptions = [
@@ -1610,6 +1538,16 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           scroll-snap-type: x mandatory;
           padding-bottom: 0.5rem;
         }
+        .sort-rule { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 0.9rem 0 1.4rem; position: relative; z-index: 10; }
+        .sort-rule p { margin: 0; font-size: 0.9rem; color: #6E6E73; }
+        .sort-rule-actions { display: flex; gap: 0.6rem; align-items: center; }
+        .sort-scope { display: inline-flex; padding: 3px; border-radius: 999px; background: #F2F2F4; gap: 2px; }
+        .sort-scope button { border: none; background: transparent; padding: 0.38rem 0.95rem; border-radius: 999px; font-family: inherit; font-size: 0.82rem; font-weight: 600; color: #6E6E73; cursor: pointer; }
+        .sort-scope button.on { background: #fff; color: #1D1D1F; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+        .sort-locate { height: 34px; padding: 0 1rem; border-radius: 999px; border: 1px solid #D2D2D7; background: #fff; color: #1D1D1F; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+        .zone-h { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #86868B; padding-top: 0.4rem; }
+        .zone-h em { font-style: normal; font-weight: 600; color: #A1A1A6; letter-spacing: 0; }
+        .zone-h::after { content: ''; flex: 1; height: 1px; background: #E8E8ED; }
         .nearby-carousel-item {
           flex: 0 0 calc((100% - 4.5rem) / 4);
           min-width: 270px;
@@ -2320,6 +2258,44 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   </div>
 </div>
 
+            {/* Правило порядку - прозоро: що саме зараз видно і чому. Перемикач охоплення
+                лише там, де він щось змінює (Дешевші, Рекомендовані). */}
+            {(() => {
+              const radius = rankingRules?.nearby_radius_km;
+              const hasLoc = !!nearbyPoint;
+              const bonus = rankingRules?.radar_bonus_km;
+              let text: string;
+              if (sortBy === 'distance') {
+                text = hasLoc
+                  ? `Від найближчого до вас.${bonus ? ` Заклади з Радаром враховуються як ближчі на ${bonus} км.` : ''}`
+                  : 'Щоб показати найближчих, потрібно визначити ваше місце.';
+              } else if (sortBy === 'price') {
+                text = !hasLoc ? 'Найдешевші в місті. Визначте місце, щоб спершу показувати ті, що поруч.'
+                  : sortScope === 'near' && radius ? `Найдешевші в радіусі ${radius} км, далі решта (теж за ціною).`
+                  : 'Найдешевші по всьому місту, незалежно від відстані.';
+              } else {
+                text = !hasLoc ? 'Найкращі в місті. Визначте місце, щоб спершу показувати ті, що поруч.'
+                  : sortScope === 'near' && radius ? `Найкращі в радіусі ${radius} км, далі решта.`
+                  : 'Найкращі по всьому місту; ближчі трохи вище.';
+              }
+              return (
+                <div className="sort-rule">
+                  <p>{text}</p>
+                  <div className="sort-rule-actions">
+                    {sortBy !== 'distance' && hasLoc && radius ? (
+                      <div className="sort-scope" role="tablist" aria-label="Охоплення">
+                        <button type="button" role="tab" aria-selected={sortScope === 'near'} className={sortScope === 'near' ? 'on' : ''} onClick={() => setSortScope('near')}>Спершу поруч</button>
+                        <button type="button" role="tab" aria-selected={sortScope === 'all'} className={sortScope === 'all' ? 'on' : ''} onClick={() => setSortScope('all')}>По всьому місту</button>
+                      </div>
+                    ) : null}
+                    {!hasLoc && (
+                      <button type="button" className="sort-locate" onClick={() => void nearby.locate()}>Визначити моє місце</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {nearbyBusinesses.length === 0 && (
               <div className="anim" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '4rem 2rem', backgroundColor: '#f8fafc', borderRadius: '24px', border: '1px dashed #cbd5e1', margin: '1.5rem 0' }}>
                 <div style={{ width: '64px', height: '64px', backgroundColor: '#ffffff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem auto', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
@@ -2344,24 +2320,32 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
                 а в каруселі половина ховалась би за краєм. */}
             <div className="salons-layout anim">
               {nearbyBusinesses.slice(0, nearbyVisible).map((biz: any, idx: number) => {
-                // Справжня відстань, а не вигадана.
-                //
-                // Раніше тут стояло `250 + idx * 150` - число з
-                // ПОРЯДКОВОГО НОМЕРА: перший заклад «250 м», другий
-                // «400 м», незалежно від того, де вони насправді.
-                // Людина вірила цифрі, за якою нічого не стояло.
-                //
-                // Немає координат - не показуємо нічого. Чесна
-                // відсутність краща за красиву вигадку.
+                // Справжня відстань, а не вигадана: немає координат - не показуємо нічого.
                 const distance = formatDistance(biz.id);
+                const zone = zoneById.get(biz.id);
+                const prevZone = idx > 0 ? zoneById.get(nearbyBusinesses[idx - 1].id) : null;
+                const radius = rankingRules?.nearby_radius_km;
+                let heading: ReactNode = null;
+                if (ranked.tiered) {
+                  if (zone === 'near' && idx === 0) {
+                    heading = <>Поруч із вами · до {radius} км <em>{ranked.nearCount}</em></>;
+                  } else if (zone === 'far' && prevZone !== 'far') {
+                    heading = idx === 0
+                      ? <>У радіусі {radius} км закладів немає — показуємо найкращі в місті <em>{ranked.farCount}</em></>
+                      : <>Далі від вас <em>{ranked.farCount}</em></>;
+                  }
+                }
                 return (
-                  <div key={`nearby-${biz.id}`} className="nearby-carousel-item">
-                    {renderCard(biz, {
-                      distanceTag: distance,
-                      distanceTitle: distance ? distanceHint(biz.id) : undefined,
-                      showTimeSlots: true
-                    })}
-                  </div>
+                  <Fragment key={`nearby-${biz.id}`}>
+                    {heading && <div className="zone-h">{heading}</div>}
+                    <div className="nearby-carousel-item">
+                      {renderCard(biz, {
+                        distanceTag: distance,
+                        distanceTitle: distance ? distanceHint(biz.id) : undefined,
+                        showTimeSlots: true
+                      })}
+                    </div>
+                  </Fragment>
                 );
               })}
             </div>

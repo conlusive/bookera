@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.services.business_profile import default_booking_settings
+from app.services.business_limits import count_owned_businesses, limit_message, max_businesses_for
 from app.services.subscription import STATUS_TRIAL, subscription_state, trial_until
-from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, sync_user_from_token, assert_section
+from app.core.auth import CurrentUser, assert_business_admin, get_current_user, sync_user_from_token, assert_section
 from pydantic import BaseModel
 from app.core.logging_config import logger
 from app.models import Business, RoleEnum, BusinessHours, User
@@ -225,6 +226,11 @@ async def register_business(
     """
     data = payload.model_dump(exclude={"hours"})
 
+    # Ліміт закладів на людину - до будь-яких записів у базу
+    limit = max_businesses_for(current_user.id)
+    if await count_owned_businesses(db, current_user.id) >= limit:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=limit_message(limit))
+
     # Спершу гарантуємо, що User-запис існує (owner_id має FK на users.id -
     # для першого входу нового власника цього рядка ще нема).
     user_res = await db.execute(select(User).where(User.id == current_user.id))
@@ -396,7 +402,7 @@ async def get_business_hours(
     return result.scalars().all()
 
 
-from typing import List, Optional, Union
+from typing import List, Union
 
 class BusinessHoursPayload(BaseModel):
     hours: Optional[List[BusinessHoursItem]] = None

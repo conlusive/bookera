@@ -12,12 +12,15 @@ import WorkingHours from '@/components/salon/WorkingHours';
 import { openStatus } from '@/lib/salon-time';
 import SmartImage from '@/components/ui/SmartImage';
 import { formatDuration } from '@/lib/duration';
+import { revalidateStorefront } from '@/app/actions/revalidate';
 
 interface StorefrontTabProps {
   onNavigate?: (tab: string, view?: string) => void;
   /** Графік зі стану кабінету: {day, active, start, end}[] у порядку Пн..Нд */
   shifts?: { day: string; active: boolean; start: string; end: string }[];
   onEditHours?: () => void;
+  /** Після збереження: оновити заклад у стані кабінету (бічна панель, шапка). */
+  onSaved?: (patch: Record<string, any>) => void;
   business: any;
   services: any[];
   team: any[];
@@ -27,7 +30,7 @@ interface StorefrontTabProps {
 
 // Список усіх доступних зручностей для салону з покращеними SVG-іконками
 
-export default function StorefrontTab({ business, services, team, Icons, setActiveTab, onNavigate, shifts, onEditHours }: StorefrontTabProps) {
+export default function StorefrontTab({ business, services, team, Icons, setActiveTab, onNavigate, shifts, onEditHours, onSaved }: StorefrontTabProps) {
   const { showToast } = useToast();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -193,7 +196,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
       business.layout_config = updatedLayoutConfig;
       business.amenities = amenities;
       business.cover_photo = coverPhoto;
+      business.logo = coverPhoto ?? null;
       business.workplace_photos = workplacePhotos;
+      // Кабінет тримає заклад у стані: без цього бічна панель лишалась зі старим фото
+      onSaved?.({ name: formData.name, category: formData.category, description: formData.description, cover_photo: coverPhoto, logo: coverPhoto ?? null, workplace_photos: workplacePhotos, amenities, layout_config: updatedLayoutConfig });
+      // Головна й сторінка закладу кешуються на хвилину - скидаємо, щоб нове фото було видно одразу
+      void revalidateStorefront(business.slug).catch(() => {});
       setSaveState('saved');
     } catch (err: any) {
       setSaveState('error');

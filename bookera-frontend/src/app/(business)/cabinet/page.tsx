@@ -9,6 +9,7 @@ import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
 import SubscriptionExpired from '@/components/cabinet/SubscriptionExpired';
 import Avatar from '@/components/ui/Avatar';
+import { useMyAvatar } from '@/lib/useMyAvatar';
 import type { SubscriptionState } from '@/lib/api';
 import { isOwnerRole } from '@/lib/roles';
 import { Business } from '@/types';
@@ -85,6 +86,7 @@ export default function BusinessCabinet() {
 
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const myAvatar = useMyAvatar();
   const [business, setBusiness] = useState<Business | null>(null);
 
   const [services, setServices] = useState<any[]>([]);
@@ -451,6 +453,8 @@ export default function BusinessCabinet() {
           id: userId,
           email: userEmail,
           full_name: me.full_name || session.user.user_metadata?.full_name || userEmail,
+          // Фото було в профілі, але сюди не потрапляло - у кабінеті стояли ініціали
+          avatar_url: session.user.user_metadata?.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem('userAvatar') : null) || null,
           role: me.role || 'client',
         });
 
@@ -1334,7 +1338,7 @@ export default function BusinessCabinet() {
                  onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
                  onMouseOut={e => { if(!isProfileMenuOpen) e.currentTarget.style.backgroundColor = 'transparent' }}
             >
-              <Avatar name={userProfile?.full_name} src={userProfile?.avatar_url} size={34} />
+              <Avatar name={userProfile?.full_name} src={myAvatar || userProfile?.avatar_url} size={34} />
               <div style={{
                 flex: isSidebarCollapsed ? 'none' : 1,
                 overflow: 'hidden',
@@ -1357,10 +1361,6 @@ export default function BusinessCabinet() {
             {isProfileMenuOpen && (
               <ProfileMenu
                 context="cabinet"
-                userName={resolveDisplayName(userProfile)}
-                email={userProfile?.email}
-                avatarUrl={userProfile?.avatar_url}
-                subtitle={userRoleDisplay}
                 showCabinet
                 onLogout={handleLogout}
                 onNavigate={() => setIsProfileMenuOpen(false)}
@@ -1443,7 +1443,7 @@ export default function BusinessCabinet() {
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
         {activeTab === 'Clients' && <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} />}
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}
-        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} shifts={shifts} onEditHours={() => { setShiftsFromCalSettings(false); setShowShiftsModal(true); }} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
+        {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} shifts={shifts} onSaved={(patch) => setBusiness(b => (b ? { ...b, ...patch } : b))} onEditHours={() => { setShiftsFromCalSettings(false); setShowShiftsModal(true); }} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 
         {activeTab === 'Stats' && <StatsTab business={business} services={services} team={team} onNavigate={setActiveTab} />}
 

@@ -13,6 +13,7 @@ import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole, roleLabel } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
+import { useMyAvatar, resetAvatarSync } from '@/lib/useMyAvatar';
 import SmartImage from '@/components/ui/SmartImage';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import { resolveDisplayName } from '@/lib/displayName';
@@ -52,6 +53,9 @@ export default function BusinessLandingPage() {
   const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // Фото з сервера: коли localStorage порожній (інша вкладка/пристрій) чи застаріле
+  const syncedAvatar = useMyAvatar();
+  useEffect(() => { if (syncedAvatar) setAvatarUrl(syncedAvatar); }, [syncedAvatar]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -173,6 +177,7 @@ export default function BusinessLandingPage() {
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userAvatar');
+    resetAvatarSync();
     setAvatarUrl(null);
     setIsLoggedIn(false);
     setIsProfileOpen(false);
@@ -486,21 +491,7 @@ export default function BusinessLandingPage() {
                     {userName}
                   </span>
 
-                  {avatarUrl ? (
-                    <SmartImage width={36} height={36}
-                      src={avatarUrl}
-                      alt={userName || 'Аватарка'}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        flexShrink: 0
-                      }}
-                    />
-                  ) : (
-                    <Avatar name={userName} size={36} />
-                  )}
+                  <Avatar name={userName} src={avatarUrl} size={36} />
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}>
                     <path d="M1 1L5 5L9 1" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -508,9 +499,6 @@ export default function BusinessLandingPage() {
 
                 {isProfileOpen && (
                   <ProfileMenu
-                    userName={userName}
-                    avatarUrl={avatarUrl}
-                    subtitle={isBusinessRole(userRole) ? roleLabel(userRole) : undefined}
                     context="business"
                     showCabinet={isBusinessRole(userRole)}
                     onLogout={handleLogout}

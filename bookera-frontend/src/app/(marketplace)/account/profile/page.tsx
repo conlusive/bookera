@@ -9,6 +9,7 @@ import ProfileMenu from '@/components/ui/ProfileMenu';
 import { isBusinessRole } from '@/lib/roles';
 import { api } from '@/lib/api';
 import Avatar from '@/components/ui/Avatar';
+import { resetAvatarSync } from '@/lib/useMyAvatar';
 import VisitsHeatmap from '@/components/profile/VisitsHeatmap';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { useToast } from '@/context/ToastContext';
@@ -337,6 +338,7 @@ function ProfileContent() {
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userAvatar');
+    resetAvatarSync();
     router.push('/');
   };
 
@@ -1100,21 +1102,7 @@ function ProfileContent() {
                   {displayName}
                 </span>
 
-                {avatarUrl ? (
-                  <SmartImage width={36} height={36}
-                    src={avatarUrl}
-                    alt={displayName}
-                    style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                  />
-                ) : (
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#f1f5f9',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827',
-                    fontWeight: '800', fontSize: '0.9rem', flexShrink: 0
-                  }}>
-                    {initials.toUpperCase()}
-                  </div>
-                )}
+                <Avatar name={displayName} src={avatarUrl} size={36} />
 
                 <svg
                   width="10"
@@ -1130,9 +1118,6 @@ function ProfileContent() {
 
               {isHeaderProfileOpen && (
                 <ProfileMenu
-                  userName={displayName}
-                  email={email}
-                  avatarUrl={avatarUrl}
                   showCabinet={userRole === 'vendor' || isBusinessRole(userRole)}
                   onLogout={handleLogout}
                   onNavigate={() => setIsHeaderProfileOpen(false)}
@@ -1156,15 +1141,7 @@ function ProfileContent() {
 
               {/* Віджет користувача */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0.25rem 1rem 0.25rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>
-                {avatarUrl ? (
-                  <SmartImage width={40} height={40}
-                    src={avatarUrl}
-                    alt={displayName}
-                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                  />
-                ) : (
-                  <Avatar name={fullName} size={40} />
-                )}
+                <Avatar name={fullName} src={avatarUrl} size={40} />
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {displayName}
@@ -1648,17 +1625,7 @@ function ProfileContent() {
                     {/* Аватарка */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #f1f5f9' }}>
                       <div style={{ position: 'relative' }}>
-                        {avatarUrl ? (
-                          <SmartImage width={64} height={64}
-                            src={avatarUrl}
-                            alt="Аватарка"
-                            style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', fontWeight: '800', color: '#111827' }}>
-                            {initials.toUpperCase()}
-                          </div>
-                        )}
+                        <Avatar name={fullName || displayName} src={avatarUrl} size={64} />
 
                         {isUploadingAvatar && (
                           <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import SmartImage from '@/components/ui/SmartImage';
 
 /**
@@ -22,6 +23,10 @@ export default function Avatar({
   src?: string | null;
   size?: number;
 }) {
+  // Битий або видалений файл не повинен лишати зламану картинку - тоді ініціали
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = !!src && failedSrc === src;
+
   // Ім'я + прізвище. Якщо слово одне - беремо перші дві літери:
   // одна літера на великому кружку виглядає загубленою.
   const initials = (() => {
@@ -56,7 +61,7 @@ export default function Avatar({
         userSelect: 'none',
       }}
     >
-      {src ? (
+      {src && !failed ? (
         <SmartImage
           src={src}
           alt={name || ''}
@@ -66,6 +71,7 @@ export default function Avatar({
           width={size}
           height={size}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setFailedSrc(src ?? null)}
         />
       ) : (
         initials

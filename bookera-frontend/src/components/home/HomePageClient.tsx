@@ -2,27 +2,28 @@
 
 import type { RankingRules } from '@/lib/api';
 import { Fragment, Suspense, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import SmartImage from '@/components/ui/SmartImage';
+import { imageLoadProps } from '@/lib/images';
 import Image from 'next/image';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { getOpenStatus } from '@/lib/businessStatus';
 import { categoryTitles, categoryTitle, categoryPlace, matchesCategory, CATEGORIES, MAIN_CATEGORIES, MORE_CATEGORIES } from '@/lib/categories';
 import { cachedFavoriteIds, loadFavorites, setFavorite } from '@/lib/favorites';
-import { imageLoadProps } from '@/lib/images';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { isBusinessRole, roleLabel } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
+import { useMyAvatar, resetAvatarSync } from '@/lib/useMyAvatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
-import HowItWorks from '@/components/home/HowItWorks';
 import BusinessShowcase from '@/components/home/BusinessShowcase';
-import SmartImage from '@/components/ui/SmartImage';
+import HowItWorks from '@/components/home/HowItWorks';
 import { rankBusinesses, type RankResult, type SortContext, type SortMode, type SortScope } from '@/lib/storefront-sort';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import SiteFooter from '@/components/ui/SiteFooter';
@@ -426,6 +427,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // Фото з сервера: коли localStorage порожній (інша вкладка/пристрій) чи застаріле
+  const syncedAvatar = useMyAvatar();
+  useEffect(() => { if (syncedAvatar) setAvatarUrl(syncedAvatar); }, [syncedAvatar]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Пошук
@@ -762,6 +766,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     localStorage.removeItem('userId');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userAvatar');
+    resetAvatarSync();
     setAvatarUrl(null);
     setIsLoggedIn(false);
     setIsProfileOpen(false);
@@ -2013,15 +2018,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
                     {userName}
                   </span>
 
-                  {avatarUrl ? (
-                    <SmartImage width={36} height={36}
-                      src={avatarUrl}
-                      alt={userName || 'Аватарка'}
-                      style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-                    />
-                  ) : (
-                    <Avatar name={userName} size={36} />
-                  )}
+                  <Avatar name={userName} src={avatarUrl} size={36} />
 
                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ transform: isProfileOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}>
                     <path d="M1 1L5 5L9 1" stroke={isHeaderDark ? '#64748b' : '#ffffff'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2030,9 +2027,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
                 {isProfileOpen && (
                   <ProfileMenu
-                    userName={userName}
-                    avatarUrl={avatarUrl}
-                    subtitle={isBusinessRole(userRole) ? roleLabel(userRole) : undefined}
                     showCabinet={isBusinessRole(userRole)}
                     onLogout={handleLogout}
                     onNavigate={() => setIsProfileOpen(false)}

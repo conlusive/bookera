@@ -20,6 +20,7 @@ import { storefrontMap } from '@/lib/storefront-map';
 import WorkingHours from '@/components/salon/WorkingHours';
 import { dayBlockedReason, formatUtcAsKyiv, formatUtcDateKyiv, kyivNow, kyivToday, openStatus, weekdayName } from '@/lib/salon-time';
 import Avatar from '@/components/ui/Avatar';
+import { useMyAvatar } from '@/lib/useMyAvatar';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import SmartImage from '@/components/ui/SmartImage';
 import GiftCardModal from '@/components/salon/GiftCardModal';
@@ -171,6 +172,9 @@ export default function SalonClient({
   const [userRole, setUserRole] = useState<string>('client');
   const [userId, setUserId] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // Фото з сервера: коли localStorage порожній (інша вкладка/пристрій) чи застаріле
+  const syncedAvatar = useMyAvatar();
+  useEffect(() => { if (syncedAvatar) setAvatarUrl(syncedAvatar); }, [syncedAvatar]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -1933,21 +1937,7 @@ const formatRole = (role?: string) => {
                     {userName}
                   </span>
 
-                  {avatarUrl ? (
-                    <SmartImage width={36} height={36}
-                      src={avatarUrl}
-                      alt={userName || 'Аватарка'}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        flexShrink: 0
-                      }}
-                    />
-                  ) : (
-                    <Avatar name={userName} size={36} />
-                  )}
+                  <Avatar name={userName} src={avatarUrl} size={36} />
 
                   <svg
                     width="10"
@@ -1973,9 +1963,6 @@ const formatRole = (role?: string) => {
 
                 {isProfileOpen && (
                   <ProfileMenu
-                    userName={userName}
-                    avatarUrl={avatarUrl}
-                    subtitle={isBusinessRole(userRole) ? roleLabel(userRole) : undefined}
                     showCabinet={isBusinessRole(userRole)}
                     onLogout={handleLogout}
                     onNavigate={() => setIsProfileOpen(false)}

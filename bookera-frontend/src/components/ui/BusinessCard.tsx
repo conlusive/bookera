@@ -138,11 +138,11 @@ export default function BusinessCard({
                 className="ad-icon"
                 role="img"
                 tabIndex={0}
-                aria-label="Реклама: заклад просувається в Bookera"
+                aria-label="Реклама: BookEra Радар - заклад оплатив просування в рекомендаціях"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
               >
                 <span className="ad-badge" aria-hidden>Ad</span>
-                <span className="ad-tip">Реклама</span>
+                <span className="ad-tip"><b>Реклама · BookEra Радар</b>Заклад оплатив просування в рекомендаціях</span>
               </span>
             ) : null}
           </div>
@@ -302,13 +302,14 @@ export function BusinessCardStyles() {
           transform: scale(1.04);
         }
         /* СКЛЯНИЙ БЕЙДЖ */
-        .card-title-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 0; }
+        .card-title-main { position: relative; display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 0; }
         .card-title-main .card-heading { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-        .ad-icon { position: relative; flex: none; display: inline-flex; align-self: center; color: #b4bbc4; outline: none; cursor: help; transition: color .15s; }
+        .ad-icon { flex: none; display: inline-flex; align-self: center; color: #b4bbc4; outline: none; cursor: help; transition: color .15s; }
         .ad-icon:hover, .ad-icon:focus { color: #64748b; }
         /* «Ad» - знайома всім позначка реклами (як у пошуку): крихітна рамка, без звуку-рупора й без «i» */
         .ad-badge { font-size: 0.58rem; font-weight: 700; line-height: 1; letter-spacing: 0.02em; padding: 2px 4px; border: 1px solid currentColor; border-radius: 4px; }
-        .ad-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px; background: #334155; color: #fff; font-size: 0.7rem; font-weight: 500; white-space: nowrap; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .15s; }
+        .ad-tip { position: absolute; bottom: calc(100% + 8px); left: 0; width: max-content; max-width: 210px; padding: 0.5rem 0.7rem; border-radius: 8px; background: #334155; color: #fff; font-size: 0.7rem; font-weight: 400; line-height: 1.4; text-align: left; white-space: normal; box-shadow: 0 4px 12px rgba(0,0,0,.18); pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .15s; z-index: 5; }
+        .ad-tip b { display: block; font-weight: 700; margin-bottom: 1px; }
         .ad-icon:hover .ad-tip, .ad-icon:focus .ad-tip { opacity: 1; visibility: visible; }
         .glass-pill {
           background: rgba(255, 255, 255, 0.85);

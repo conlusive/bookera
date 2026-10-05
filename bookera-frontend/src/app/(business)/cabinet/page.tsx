@@ -1,5 +1,6 @@
 'use client';
 
+import ProfileMenu from '@/components/ui/ProfileMenu';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -1354,26 +1355,17 @@ export default function BusinessCabinet() {
             </div>
 
             {isProfileMenuOpen && (
-              <div className="menu-popup" style={{
-                position: 'absolute', bottom: 'calc(100% + 6px)', left: isSidebarCollapsed ? 'calc(100% + 8px)' : '0', width: isSidebarCollapsed ? '210px' : '100%',
-                backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '14px', padding: '0.4rem',
-                boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.04)', zIndex: 200
-              }}>
-                <div style={{ padding: '0.35rem 0.65rem 0.45rem 0.65rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.25rem' }}>
-                  <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: '800' }}>Акаунт</div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#0f172a', marginTop: '2px', wordWrap: 'break-word' }}>{userProfile?.full_name}</div>
-                </div>
-                <button onClick={() => router.push('/')} style={{ width: '100%', padding: '0.5rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.65rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.88rem', cursor: 'pointer', borderRadius: '8px', transition: '0.12s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
-                  <Icons.Globe /> Головна сторінка
-                </button>
-                <button onClick={() => router.push('/profile')} style={{ width: '100%', padding: '0.5rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.65rem', background: 'transparent', border: 'none', color: '#475569', fontSize: '0.88rem', cursor: 'pointer', borderRadius: '8px', transition: '0.12s', textAlign: 'left', fontWeight: '500' }} onMouseOver={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.color = '#0f172a'; }} onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#475569'; }}>
-                  <Icons.User /> Налаштування
-                </button>
-                <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '0.25rem 0' }}></div>
-                <button onClick={handleLogout} style={{ width: '100%', padding: '0.5rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.65rem', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.88rem', cursor: 'pointer', borderRadius: '8px', transition: '0.12s', textAlign: 'left', fontWeight: '600' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
-                  <Icons.LogOut /> Вийти з системи
-                </button>
-              </div>
+              <ProfileMenu
+                context="cabinet"
+                userName={resolveDisplayName(userProfile)}
+                email={userProfile?.email}
+                avatarUrl={userProfile?.avatar_url}
+                subtitle={userRoleDisplay}
+                showCabinet
+                onLogout={handleLogout}
+                onNavigate={() => setIsProfileMenuOpen(false)}
+                style={{ top: 'auto', right: 'auto', bottom: 'calc(100% + 6px)', left: isSidebarCollapsed ? 'calc(100% + 8px)' : 0 }}
+              />
             )}
           </div>
 

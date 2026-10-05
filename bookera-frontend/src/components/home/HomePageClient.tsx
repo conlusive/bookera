@@ -14,7 +14,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
-import { isBusinessRole } from '@/lib/roles';
+import { isBusinessRole, roleLabel } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
@@ -2031,6 +2031,8 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
                 {isProfileOpen && (
                   <ProfileMenu
                     userName={userName}
+                    avatarUrl={avatarUrl}
+                    subtitle={isBusinessRole(userRole) ? roleLabel(userRole) : undefined}
                     showCabinet={isBusinessRole(userRole)}
                     onLogout={handleLogout}
                     onNavigate={() => setIsProfileOpen(false)}

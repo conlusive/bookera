@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import ProfileMenu from '@/components/ui/ProfileMenu';
+import { isBusinessRole } from '@/lib/roles';
 import { api } from '@/lib/api';
 import Avatar from '@/components/ui/Avatar';
 import VisitsHeatmap from '@/components/profile/VisitsHeatmap';
@@ -113,6 +115,10 @@ function ProfileContent() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'work' | 'favorites' | 'wallet' | 'settings'>(
     (tabFromUrl as any) || 'appointments'
   );
+  // Пункти меню акаунта ведуть сюди з ?tab=…: коли адреса змінилась, а сторінка вже відкрита, перемикаємо вкладку
+  useEffect(() => {
+    if (tabFromUrl && ['appointments', 'work', 'favorites', 'wallet', 'settings'].includes(tabFromUrl)) setActiveTab(tabFromUrl as any);
+  }, [tabFromUrl]);
   const [appointmentFilter, setAppointmentFilter] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
 
   // --- Дані з БД ---
@@ -1123,20 +1129,14 @@ function ProfileContent() {
               </div>
 
               {isHeaderProfileOpen && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '210px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.4rem', zIndex: 1001 }}>
-                  <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>Акаунт</div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
-                  </div>
-                  {userRole === 'vendor' && (
-                    <Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', color: '#334155' }}>Панель салону</Link>
-                  )}
-                  {worksSomewhere && (
-                    <button onClick={() => { setActiveTab('work'); setIsHeaderProfileOpen(false); }} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', border: 'none', background: 'transparent', fontSize: '0.85rem', fontWeight: 550, color: '#334155', cursor: 'pointer' }}>Моя робота</button>
-                  )}
-                  <button onClick={() => { setActiveTab('settings'); setIsHeaderProfileOpen(false); }} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', border: 'none', background: 'transparent', fontSize: '0.85rem', fontWeight: '550', color: '#334155', cursor: 'pointer' }}>Налаштування</button>
-                  <button onClick={handleLogout} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', border: 'none', background: 'transparent', fontSize: '0.85rem', fontWeight: '550', color: '#ef4444', cursor: 'pointer', borderTop: '1px solid #f1f5f9', marginTop: '2px' }}>Вийти з акаунту</button>
-                </div>
+                <ProfileMenu
+                  userName={displayName}
+                  email={email}
+                  avatarUrl={avatarUrl}
+                  showCabinet={userRole === 'vendor' || isBusinessRole(userRole)}
+                  onLogout={handleLogout}
+                  onNavigate={() => setIsHeaderProfileOpen(false)}
+                />
               )}
             </div>
 

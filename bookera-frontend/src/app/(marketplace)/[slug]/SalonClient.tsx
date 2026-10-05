@@ -13,7 +13,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Icons } from '@/components/shared';
 import { api, SlotStatusItem } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
-import { isBusinessRole } from '@/lib/roles';
+import { isBusinessRole, roleLabel } from '@/lib/roles';
+import ProfileMenu from '@/components/ui/ProfileMenu';
 import { ALL_AMENITIES } from '@/lib/amenities';
 import { storefrontMap } from '@/lib/storefront-map';
 import WorkingHours from '@/components/salon/WorkingHours';
@@ -1971,18 +1972,14 @@ const formatRole = (role?: string) => {
                 </div>
 
                 {isProfileOpen && (
-                  <div className="search-dropdown anim" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '210px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 16px 40px rgba(0,0,0,0.08)', padding: '0.4rem', zIndex: 1001 }}>
-                    <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.25rem' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>Акаунт</div>
-                      <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#111827', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
-                    </div>
-                    <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Мій профіль</Link>
-                    {isBusinessRole(userRole) && (
-                      <Link href="/cabinet" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Панель салону</Link>
-                    )}
-                    <Link href="/account/profile" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', color: '#334155', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', boxSizing: 'border-box' }} onClick={() => setIsProfileOpen(false)}>Налаштування</Link>
-                    <button onClick={handleLogout} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.75rem', borderRadius: '8px', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '550', background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', borderTop: '1px solid #f1f5f9', marginTop: '2px', boxSizing: 'border-box' }}>Вийти з акаунту</button>
-                  </div>
+                  <ProfileMenu
+                    userName={userName}
+                    avatarUrl={avatarUrl}
+                    subtitle={isBusinessRole(userRole) ? roleLabel(userRole) : undefined}
+                    showCabinet={isBusinessRole(userRole)}
+                    onLogout={handleLogout}
+                    onNavigate={() => setIsProfileOpen(false)}
+                  />
                 )}
               </div>
             ) : (

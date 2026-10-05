@@ -11,7 +11,7 @@ import SiteFooter from '@/components/ui/SiteFooter';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
-import { isBusinessRole } from '@/lib/roles';
+import { isBusinessRole, roleLabel } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import SmartImage from '@/components/ui/SmartImage';
 import ProfileMenu from '@/components/ui/ProfileMenu';
@@ -509,6 +509,9 @@ export default function BusinessLandingPage() {
                 {isProfileOpen && (
                   <ProfileMenu
                     userName={userName}
+                    avatarUrl={avatarUrl}
+                    subtitle={isBusinessRole(userRole) ? roleLabel(userRole) : undefined}
+                    context="business"
                     showCabinet={isBusinessRole(userRole)}
                     onLogout={handleLogout}
                     onNavigate={() => setIsProfileOpen(false)}

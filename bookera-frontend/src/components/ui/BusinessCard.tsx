@@ -128,7 +128,28 @@ export default function BusinessCard({
 
       <div className="card-body">
         <div className="card-title-row">
-          <h3 className="card-heading" title={biz.name}>{biz.name}</h3>
+          <div className="card-title-main">
+            <h3 className="card-heading" title={biz.name}>{biz.name}</h3>
+            {/* «Радар» - це реклама, і про це є позначка: крихітна іконка біля назви з підказкою
+                (при наведенні, на телефоні - при дотику). Не плашка, що кричить, і не рядок,
+                що може не вміститись біля адреси. */}
+            {biz.is_radar_active ? (
+              <span
+                className="ad-icon"
+                role="img"
+                tabIndex={0}
+                aria-label="Реклама: заклад просувається в Bookera"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z" />
+                  <path d="M15.5 9a4 4 0 0 1 0 6" />
+                  <path d="M18 6.5a8 8 0 0 1 0 11" />
+                </svg>
+                <span className="ad-tip">Реклама</span>
+              </span>
+            ) : null}
+          </div>
           {/* Ціни немає - нічого не показуємо. Раніше стояло «від 450 ₴» для
               будь-якого закладу без послуг: вигадана ціна, як колись «5.0». */}
           {minPrice ? <span className="card-price">від {minPrice} ₴</span> : null}
@@ -171,7 +192,6 @@ export default function BusinessCard({
             );
           })()}
           <span className="card-ellipsis" title={locationText}>{locationText}</span>
-          {biz.is_radar_active ? <span className="ad-label" title="Заклад просувається в Bookera («Радар»)">Реклама</span> : null}
         </div>
 
         {/* РЕАЛЬНІ СЛОТИ ЧАСУ НА СЬОГОДНІ */}
@@ -286,8 +306,12 @@ export function BusinessCardStyles() {
           transform: scale(1.04);
         }
         /* СКЛЯНИЙ БЕЙДЖ */
-        /* Позначка «Реклама» - дрібний сірий підпис у картці, як «Ad» у пошуку: чесно, але тихо */
-        .ad-label { flex: none; margin-left: auto; padding-left: 0.5rem; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.02em; color: #b0b7c0; cursor: help; white-space: nowrap; }
+        .card-title-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 0; }
+        .card-title-main .card-heading { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .ad-icon { position: relative; flex: none; display: inline-flex; align-self: center; color: #c3c9d1; outline: none; cursor: help; transition: color .15s; }
+        .ad-icon:hover, .ad-icon:focus { color: #64748b; }
+        .ad-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px; background: #334155; color: #fff; font-size: 0.7rem; font-weight: 500; white-space: nowrap; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .15s; }
+        .ad-icon:hover .ad-tip, .ad-icon:focus .ad-tip { opacity: 1; visibility: visible; }
         .glass-pill {
           background: rgba(255, 255, 255, 0.85);
           backdrop-filter: blur(16px);

@@ -1614,7 +1614,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           scroll-snap-type: x mandatory;
           padding-bottom: 0.5rem;
         }
-        .sort-rule { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 0.9rem 0 1.4rem; position: relative; z-index: 10; }
+        .sort-rule { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; min-height: 40px; margin: 0.9rem 0 1.4rem; position: relative; z-index: 10; }
         .sort-rule p { margin: 0; font-size: 0.9rem; color: #6E6E73; }
         .sort-rule-actions { display: flex; gap: 0.6rem; align-items: center; }
         .sort-scope { display: inline-flex; padding: 3px; border-radius: 999px; background: #F2F2F4; gap: 2px; }
@@ -2405,6 +2405,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
             {/* Сітка, а не карусель: тепер це весь список закладів,
                 а в каруселі половина ховалась би за краєм. */}
             <div className="salons-layout anim">
+              {isRanking && <div className="zone-h" aria-hidden>&nbsp;</div>}
               {isRanking && Array.from({ length: 8 }, (_, i) => <div key={`sk-${i}`} className="nearby-skeleton" aria-hidden />)}
               {pageItems.map((biz: any, idx: number) => {
                 // Справжня відстань, а не вигадана: немає координат - не показуємо нічого.
@@ -2415,6 +2416,13 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
                 let heading: ReactNode = null;
                 // Заголовок групи - на початку списку й там, де група змінюється; на кожній
                 // сторінці він повторюється зверху, щоб було зрозуміло, де людина.
+                // Без розподілу на «поруч / далі» заголовок усе одно є: щоб при перемиканні
+                // охоплення список не здригався вгору-вниз на висоту рядка
+                if (!ranked.tiered && idx === 0) {
+                  const label = sortBy === 'distance' ? (nearbyPoint ? 'Від найближчого' : 'Усі заклади')
+                    : sortBy === 'price' ? 'Найдешевші по місту' : 'Найкращі по місту';
+                  heading = <>{label} <em>{nearbyBusinesses.length}</em></>;
+                }
                 if (ranked.tiered && zone && zone !== prevZone) {
                   if (zone === 'near') {
                     heading = <>Поруч із вами · до {radius} км <em>{ranked.nearCount}</em></>;

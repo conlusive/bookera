@@ -1171,7 +1171,7 @@ export default function BusinessCabinet() {
                           flexShrink: 0,
                           overflow: 'hidden',
                         }}>
-                          {photo ? <SmartImage src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : biz.name?.charAt(0).toUpperCase()}
+                          {photo ? <SmartImage src={photo} alt="" width={96} height={96} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : biz.name?.charAt(0).toUpperCase()}
                         </div>
                         <span style={{ fontSize: '0.88rem', fontWeight: isActive ? '700' : '500', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {biz.name}

@@ -591,7 +591,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                           <div key={idx} title={staff.show_in_storefront === false ? 'Не показується на сторінці закладу' : undefined} style={{ opacity: staff.show_in_storefront === false ? 0.45 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '92px', textAlign: 'center', flexShrink: 0, scrollSnapAlign: 'start' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f1f5f9', marginBottom: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
                               {staff.avatar_url ? (
-                                <SmartImage src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
+                                <SmartImage src={staff.avatar_url} width={96} height={96} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={staff.name || 'Avatar'} />
                               ) : (
                                 <div style={{ display: 'flex', width: '20px', height: '20px', color: '#86868B' }}><Icons.User /></div>
                               )}
@@ -727,7 +727,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                         </span>
                         <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#e2e8f0', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {staff.avatar_url ? (
-                            <SmartImage src={staff.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                            <SmartImage src={staff.avatar_url} width={72} height={72} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                           ) : (
                             <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{staff.name?.[0] || 'М'}</span>
                           )}

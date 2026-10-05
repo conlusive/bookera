@@ -125,6 +125,7 @@ async def test_inventory_expense_campaign_and_goal_are_logged(client, auth_heade
     exp = (await client.post("/crm/expenses", json={"business_id": bid, "category": "Оренда", "amount": 1000}, headers=h)).json()
     await client.patch(f"/crm/expenses/{exp['id']}", json={"amount": 1200}, headers=h)
     await client.delete(f"/crm/expenses/{exp['id']}", headers=h)
+    await client.post("/crm/clients", json={"business_id": bid, "name": "Іра", "phone": "+380671110000", "email": "ira@test.com"}, headers=h)
     await client.post("/crm/campaigns", json={"business_id": bid, "subject": "Новини", "message": "Текст розсилки для всіх", "audience": "all"}, headers=h)
     await client.put(f"/crm/businesses/{bid}/analytics/goal", json={"amount": 50000}, headers=h)
 

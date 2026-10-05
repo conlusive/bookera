@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, RadarOverview, RadarPackage } from '@/lib/api';
+import { api, CampaignRow, RadarOverview, RadarPackage } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { notify } from '@/lib/feedback';
 import { goToCheckout } from '@/lib/checkout';
@@ -57,7 +57,8 @@ export default function MarketingTab({ business }: { business: any }) {
   const [paying, setPaying] = useState(false);
 
   // --- Розсилки ---
-  const [counts, setCounts] = useState<{ all: number; regular: number; lapsed: number; total_clients: number; without_email: number } | null>(null);
+  const [counts, setCounts] = useState<Awaited<ReturnType<typeof api.getCampaignAudience>> | null>(null);
+  const [history, setHistory] = useState<CampaignRow[]>([]);
   const [audience, setAudience] = useState<Audience>('all');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -88,6 +89,7 @@ export default function MarketingTab({ business }: { business: any }) {
       try {
         const t = await getAuthToken();
         setCounts(await api.getCampaignAudience(t, bid));
+        setHistory(await api.getCampaigns(t, bid));
       } catch { /* розсилка покаже порожні лічильники */ }
       try {
         setCommission(Number((await api.getMonetizationSummary(await getAuthToken(), bid)).commission_rate) || 10);
@@ -137,8 +139,13 @@ export default function MarketingTab({ business }: { business: any }) {
       if (res.queued === 0) {
         notify('Жоден лист не надіслано: у цих клієнтів немає пошти', 'error');
       } else {
-        setSent(`Надіслано листів: ${res.queued}${res.without_email ? ` · без пошти: ${res.without_email}` : ''}`);
+        setSent(`Розсилку запущено: ${res.queued} ${res.queued === 1 ? 'лист' : 'листів'}${res.without_email ? ` · без пошти: ${res.without_email}` : ''}${res.unsubscribed ? ` · відписались: ${res.unsubscribed}` : ''}`);
         setMessage(''); setSubject('');
+        try {
+          const t = await getAuthToken();
+          setCounts(await api.getCampaignAudience(t, bid));
+          setHistory(await api.getCampaigns(t, bid));
+        } catch { /* лічильники оновляться при наступному відкритті */ }
       }
     } catch (err: any) {
       setSendConfirm(false);
@@ -333,7 +340,7 @@ export default function MarketingTab({ business }: { business: any }) {
                   <textarea className="clean-input mk-text" data-field="mk-message" maxLength={3000} placeholder="Що ви хочете сказати клієнтам?" value={message} onChange={e => { setMessage(e.target.value); setSent(null); }} />
                   <div className="mk-send-row">
                     <span className="mk-reach">
-                      {counts ? <>Лист отримають: <b>{reachable}</b>{counts.without_email > 0 && <> · без пошти: {counts.without_email}</>}</> : 'Рахуємо аудиторію…'}
+                      {counts ? <>Лист отримають: <b>{reachable}</b>{counts.without_email > 0 && <> · без пошти: {counts.without_email}</>}{counts.unsubscribed > 0 && <> · відписались: {counts.unsubscribed}</>}</> : 'Рахуємо аудиторію…'}
                     </span>
                     <button type="button" className="clean-btn" onClick={askSend}>Надіслати</button>
                   </div>
@@ -412,7 +419,22 @@ export default function MarketingTab({ business }: { business: any }) {
                 <div className="mk-row"><span>Усього клієнтів</span><b>{counts?.total_clients ?? '—'}</b></div>
                 <div className="mk-row"><span>З поштою</span><b>{counts ? counts.total_clients - counts.without_email : '—'}</b></div>
                 <div className="mk-row"><span>Без пошти</span><b className="mute">{counts?.without_email ?? '—'}</b></div>
-                <p className="mk-note">Розсилка йде листом на пошту. Номер телефону для неї не потрібен.</p>
+                <div className="mk-row"><span>Відписались</span><b className="mute">{counts?.unsubscribed ?? '—'}</b></div>
+                {counts && (
+                  <div className="mk-row"><span>Ліміт на добу</span><b>{counts.quota.remaining_recipients} з {counts.quota.daily_recipient_limit}</b></div>
+                )}
+                <p className="mk-note">Розсилка йде листом на пошту. У кожному листі є посилання «Відписатися» — ті, хто відписався, більше не отримують розсилок.</p>
+                {history.length > 0 && (
+                  <>
+                    <div className="widget-title" style={{ marginTop: '1rem' }}>Останні розсилки</div>
+                    {history.slice(0, 5).map(h => (
+                      <div key={h.id} className="mk-row">
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>{h.subject}</span>
+                        <b className={h.failed ? 'mute' : ''}>{h.status === 'done' ? `${h.sent}/${h.recipients}` : 'надсилається…'}</b>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
             {view === 'links' && (

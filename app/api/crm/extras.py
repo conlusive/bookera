@@ -605,12 +605,13 @@ class CampaignRequest(BaseModel):
 
 async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
     """
-    Кому піде розсилка: (усі клієнти закладу, ті, кому лист справді піде).
+    Кому піде розсилка: (усі клієнти закладу, унікальні адресати, скільки відписалось, скільки адрес некоректні).
     Одне правило і для підрахунку перед відправкою, і для самої розсилки -
     число в інтерфейсі не може розійтись із фактом.
     """
     from app.models import Client
     from app.services.client_stats import client_stats
+    from app.services import mailing
     from app.core.time_utils import local_now as _local_now
 
     clients = (await db.execute(select(Client).where(
@@ -621,7 +622,7 @@ async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
     # падала на неіснуючому полі last_visit.
     stats = await client_stats(db, business_id, clients)
     today = _local_now().date()
-    selected = []
+    candidates = []
     for c in clients:
         if not c.email:
             continue
@@ -634,8 +635,10 @@ async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
             last = s.get("last_visit_at")
             if not last or s.get("next_visit_at") or (today - last.date()).days < 60:
                 continue
-        selected.append(c)
-    return clients, selected
+        candidates.append(c)
+    # Відписаних і дублікатів пошти виключаємо тут, а не при відправці: число в інтерфейсі = число листів
+    recipients, unsubscribed, invalid = mailing.unique_recipients(candidates, await mailing.suppressed_emails(db, business_id))
+    return clients, recipients, unsubscribed, invalid
 
 
 @router.get("/crm/campaigns/audience")
@@ -644,15 +647,41 @@ async def campaign_audience(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Скільки людей отримає розсилку для кожної аудиторії - до відправки."""
+    """Скільки людей отримає розсилку для кожної аудиторії, скільки відписалось і скільки ще можна надіслати за добу."""
+    from app.services import mailing
     await assert_section(db, current_user, business_id, "analytics")
     out = {}
+    unsubscribed = invalid = 0
     for key in ("all", "regular", "lapsed"):
-        clients, selected = await _campaign_audience(db, business_id, key)
-        out[key] = len(selected)
+        clients, recipients, unsub, inv = await _campaign_audience(db, business_id, key)
+        out[key] = len(recipients)
+        if key == "all":
+            unsubscribed, invalid = unsub, inv
     out["total_clients"] = len(clients)
     out["without_email"] = sum(1 for c in clients if not c.email)
+    out["unsubscribed"] = unsubscribed
+    out["invalid_email"] = invalid
+    out["quota"] = await mailing.quota(db, business_id)
     return out
+
+
+@router.get("/crm/campaigns")
+async def list_campaigns(
+    business_id: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Останні розсилки закладу: тема, скільки листів надіслано й скільки не дійшло."""
+    from app.models import EmailCampaign
+    await assert_section(db, current_user, business_id, "analytics")
+    rows = (await db.execute(
+        select(EmailCampaign).where(EmailCampaign.business_id == business_id).order_by(EmailCampaign.id.desc()).limit(10)
+    )).scalars().all()
+    return [
+        {"id": r.id, "subject": r.subject, "audience": r.audience, "recipients": r.recipients, "sent": r.sent,
+         "failed": r.failed, "status": r.status, "created_at": r.created_at}
+        for r in rows
+    ]
 
 
 @router.post("/crm/campaigns")
@@ -665,18 +694,17 @@ async def send_campaign(
     """
     Надіслати листа клієнтам закладу.
 
-    Раніше кнопка «Відправити» в маркетингу лише показувала
-    повідомлення «Розсилку відправлено» - жоден лист нікуди не йшов.
-
     Обмеження свідомі:
-    - лише адміністратори: розсилка від імені закладу впливає на
-      репутацію, це не рішення рядового майстра
-    - за підпискою: масова пошта - платна можливість
+    - лише з доступом до розділу «Аналітика й маркетинг»: розсилка від імені
+      закладу впливає на репутацію, це не рішення рядового майстра
+    - відписані й дублікати пошти виключені; кожен лист має посилання відписки
+    - добові ліміти (листів і розсилок): інакше це канал спаму від імені платформи
     - без email клієнта пропускаємо мовчки, але рахуємо: власник має
       бачити, скільки контактів насправді досяжні
     """
-    from app.models import Business
-    from app.core.email import send_campaign_email
+    from app.models import Business, EmailCampaign
+    from app.services import mailing
+    from app.services.mailing import make_unsubscribe_token, run_campaign
 
     await assert_section(db, current_user, payload.business_id, "analytics")
 
@@ -685,26 +713,49 @@ async def send_campaign(
     if not business:
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
 
-    clients, selected = await _campaign_audience(db, payload.business_id, payload.audience)
+    clients, recipients, unsubscribed, invalid = await _campaign_audience(db, payload.business_id, payload.audience)
+    if not recipients:
+        return {"queued": 0, "campaign_id": None, "total_clients": len(clients),
+                "without_email": sum(1 for c in clients if not c.email), "unsubscribed": unsubscribed,
+                "invalid_email": invalid, "quota": await mailing.quota(db, payload.business_id)}
+
+    q = await mailing.quota(db, payload.business_id)
+    if q["remaining_campaigns"] <= 0:
+        raise HTTPException(status_code=429, detail=f"Ліміт розсилок на добу: {q['daily_campaign_limit']}. Спробуйте завтра.")
+    if len(recipients) > q["remaining_recipients"]:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Ліміт листів на добу: {q['daily_recipient_limit']}, вже надіслано {q['used_recipients']}. "
+                   f"Зараз можна не більше {q['remaining_recipients']}, а в аудиторії {len(recipients)}. "
+                   f"Оберіть вужчу аудиторію або спробуйте завтра.",
+        )
+
+    campaign = EmailCampaign(
+        business_id=payload.business_id, created_by=str(current_user.id), subject=payload.subject,
+        audience=payload.audience, recipients=len(recipients), status="queued",
+    )
+    db.add(campaign)
+    await db.flush()
+
     from app.services.audit import record as _audit
     audience_label = {"all": "усі", "regular": "постійні", "lapsed": "давно не були"}.get(payload.audience, payload.audience)
     await _audit(db, payload.business_id, str(current_user.id), "marketing", "campaign_sent",
-                 f"Розсилка «{payload.subject[:80]}»: {len(selected)} листів (аудиторія: {audience_label})",
-                 meta={"queued": len(selected), "audience": payload.audience})
+                 f"Розсилка «{payload.subject[:80]}»: {len(recipients)} листів (аудиторія: {audience_label})",
+                 meta={"queued": len(recipients), "audience": payload.audience, "campaign_id": campaign.id})
     await db.commit()
 
-    for c in selected:
-        background_tasks.add_task(
-            send_campaign_email,
-            to_email=c.email,
-            client_name=c.name or "",
-            business_name=business.name,
-            subject=payload.subject,
-            message=payload.message,
-        )
+    items = [(email, c.name or "", make_unsubscribe_token(payload.business_id, email)) for c, email in recipients]
+    background_tasks.add_task(
+        run_campaign, campaign.id, items, business.name, payload.subject, payload.message,
+        (getattr(business, "email", None) or ""),
+    )
 
     return {
-        "queued": len(selected),
+        "queued": len(recipients),
+        "campaign_id": campaign.id,
         "total_clients": len(clients),
         "without_email": sum(1 for c in clients if not c.email),
+        "unsubscribed": unsubscribed,
+        "invalid_email": invalid,
+        "quota": await mailing.quota(db, payload.business_id),
     }

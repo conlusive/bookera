@@ -1,4 +1,5 @@
 from app.models.base import Base
+from app.models.mailing import EmailSuppression, EmailCampaign
 from app.models.user import User, RoleEnum, StaffInvite, StaffMembership, Favorite
 from app.models.business import Business, BusinessHours
 from app.models.service import Service, ServiceAddon
@@ -11,7 +12,7 @@ from app.models.monetization import (
  ClientBonusEntry)
 
 __all__ = [
-    "Base", "User", "RoleEnum", "StaffInvite", "StaffMembership", "Favorite",
+    "Base", "EmailSuppression", "EmailCampaign", "User", "RoleEnum", "StaffInvite", "StaffMembership", "Favorite",
     "Business", "BusinessHours",
     "Service", "ServiceAddon",
     "Client", "ClientLink",

@@ -176,6 +176,123 @@ async def send_campaign_email(
     await asyncio.to_thread(send_email_sync, to_email, subject, html)
 
 
+def _clean_header(value: str) -> str:
+    """Один рядок без переносів: назви закладів і теми вводять люди, а ' \\n ' у заголовку - ін'єкція."""
+    return " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())
+
+
+def build_campaign_message(
+        to_email: str,
+        client_name: str,
+        business_name: str,
+        subject: str,
+        message: str,
+        unsubscribe_url: str,
+        one_click_url: str = "",
+        reply_to: str = "",
+) -> MIMEMultipart:
+    """
+    Лист розсилки як готове повідомлення.
+
+    - відправник: «Назва закладу через BookEra» (адреса одна, але людина бачить, від кого лист),
+      відповідь іде самому закладу (Reply-To);
+    - List-Unsubscribe (+ List-Unsubscribe-Post): без цього Gmail і Yahoo вважають масову пошту
+      підозрілою, а кнопка «Відписатись» у самому клієнті працює в один клік;
+    - окрема текстова частина: лист лише з HTML частіше потрапляє до спаму.
+    """
+    from email.utils import formataddr
+    subject = _clean_header(subject)
+    business_name = _clean_header(business_name)
+    safe_message = esc(message).replace("\n", "<br>")
+    body = f"""
+    <div style="font-family:{FONT};font-size:15px;line-height:1.65;color:{INK};">
+      {safe_message}
+    </div>
+    """
+    html = layout(
+        business_name=business_name,
+        title=subject,
+        intro=f"{esc(client_name)}, вітаємо!" if client_name else "",
+        body_html=body,
+        unsubscribe_url=unsubscribe_url,
+    )
+    plain = (
+        (f"{client_name}, вітаємо!\n\n" if client_name else "")
+        + str(message).strip()
+        + f"\n\n--\nВи отримали цей лист, бо є клієнтом «{business_name}».\nВідписатись: {unsubscribe_url}\n"
+    )
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = formataddr((f"{business_name} через BookEra", SMTP_USER or "noreply@bookera.local"))
+    msg["To"] = "".join(str(to_email).split())
+    if reply_to and "@" in reply_to:
+        msg["Reply-To"] = _clean_header(reply_to)
+    links = [f"<{one_click_url}>"] if one_click_url else []
+    links.append(f"<{unsubscribe_url}>")
+    msg["List-Unsubscribe"] = ", ".join(links)
+    if one_click_url:
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    msg["Precedence"] = "bulk"
+    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+    return msg
+
+
+# Пауза між листами: SMTP-сервери (Gmail, хостинги) обмежують швидкість, і пачка без пауз
+# закінчується тимчасовою відмовою на половині списку.
+CAMPAIGN_SEND_DELAY = float(os.getenv("CAMPAIGN_SEND_DELAY", "0.2") or 0.2)
+
+
+def send_campaign_batch(messages: list) -> tuple[int, int]:
+    """
+    Відправляє пакет листів ОДНИМ SMTP-з'єднанням (раніше кожен лист відкривав нове з автентифікацією).
+    Повертає (надіслано, не вдалось). Збій одного листа не зупиняє решту; обрив з'єднання - одна
+    спроба відновити.
+    """
+    import time
+    sent = failed = 0
+    if not SMTP_USER or not SMTP_PASSWORD:
+        for m in messages:
+            print(f"[Email Mock] Розсилка: До: {m['To']} | Тема: {m['Subject']}")
+            sent += 1
+        return sent, failed
+
+    server = None
+
+    def connect():
+        s = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30)
+        s.starttls()
+        s.login(SMTP_USER, SMTP_PASSWORD)
+        return s
+
+    try:
+        server = connect()
+        for m in messages:
+            try:
+                try:
+                    server.sendmail(SMTP_USER, m["To"], m.as_string())
+                except smtplib.SMTPServerDisconnected:
+                    server = connect()
+                    server.sendmail(SMTP_USER, m["To"], m.as_string())
+                sent += 1
+            except Exception as exc:  # одна відмова (адреса, ліміт) - не причина кидати решту
+                failed += 1
+                print(f"[Email] Розсилка: не надіслано {m['To']}: {exc}")
+            time.sleep(CAMPAIGN_SEND_DELAY)
+    except Exception as exc:
+        # Не вдалось підключитись узагалі - усе, що лишилось, рахуємо невдалим
+        failed += len(messages) - sent - failed
+        print(f"[Email] Розсилка: SMTP недоступний: {exc}")
+    finally:
+        try:
+            if server is not None:
+                server.quit()
+        except Exception:
+            pass
+    return sent, failed
+
+
 async def send_new_booking_to_staff(
         to_email: str,
         business_name: str,

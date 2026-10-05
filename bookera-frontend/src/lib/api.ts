@@ -362,6 +362,16 @@ const isPlainGet = (o: RequestInit) => (!o.method || o.method.toUpperCase() === 
  * відвідувача. Тому `revalidate` (секунди) дозволяє кешувати там, де
  * дані можуть бути хвилину старими.
  */
+export interface CampaignQuota {
+  daily_recipient_limit: number; daily_campaign_limit: number;
+  used_recipients: number; used_campaigns: number;
+  remaining_recipients: number; remaining_campaigns: number;
+}
+export interface CampaignRow {
+  id: number; subject: string; audience: string; recipients: number; sent: number; failed: number;
+  status: 'queued' | 'sending' | 'done'; created_at: string;
+}
+
 async function publicFetch(path: string, options: RequestInit & { revalidate?: number } = {}) {
   const { revalidate, ...rest } = options;
   // Живий GET у браузері (без кешу сторінки): ділимо запит між компонентами
@@ -1006,15 +1016,32 @@ export const api = {
    */
   async sendCampaign(token: string, payload: {
     business_id: number; subject: string; message: string; audience?: 'all' | 'regular' | 'lapsed';
-  }): Promise<{ queued: number; total_clients: number; without_email: number }> {
+  }): Promise<{ queued: number; total_clients: number; without_email: number; unsubscribed: number; quota: CampaignQuota }> {
     return authFetch('/crm/campaigns', token, { method: 'POST', body: JSON.stringify(payload) });
   },
 
   /** Скільки людей отримає розсилку для кожної аудиторії - до відправки. */
   async getCampaignAudience(token: string, businessId: number): Promise<{
     all: number; regular: number; lapsed: number; total_clients: number; without_email: number;
+    unsubscribed: number; invalid_email: number; quota: CampaignQuota;
   }> {
     return authFetch(`/crm/campaigns/audience?business_id=${businessId}`, token);
+  },
+
+  /** Останні розсилки закладу з результатом відправки. */
+  async getCampaigns(token: string, businessId: number): Promise<CampaignRow[]> {
+    return authFetch(`/crm/campaigns?business_id=${businessId}`, token);
+  },
+
+  /** Відписка від розсилок закладу за токеном із листа (без входу). */
+  async getUnsubscribe(token: string): Promise<{ business_name: string; email: string; unsubscribed: boolean }> {
+    return publicFetch(`/public/unsubscribe/${encodeURIComponent(token)}`);
+  },
+  async unsubscribe(token: string): Promise<{ business_name: string; email: string; unsubscribed: boolean }> {
+    return publicFetch(`/public/unsubscribe/${encodeURIComponent(token)}`, { method: 'POST' });
+  },
+  async resubscribe(token: string): Promise<{ business_name: string; email: string; unsubscribed: boolean }> {
+    return publicFetch(`/public/unsubscribe/${encodeURIComponent(token)}/resubscribe`, { method: 'POST' });
   },
 
   /** Оновити правила бронювання за профілем закладу. */

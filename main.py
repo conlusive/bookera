@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.crm import access as crm_access
 from app.api.crm import client_io as crm_client_io
 from app.api.crm import quality as crm_quality
-from app.api import businesses, services, appointments, platform, wallet, account, work, master_tools, feedback, payments_wfp
+from app.api import businesses, services, appointments, platform, wallet, account, work, master_tools, feedback, payments_wfp, unsubscribe
 from app.services.reminders import reminder_loop
 from app.api.crm import (
     clients as crm_clients,
@@ -243,6 +243,7 @@ app.include_router(crm_extras.router)
 app.include_router(crm_appointments.router)
 app.include_router(crm_stats.router)
 app.include_router(crm_monetization.router)
+app.include_router(unsubscribe.router)
 
 
 @app.get("/")

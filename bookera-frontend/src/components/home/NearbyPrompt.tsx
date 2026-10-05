@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { isStoredPointFresh, shouldAcceptFix } from '@/lib/geo';
 
 /**
  * Місце людини для відстаней «дорогою до закладу».
@@ -24,6 +25,13 @@ import { useEffect, useState } from 'react';
  *   granted - беремо місце мовчки, свіже підмінює збережене
  *   prompt  - уперше: вікно браузера; далі: збережене місце + плашка
  *   denied  - людина заборонила: збережене місце стираємо й не чіпаємо
+ *
+ * Поки сторінка відкрита, місце ОНОВЛЮЄТЬСЯ САМО (лише коли дозвіл уже є):
+ *   - стеження за рухом: нове місце приймаємо, коли людина зрушила помітно
+ *     більше за похибку GPS (дрібний «дрейф» відстані не змінює)
+ *   - повернулись на вкладку або з'явилась мережа - одразу перевизначаємо
+ *   - збережене місце старше кількох годин за «поточне» не вважаємо: людина
+ *     могла поїхати в інше місто, а відстані від старої точки були б хибними
  */
 
 export type GeoPoint = { lat: number; lng: number };
@@ -61,6 +69,18 @@ export function useNearbyPrompt(isEnabled: boolean) {
   const [isVisible, setIsVisible] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Дозвіл уже є (був успішний вимір): лише тоді можна стежити за рухом, не питаючи вдруге
+  const [tracking, setTracking] = useState(false);
+  const pointRef = useRef<GeoPoint | null>(null);
+  const lastFixAt = useRef(0);
+
+  /** Нове місце: оновлюємо стан, пам'ять і час останнього виміру. */
+  const commitPoint = (next: GeoPoint) => {
+    pointRef.current = next;
+    lastFixAt.current = Date.now();
+    setPoint(next);
+    writeStored(next);
+  };
 
   /**
    * fromUser - людина сама щойно натиснула щось, що потребує місця
@@ -76,8 +96,9 @@ export function useNearbyPrompt(isEnabled: boolean) {
       navigator.geolocation.getCurrentPosition(
         pos => {
           const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setPoint(next);
-          writeStored(next);
+          // Звичайне визначення (вхід, кнопка) приймаємо завжди; дрейф відсікає лише стеження нижче
+          commitPoint(next);
+          setTracking(true);
           setIsVisible(false);
           setIsLocating(false);
           resolve();
@@ -86,6 +107,8 @@ export function useNearbyPrompt(isEnabled: boolean) {
           if (err.code === err.PERMISSION_DENIED) {
             // Людина відмовила: збережене місце стираємо, воно більше не наше.
             clearStored();
+            pointRef.current = null;
+            setTracking(false);
             setPoint(null);
             setError('denied');
             // Пояснення, де зняти заборону, - лише якщо людина сама просила.
@@ -95,6 +118,7 @@ export function useNearbyPrompt(isEnabled: boolean) {
             // останнє відоме місце - воно краще за нічого.
             const last = readStored();
             if (last && Date.now() - last.at < FALLBACK_TTL) {
+              pointRef.current = { lat: last.lat, lng: last.lng };
               setPoint({ lat: last.lat, lng: last.lng });
               setIsVisible(false);
             } else {
@@ -135,6 +159,7 @@ export function useNearbyPrompt(isEnabled: boolean) {
       if (!wasAsked()) {
         void locate();
       } else if (stored && Date.now() - stored.at < UNKNOWN_STATE_TTL) {
+        pointRef.current = { lat: stored.lat, lng: stored.lng };
         setPoint({ lat: stored.lat, lng: stored.lng });
       } else {
         void locate();
@@ -153,6 +178,8 @@ export function useNearbyPrompt(isEnabled: boolean) {
             // Людина заборонила браузеру. Збережене місце стираємо, не
             // нагадуємо: сторінка працює й без відстаней.
             clearStored();
+            pointRef.current = null;
+            setTracking(false);
             setPoint(null);
             setError('denied');
             return;
@@ -160,9 +187,12 @@ export function useNearbyPrompt(isEnabled: boolean) {
           setError(null);
 
           if (st.state === 'granted') {
-            // Збережене місце - одразу (список поруч у першому кадрі),
-            // свіже підмінить його за секунду-дві.
-            if (stored) setPoint({ lat: stored.lat, lng: stored.lng });
+            // Збережене місце - одразу (список поруч у першому кадрі), але лише поки воно
+            // свіже: стару точку (людина могла поїхати) не показуємо - чекаємо вимір.
+            if (stored && isStoredPointFresh(stored.at)) {
+              pointRef.current = { lat: stored.lat, lng: stored.lng };
+              setPoint({ lat: stored.lat, lng: stored.lng });
+            }
             void locate();
             return;
           }
@@ -174,9 +204,14 @@ export function useNearbyPrompt(isEnabled: boolean) {
             void locate();
           } else {
             // Питали вже. Не вискакуємо вдруге: людина або закрила вікно,
-            // або браузер забув дозвіл. Якщо місце було - користуємось ним.
-            if (stored) setPoint({ lat: stored.lat, lng: stored.lng });
-            else setIsVisible(true); // плашка «Показати?» - її можна пропустити
+            // або браузер забув дозвіл. Свіже місце використовуємо; застаріле - ні
+            // (відстані від старої точки в іншому місті були б хибними), тоді плашка.
+            if (stored && isStoredPointFresh(stored.at)) {
+              pointRef.current = { lat: stored.lat, lng: stored.lng };
+              setPoint({ lat: stored.lat, lng: stored.lng });
+            } else {
+              setIsVisible(true); // плашка «Показати?» - її можна пропустити
+            }
           }
         };
 
@@ -194,6 +229,54 @@ export function useNearbyPrompt(isEnabled: boolean) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEnabled]);
+
+  // Стеження за зміною місця. Лише коли дозвіл уже є (tracking) - тож вікно браузера
+  // не з'являється вдруге. Поки вкладка прихована, не стежимо (батарея).
+  useEffect(() => {
+    if (!isEnabled || !tracking) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    const MIN_INTERVAL_MS = 15_000;      // не частіше: кожна зміна точки - запит відстаней
+    const STALE_AFTER_MS = 90_000;       // повернулись на вкладку: старший за це вимір оновлюємо
+    let watchId: number | null = null;
+
+    const onFix = (pos: GeolocationPosition) => {
+      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      if (Date.now() - lastFixAt.current < MIN_INTERVAL_MS && pointRef.current) return;
+      if (!shouldAcceptFix(pointRef.current, next, pos.coords.accuracy)) return;
+      commitPoint(next);
+    };
+    const quiet = () => { /* збій стеження не показуємо: лишається останнє відоме місце */ };
+
+    const startWatch = () => {
+      if (watchId !== null) return;
+      watchId = navigator.geolocation.watchPosition(onFix, quiet, { enableHighAccuracy: true, maximumAge: 30_000, timeout: 30_000 });
+    };
+    const stopWatch = () => {
+      if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    };
+    const refreshNow = () => {
+      if (Date.now() - lastFixAt.current < STALE_AFTER_MS) return;
+      navigator.geolocation.getCurrentPosition(onFix, quiet, { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 });
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') { refreshNow(); startWatch(); }
+      else stopWatch();
+    };
+    if (document.visibilityState === 'visible') startWatch();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', refreshNow);
+    window.addEventListener('focus', refreshNow);
+
+    return () => {
+      stopWatch();
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', refreshNow);
+      window.removeEventListener('focus', refreshNow);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEnabled, tracking]);
 
   const decline = () => setIsVisible(false);
 

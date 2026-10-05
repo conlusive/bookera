@@ -318,6 +318,41 @@ async function handle(res: Response) {
 }
 
 /**
+ * Той самий GET, що вже летить у мережу, не відправляємо вдруге.
+ *
+ * Кілька компонентів на одній сторінці просять одне й те саме (профіль, улюблені,
+ * слоти) в один момент - і кожен робив окремий запит до бекенду. Тепер вони ділять
+ * один запит, але КОЖЕН отримує свою копію розібраної відповіді: хтось із них може
+ * змінювати отримані дані, і чужі посилання він не зачепить. Тримаємо лише поки
+ * запит у польоті - далі наступний виклик піде у мережу як і раніше, дані лишаються живими.
+ */
+type RawResponse = { ok: boolean; status: number; text: string };
+const inflightGets = new Map<string, Promise<RawResponse>>();
+
+async function sharedGet(key: string, doFetch: () => Promise<Response>): Promise<RawResponse> {
+  const existing = inflightGets.get(key);
+  if (existing) return existing;
+  const p = doFetch()
+    .then(async (r) => ({ ok: r.ok, status: r.status, text: await r.text() }))
+    .finally(() => { inflightGets.delete(key); });
+  inflightGets.set(key, p);
+  return p;
+}
+
+function handleRaw(raw: RawResponse) {
+  if (!raw.ok) {
+    let detail: any;
+    try { detail = JSON.parse(raw.text).detail; } catch { detail = undefined; }
+    throw new ApiError(detail || `Помилка ${raw.status}`, raw.status);
+  }
+  if (raw.status === 204 || raw.text === '') return null;
+  return JSON.parse(raw.text);
+}
+
+// Запити зі своїм сигналом скасування не ділимо: скасування одного не повинно обривати чужий
+const isPlainGet = (o: RequestInit) => (!o.method || o.method.toUpperCase() === 'GET') && !o.body && !o.signal;
+
+/**
  * Публічні запити - без токена авторизації.
  *
  * За замовчуванням без кешу: слоти, бронювання, відстані мають бути
@@ -329,6 +364,13 @@ async function handle(res: Response) {
  */
 async function publicFetch(path: string, options: RequestInit & { revalidate?: number } = {}) {
   const { revalidate, ...rest } = options;
+  // Живий GET у браузері (без кешу сторінки): ділимо запит між компонентами
+  if (typeof window !== 'undefined' && revalidate === undefined && isPlainGet(options)) {
+    const raw = await sharedGet(`P ${path}`, () => fetch(`${API_URL}${path}`, {
+      cache: 'no-store', ...rest, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    }));
+    return handleRaw(raw);
+  }
   const res = await fetch(`${API_URL}${path}`, {
     ...(revalidate !== undefined ? { next: { revalidate } } : { cache: 'no-store' as const }),
     ...rest,
@@ -344,6 +386,13 @@ async function publicFetch(path: string, options: RequestInit & { revalidate?: n
  * однаково і в Server Components, і в Client Components.
  */
 async function authFetch(path: string, token: string, options: RequestInit = {}) {
+  if (typeof window !== 'undefined' && isPlainGet(options)) {
+    const raw = await sharedGet(`A ${token} ${path}`, () => fetch(`${API_URL}${path}`, {
+      cache: 'no-store', ...options,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(options.headers || {}) },
+    }));
+    return handleRaw(raw);
+  }
   const res = await fetch(`${API_URL}${path}`, {
     cache: 'no-store',
     ...options,

@@ -40,6 +40,9 @@ const Icon = {
   percent: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 5 5 19" /><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" /></svg>,
   users: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" /><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.7.7 2.9 2.4 3.5 5.2" /></svg>,
   clock: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2M10 2h4" /></svg>,
+  calendar: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /><path d="m9 15 2 2 4-4" /></svg>,
+  trend: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>,
+  send: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 3-9.5 18-2.5-8-8-2.5L21 3z" /><path d="m21 3-12 10" /></svg>,
   check: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>,
 };
 
@@ -67,6 +70,7 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
           {/* Вітрина - запис на час */}
           <div className="gh-float gh-tr" style={{ ['--d' as string]: '.25s', ['--r' as string]: '4deg' }}>
             <span className="gh-timer">{Icon.clock}</span>
+            <span className="gh-sticker gh-st-blue">{Icon.calendar}</span>
             <div className="gh-folder">
               <div className="gh-folder-title">Онлайн-вітрина</div>
               <div className="gh-sheet">
@@ -79,6 +83,7 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
 
           {/* Аналітика */}
           <div className="gh-float gh-bl" style={{ ['--d' as string]: '.35s', ['--r' as string]: '-4deg' }}>
+            <span className="gh-sticker gh-st-green">{Icon.trend}</span>
             <div className="gh-folder">
               <div className="gh-folder-title">Аналітика</div>
               {[
@@ -96,6 +101,7 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
 
           {/* Розсилки */}
           <div className="gh-float gh-br" style={{ ['--d' as string]: '.45s', ['--r' as string]: '3deg' }}>
+            <span className="gh-sticker gh-st-pink">{Icon.send}</span>
             <div className="gh-folder">
               <div className="gh-folder-title">Розсилки</div>
               <div className="gh-tiles">
@@ -230,6 +236,30 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
         .gh-tiles { display: flex; gap: .7rem; padding: .3rem 0 .2rem; }
         .gh-tiles span { width: 62px; height: 62px; border-radius: 16px; background: #fff; box-shadow: 0 8px 18px -10px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.03); display: flex; align-items: center; justify-content: center; color: #6F9273; }
         .gh-tiles svg { width: 26px; height: 26px; }
+
+        /* --- Кольори: у кожної теки й нотатки свій, стікери - у тон --- */
+        .gh-note { background: linear-gradient(170deg, #FFF3B0 0%, #FFE070 100%); }
+        .gh-note p { color: #4A3B05; }
+        .gh-pin { background: #E5484D; }
+        .gh-check svg { background: #F2B705; }
+
+        .gh-tr .gh-folder { background: #D9E2FF; border-color: rgba(255,255,255,.7); }
+        .gh-tr .gh-time { background: #fff; color: #3B52B4; }
+        .gh-tr .gh-timer { color: #3B52B4; }
+        .gh-bl .gh-folder { background: #CDEBD5; border-color: rgba(255,255,255,.7); }
+        .gh-br .gh-folder { background: #FAD3E1; border-color: rgba(255,255,255,.7); }
+        .gh-br .gh-tiles span { color: #D6457C; }
+        .gh-row-top span { color: #2E7A4A; }
+
+        /* Стікери - вирізані кружечки з білою обводкою, трохи нахилені */
+        .gh-sticker {
+          position: absolute; z-index: 4; width: 46px; height: 46px; border-radius: 50%; border: 3px solid #fff;
+          box-shadow: 0 10px 20px -8px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; color: #fff;
+        }
+        .gh-sticker svg { width: 22px; height: 22px; }
+        .gh-st-blue { background: #5B7CFA; right: -14px; bottom: -14px; transform: rotate(10deg); }
+        .gh-st-green { background: #2FA866; right: -16px; top: -8px; transform: rotate(-12deg); }
+        .gh-st-pink { background: #F0508A; right: -14px; top: -10px; transform: rotate(12deg); }
 
         /* Середні екрани: картки менші, щоб не лягали на заголовок. */
         @media (max-width: 1180px) {

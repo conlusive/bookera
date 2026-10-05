@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ArsenalMosaic from '@/components/business/ArsenalMosaic';
 import GrowthHero from '@/components/business/GrowthHero';
+import HeroCards from '@/components/business/HeroCards';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
@@ -556,7 +557,7 @@ export default function BusinessLandingPage() {
       </header>
 
       {/* HERO SECTION */}
-      <section style={{ paddingTop: '160px', paddingBottom: '80px', textAlign: 'center', position: 'relative' }}>
+      <section style={{ paddingTop: '160px', paddingBottom: '0', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div className="container" style={{ position: 'relative', zIndex: 10 }}>
           <div className="reveal-on-scroll">
             <h1 className="hero-title">
@@ -582,11 +583,13 @@ export default function BusinessLandingPage() {
               Базовий функціонал назавжди безкоштовний.
             </p>
           </div>
+          {/* Віяло карток: стирчать із лінії знизу, а при скролі падають за неї */}
+          <HeroCards />
         </div>
       </section>
 
       {/* STATS STRIP */}
-      <section className="reveal-on-scroll delay-100" style={{ padding: '0 0 5rem 0' }}>
+      <section className="reveal-on-scroll delay-100" style={{ padding: '0 0 5rem 0', marginTop: '-1px' }}>
         <div className="container">
            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2rem', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: '2.5rem 0' }}>
               <div><div style={{ fontSize: '3rem', fontWeight: '900', color: '#111827', marginBottom: '0.2rem', letterSpacing: '-0.04em' }}>24/7</div><div style={{ color: '#64748b', fontWeight: '500', fontSize: '0.95rem' }}>Онлайн-запис без вас</div></div>

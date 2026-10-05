@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, assert_section
+from app.core.auth import CurrentUser, assert_business_access, assert_business_admin, get_current_user, assert_section, has_section
 from app.core.rate_limit import rate_limit
 from app.core.time_utils import to_local, utc_now
 from app.models import Review, InventoryItem, Expense
@@ -89,6 +89,11 @@ EXPENSE_LABELS = {"category": "Категорія", "description": "Опис", "
 @router.get("/crm/inventory", response_model=List[InventoryItemResponse])
 async def list_inventory(business_id: int = Query(...), db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
     await assert_business_access(db, current_user, business_id)
+    # Склад (залишки й закупівельна ціна) бачить той, у кого є розділ «Склад» - або «Послуги»:
+    # без цього не вибрати матеріали послуги. Раніше читати міг будь-який працівник закладу,
+    # включно з майстром без жодних доступів, хоча записувати без розділу вже не можна.
+    if not (await has_section(db, current_user, business_id, "inventory") or await has_section(db, current_user, business_id, "services")):
+        await assert_section(db, current_user, business_id, "inventory")
     result = await db.execute(select(InventoryItem).where(InventoryItem.business_id == business_id))
     return result.scalars().all()
 

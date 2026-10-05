@@ -2056,8 +2056,10 @@ const handleSaveShifts = async () => {
                 <label className="modal-label">Майстер</label>
                 <div className="modal-select-wrapper">
                   <select value={apptForm.staff_id} onChange={e => setApptForm({...apptForm, staff_id: e.target.value})}>
-                    <option value="">{isBlockMode ? 'Весь заклад (всі майстри)' : 'Будь-який майстер (Не вказано)'}</option>
-                    {team.filter((m:any) => m.provides_services !== false).map((m:any) => ( <option key={m.id} value={m.id}>{m.name}</option> ))}
+                    {/* Майстер записує лише у свій графік: ні колег, ні «будь-якого», ні весь заклад
+                        (сервер це теж забороняє) */}
+                    {!isMasterUser && <option value="">{isBlockMode ? 'Весь заклад (всі майстри)' : 'Будь-який майстер (Не вказано)'}</option>}
+                    {team.filter((m:any) => m.provides_services !== false && (!isMasterUser || String(m.id) === String(userProfile?.id))).map((m:any) => ( <option key={m.id} value={m.id}>{m.name}</option> ))}
                   </select>
                   <div className="modal-select-icon"><Icons.ChevronDown /></div>
                 </div>

@@ -403,6 +403,15 @@ async def remove_staff(
     if str(staff.id) == str(current_user.id):
         raise HTTPException(status_code=400, detail="Не можна видалити самого себе")
 
+    # Власника не можна звільнити взагалі - навіть адміністратору (інтерфейс ховає кнопку,
+    # але сервер мусить відмовляти сам). Спершу права передають іншій людині.
+    owner_row = (await db.execute(select(Business.owner_id).where(Business.id == target_business_id))).first()
+    if owner_row and owner_row[0] is not None and str(owner_row[0]) == str(staff.id):
+        raise HTTPException(
+            status_code=403,
+            detail="Власника не можна звільнити. Спершу передайте права власності іншій людині.",
+        )
+
     # Закриваємо членство саме в ЦЬОМУ закладі, а не звільняємо людину
     # звідусіль: вона може працювати ще десь, і той заклад тут ні до чого.
     m_res = await db.execute(

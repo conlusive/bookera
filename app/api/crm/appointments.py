@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.appointments import normalize_master_id
-from app.core.auth import CurrentUser, assert_business_access, get_current_user
+from app.core.auth import CurrentUser, assert_business_access, get_current_user, assert_can_modify_appointment, is_limited_to_own_schedule
 from app.core.time_utils import utc_now, business_tz
 from app.models import Appointment, Business, Client, Service, User
 from app.schemas.appointment import AppointmentResponse, AppointmentRescheduleRequest, ManualAppointmentCreate
@@ -77,6 +77,10 @@ async def create_manual_appointment(
     АБО блокування часу (is_block=true - обід, перерва майстра або всього закладу).
     """
     await assert_business_access(db, current_user, payload.business_id)
+    # Майстер вносить записи й блокування лише у СВІЙ графік (не на колегу й не на весь заклад)
+    if await is_limited_to_own_schedule(db, current_user, payload.business_id):
+        if str(payload.master_id or "") != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Майстер може вносити записи лише у свій графік")
 
     biz_res = await db.execute(select(Business).where(Business.id == payload.business_id))
     business = biz_res.scalars().first()
@@ -266,6 +270,7 @@ async def update_crm_appointment_status(
     if not appointment:
         raise HTTPException(status_code=404, detail="Запис не знайдено")
     await assert_business_access(db, current_user, appointment.business_id)
+    await assert_can_modify_appointment(db, current_user, appointment)
 
     new_status = payload.status.lower().strip()
 
@@ -336,6 +341,7 @@ async def delete_crm_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Запис не знайдено")
     await assert_business_access(db, current_user, appointment.business_id)
+    await assert_can_modify_appointment(db, current_user, appointment)
 
     await db.delete(appointment)
     # Журнал дій
@@ -359,6 +365,7 @@ async def reschedule_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Запис не знайдено")
     await assert_business_access(db, current_user, appointment.business_id)
+    await assert_can_modify_appointment(db, current_user, appointment)
 
     old_start = appointment.start_time
     duration = (appointment.end_time - appointment.start_time) if appointment.end_time else timedelta(minutes=60)

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate, MyAppointmentResponse
 
 from app.api.deps import get_db
-from app.core.auth import CurrentUser, assert_business_access, get_current_user, require_business_access, is_limited_to_own_schedule
+from app.core.auth import CurrentUser, assert_business_access, assert_can_modify_appointment, get_current_user, require_business_access, is_limited_to_own_schedule
 from app.core.rate_limit import rate_limit
 from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client
 from app.schemas.appointment import (
@@ -1062,6 +1062,7 @@ async def update_appointment_status(
     # business_id відомий лише ПІСЛЯ того, як знайшли запис - тому перевірка
     # доступу тут ручна (assert_business_access), а не через FastAPI-залежність.
     await assert_business_access(db, current_user, appointment.business_id)
+    await assert_can_modify_appointment(db, current_user, appointment)
 
     previous_status = appointment.status
     _old_status = appointment.status

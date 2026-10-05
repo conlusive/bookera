@@ -303,6 +303,20 @@ def effective_permissions(role: Optional[str], overrides: Optional[dict]) -> dic
     return base
 
 
+
+async def assert_can_modify_appointment(db: AsyncSession, current_user: CurrentUser, appointment) -> None:
+    """
+    Чи може людина ЗМІНЮВАТИ цей запис (статус, перенесення, видалення).
+
+    Майстер веде лише свій графік: чужі записи він не бачить у списку (див.
+    is_limited_to_own_schedule), але раніше міг скасувати, завершити (а це комісія й виплата),
+    перенести чи видалити запис колеги, знаючи його id. Адміністратор і власник - будь-які.
+    Запис без майстра (ще не призначений) майстру теж не належить.
+    """
+    if await is_limited_to_own_schedule(db, current_user, appointment.business_id):
+        if str(appointment.master_id or "") != str(current_user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Це запис іншого майстра")
+
 async def has_section(db: AsyncSession, current_user: CurrentUser, business_id: int, section: str) -> bool:
     """
     Чи має людина доступ до розділу в цьому закладі.

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ArsenalMosaic from '@/components/business/ArsenalMosaic';
 import GrowthHero from '@/components/business/GrowthHero';
 import HeroCards from '@/components/business/HeroCards';
+import StatsStrip from '@/components/business/StatsStrip';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
@@ -591,11 +592,7 @@ export default function BusinessLandingPage() {
       {/* STATS STRIP */}
       <section className="reveal-on-scroll delay-100" style={{ padding: '0 0 5rem 0', marginTop: '-1px' }}>
         <div className="container">
-           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2rem', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: '2.5rem 0' }}>
-              <div><div style={{ fontSize: '3rem', fontWeight: '900', color: '#111827', marginBottom: '0.2rem', letterSpacing: '-0.04em' }}>24/7</div><div style={{ color: '#64748b', fontWeight: '500', fontSize: '0.95rem' }}>Онлайн-запис без вас</div></div>
-              <div><div style={{ fontSize: '3rem', fontWeight: '900', color: '#111827', marginBottom: '0.2rem', letterSpacing: '-0.04em' }}>-40%</div><div style={{ color: '#64748b', fontWeight: '500', fontSize: '0.95rem' }}>Зменшення неявок</div></div>
-              <div><div style={{ fontSize: '3rem', fontWeight: '900', color: '#111827', marginBottom: '0.2rem', letterSpacing: '-0.04em' }}>+25%</div><div style={{ color: '#64748b', fontWeight: '500', fontSize: '0.95rem' }}>Зростання прибутку</div></div>
-            </div>
+          <StatsStrip />
         </div>
       </section>
 

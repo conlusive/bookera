@@ -215,10 +215,9 @@ export default function GrowthHero({ onStart, startLabel = 'Спробувати
         .gh-note p { margin: 0; font-size: 1.55rem; line-height: 1.15; color: #2E3A30; }
         .gh-pin { position: absolute; top: 10px; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #6F9273; box-shadow: 0 2px 4px rgba(0,0,0,.25); }
         .gh-check {
-          position: absolute; left: -18px; bottom: -22px; width: 58px; height: 58px; border-radius: 16px; background: #fff;
-          box-shadow: 0 14px 26px -14px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center;
+          position: absolute; left: -16px; bottom: -20px; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;
         }
-        .gh-check svg { width: 30px; height: 30px; padding: 6px; border-radius: 9px; background: #6F9273; color: #fff; }
+        .gh-check svg { width: 46px; height: 46px; padding: 11px; border-radius: 14px; background: #6F9273; color: #fff; box-shadow: 0 12px 22px -10px rgba(0,0,0,.35); transform: rotate(-8deg); }
 
         .gh-tr { top: 70px; right: 3%; display: flex; align-items: flex-start; gap: .7rem; }
         .gh-timer { width: 54px; height: 54px; border-radius: 16px; background: #fff; box-shadow: 0 10px 22px -12px rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; color: #1D1D1F; margin-top: 8px; }

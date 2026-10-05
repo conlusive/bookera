@@ -100,7 +100,10 @@ export default function HeroCards() {
       </div>
 
       <style jsx global>{`
-        .hc-stage { --p: 0; --s: 1; position: relative; width: 100%; height: calc(340px * var(--s) * (1 - var(--p) * .45)); margin: 3.5rem auto 0; overflow: hidden; pointer-events: none; border-bottom: 1px solid #EDEDF0; }
+        .hc-stage { --p: 0; --s: 1; position: relative; width: 100%; height: calc(340px * var(--s) * (1 - var(--p) * .45)); margin: 3.5rem 0 0; overflow: hidden; pointer-events: none;
+          /* Вихід за поля контейнера на всю ширину екрана: картки не обрізаються по боках, а знизу плавно тануть */
+          width: 100vw; margin-left: calc(50% - 50vw);
+          -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 95%); mask-image: linear-gradient(to bottom, #000 55%, transparent 95%); }
         .hc-fan { position: absolute; left: 50%; top: 0; width: 0; height: 340px; transform: scale(var(--s)); transform-origin: top center; }
         .hc-card {
           position: absolute; top: 0; left: -112px; width: 224px; height: 330px;

@@ -18,11 +18,11 @@ import HeroVideoBackdrop from '@/components/home/HeroVideoBackdrop';
 import TypingHeadline from '@/components/home/TypingHeadline';
 import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
-import Statement from '@/components/business/Statement';
-import BookingDemo from '@/components/home/BookingDemo';
-import ClientHighlights from '@/components/home/ClientHighlights';
-import TipsCarousel from '@/components/home/TipsCarousel';
-import BusinessBanner from '@/components/home/BusinessBanner';
+import CategoryPhotos from '@/components/home/CategoryPhotos';
+import PhotoBanner from '@/components/home/PhotoBanner';
+import PhotoSteps from '@/components/home/PhotoSteps';
+import TipsEditorial from '@/components/home/TipsEditorial';
+import BusinessStrip from '@/components/home/BusinessStrip';
 import { rankBusinesses, type RankResult, type SortContext, type SortMode, type SortScope } from '@/lib/storefront-sort';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import SiteFooter from '@/components/ui/SiteFooter';
@@ -2072,12 +2072,12 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       )}
 
 
-      {/* Усе нижче - після каталогу: одна думка, жива демонстрація запису, плитки, поради й перехід для бізнесу */}
-      <Statement text="Знайдіть майстра поруч, побачте вільний час і запишіться самі. Без дзвінків і без очікування відповіді." />
-      <BookingDemo />
-      <ClientHighlights />
-      <TipsCarousel />
-      <BusinessBanner />
+      {/* Усе нижче - після каталогу: фото-історії. Категорія з фото відкриває каталог, смуга веде на пошук. */}
+      <CategoryPhotos onPick={(slug) => { handleCategorySelect(slug); document.getElementById('salons-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
+      <PhotoBanner onFind={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
+      <PhotoSteps />
+      <TipsEditorial />
+      <BusinessStrip />
 
       {/* ЧОРНИЙ ФУТЕР ІЗ КОТИКОМ */}
       <SiteFooter />

@@ -547,12 +547,39 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        @media (max-width: 860px) {
+          .svc-toolbar { padding: 0.75rem 1rem 0 !important; flex-wrap: wrap; gap: 0.6rem; }
+          .svc-search { width: 100% !important; }
+          .svc-toolbar-left { flex: 1 1 100% !important; }
+          .svc-toolbar-right { width: 100%; justify-content: space-between; }
+          .svc-toolbar-right > div { display: none; }
+          .clean-input { font-size: 16px; padding: 0.65rem 0.8rem; }
+          .svc-cats { padding: 0.75rem 1rem !important; }
+          .category-pill { padding: 0.55rem 1.1rem; }
+          .svc-grid { display: block !important; overflow-y: auto !important; }
+          .svc-grid > div { overflow: visible !important; border-right: none !important; }
+          .svc-grid > div > div { padding: 0 1rem !important; }
+          .svc-aside { padding: 1rem !important; border-top: 1px solid #f1f5f9; }
+          .service-table, .service-table tbody { display: block; }
+          .service-table thead { display: none; }
+          .service-table tr.category-header { display: block; }
+          .service-table tr.service-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; column-gap: 0.9rem; row-gap: 0.4rem; padding: 0.85rem 0.9rem; margin-bottom: 0.5rem; border: 1px solid #f1f5f9; border-radius: 14px; }
+          .service-table tr.service-row td { display: block; padding: 0 !important; border: none !important; border-radius: 0 !important; background: transparent !important; }
+          .service-table tr.service-row td:first-child { grid-column: 1 / -1; }
+          .service-table tr.service-row td:first-child span { max-width: 100% !important; }
+          .service-table .category-header td { padding: 1.1rem 0.25rem 0.4rem !important; }
+          .row-action-btn { width: 40px; height: 40px; }
+          .apple-switch { width: 40px; height: 24px; }
+          .apple-switch-knob { width: 20px; height: 20px; }
+          .apple-switch.on .apple-switch-knob { transform: translateX(16px); }
+        }
       `}</style>
 
       {/* --- ТУЛБАР --- */}
-      <div style={{ padding: '0.8rem 2rem 0 2rem', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 20 }}>
-         <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-            <div style={{ position: 'relative', width: '280px' }}>
+      <div className="svc-toolbar" style={{ padding: '0.8rem 2rem 0 2rem', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 20 }}>
+         <div className="svc-toolbar-left" style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+            <div className="svc-search" style={{ position: 'relative', width: '280px' }}>
                <div style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', display: 'flex' }}>
                   <Icons.Search />
                </div>
@@ -567,7 +594,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
             </div>
          </div>
 
-         <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+         <div className="svc-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
             {/* Порядок для клієнтів - окремий режим. Сортування колонок нижче - лише
                 для перегляду й нічого не змінює на сторінці салону. */}
             <button type="button" className="clean-btn-ghost" onClick={startReorder} disabled={services.length < 2}
@@ -586,7 +613,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
 
       {/* ФІЛЬТР КАТЕГОРІЙ */}
       {!reorderMode && uniqueCategories.length > 0 && (
-        <div className="hide-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '1rem 2rem', background: '#fff', borderBottom: '1px solid #f1f5f9' }}>
+        <div className="hide-scrollbar svc-cats" style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '1rem 2rem', background: '#fff', borderBottom: '1px solid #f1f5f9' }}>
            <button
              className={`category-pill ${!selectedCategory ? 'active' : ''}`}
              onClick={() => setSelectedCategory(null)}
@@ -606,7 +633,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
       )}
 
       {/* --- ТАБЛИЦЯ ТА САЙДБАР --- */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', flex: 1, overflow: 'hidden' }}>
+      <div className="svc-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', flex: 1, overflow: 'hidden' }}>
 
         <div className="custom-scroll" style={{ overflowY: 'auto', borderRight: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center' }}>
             <div style={{ width: '100%', maxWidth: '1200px', padding: '0 1.25rem' }}>
@@ -761,7 +788,7 @@ export default function ServicesTab({ business, services, setServices, Icons }: 
         </div>
 
         {/* ПРАВА ЧАСТИНА: САЙДБАР */}
-        <div className="custom-scroll" style={{ padding: '1.2rem', background: '#fff', overflowY: 'auto' }}>
+        <div className="custom-scroll svc-aside" style={{ padding: '1.2rem', background: '#fff', overflowY: 'auto' }}>
            <div className="widget-card">
               <div className="widget-title" style={{ cursor: 'default' }}>Статистика прайсу</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>

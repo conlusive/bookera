@@ -359,6 +359,7 @@ export default function BusinessLandingPage() {
         .btn-secondary:hover { background-color: #f8fafc; border-color: #cbd5e1; transform: translateY(-2px); }
 
         .hdr-short { display: none; }
+        @media (max-width: 860px) { .faq-btn { padding: 0.6rem 0 !important; } }
         @media (max-width: 560px) { .hdr-clients, .hdr-name, .hdr-long { display: none !important; } .hdr-short { display: inline; } }
         .main-header { position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000; display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent; will-change: transform, background-color; }
         .main-header.top { transform: translateY(0); }
@@ -681,7 +682,7 @@ export default function BusinessLandingPage() {
             <div style={{ borderTop: '1px solid #e2e8f0' }}>
               {faqs.map((faq, index) => (
                 <div key={index} style={{ borderBottom: '1px solid #e2e8f0', padding: '1.2rem 0' }}>
-                  <button onClick={() => toggleFaq(index)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '0', textAlign: 'left' }}>
+                  <button className="faq-btn" onClick={() => toggleFaq(index)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '0', textAlign: 'left' }}>
                     <span style={{ fontSize: '1.05rem', fontWeight: '700', color: '#111827', paddingRight: '1.5rem' }}>{faq.q}</span>
                     <span className={`faq-icon ${openFaq === index ? 'open' : ''}`} style={{ fontSize: '1.2rem', color: '#64748b' }}>▼</span>
                   </button>

@@ -327,16 +327,36 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         .media-delete-btn:hover { background: rgba(220, 38, 38, 1); transform: scale(1.1); }
         .media-upload-label { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 16px; cursor: pointer; color: #64748b; transition: 0.2s; }
         .media-upload-label:hover { background: #e2e8f0; border-color: #94a3b8; color: #475569; }
+
+        @media (max-width: 860px) {
+          .sf-header { padding: 0.7rem 1rem !important; flex-wrap: wrap; gap: 0.5rem; }
+          .sf-header h1 { font-size: 1.15rem !important; }
+          .sf-header-actions { width: 100%; justify-content: space-between; gap: 0.4rem !important; flex-wrap: wrap; }
+          .sf-header-actions > div { display: none; }
+          .sf-header-actions button { min-height: 40px; }
+          .sf-header-actions [role="status"] { min-width: 0 !important; flex-basis: 100%; text-align: left !important; order: -1; }
+          .sf-pad { padding: 1.25rem 1rem 4rem !important; }
+          .sf-stack { gap: 2rem !important; }
+          .sf-hero { height: 240px !important; border-radius: 18px !important; grid-template-columns: 1fr !important; }
+          .sf-hero > div { border-radius: 18px !important; }
+          .sf-hero > div:nth-child(2) { display: none; }
+          .sf-title-input { font-size: 1.8rem !important; width: 100% !important; min-width: 0 !important; }
+          .sf-title-wrap { min-width: 0 !important; width: 100%; }
+          .sf-cols { grid-template-columns: minmax(0, 1fr) !important; gap: 2rem !important; }
+          .sf-cols > div { gap: 2rem !important; }
+          .sf-card { padding: 1.25rem !important; border-radius: 18px !important; }
+          .sf-two { grid-template-columns: 1fr !important; }
+        }
       `}} />
 
       <div className="hide-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fafbfc', overflowY: 'auto', position: 'relative' }}>
 
         {/* Хедер */}
-        <header style={{ padding: '1.25rem 3rem', whiteSpace: 'nowrap', borderBottom: '1px solid rgba(226, 232, 240, 0.6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 50 }}>
+        <header className="sf-header" style={{ padding: '1.25rem 3rem', whiteSpace: 'nowrap', borderBottom: '1px solid rgba(226, 232, 240, 0.6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 50 }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', margin: 0, whiteSpace: 'nowrap' }}>Редактор вітрини</h1>
           </div>
-          <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+          <div className="sf-header-actions" style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
 
             <button
               onClick={() => setIsDesignModalOpen(true)}
@@ -362,13 +382,13 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
         </header>
 
         {/* Основний контент */}
-        <div style={{ padding: '2rem 3rem 5rem 3rem', flex: 1, display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: '100%', maxWidth: '1280px', display: 'flex', flexDirection: 'column', gap: '3rem' }}>
+        <div className="sf-pad" style={{ padding: '2rem 3rem 5rem 3rem', flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <div className="sf-stack" style={{ width: '100%', maxWidth: '1280px', display: 'flex', flexDirection: 'column', gap: '3rem' }}>
 
             {/* Галерея: головна обкладинка + фото інтер'єру */}
             <div className="editable-block" style={{ borderRadius: '24px', position: 'relative' }}>
               {allGalleryPhotos.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: allGalleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', borderRadius: '24px', overflow: 'hidden' }}>
+                <div className="sf-hero" style={{ display: 'grid', gridTemplateColumns: allGalleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', borderRadius: '24px', overflow: 'hidden' }}>
                   <div style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', position: 'relative', background: '#f1f5f9' }}>
                     <SmartImage src={allGalleryPhotos[0]} alt="Головна обкладинка" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
@@ -383,7 +403,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                   )}
                 </div>
               ) : (
-                <div style={{ height: '420px', borderRadius: '24px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #cbd5e1', position: 'relative' }}>
+                <div className="sf-hero" style={{ height: '420px', borderRadius: '24px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #cbd5e1', position: 'relative' }}>
                   <div style={{ color: '#94a3b8', textAlign: 'center' }}>
                     <Icons.Image style={{ width: '48px', height: '48px', opacity: 0.5 }} />
                     <div style={{ fontWeight: '600', marginTop: '1rem', fontSize: '1.1rem' }}>Завантажте головну обкладинку та фото інтер'єру</div>
@@ -398,12 +418,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
             {/* Назва та адреса закладу */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem' }}>
-              <div style={{ flex: 1, minWidth: '300px' }}>
+              <div className="sf-title-wrap" style={{ flex: 1, minWidth: '300px' }}>
                 <input
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="inline-input"
+                  className="inline-input sf-title-input"
                   placeholder="Назва вашого закладу"
                   style={{ fontSize: '2.5rem', fontWeight: '800', color: '#1D1D1F', lineHeight: 1.15, letterSpacing: '-0.02em', width: 'auto', minWidth: '240px' }}
                 />
@@ -442,12 +462,12 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
             </div>
 
             {/* Сітка 2 колонки: Основний вміст та Правий сайдбар */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '4rem', alignItems: 'start' }}>
+            <div className="sf-cols" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '4rem', alignItems: 'start' }}>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
                 {/* ПРАЙС-ЛИСТ */}
-                <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                <div className="editable-block sf-card" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1D1D1F', margin: 0, letterSpacing: '-0.02em' }}>
                       Послуги
@@ -537,7 +557,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 </div>
 
                 {/* Графік роботи: редагується там само, де й календар (вікно «Графік»). */}
-                <div className="editable-block" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', position: 'relative' }}>
+                <div className="editable-block sf-card" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', position: 'relative' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: '800', margin: 0, color: '#1D1D1F', letterSpacing: '-0.01em' }}>Графік роботи</h2>
                     {openNow && (
@@ -667,7 +687,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: '0 0 1.25rem', color: '#1D1D1F' }}>Зручності</h3>
 
                     {activeAmenitiesList.length > 0 ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
+                      <div className="sf-two" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
                         {activeAmenitiesList.map(item => (
                           <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
                             <span style={{ color: '#86868B', display: 'flex', alignItems: 'center' }}>{item.icon}</span>

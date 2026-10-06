@@ -1,7 +1,7 @@
 'use client';
 
 import ProfileMenu from '@/components/ui/ProfileMenu';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
@@ -144,7 +144,15 @@ export default function BusinessCabinet() {
   useEffect(() => {
     if (userProfile?.role && !allowedTabs.includes(activeTab)) setActiveTab('Calendar');
   }, [allowedTabs, activeTab, userProfile?.role]);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [sidebarCollapsedPref, setIsSidebarCollapsed] = useState(false);
+  // На телефоні меню - висувна панель: згорнута версія з самими іконками там не має сенсу
+  const isMobile = useSyncExternalStore(
+    (notify) => { const mq = window.matchMedia('(max-width: 860px)'); mq.addEventListener('change', notify); return () => mq.removeEventListener('change', notify); },
+    () => window.matchMedia('(max-width: 860px)').matches,
+    () => false,
+  );
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isSidebarCollapsed = sidebarCollapsedPref && !isMobile;
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isBizMenuOpen, setIsBizMenuOpen] = useState(false);
   const [myBusinesses, setMyBusinesses] = useState<any[]>([]);
@@ -872,8 +880,23 @@ export default function BusinessCabinet() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div className="cab-root" style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <style>{`
+        .cab-topbar, .cab-backdrop { display: none; }
+        @media (max-width: 860px) {
+          .cab-root { height: 100dvh !important; width: 100% !important; overflow: hidden; }
+          .cab-aside { position: fixed !important; top: 0; bottom: 0; left: 0; width: min(300px, 86vw) !important; transform: translateX(-102%); transition: transform .28s cubic-bezier(.2,.8,.2,1) !important; z-index: 2000 !important; box-shadow: none; }
+          .cab-aside.open { transform: translateX(0); box-shadow: 0 0 40px rgba(15,23,42,.25); }
+          .cab-backdrop { display: block; position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 1999; border: none; padding: 0; }
+          .cab-topbar { display: flex; align-items: center; gap: .6rem; position: sticky; top: 0; z-index: 90; background: #fff; border-bottom: 1px solid #f1f5f9; padding: .5rem .75rem; flex-shrink: 0; }
+          .cab-topbar button { width: 44px; height: 44px; border: none; background: transparent; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #0f172a; }
+          .cab-topbar button:active { background: #f1f5f9; }
+          .cab-collapse-btn { display: none !important; }
+          .cab-aside .nav-item-wrapper button { min-height: 44px; }
+          .modal-overlay { padding: 0 !important; align-items: flex-end !important; }
+          .modal-content { max-width: 100% !important; border-radius: 20px 20px 0 0 !important; max-height: 94dvh; overflow-y: auto; padding: 1.25rem !important; margin: 0 !important; }
+          .modal-input, .search-input, .modal-select-wrapper select { font-size: 16px; }
+        }
         .apple-sidebar-nav::-webkit-scrollbar { display: none; }
         .apple-sidebar-nav { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -1022,7 +1045,8 @@ export default function BusinessCabinet() {
       `}</style>
 
       {/* САЙДБАР (Шовковистий Apple SaaS Стиль) */}
-      <aside style={{
+      {mobileNavOpen && <button className="cab-backdrop" aria-label="Закрити меню" onClick={() => setMobileNavOpen(false)} />}
+      <aside className={`cab-aside${mobileNavOpen ? ' open' : ''}`} style={{
         width: isSidebarCollapsed ? '76px' : '265px',
         backgroundColor: '#ffffff',
         borderRight: '1px solid #f1f5f9',
@@ -1246,7 +1270,7 @@ export default function BusinessCabinet() {
             return (
               <div key={item.id} className="nav-item-wrapper" style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
                 <button
-                  onClick={() => { setActiveTab(item.id); localStorage.setItem('bookera_activeTab', item.id); }}
+                  onClick={() => { setActiveTab(item.id); setMobileNavOpen(false); localStorage.setItem('bookera_activeTab', item.id); }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1295,8 +1319,8 @@ export default function BusinessCabinet() {
         {/* 3. ПРОФІЛЬ ТА КНОПКА ЗГОРТАННЯ */}
         <div style={{ padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: 'auto' }}>
 
-          <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-             <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          <div className="cab-collapse-btn" style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+             <button onClick={() => setIsSidebarCollapsed(!sidebarCollapsedPref)}
                 style={{
                   background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer',
                   display: 'flex', alignItems: 'center',
@@ -1378,6 +1402,16 @@ export default function BusinessCabinet() {
 
       {/* ГОЛОВНА РОБОЧА ЗОНА */}
       <main className="custom-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', overflowY: 'auto', position: 'relative' }}>
+
+        <div className="cab-topbar">
+          <button type="button" aria-label="Відкрити меню" onClick={() => setMobileNavOpen(true)}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{navItems.find(i => i.id === activeTab)?.label || business.name}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{business.name}</div>
+          </div>
+        </div>
 
         {subscription?.has_access && subscription.days_left !== null &&
          (subscription.is_trial || subscription.days_left <= 7) &&

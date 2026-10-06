@@ -57,8 +57,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     localStorage.setItem('bookera_staff_active_tab', tabId);
   };
 
+  // На телефоні список і картка людини - окремі екрани
+  const [mobileDetail, setMobileDetail] = useState(false);
   const handleStaffSelect = (staffId: any) => {
     setSelectedStaffId(staffId);
+    setMobileDetail(true);
     localStorage.setItem('bookera_selected_staff_id', String(staffId));
   };
 
@@ -549,6 +552,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       await api.removeStaff(token, String(currentStaff.id));
       setTeam(team.filter((t: any) => String(t.id) !== String(currentStaff.id)));
       setSelectedStaffId(null);
+      setMobileDetail(false);
       setStaffActiveTab('general');
     } catch (err: any) {
       showToast(err?.message || 'Не вдалося видалити співробітника', 'error');
@@ -652,9 +656,24 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   });
 
   return (
-    <div style={{ display: 'flex', flex: 1, minHeight: 0, width: '100%', backgroundColor: colors.bg, overflow: 'hidden' }}>
+    <div className={`team-root${mobileDetail || !hasAdminRights ? ' show-detail' : ''}`} style={{ display: 'flex', flex: 1, minHeight: 0, width: '100%', backgroundColor: colors.bg, overflow: 'hidden' }}>
 
       <style>{`
+        .team-back { display: none; }
+        @media (max-width: 860px) {
+          .team-list { width: 100% !important; border-right: none !important; }
+          .team-root.show-detail .team-list { display: none !important; }
+          .team-root:not(.show-detail) .team-detail { display: none !important; }
+          .team-back { display: inline-flex; align-items: center; gap: 0.35rem; border: none; background: transparent; color: #475569; font-weight: 600; font-size: 0.95rem; padding: 0.6rem 0.25rem; margin: 0 0 0.75rem -0.25rem; cursor: pointer; font-family: inherit; }
+          .team-root:not(.show-detail) .team-back, .team-root.no-admin .team-back { display: none; }
+          .team-pad { padding: 1rem 1.1rem 2rem !important; }
+          .team-head { flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem !important; }
+          .team-head > div:first-child { gap: 1rem !important; min-width: 0; }
+          .team-head h1 { font-size: 1.4rem !important; overflow-wrap: anywhere; }
+          .team-tabs { gap: 1.4rem !important; margin-bottom: 1.5rem !important; }
+          .team-grid { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
+          .team-detail input, .team-detail select, .team-detail textarea { font-size: 16px; }
+        }
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
@@ -715,7 +734,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       `}</style>
 
       {/* --- ЛІВА ПАНЕЛЬ КОМАНДИ --- */}
-      <div style={{ width: '300px', borderRight: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', backgroundColor: colors.surface, zIndex: 10 }}>
+      <div className="team-list" style={{ width: '300px', borderRight: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', backgroundColor: colors.surface, zIndex: 10 }}>
 
         <div style={{ padding: '1.5rem 1rem 0.8rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -854,9 +873,15 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
       </div>
 
       {/* --- ПРАВА ПАНЕЛЬ --- */}
-      <div className="custom-scroll" style={{ flex: 1, backgroundColor: colors.bg, overflowY: 'auto', position: 'relative' }}>
+      <div className="custom-scroll team-detail" style={{ flex: 1, backgroundColor: colors.bg, overflowY: 'auto', position: 'relative', minWidth: 0 }}>
         {currentStaff ? (
-          <div style={{ maxWidth: '850px', margin: '0 auto', padding: '3rem 2rem' }}>
+          <div className="team-pad" style={{ maxWidth: '850px', margin: '0 auto', padding: '3rem 2rem' }}>
+            {hasAdminRights && (
+              <button type="button" className="team-back" onClick={() => setMobileDetail(false)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+                До команди
+              </button>
+            )}
 
             {/* Запити команди (графік, відпустка) - лише коли є що розглянути.
                 Погоджений графік одразу зʼявиться в картці майстра. */}
@@ -865,7 +890,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             )}
 
             {/* ХЕДЕР ПРОФІЛЮ */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
+            <div className="team-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <Avatar name={currentStaff.name} src={currentStaff.avatar_url} size={80} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -890,7 +915,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
             </div>
 
             {/* НАВІГАЦІЯ ПО ВКЛАДКАХ */}
-            <div style={{ display: 'flex', gap: '2.5rem', borderBottom: `1px solid ${colors.border}`, marginBottom: '2.5rem', overflowX: 'auto' }}>
+            <div className="team-tabs" style={{ display: 'flex', gap: '2.5rem', borderBottom: `1px solid ${colors.border}`, marginBottom: '2.5rem', overflowX: 'auto' }}>
               {[
                 { id: 'general', label: 'Загальна інформація' },
                 { id: 'services', label: 'Послуги' },
@@ -949,7 +974,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <div className="team-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                   {/* Ім'я та прізвище зафіксовано за акаунтом */}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem' }}>Ім'я та прізвище</label>
@@ -1443,7 +1468,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                      )}
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+                  <div className="team-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: colors.textSecondary, marginBottom: '0.6rem' }}>Комісія від послуг (%) <HelpTip>Частка вартості кожного завершеного візиту, яка йде майстрові. Наприклад, 40% від стрижки за 500 ₴ - 200 ₴.</HelpTip></label>
                       <div style={{ position: 'relative' }}>
@@ -1485,7 +1510,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', alignItems: 'flex-start' }}>
+                  <div className="team-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', alignItems: 'flex-start' }}>
                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                        {(() => {
                           const safePeriod = currentStaff.payout_period || 'weekly';
@@ -1620,7 +1645,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                   </div>
 
                   {currentStaff.payment_method === 'card' && (
-                     <div style={{ animation: 'slideUp 0.3s ease-out', display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', padding: '1.5rem', background: colors.surface, borderRadius: '12px', border: `1px dashed ${colors.border}` }}>
+                     <div className="team-grid" style={{ animation: 'slideUp 0.3s ease-out', display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', padding: '1.5rem', background: colors.surface, borderRadius: '12px', border: `1px dashed ${colors.border}` }}>
                         <div>
                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', color: colors.textSecondary, marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Номер картки або IBAN</label>
                            <input

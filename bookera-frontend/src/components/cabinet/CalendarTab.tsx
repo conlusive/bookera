@@ -1161,10 +1161,31 @@ const handleSaveShifts = async () => {
           ) !important;
           background-color: #ffffff !important;
         }
+        @media (max-width: 860px) {
+          .cal-left { display: none !important; }
+          .cal-toolbar { flex-wrap: wrap !important; padding: 0.5rem 0.75rem !important; row-gap: 0.5rem !important; }
+          .cal-toolbar__left { flex-wrap: wrap; flex-shrink: 1 !important; }
+          .cal-toolbar__rest { flex: 1 1 100% !important; justify-content: space-between !important; }
+          .cal-toolbar__count { display: none !important; }
+          .cal-toolbar__search { flex: 1 1 90px !important; }
+          .cal-toolbar__search input { height: 36px !important; font-size: 16px !important; }
+          .cal-toolbar__right button { padding: 0.55rem 0.45rem !important; font-size: 0.8rem !important; }
+          .cal-toolbar__rest { gap: 0.25rem !important; }
+          .cal-time-input { width: 150px !important; }
+          .cal-m-head, .cal-m-grid { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+          .cal-m-head { font-size: 0.65rem !important; letter-spacing: 0 !important; padding: 0.7rem 0 !important; }
+          .cal-m-grid { grid-auto-rows: minmax(64px, 1fr) !important; }
+          .month-view-cell { padding: 0.3rem 0.15rem !important; align-items: center; min-width: 0; }
+          .month-view-cell > div:first-child { flex-direction: column-reverse; align-items: center !important; margin-bottom: 0.2rem !important; }
+          .month-view-cell > div:first-child > div { padding-top: 2px !important; }
+          .cal-m-chips { display: none !important; }
+          .cal-m-count { font-size: 0.6rem !important; }
+          .cal-toolbar .action-icon-btn { padding: 0.65rem !important; }
+        }
       `}</style>
 
       {/* Ліва панель: Міні-календар та віджети */}
-      <div className="custom-scroll" style={{ width: '320px', borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', flexShrink: 0, zIndex: 10 }}>
+      <div className="custom-scroll cal-left" style={{ width: '320px', borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem', overflowY: 'auto', flexShrink: 0, zIndex: 10 }}>
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', padding: '0 0.2rem' }}>
             <div style={{ fontWeight: '800', color: '#111827', fontSize: '1.15rem', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
@@ -1408,7 +1429,7 @@ const handleSaveShifts = async () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+          <div className="cal-toolbar__rest" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0 }} ref={masterFilterRef}>
               <div
                 onClick={() => { if (!isMasterUser) setIsMasterFilterOpen(!isMasterFilterOpen); }}
@@ -1465,7 +1486,7 @@ const handleSaveShifts = async () => {
               )}
             </div>
 
-            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', backgroundColor: '#f8fafc', padding: '0.25rem 0.55rem', borderRadius: '20px', whiteSpace: 'nowrap', flexShrink: 0, border: '1px solid #f1f5f9' }}>
+            <div className="cal-toolbar__count" style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', backgroundColor: '#f8fafc', padding: '0.25rem 0.55rem', borderRadius: '20px', whiteSpace: 'nowrap', flexShrink: 0, border: '1px solid #f1f5f9' }}>
               Записів: {currentViewAppointmentsCount}
               {currentViewRevenue > 0 && (
                 <span style={{ marginLeft: '0.4rem', paddingLeft: '0.4rem', borderLeft: '1px solid #dbe3dc', color: '#2E3A30' }}>
@@ -1847,12 +1868,12 @@ const handleSaveShifts = async () => {
           {/* --- МІСЯЦЬ --- */}
           {calendarView === 'month' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #f1f5f9', textAlign: 'center', fontWeight: '600', color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '1rem 0', flexShrink: 0 }}>
+              <div className="cal-m-head" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #f1f5f9', textAlign: 'center', fontWeight: '600', color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '1rem 0', flexShrink: 0 }}>
                  <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div>
                  <div style={{ color: '#d92d20' }}>Сб</div><div style={{ color: '#d92d20' }}>Нд</div>
               </div>
 
-              <div className="custom-scroll" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(130px, 1fr)', overflowY: 'auto' }}>
+              <div className="custom-scroll cal-m-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(130px, 1fr)', overflowY: 'auto' }}>
                   {blanks.map(blank => <div key={`blank-${blank}`} style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}></div>)}
 
                   {days.map(day => {
@@ -1871,7 +1892,7 @@ const handleSaveShifts = async () => {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingTop: '4px' }}>
                                     {hasOverdue && <div style={{ width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%' }}></div>}
                                     {dayApps.filter((a: any) => a.status !== 'blocked').length > 0 && (
-                                      <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>{dayApps.filter((a: any) => a.status !== 'blocked').length} зап.</span>
+                                      <span className="cal-m-count" style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>{dayApps.filter((a: any) => a.status !== 'blocked').length} зап.</span>
                                     )}
                                   </div>
                                   <span style={{ fontWeight: isMDayToday ? '700' : '500',
@@ -1900,7 +1921,7 @@ const handleSaveShifts = async () => {
                               )}
 
                               {dayApps.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1, overflow: 'hidden', width: '100%' }}>
+                                <div className="cal-m-chips" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1, overflow: 'hidden', width: '100%' }}>
                                   {dayApps.slice(0, 4).map((app: any) => {
                                     const isBlock = app.status === 'blocked' || app.color === 'blocked';
                                     const mColors = getCardColor(app.staff_id);
@@ -2205,6 +2226,7 @@ const handleSaveShifts = async () => {
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginBottom: '1.25rem' }}>
                 <input
                   type="time"
+                  className="cal-time-input"
                   value={String(selectedBooking.start_time || '').substring(0, 5)}
                   onChange={e => handleUpdateBookingTime(e.target.value)}
                   style={{ fontSize: '1.6rem', fontWeight: 700, color: '#222222', border: 'none', background: 'transparent', padding: 0, outline: 'none', width: '105px', letterSpacing: '-0.02em', fontFamily: 'inherit' }}

@@ -629,6 +629,28 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
         .cl-hint button { margin-top: 0.6rem; border: none; background: none; padding: 0; font-family: inherit; font-size: 0.78rem; font-weight: 700; color: #7c3aed; cursor: pointer; }
         @media (max-width: 1100px) { .cl-grid { grid-template-columns: 1fr; } .cl-side { display: none; } .cl-main { border-right: none; } }
+        @media (max-width: 860px) {
+          .cl-toolbar { padding: 0.75rem 1rem 0 !important; flex-direction: column; align-items: stretch !important; gap: 0.6rem !important; }
+          .cl-search { width: 100% !important; }
+          .cl-search .clean-input { font-size: 16px; padding-top: 0.65rem; padding-bottom: 0.65rem; }
+          .cl-actions-top { justify-content: stretch; flex-wrap: nowrap; }
+          .cl-actions-top > button { flex: 1 1 0; min-width: 0; padding-left: 0.5rem; padding-right: 0.5rem; white-space: nowrap; }
+          .cl-pills { padding: 0.75rem 1rem !important; }
+          .category-pill { padding: 0.55rem 1.1rem; }
+          .cl-main-inner { padding: 0 1rem 1rem !important; }
+          .service-table, .service-table tbody { display: block; }
+          .service-table thead { display: none; }
+          .service-table tr.service-row { display: grid; grid-template-columns: 1fr auto; column-gap: 0.75rem; row-gap: 0.35rem; align-items: center; padding: 0.8rem 0.9rem; margin-bottom: 0.5rem; border: 1px solid #f1f5f9; border-radius: 14px; }
+          .service-table tr.service-row td { display: block; padding: 0 !important; border: none !important; border-radius: 0 !important; background: transparent !important; text-align: left !important; }
+          .service-table tr.service-row td:nth-child(1) { grid-column: 1 / -1; }
+          .service-table tr.service-row td:nth-child(2) { grid-column: 1; }
+          .service-table tr.service-row td:nth-child(3) { grid-column: 2; grid-row: 2; }
+          .service-table tr.service-row td:nth-child(3)::before { content: 'Візитів: '; font-weight: 500; color: #94a3b8; font-size: 0.78rem; }
+          .service-table tr.service-row td:nth-child(4), .service-table tr.service-row td:nth-child(5) { display: none; }
+          .cl-acts { grid-column: 1 / -1 !important; }
+          .cl-acts > span { opacity: 1; }
+          .cl-acts a, .cl-acts button { width: 40px; height: 40px; }
+        }
         .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .cl-search { position: relative; width: 280px; max-width: 100%; }
         .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }

@@ -57,9 +57,9 @@ export default function SiteFooter() {
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
-                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>ПОЛІТИКА КОНФІДЕНЦІЙНОСТІ</Link>
-                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>УМОВИ ВИКОРИСТАННЯ</Link>
-                <Link href="#" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>БЕЗПЕКА</Link>
+                <Link href="#" className="footer-legal" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>ПОЛІТИКА КОНФІДЕНЦІЙНОСТІ</Link>
+                <Link href="#" className="footer-legal" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>УМОВИ ВИКОРИСТАННЯ</Link>
+                <Link href="#" className="footer-legal" style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', letterSpacing: '0.04em' }}>БЕЗПЕКА</Link>
               </div>
 
               <div style={{ color: '#64748B', fontSize: '0.78rem' }}>
@@ -105,7 +105,8 @@ export default function SiteFooter() {
         @media (max-width: 860px) {
           .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 2rem 1.5rem !important; margin-bottom: 2.5rem !important; }
           .footer-grid > div:first-child { grid-column: 1 / -1; }
-          .footer-nav-link { padding: 0.25rem 0; }
+          .footer-nav-link { padding: 0.6rem 0; }
+          .footer-legal { display: inline-block; padding: 0.5rem 0; }
           .clean-dark-footer { padding-top: 3rem !important; }
         }
         .clean-dark-footer {

@@ -1462,7 +1462,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         }
 
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; position: relative; z-index: 10; }
-        @media (max-width: 768px) { .container { padding: 0 1.25rem; } }
+        @media (max-width: 768px) { .container { padding: 0 1.25rem; } .category-btn { padding-top: 0.6rem; padding-bottom: 0.6rem; } }
         .anim { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
         
         .btn-theme { background-color: #C2D8C4 !important; color: #222222 !important; font-weight: 750; border: none; cursor: pointer; }
@@ -1810,6 +1810,13 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
           animation: slideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
         }
+        .hs-pill input { min-width: 0; }
+        @media (max-width: 560px) {
+          .hs-ico { display: none !important; }
+          .hs-pill > div:not([style*="width: 1px"]) { padding-left: 0.6rem !important; padding-right: 0.4rem !important; }
+          .hs-pill input { font-size: 16px !important; }
+          .hs-pill span { font-size: 0.9rem !important; }
+        }
         .hd-short, .hd-find { display: none; }
         .hd-find { background: none; border: none; width: 44px; height: 44px; align-items: center; justify-content: center; cursor: pointer; transition: opacity .2s ease; }
         /* Телефон: у шапці лише логотип, лупа й вхід/аватар. «Для бізнесу» є в футері й нижче на сторінці */
@@ -2086,7 +2093,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
               Зʼявляється останнім: спершу людина читає, чим корисний
               сайт, і лише потім бачить, де це зробити. Одночасна поява
               змусила б обирати, куди дивитись. */}
-          <div style={{
+          <div className="hs-pill" style={{
             animation: 'heroWordIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 820ms both',
             backgroundColor: 'rgba(255, 255, 255, 0.96)',
             backdropFilter: 'blur(20px)',
@@ -2107,7 +2114,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           }}>
 
             <div ref={heroWhatRef} style={{ flex: 1.3, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.5rem 0 1rem', height: '100%' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <svg className="hs-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               <input
                 type="text"
                 placeholder="Послуга, бренд або салон"
@@ -2132,7 +2139,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
             <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
 
             <div ref={heroWhereRef} style={{ flex: 0.9, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 0.75rem', height: '100%' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              <svg className="hs-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
               <input
                 type="text"
                 placeholder="Де шукаємо?"
@@ -2154,7 +2161,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
             <div style={{ width: '1px', height: '28px', backgroundColor: '#e2e8f0' }}></div>
 
             <div ref={heroDateRef} style={{ flex: 0.8, position: 'relative', display: 'flex', alignItems: 'center', padding: '0 1.25rem 0 0.5rem', cursor: 'pointer', height: '100%' }} onClick={() => { setIsDateOpen(!isDateOpen); setActiveSearch('hero'); }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              <svg className="hs-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
               <span style={{ color: searchDate || searchTime ? '#222222' : '#64748b', fontSize: '0.95rem', fontWeight: searchDate || searchTime ? '600' : '400', flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {getDisplayDateTime()}
               </span>

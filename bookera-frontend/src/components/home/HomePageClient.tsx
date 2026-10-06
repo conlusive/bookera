@@ -1462,6 +1462,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         }
 
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; position: relative; z-index: 10; }
+        @media (max-width: 768px) { .container { padding: 0 1.25rem; } }
         .anim { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
         
         .btn-theme { background-color: #C2D8C4 !important; color: #222222 !important; font-weight: 750; border: none; cursor: pointer; }
@@ -1809,6 +1810,17 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
           animation: slideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
         }
+        .hd-short, .hd-find { display: none; }
+        .hd-find { background: none; border: none; width: 44px; height: 44px; align-items: center; justify-content: center; cursor: pointer; transition: opacity .2s ease; }
+        /* Телефон: у шапці лише логотип, лупа й вхід/аватар. «Для бізнесу» є в футері й нижче на сторінці */
+        @media (max-width: 860px) {
+          .hd-logo { width: auto !important; }
+          .hd-logo div { font-size: 1.5rem !important; }
+          .hd-search, .hd-biz, .hd-name, .hd-long { display: none !important; }
+          .hd-short { display: inline; }
+          .hd-find { display: inline-flex; }
+          .hd-right { width: auto !important; margin-left: auto; gap: 0.35rem !important; }
+        }
         .main-header.top .nav-link { color: #ffffff; }
         .main-header.scrolled .nav-link, .main-header.hiding .nav-link { color: #475569; }
         .main-header.scrolled .nav-link:hover, .main-header.hiding .nav-link:hover { color: #8fae92 !important; }
@@ -1848,7 +1860,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       <header className={`main-header ${scrollState}`}>
         <div className="container" style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '1rem' }}>
 
-          <div style={{ width: '180px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          <div className="hd-logo" style={{ width: '180px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
             <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline' }}>
               <div style={{ fontSize: '1.8rem', fontWeight: '900', color: isHeaderDark ? '#111827' : '#ffffff', letterSpacing: '-0.04em', transition: 'color 0.3s ease' }}>
                 Book<span style={{ color: '#8fae92' }}>Era</span>
@@ -1857,7 +1869,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           </div>
 
           {/* ПОШУК У ХЕДЕРІ */}
-          <div style={{
+          <div className="hd-search" style={{
             flex: 1,
             display: 'flex',
             justifyContent: 'flex-start',
@@ -1946,9 +1958,15 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           </div>
 
           {/* ПРОФІЛЬ */}
-          <div style={{ width: '320px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
+          <div className="hd-right" style={{ width: '320px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
+            {/* Телефон: повний пошук у шапці не вміщається - кнопка з лупою веде нагору до великого пошуку */}
+            <button type="button" className="hd-find" aria-label="Пошук" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              style={{ color: isHeaderDark ? '#111827' : '#ffffff', opacity: scrollState === 'top' ? 0 : 1, pointerEvents: scrollState === 'top' ? 'none' : 'auto' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            </button>
             <Link
               href="/business"
+              className="hd-biz"
               style={{
                 whiteSpace: 'nowrap',
                 fontSize: '0.95rem',
@@ -1980,7 +1998,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
                   }}
                   className="anim"
                 >
-                  <span style={{
+                  <span className="hd-name" style={{
                     color: isHeaderDark ? '#111827' : '#ffffff',
                     transition: 'color 0.2s ease',
                     fontSize: '0.95rem',
@@ -2013,7 +2031,8 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
                 onMouseOver={(e) => { e.currentTarget.style.color = '#8fae92'; }}
                 onMouseOut={(e) => { e.currentTarget.style.color = isHeaderDark ? '#111827' : '#ffffff'; }}
               >
-                Увійти / Зареєструватись
+                <span className="hd-long">Увійти / Зареєструватись</span>
+                <span className="hd-short">Увійти</span>
               </span>
             )}
           </div>

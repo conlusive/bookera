@@ -1413,6 +1413,40 @@ const formatRole = (role?: string) => {
 
       <style dangerouslySetInnerHTML={{ __html: `
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; position: relative; z-index: 10; }
+        .sl-hd-short, .sl-hd-find { display: none; }
+        .sl-hd-find { width: 44px; height: 44px; align-items: center; justify-content: center; color: #111827; }
+        /* ТЕЛЕФОН (лише до 860px, комп'ютер не змінюється) */
+        @media (max-width: 860px) {
+          .container { padding: 0 1.25rem; }
+          .sl-hd-logo { width: auto !important; }
+          .sl-hd-logo div { font-size: 1.5rem !important; }
+          .sl-hd-search, .sl-hd-biz, .sl-hd-name, .sl-hd-long { display: none !important; }
+          .sl-hd-short { display: inline; }
+          .sl-hd-find { display: inline-flex; }
+          .sl-hd-right { width: auto !important; margin-left: auto; gap: 0.35rem !important; }
+          .sl-gallery { grid-template-columns: minmax(0, 1fr) !important; height: 260px !important; border-radius: 18px; }
+          .sl-gallery > div:nth-child(n+2) { display: none !important; }
+          .sl-gallery > div:first-child { border-radius: 18px !important; }
+          .sl-h1 { font-size: 1.85rem !important; }
+          .sl-main { grid-template-columns: minmax(0, 1fr) !important; gap: 2rem !important; }
+          .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 2rem 1.5rem !important; margin-bottom: 2.5rem !important; }
+          .footer-grid > div:first-child { grid-column: 1 / -1; }
+          .footer-nav-link { padding: 0.25rem 0; }
+          .clean-dark-footer { padding-top: 3rem !important; }
+          .section-card { padding: 1.4rem !important; }
+        }
+        /* Вікно запису на телефоні - на весь екран, зручні відступи, у степері лише поточний крок підписаний */
+        @media (max-width: 640px) {
+          .apple-modal-overlay { padding: 0 !important; align-items: stretch !important; }
+          .apple-modal-sheet { max-width: 100% !important; height: 100dvh; border-radius: 0 !important; }
+          .apple-modal-sheet > div:first-child { padding: 1rem 1.1rem 0.8rem !important; }
+          .apple-modal-sheet > div:first-child h2 { font-size: 1.1rem !important; }
+          .apple-modal-sheet > div:nth-child(2) { padding: 0.7rem 1rem !important; }
+          .apple-modal-sheet > .hide-scrollbar { flex: 1; min-height: 0 !important; max-height: none !important; padding: 1.1rem !important; }
+          .apple-modal-sheet > div:last-child { padding-bottom: calc(0.9rem + env(safe-area-inset-bottom)) !important; }
+          .bk-step-label:not(.is-active) { display: none; }
+          .bk-two { grid-template-columns: minmax(0, 1fr) !important; gap: 1.25rem !important; }
+        }
         .anim { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
         .section-card { background-color: #ffffff; border-radius: 24px; padding: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; }
         .section-title { font-size: 1.5rem; font-weight: 800; color: #1D1D1F; margin: 0; letter-spacing: -0.02em; }
@@ -1793,7 +1827,7 @@ const formatRole = (role?: string) => {
       }}>
         <div className="container" style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '1rem' }}>
 
-          <div style={{ width: '180px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          <div className="sl-hd-logo" style={{ width: '180px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
             <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline' }}>
               <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', transition: 'color 0.3s ease' }}>
                 Book<span style={{ color: '#8fae92' }}>Era</span>
@@ -1801,7 +1835,7 @@ const formatRole = (role?: string) => {
             </Link>
           </div>
 
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', marginLeft: '1rem' }}>
+          <div className="sl-hd-search" style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', marginLeft: '1rem' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -1906,9 +1940,14 @@ const formatRole = (role?: string) => {
             </div>
           </div>
 
-          <div style={{ width: '320px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
+          <div className="sl-hd-right" style={{ width: '320px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
+            {/* Телефон: повний пошук у шапці не вміщається - лупа веде на головну, де великий пошук */}
+            <Link href="/" className="sl-hd-find" aria-label="Пошук закладів">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            </Link>
             <Link
               href="/business"
+              className="sl-hd-biz"
               style={{
                 whiteSpace: 'nowrap',
                 fontSize: '0.95rem',
@@ -1940,7 +1979,7 @@ const formatRole = (role?: string) => {
                   }}
                   className="anim"
                 >
-                  <span style={{
+                  <span className="sl-hd-name" style={{
                     color: '#111827',
                     transition: 'color 0.2s ease',
                     fontSize: '0.95rem',
@@ -1997,7 +2036,8 @@ const formatRole = (role?: string) => {
                 onMouseOver={(e) => { e.currentTarget.style.color = '#8fae92'; }}
                 onMouseOut={(e) => { e.currentTarget.style.color = '#111827'; }}
               >
-                Увійти / Зареєструватись
+                <span className="sl-hd-long">Увійти / Зареєструватись</span>
+                <span className="sl-hd-short">Увійти</span>
               </span>
             )}
           </div>
@@ -2007,7 +2047,7 @@ const formatRole = (role?: string) => {
       {/* --- ОБКЛАДИНКА ТА ДЕТАЛІ ЗАЛАДУ --- */}
       <section className="container">
         {galleryPhotos.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', marginBottom: '2.5rem' }}>
+          <div className="sl-gallery" style={{ display: 'grid', gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', marginBottom: '2.5rem' }}>
             <div style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', position: 'relative' }}>
               <Image {...imageLoadProps(galleryPhotos[0])} priority src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 768px) 100vw, 66vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(0)} />
             </div>
@@ -2038,7 +2078,7 @@ const formatRole = (role?: string) => {
         <div style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '2.5rem', fontWeight: '800', margin: 0, color: '#1D1D1F', letterSpacing: '-0.02em' }}>
+              <h1 className="sl-h1" style={{ fontSize: '2.5rem', fontWeight: '800', margin: 0, color: '#1D1D1F', letterSpacing: '-0.02em' }}>
                 {salon ? salon.name : "Завантаження..."}
               </h1>
               {realReviewsCount > 0 && realAverageRating > 0 && (
@@ -2147,7 +2187,7 @@ const formatRole = (role?: string) => {
 
       {/* --- СПИСОК ПОСЛУГ (ЧИСТИЙ БЕЙДЖ БЕЗ БОРДЕРА) --- */}
       <main className="container main-content-wrapper" style={{ paddingBottom: '6rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '4rem' }}>
+        <div className="sl-main" style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '4rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
             <div>
@@ -2792,7 +2832,7 @@ const formatRole = (role?: string) => {
       <footer className="clean-dark-footer">
         <div className="container">
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '3rem', marginBottom: '3.5rem' }}>
+          <div className="footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '3rem', marginBottom: '3.5rem' }}>
 
             {/* 1. БРЕНД */}
             <div>
@@ -3005,7 +3045,7 @@ const formatRole = (role?: string) => {
       {/* МОДАЛЬНЕ ВІКНО БРОНЮВАННЯ (ОРИГІНАЛЬНИЙ СТЕППЕР + ПЛАВНІСТЬ) */}
       {/* ========================================================= */}
       {isModalOpen && (
-        <div onClick={closeModal} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem', boxSizing: 'border-box' }}>
+        <div className="apple-modal-overlay" onClick={closeModal} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(15, 23, 42, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: '1rem', boxSizing: 'border-box' }}>
           <div className="apple-modal-sheet" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#ffffff', borderRadius: '24px', width: '100%', maxWidth: '780px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
 
             {/* ХЕДЕР */}
@@ -3073,7 +3113,7 @@ const formatRole = (role?: string) => {
                           }}>
                             {isPassed ? '✓' : item.step}
                           </div>
-                          <span style={{ fontSize: '0.85rem', fontWeight: isActive ? 600 : 500, color: '#1D1D1F' }}>
+                          <span className={`bk-step-label ${isActive ? 'is-active' : ''}`} style={{ fontSize: '0.85rem', fontWeight: isActive ? 600 : 500, color: '#1D1D1F' }}>
                             {item.label}
                           </span>
                         </div>
@@ -3340,7 +3380,7 @@ const formatRole = (role?: string) => {
 
                 /* КРОК 3: МІСЯЧНИЙ КАЛЕНДАР + ЧАС */
                 <div className="apple-step-anim">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '2.5rem' }}>
+                  <div className="bk-two" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '2.5rem' }}>
 
                     {/* Ліва частина: Календар на місяць */}
                     <div>
@@ -3437,7 +3477,7 @@ const formatRole = (role?: string) => {
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '2rem' }}>
+                  <div className="bk-two" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '2rem' }}>
                     <div style={{ background: '#FBFBFD', border: '1px solid rgba(0,0,0,0.06)', borderRadius: '18px', padding: '1.25rem' }}>
                       <h4 style={{ fontSize: '0.92rem', fontWeight: '700', color: '#1D1D1F', margin: '0 0 1rem 0' }}>Деталі запису</h4>
 

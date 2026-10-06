@@ -358,7 +358,8 @@ export default function BusinessLandingPage() {
         .btn-secondary { background-color: #ffffff; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1rem 2.4rem; border-radius: 999px; border: 1px solid #e2e8f0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease; will-change: transform; }
         .btn-secondary:hover { background-color: #f8fafc; border-color: #cbd5e1; transform: translateY(-2px); }
 
-        @media (max-width: 560px) { .hdr-clients, .hdr-name { display: none !important; } }
+        .hdr-short { display: none; }
+        @media (max-width: 560px) { .hdr-clients, .hdr-name, .hdr-long { display: none !important; } .hdr-short { display: inline; } }
         .main-header { position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000; display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent; will-change: transform, background-color; }
         .main-header.top { transform: translateY(0); }
         .main-header.scrolled { position: fixed; background-color: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05); animation: slideDown 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
@@ -540,7 +541,8 @@ export default function BusinessLandingPage() {
                 onMouseOver={e => { e.currentTarget.style.color = '#8fae92'; }}
                 onMouseOut={e => { e.currentTarget.style.color = '#475569'; }}
               >
-                Увійти / Зареєструватись
+                <span className="hdr-long">Увійти / Зареєструватись</span>
+                <span className="hdr-short">Увійти</span>
               </span>
             )}
           </div>

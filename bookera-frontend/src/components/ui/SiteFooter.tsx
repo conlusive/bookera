@@ -11,7 +11,7 @@ export default function SiteFooter() {
       <footer className="clean-dark-footer" style={{ marginTop: 'auto', position: 'relative', overflow: 'hidden' }}>
         <div className="container">
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '3rem', marginBottom: '3.5rem' }}>
+          <div className="footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '3rem', marginBottom: '3.5rem' }}>
             <div>
               <Link href="/" style={{ textDecoration: 'none', display: 'inline-block', marginBottom: '1rem' }}>
                 <div style={{ fontSize: '1.75rem', fontWeight: '900', color: '#ffffff', letterSpacing: '-0.04em' }}>
@@ -101,6 +101,13 @@ export default function SiteFooter() {
           </svg>
         </div>
         <style jsx global>{`
+        /* Телефон: колонки футера у дві, бренд на всю ширину, посилання з зручною зоною натискання */
+        @media (max-width: 860px) {
+          .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 2rem 1.5rem !important; margin-bottom: 2.5rem !important; }
+          .footer-grid > div:first-child { grid-column: 1 / -1; }
+          .footer-nav-link { padding: 0.25rem 0; }
+          .clean-dark-footer { padding-top: 3rem !important; }
+        }
         .clean-dark-footer {
           background-color: #111215;
           color: #ffffff;

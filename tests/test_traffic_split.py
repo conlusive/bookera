@@ -263,3 +263,33 @@ async def test_commission_callback_marks_paid_once_and_checks_amount(client, aut
     async with AsyncSessionLocal() as db:
         statuses = (await db.execute(select(ReferralCommission.status).where(ReferralCommission.business_id == business_id))).scalars().all()
     assert statuses == ["paid"]
+
+
+@pytest.mark.asyncio
+async def test_subscription_payment_automatically_includes_owed_commission(client, auth_headers):
+    """Комісія вираховується в платежі за підписку: заклад не платить її окремо."""
+    from app.services.subscription import SUBSCRIPTION_PRICE_UAH
+
+    headers = auth_headers("split-owner-12")
+    business_id, service_id, _ = await _salon(client, headers, "Net Salon")
+    appt = await _book_by_phone(client, business_id, service_id, _slot(2, 9), None, "+380671000004", "p4")
+    await _complete(client, headers, appt["id"])
+    assert await _owed(client, headers, business_id) == 100.0
+
+    overview = await client.get("/platform/subscription", params={"business_id": business_id}, headers=headers)
+    assert overview.json()["commission_owed_uah"] == 100.0
+
+    r = await client.post("/platform/subscription/checkout", params={"business_id": business_id}, headers=headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["commission_uah"] == 100.0
+    assert body["price_uah"] == float(SUBSCRIPTION_PRICE_UAH)
+    assert body["amount"] == float(SUBSCRIPTION_PRICE_UAH) + 100.0
+    assert body["activated"] is True  # без ключів платіжки: одразу
+
+    assert await _owed(client, headers, business_id) == 0.0
+    assert [c["status"] for c in await _commissions(client, headers, business_id)] == ["paid"]
+
+    # без боргу платіж = лише тариф
+    r2 = await client.post("/platform/subscription/checkout", params={"business_id": business_id}, headers=headers)
+    assert r2.json()["commission_uah"] == 0.0 and r2.json()["amount"] == float(SUBSCRIPTION_PRICE_UAH)

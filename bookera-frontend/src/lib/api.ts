@@ -237,6 +237,8 @@ export interface SubscriptionOverview {
   until: string | null;
   days_left: number | null;
   price_uah: number;
+  /** Комісія за клієнтів з вітрини, що вирахується з наступної оплати підписки */
+  commission_owed_uah?: number;
   period_days: number;
   live_payments: boolean;
   manual_note: string | null;

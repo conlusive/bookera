@@ -90,6 +90,11 @@ export default function SubscriptionPanel({ businessId, showPlans, onShowPlans }
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.8rem', flex: 1 }}>
               {['Онлайн-бронювання', 'Необмежені майстри', 'Листи-нагадування клієнтам', 'Аналітика, склад і витрати', 'Маркетинг і Радар'].map(t => item(t))}
             </ul>
+            {!!data.commission_owed_uah && data.commission_owed_uah > 0 && (
+              <p style={{ margin: '-0.6rem 0 1rem', fontSize: '0.8rem', color: '#6e6e73', lineHeight: 1.45 }}>
+                До оплати + {money(data.commission_owed_uah)} комісії за нових клієнтів з вітрини. Вона вираховується автоматично в цьому ж платежі: окремо платити не треба.
+              </p>
+            )}
             <button type="button" onClick={() => void pay()} disabled={paying}
               style={{ width: '100%', padding: '0.8rem', background: '#436b49', color: '#fff', border: 'none', borderRadius: 10, fontSize: '0.9rem', fontWeight: 700, cursor: paying ? 'wait' : 'pointer', opacity: paying ? 0.7 : 1 }}>
               {paying ? 'Зачекайте…' : data.has_access ? 'Продовжити на 30 днів' : 'Оплатити'}
@@ -125,6 +130,11 @@ export default function SubscriptionPanel({ businessId, showPlans, onShowPlans }
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#1d1d1f', letterSpacing: '-0.5px' }}>
             {money(data.price_uah)} <span style={{ fontSize: '0.9rem', color: '#86868b', fontWeight: 500 }}>/ {data.period_days} днів</span>
           </div>
+          {!!data.commission_owed_uah && data.commission_owed_uah > 0 && (
+            <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: '#6e6e73', maxWidth: 300, marginLeft: 'auto' }}>
+              + {money(data.commission_owed_uah)} комісії за нових клієнтів з вітрини. Вираховується автоматично з цієї оплати.
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
             <button type="button" onClick={() => onShowPlans(true)}
               style={{ padding: '0.6rem 1.2rem', background: '#f5f5f7', color: '#1d1d1f', border: 'none', borderRadius: 8, fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>

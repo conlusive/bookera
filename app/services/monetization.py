@@ -108,6 +108,38 @@ async def award_points_for_new_client(
     logger.info(f"Нараховано {POINTS_PER_NEW_CLIENT} балів business_id={business.id} за нового клієнта")
 
 
+OWED_STATUSES = ("pending", "invoiced")
+
+
+async def owed_commissions(db: AsyncSession, business_id: int, lock: bool = False) -> list:
+    """Неоплачені комісії закладу: нараховані й виставлені в платежі, що ще не підтверджений."""
+    stmt = select(ReferralCommission).where(
+        ReferralCommission.business_id == business_id, ReferralCommission.status.in_(OWED_STATUSES)
+    )
+    if lock:
+        stmt = stmt.with_for_update()
+    return list((await db.execute(stmt)).scalars().all())
+
+
+def commissions_total(rows: list) -> Decimal:
+    return sum((Decimal(r.amount) for r in rows), Decimal("0")).quantize(Decimal("0.01"))
+
+
+async def attach_commissions(db: AsyncSession, rows: list, payment) -> None:
+    """Прив'язує комісії до платежу, що їх покриває (виставлено, ще не сплачено)."""
+    for r in rows:
+        r.payment_id = payment.id
+        r.status = "invoiced"
+    await db.flush()  # сесія без autoflush: наступні вибірки за payment_id мають бачити зміни
+
+
+async def settle_commissions(db: AsyncSession, payment) -> None:
+    """Платіж підтверджено: усе, що в ньому виставлено, стає сплаченим. Повтор нічого не змінює."""
+    rows = (await db.execute(select(ReferralCommission).where(ReferralCommission.payment_id == payment.id))).scalars().all()
+    for r in rows:
+        r.status = "paid"
+
+
 async def charge_commission_if_applicable(db: AsyncSession, appointment: Appointment, business: Business) -> None:
     """
     Викликається, коли запис переходить у статус 'completed'. Комісія

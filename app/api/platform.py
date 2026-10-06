@@ -19,6 +19,7 @@ from app.core.auth import CurrentUser, get_current_user
 from app.core.logging_config import logger
 from app.core.time_utils import utc_now
 from app.models import Business, Payment, User
+from app.services.monetization import attach_commissions, commissions_total, owed_commissions, settle_commissions
 from app.services.payments import create_payment_intent, is_live, verify_callback_signature
 from app.services.subscription import (
     SUBSCRIPTION_PERIOD_DAYS,
@@ -220,8 +221,10 @@ class SubscriptionCheckoutResponse(BaseModel):
     # грошей: перехід за посиланням WayForPay не підтримує.
     checkout: Optional[dict] = None
     order_id: str
-    amount: float
+    amount: float  # усе, що списується: тариф + комісія
     period_days: int
+    price_uah: float = 0  # тариф
+    commission_uah: float = 0  # комісія за клієнтів з вітрини, вирахувана в цьому ж платежі
 
 
 @router.post("/subscription/checkout", response_model=SubscriptionCheckoutResponse)
@@ -254,10 +257,17 @@ async def create_subscription_payment(
     # про успіх, ми маємо знати, кому саме продовжувати доступ.
     order_id = f"sub-{business_id}-{int(utc_now().timestamp())}"
 
+    # Комісія за клієнтів з вітрини вирахувається автоматично: вона входить у цей же платіж,
+    # заклад нічого не платить окремо. Суму рахує сервер.
+    owed_rows = await owed_commissions(db, business_id, lock=True)
+    commission = commissions_total(owed_rows)
+    total = Decimal(SUBSCRIPTION_PRICE_UAH) + commission
+
     intent = create_payment_intent(
-        amount=SUBSCRIPTION_PRICE_UAH,
+        amount=total,
         order_id=order_id,
-        product_name=f"Підписка BookEra — {business.name}",
+        product_name=(f"Підписка BookEra + комісія {commission} ₴ — {business.name}" if commission > 0
+                      else f"Підписка BookEra — {business.name}"),
     )
     intent_provider = getattr(intent, "provider", "wayforpay")
 
@@ -266,7 +276,7 @@ async def create_subscription_payment(
     # шлях до розсинхрону.
     payment = Payment(
         business_id=business_id,
-        amount=SUBSCRIPTION_PRICE_UAH,
+        amount=total,
         currency="UAH",
         purpose="subscription",
         provider=intent_provider,
@@ -278,6 +288,8 @@ async def create_subscription_payment(
     # реальному сценарії. Це навмисно: локальна перевірка має проходити
     # тим самим шляхом, що й бойова.
     db.add(payment)
+    await db.flush()
+    await attach_commissions(db, owed_rows, payment)
     await db.commit()
 
     # Режим без платіжного провайдера (ключі WayForPay не задані).
@@ -299,8 +311,10 @@ async def create_subscription_payment(
         return SubscriptionCheckoutResponse(
             payment_url=None,
             order_id=order_id,
-            amount=float(SUBSCRIPTION_PRICE_UAH),
+            amount=float(total),
             period_days=SUBSCRIPTION_PERIOD_DAYS,
+            price_uah=float(SUBSCRIPTION_PRICE_UAH),
+            commission_uah=float(commission),
             activated=True,
         )
 
@@ -308,8 +322,10 @@ async def create_subscription_payment(
         payment_url=intent.checkout_url,
         checkout=intent.checkout,
         order_id=order_id,
-        amount=float(SUBSCRIPTION_PRICE_UAH),
+        amount=float(total),
         period_days=SUBSCRIPTION_PERIOD_DAYS,
+        price_uah=float(SUBSCRIPTION_PRICE_UAH),
+        commission_uah=float(commission),
     )
 
 
@@ -324,6 +340,7 @@ async def complete_subscription_payment(db: AsyncSession, payment: Payment) -> N
         return
     payment.status = "completed"
     payment.completed_at = utc_now()
+    await settle_commissions(db, payment)  # комісія, виставлена в цьому платежі, вирахувана
     business = (await db.execute(select(Business).where(Business.id == payment.business_id))).scalars().first()
     if business:
         base = business.subscription_until
@@ -357,6 +374,7 @@ async def subscription_overview(
     return {
         **subscription_state(business),
         "price_uah": float(SUBSCRIPTION_PRICE_UAH),
+        "commission_owed_uah": float(commissions_total(await owed_commissions(db, business_id))),
         "period_days": SUBSCRIPTION_PERIOD_DAYS,
         "live_payments": is_live(),
         "manual_note": business.subscription_note,

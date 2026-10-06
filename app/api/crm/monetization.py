@@ -14,7 +14,9 @@ from app.core.rate_limit import rate_limit
 from app.models import Appointment, Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
 from app.models import Expense, StaffMembership, StaffPayout, User
 from app.services import ranking
-from app.services.monetization import calculate_payout_preview
+from app.services.monetization import (
+    OWED_STATUSES, attach_commissions, calculate_payout_preview, commissions_total, owed_commissions, settle_commissions,
+)
 from app.services.payments import create_payment_intent
 from app.schemas.monetization import (
     GiftCertificateCreate, GiftCertificateResponse,
@@ -26,9 +28,6 @@ from app.schemas.monetization import (
 )
 
 router = APIRouter(tags=["CRM - Monetization"])
-
-# Комісії, що ще не оплачені: нараховані й виставлені в платежі, який не підтверджено
-OWED_STATUSES = ("pending", "invoiced")
 
 
 
@@ -132,12 +131,8 @@ async def checkout_commissions(
     await assert_business_admin(db, current_user, business_id)
     business = await _get_business_or_404(db, business_id)
 
-    rows = (await db.execute(
-        select(ReferralCommission).where(
-            ReferralCommission.business_id == business_id, ReferralCommission.status.in_(OWED_STATUSES),
-        ).with_for_update()
-    )).scalars().all()
-    amount = sum((Decimal(r.amount) for r in rows), Decimal("0")).quantize(Decimal("0.01"))
+    rows = await owed_commissions(db, business_id, lock=True)
+    amount = commissions_total(rows)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Немає комісії до сплати")
 
@@ -151,10 +146,7 @@ async def checkout_commissions(
     )
     db.add(payment)
     await db.flush()
-    for r in rows:
-        r.payment_id = payment.id
-        r.status = "invoiced"
-    await db.flush()  # сесія без autoflush: без цього вибірка за payment_id нічого не знайшла б
+    await attach_commissions(db, rows, payment)
 
     paid = False
     if intent.status == "completed":
@@ -173,11 +165,7 @@ async def complete_commission_payment(db: AsyncSession, payment: Payment) -> Non
         return
     payment.status = "completed"
     payment.completed_at = utc_now()
-    rows = (await db.execute(
-        select(ReferralCommission).where(ReferralCommission.payment_id == payment.id)
-    )).scalars().all()
-    for r in rows:
-        r.status = "paid"
+    await settle_commissions(db, payment)
 
 
 # === Radar (платне просування) ===

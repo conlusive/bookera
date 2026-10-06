@@ -114,6 +114,13 @@ const getStaffName = (t: any): string => {
 
 // Список усіх доступних зручностей із лапкою для тварин
 
+/**
+ * Оплата візиту онлайн. Раніше перемикач «Оплата онлайн» лише міняв напис кнопки: запис створювався
+ * без жодного платежу, і клієнт думав, що заплатив. Поки сервер не приймає платіж за візит
+ * (оплата + виплата закладу за мінусом комісії), варіант не показуємо.
+ */
+const ONLINE_VISIT_PAYMENT = false;
+
 export default function SalonClient({
   initialSalon,
   initialServices,
@@ -3551,7 +3558,7 @@ const formatRole = (role?: string) => {
                           <h4 style={{ fontSize: '0.92rem', fontWeight: '700', color: '#1D1D1F', margin: '0 0 0.65rem 0' }}>
                             Спосіб оплати
                           </h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: ONLINE_VISIT_PAYMENT ? '1fr 1fr' : '1fr', gap: '8px' }}>
                             <button
                               type="button"
                               onClick={() => setPaymentMethod('on_site')}
@@ -3582,7 +3589,7 @@ const formatRole = (role?: string) => {
                               </div>
                             </button>
 
-                            <button
+                            {ONLINE_VISIT_PAYMENT && <button
                               type="button"
                               onClick={() => setPaymentMethod('online')}
                               style={{
@@ -3610,7 +3617,7 @@ const formatRole = (role?: string) => {
                                 <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1D1D1F' }}>Оплата онлайн</div>
                                 <div style={{ fontSize: '0.72rem', color: '#86868B' }}>Картка / Apple Pay</div>
                               </div>
-                            </button>
+                            </button>}
                           </div>
                         </div>
 

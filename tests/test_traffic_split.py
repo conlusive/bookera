@@ -114,3 +114,78 @@ async def test_commission_uses_rate_at_completion_and_price_actually_paid(client
     rows = await _commissions(client, headers, business_id)
     assert float(rows[0]["amount"]) == 80.0
     assert float(rows[0]["rate_applied"]) == 10.0
+
+
+async def _complete(client, headers, appt_id):
+    await client.patch(f"/appointments/{appt_id}/status", json={"status": "completed"}, headers=headers)
+
+
+async def _book_by_phone(client, business_id, service_id, start, token, phone, session):
+    lock = await client.post("/appointments/lock", json={
+        "business_id": business_id, "service_id": service_id, "start_time": start,
+        "session_token": session, "direct_link_token": token,
+    })
+    assert lock.status_code == 200, lock.text
+    r = await client.post("/appointments", json={
+        "business_id": business_id, "service_id": service_id, "start_time": start, "session_token": session,
+        "client_name": "Ірина", "client_phone": phone, "direct_link_token": token,
+    })
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+@pytest.mark.asyncio
+async def test_only_first_visit_of_new_marketplace_client_is_charged(client, auth_headers):
+    headers = auth_headers("split-owner-6")
+    business_id, service_id, _ = await _salon(client, headers, "First Visit Salon")
+
+    first = await _book_by_phone(client, business_id, service_id, _slot(2, 9), None, "+380671234567", "s-first")
+    await _complete(client, headers, first["id"])
+    second = await _book_by_phone(client, business_id, service_id, _slot(3, 9), None, "+38 (067) 123-45-67", "s-second")
+    assert second["source"] == "marketplace", "джерело лишається чесним, а комісії за повторний візит немає"
+    await _complete(client, headers, second["id"])
+
+    rows = await _commissions(client, headers, business_id)
+    assert [c["appointment_id"] for c in rows] == [first["id"]], "платним є лише перший візит нової людини"
+
+
+@pytest.mark.asyncio
+async def test_client_first_seen_via_direct_link_stays_free_via_marketplace(client, auth_headers):
+    headers = auth_headers("split-owner-7")
+    business_id, service_id, token = await _salon(client, headers, "Own Client Salon")
+
+    own = await _book_by_phone(client, business_id, service_id, _slot(2, 9), token, "+380501112200", "s-own")
+    await _complete(client, headers, own["id"])
+    later = await _book_by_phone(client, business_id, service_id, _slot(5, 9), None, "+380501112200", "s-later")
+    await _complete(client, headers, later["id"])
+
+    assert await _commissions(client, headers, business_id) == []
+
+
+@pytest.mark.asyncio
+async def test_client_card_added_by_salon_before_booking_is_own(client, auth_headers):
+    """Картка, яку заклад створив сам (вручну/імпорт) раніше за онлайн-запис, - власний клієнт."""
+    from datetime import datetime
+    from sqlalchemy import update
+    from app.core.database import AsyncSessionLocal
+    from app.models import Client
+
+    headers = auth_headers("split-owner-8")
+    business_id, service_id, _ = await _salon(client, headers, "Card Salon")
+    r = await client.post("/crm/clients", json={"business_id": business_id, "name": "Стара клієнтка", "phone": "+380931110011"}, headers=headers)
+    assert r.status_code == 201, r.text
+    async with AsyncSessionLocal() as db:  # картка існує не секунди, а давно
+        await db.execute(update(Client).where(Client.id == r.json()["id"]).values(created_at=datetime(2024, 1, 1)))
+        await db.commit()
+
+    appt = await _book_by_phone(client, business_id, service_id, _slot(2, 9), None, "+380931110011", "s-card")
+    await _complete(client, headers, appt["id"])
+    assert await _commissions(client, headers, business_id) == []
+
+
+@pytest.mark.asyncio
+async def test_platform_terms_describe_first_visit_policy(client):
+    r = await client.get("/businesses/platform-terms")
+    body = r.json()
+    assert body["commission_first_visit_only"] is True
+    assert body["direct_link_days"] == 30

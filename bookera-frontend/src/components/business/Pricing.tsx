@@ -33,7 +33,7 @@ export default function Pricing({ terms, onStart }: { terms: PlatformTerms; onSt
   const facts = [
     { big: <Count to={terms.trial_days} />, unit: 'днів', cap: 'безкоштовно, щоб усе спробувати' },
     { big: <Count to={terms.price_uah} suffix=" ₴" />, unit: `/ ${periodLabel}`, cap: 'єдиний тариф: увесь кабінет' },
-    { big: <><Count to={terms.own_clients_commission_percent} suffix="%" /></>, unit: 'комісії', cap: 'з клієнтів, яких привели ви самі' },
+    { big: <><Count to={terms.own_clients_commission_percent} suffix="%" /></>, unit: 'комісії', cap: 'з ваших клієнтів і з повторних візитів' },
   ];
   return (
     <MotionConfig reducedMotion="user">
@@ -53,14 +53,14 @@ export default function Pricing({ terms, onStart }: { terms: PlatformTerms; onSt
 
           <motion.div className="pz-calc" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-40px' }} transition={spring}>
             <div className="pz-q">
-              <div><h3>А з вітрини BookEra?</h3><p>Комісія {Math.round(rate)}% береться лише із завершеного візиту. Подивіться, скільки лишається вам.</p></div>
+              <div><h3>А з вітрини BookEra?</h3><p>Комісія {Math.round(rate)}% береться лише з першого завершеного візиту нового клієнта. Усі наступні візити — ваші, без комісії.</p></div>
               <div className="pz-visit"><label htmlFor="pz-visit">Візит коштує</label><output htmlFor="pz-visit">{money(visit)}</output></div>
             </div>
             <input id="pz-visit" type="range" min={300} max={3000} step={100} value={visit} onChange={e => setVisit(Number(e.target.value))} aria-label="Вартість візиту" />
             <div className="pz-rows">
               <div><span>Ваш клієнт <em>посилання, QR, розсилка</em></span><b>вам {money(visit)}</b></div>
               <div className="pz-bar"><i style={{ transform: 'scaleX(1)' }} /></div>
-              <div><span>Клієнт із вітрини BookEra <em>комісія {money(fee)}</em></span><b>вам {money(visit - fee)}</b></div>
+              <div><span>Новий клієнт із вітрини BookEra <em>перший візит: комісія {money(fee)}</em></span><b>вам {money(visit - fee)}</b></div>
               <div className="pz-bar"><i style={{ transform: `scaleX(${(visit - fee) / visit})` }} /></div>
             </div>
           </motion.div>

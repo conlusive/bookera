@@ -49,7 +49,7 @@ async def get_platform_terms(response: Response):
     Умови платформи для бізнесу: ціна єдиного тарифу, пробний період і комісія.
     Бізнес-лендінг показує саме ці числа, а не власні копії: змінили ціну в налаштуваннях - змінилась і на сайті.
     """
-    from app.services.monetization import DEFAULT_COMMISSION_RATE
+    from app.services.monetization import DEFAULT_COMMISSION_RATE, DIRECT_LINK_DAYS
     from app.services.subscription import SUBSCRIPTION_PERIOD_DAYS, SUBSCRIPTION_PRICE_UAH, TRIAL_DAYS
     response.headers["Cache-Control"] = "public, max-age=300"
     return {
@@ -58,6 +58,9 @@ async def get_platform_terms(response: Response):
         "trial_days": TRIAL_DAYS,
         "marketplace_commission_percent": float(DEFAULT_COMMISSION_RATE),
         "own_clients_commission_percent": 0,
+        # Комісія лише за перший візит нового клієнта з вітрини; прямі посилання діють стільки днів
+        "commission_first_visit_only": True,
+        "direct_link_days": DIRECT_LINK_DAYS,
     }
 
 

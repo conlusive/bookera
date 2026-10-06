@@ -1,7 +1,9 @@
+import re
+from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging_config import logger
@@ -11,6 +13,68 @@ from app.models import Appointment, Business, Client, PointsLedgerEntry, PointsR
 POINTS_PER_NEW_CLIENT = 10
 # Комісія платформи з завершеного візиту, що прийшов із вітрини (власні клієнти її не мають)
 DEFAULT_COMMISSION_RATE = Decimal("10.00")
+# Скільки днів після переходу за прямим посиланням закладу клієнт лишається «власним»
+# (браузер забуває токен пізніше; число віддається фронтенду через /businesses/platform-terms)
+DIRECT_LINK_DAYS = 30
+# Картка клієнта, створена не онлайн-записом і раніше за запис, - клієнт закладу, а не вітрини.
+# Невеликий запас: картку онлайн-запису сервер створює майже одночасно з самим записом.
+_OWN_CARD_GRACE = timedelta(minutes=2)
+ONLINE_TAG = "Онлайн-запис"
+
+
+def _phone_tail(phone: Optional[str]) -> Optional[str]:
+    digits = re.sub(r"\D", "", phone or "")
+    return digits[-9:] if len(digits) >= 9 else None
+
+
+def _identity_filters(model, appointment: Appointment) -> list:
+    """Умови «це та сама людина»: картка/запис за client_id, останніми 9 цифрами телефону чи поштою."""
+    conds = []
+    if getattr(appointment, "client_id", None) is not None:
+        conds.append(model.client_id == appointment.client_id if hasattr(model, "client_id") else model.id == appointment.client_id)
+    tail = _phone_tail(appointment.client_phone)
+    phone_col = model.client_phone if hasattr(model, "client_phone") else model.phone
+    email_col = model.client_email if hasattr(model, "client_email") else model.email
+    if tail:
+        conds.append(func.right(func.regexp_replace(phone_col, r"\D", "", "g"), 9) == tail)
+    if appointment.client_email:
+        conds.append(func.lower(email_col) == appointment.client_email.strip().lower())
+    return conds
+
+
+async def is_own_client(db: AsyncSession, appointment: Appointment) -> bool:
+    """
+    Чи цей клієнт уже був клієнтом закладу ДО візиту. Тоді вітрина його не «привела» і комісії немає.
+
+    Власний, якщо:
+      1) у закладі вже є ІНШИЙ завершений візит цієї людини (з будь-якого джерела), або
+      2) її картка в закладі існувала раніше за запис і створена НЕ онлайн-записом
+         (внесена вручну, імпортована, з розсилки).
+    Людину знаходимо за client_id, останніми 9 цифрами телефону чи поштою.
+    """
+    visit_conds = _identity_filters(Appointment, appointment)
+    if visit_conds:
+        prior = await db.execute(
+            select(Appointment.id).where(
+                Appointment.business_id == appointment.business_id,
+                Appointment.status == "completed",
+                Appointment.id != appointment.id,
+                or_(*visit_conds),
+            ).limit(1)
+        )
+        if prior.scalars().first() is not None:
+            return True
+
+    card_conds = _identity_filters(Client, appointment)
+    if card_conds and appointment.created_at is not None:
+        cards = await db.execute(
+            select(Client).where(Client.business_id == appointment.business_id, or_(*card_conds))
+        )
+        for card in cards.scalars().all():
+            if card.created_at is not None and card.created_at < appointment.created_at - _OWN_CARD_GRACE \
+                    and ONLINE_TAG not in (card.tags or []):
+                return True
+    return False
 
 
 async def award_points_for_new_client(
@@ -47,9 +111,11 @@ async def award_points_for_new_client(
 async def charge_commission_if_applicable(db: AsyncSession, appointment: Appointment, business: Business) -> None:
     """
     Викликається, коли запис переходить у статус 'completed'. Комісія
-    нараховується лише за клієнта, який прийшов з вітрини Bookera
-    (source == 'marketplace'). Власні клієнти - за прямим посиланням,
-    з розсилки, внесені вручну - безкоштовні завжди.
+    нараховується лише за НОВОГО клієнта закладу, що прийшов з вітрини Bookera
+    (source == 'marketplace'), і лише за його перший завершений візит.
+    Власні клієнти - за прямим посиланням, з розсилки, внесені вручну, а також
+    ті, хто вже відвідував заклад, - безкоштовні завжди, навіть якщо записались
+    через вітрину: платформа не приводила їх, вони вже були в закладі.
 
     Радар - це окрема плата за показ, а не друга комісія: раніше, поки
     пакет був активний, 10% стягувалось з УСІХ візитів закладу, тобто
@@ -66,6 +132,9 @@ async def charge_commission_if_applicable(db: AsyncSession, appointment: Appoint
 
     if not appointment.price:
         return
+
+    if await is_own_client(db, appointment):
+        return  # уже клієнт закладу - вітрина його не привела
 
     rate = business.commission_rate or DEFAULT_COMMISSION_RATE
     amount = (Decimal(str(appointment.price)) * rate / Decimal("100")).quantize(Decimal("0.01"))

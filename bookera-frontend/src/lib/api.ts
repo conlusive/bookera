@@ -366,6 +366,10 @@ const isPlainGet = (o: RequestInit) => (!o.method || o.method.toUpperCase() === 
 export interface PlatformTerms {
   price_uah: number; period_days: number; trial_days: number;
   marketplace_commission_percent: number; own_clients_commission_percent: number;
+  /** Комісія лише з першого візиту нового клієнта з вітрини */
+  commission_first_visit_only: boolean;
+  /** Скільки днів прямe посилання зараховує клієнта власним */
+  direct_link_days: number;
 }
 export interface CampaignQuota {
   daily_recipient_limit: number; daily_campaign_limit: number;

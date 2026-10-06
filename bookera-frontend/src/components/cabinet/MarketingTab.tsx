@@ -191,7 +191,7 @@ export default function MarketingTab({ business }: { business: any }) {
   const trend = res ? res.storefront_bookings_30d - res.storefront_bookings_prev_30d : 0;
 
   const hint = view === 'radar'
-    ? { t: 'Радар — це реклама', x: 'Заклад отримує бали в позиції та позначку «Реклама» на картці. Комісії за Радар немає: 10% беруться лише з клієнтів, що прийшли з вітрини.' }
+    ? { t: 'Радар — це реклама', x: 'Заклад отримує бали в позиції та позначку «Реклама» на картці. Комісії за Радар немає: 10% беруться лише з першого візиту нового клієнта, що прийшов з вітрини.' }
     : view === 'campaigns'
       ? { t: 'Лист із вашим посиланням', x: 'Шаблони вже містять пряме посилання: клієнти, що запишуться з розсилки, не рахуються як клієнти вітрини — комісії за них немає.' }
       : { t: 'Куди ставити посилання', x: 'Шапка Instagram, Telegram, візитка, QR на дверях. Усі, хто запишеться за прямим посиланням, — ваші клієнти без комісії.' };
@@ -395,7 +395,7 @@ export default function MarketingTab({ business }: { business: any }) {
                 <section className="mk-link-card plain">
                   <div className="mk-link-main">
                     <h3>Посилання вітрини</h3>
-                    <p>Так вас знаходять у каталозі BookEra. За клієнтів, що прийшли звідси, стягується комісія {commission}% із завершеного візиту.</p>
+                    <p>Так вас знаходять у каталозі BookEra. За нового клієнта, що прийшов звідси, стягується комісія {commission}% із його першого завершеного візиту. Повторні візити — без комісії.</p>
                     <div className="mk-url">
                       <input readOnly className="clean-input" value={links?.marketplace_url || 'Завантаження…'} onFocus={e => e.currentTarget.select()} />
                       <button type="button" className="clean-btn-ghost" disabled={!links} onClick={() => links && copy('market', links.marketplace_url)}>{copied === 'market' ? 'Скопійовано ✓' : 'Копіювати'}</button>
@@ -455,7 +455,7 @@ export default function MarketingTab({ business }: { business: any }) {
                 <div className="widget-title">Звідки клієнт</div>
                 <div className="mk-row"><span>Пряме посилання</span><b className="up">0%</b></div>
                 <div className="mk-row"><span>Вітрина BookEra</span><b>{commission}%</b></div>
-                <p className="mk-note">Комісія — із завершеного візиту, не за запис. Розсилки, QR і власні клієнти її не мають.</p>
+                <p className="mk-note">Комісія — лише з першого завершеного візиту нового клієнта з вітрини, не за запис. Розсилки, QR, власні й повторні клієнти її не мають.</p>
               </div>
             )}
           </div>

@@ -190,3 +190,130 @@ def layout(
   </table>
 </body>
 </html>"""
+
+
+def campaign_layout(
+    business_name: str,
+    title: str,
+    greeting: str,
+    text_html: str,
+    cta_url: str = "",
+    cta_label: str = "Записатися онлайн",
+    contacts: Optional[list] = None,
+    can_reply: bool = False,
+    unsubscribe_url: str = "",
+    preheader: str = "",
+) -> str:
+    """
+    Лист розсилки: шапка з назвою закладу, великий заголовок, привітання, текст, широка кнопка,
+    блок контактів і спокійний сірий футер з відпискою. Без фотографій: лист легкий, швидко
+    вантажиться й не потрапляє під «картинки вимкнені».
+
+    contacts - список пар (підпис, значення, посилання або ""): показуємо лише те, що заклад
+    справді вказав, нічого не вигадуємо.
+    """
+    rows = ""
+    for label, value, href in (contacts or []):
+        v = esc(value)
+        if href:
+            v = f'<a href="{esc(href)}" style="color:{INK};text-decoration:none;font-weight:600;">{v}</a>'
+        else:
+            v = f'<span style="color:{INK};font-weight:600;">{v}</span>'
+        rows += f"""
+        <tr>
+          <td style="padding:0 0 12px;font-family:{FONT};font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:{MUTED};">{esc(label)}</td>
+        </tr>
+        <tr>
+          <td style="padding:0 0 18px;font-family:{FONT};font-size:16px;line-height:1.45;">{v}</td>
+        </tr>"""
+    contacts_block = f"""
+      <tr><td style="padding:8px 0 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="background:{SOFT};border:1px solid {LINE};border-radius:14px;">
+          <tr><td style="padding:22px 24px 4px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="padding:0 0 18px;font-family:{FONT};font-size:18px;font-weight:700;color:{INK};letter-spacing:-0.01em;">Як нас знайти</td></tr>
+              {rows}
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>""" if rows else ""
+
+    cta_block = f"""
+      <tr><td style="padding:8px 0 28px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" bgcolor="{INK}" style="border-radius:12px;">
+              <a href="{esc(cta_url)}" target="_blank"
+                 style="display:block;padding:16px 24px;font-family:{FONT};font-size:17px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;letter-spacing:-0.01em;">
+                {esc(cta_label)}
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td></tr>""" if cta_url else ""
+
+    reply_line = (
+        f'<p style="margin:0 0 14px;font-size:15px;color:{INK};">Є питання? Дайте відповідь на цей лист — він надійде безпосередньо закладу.</p>'
+        if can_reply else ""
+    )
+    unsub_line = (
+        f'Ви отримуєте цей лист, бо є клієнтом закладу {esc(business_name if "«" in business_name or "»" in business_name else "«" + business_name + "»")}. '
+        f'<a href="{esc(unsubscribe_url)}" style="color:{INK};text-decoration:underline;">Відписатися від розсилок</a>.'
+        if unsubscribe_url else ""
+    )
+    preheader_block = (
+        f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:{PAGE_BG};">'
+        f"{esc(preheader)}{'&nbsp;&zwnj;' * 40}</div>"
+    ) if preheader else ""
+
+    return f"""<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{esc(title)}</title>
+</head>
+<body style="margin:0;padding:0;background:{PAGE_BG};">
+  {preheader_block}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{PAGE_BG};">
+    <tr><td align="center" style="padding:24px 12px;">
+
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="width:600px;max-width:100%;background:#ffffff;border-radius:18px;overflow:hidden;">
+        <tr><td style="height:5px;background:{MATCHA};font-size:0;line-height:0;">&nbsp;</td></tr>
+
+        <!-- Шапка: назва закладу замість логотипу -->
+        <tr>
+          <td align="center" style="padding:30px 32px 26px;border-bottom:1px solid {LINE};font-family:{FONT};font-size:20px;font-weight:800;letter-spacing:-0.01em;color:{INK};">
+            {esc(business_name)}
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:34px 32px 8px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="padding:0 0 22px;font-family:{FONT};font-size:30px;font-weight:800;line-height:1.2;letter-spacing:-0.025em;color:{INK};">{esc(title)}</td></tr>
+              <tr><td style="padding:0 0 14px;font-family:{FONT};font-size:17px;font-weight:600;color:{INK};">{esc(greeting)}</td></tr>
+              <tr><td style="padding:0 0 22px;font-family:{FONT};font-size:17px;line-height:1.65;color:{INK};">{text_html}</td></tr>
+              {cta_block}
+              {contacts_block}
+              <tr><td align="right" style="padding:26px 0 30px;font-family:{FONT};font-size:15px;font-weight:600;color:{MUTED};">&mdash; З повагою, {esc(business_name)}</td></tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Футер: спокійний сірий блок -->
+        <tr>
+          <td align="center" style="padding:26px 32px 28px;background:{PAGE_BG};font-family:{FONT};font-size:13px;line-height:1.6;color:{MUTED};">
+            {reply_line}
+            <p style="margin:0 0 12px;">{unsub_line}</p>
+            <p style="margin:0;color:#A5AEA3;">Надіслано через BookEra</p>
+          </td>
+        </tr>
+      </table>
+
+    </td></tr>
+  </table>
+</body>
+</html>"""

@@ -1,10 +1,11 @@
 import os
 import re
+from typing import Optional
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import asyncio
-from app.core.email_layout import FONT, INK, MUTED, button, card, esc, info_row, layout
+from app.core.email_layout import FONT, INK, button, campaign_layout, card, esc, info_row, layout
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -246,6 +247,7 @@ def build_campaign_message(
         unsubscribe_url: str,
         one_click_url: str = "",
         reply_to: str = "",
+        contacts: Optional[list] = None,
 ) -> MIMEMultipart:
     """
     Лист розсилки як готове повідомлення.
@@ -262,18 +264,18 @@ def build_campaign_message(
     text_part, cta_url = split_cta(message)
     first_name = (client_name or "").split()[0] if (client_name or "").strip() else ""
     greeting = f"{first_name}, доброго дня!" if first_name else "Доброго дня!"
-    body = f"""
-    <div style="font-family:{FONT};font-size:16px;line-height:1.65;color:{INK};">
-      <p style="margin:0 0 16px;font-weight:600;">{esc(greeting)}</p>
-      <div>{linkify(text_part)}</div>
-      {button("Записатися онлайн", cta_url) if cta_url else ""}
-      <p style="margin:28px 0 28px;color:{MUTED};font-size:15px;">З повагою,<br>команда {esc(_quoted(business_name))}</p>
-    </div>
-    """
-    html = layout(
+    contact_rows = []
+    for label, value, href in (contacts or []):
+        if value:
+            contact_rows.append((label, _clean_header(str(value)), href))
+    html = campaign_layout(
         business_name=business_name,
         title=subject,
-        body_html=body,
+        greeting=greeting,
+        text_html=linkify(text_part),
+        cta_url=cta_url,
+        contacts=contact_rows,
+        can_reply=bool(reply_to and "@" in reply_to),
         unsubscribe_url=unsubscribe_url,
         preheader=" ".join(text_part.split())[:110],
     )
@@ -281,7 +283,8 @@ def build_campaign_message(
         f"{greeting}\n\n"
         + text_part.strip()
         + (f"\n\nЗаписатися онлайн: {cta_url}" if cta_url else "")
-        + f"\n\nЗ повагою,\nкоманда {_quoted(business_name)}"
+        + ("".join(f"\n{l}: {v}" for l, v, _ in contact_rows) and "\n" + "".join(f"\n{l}: {v}" for l, v, _ in contact_rows))
+        + f"\n\n— З повагою, {business_name}"
         + f"\n\n--\nВи отримуєте цей лист, бо є клієнтом {_quoted(business_name)}.\nВідписатися від розсилок: {unsubscribe_url}\n"
     )
 

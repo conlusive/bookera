@@ -603,6 +603,16 @@ class CampaignRequest(BaseModel):
     audience: str = Field("all", description="all | regular | lapsed")
 
 
+def _business_contacts(business) -> list:
+    """Контакти закладу для листа: лише ті, що він справді вказав."""
+    address = ", ".join(x for x in [getattr(business, "address", None), getattr(business, "city", None)] if x)
+    phone = (getattr(business, "phone", None) or "").strip()
+    return [
+        ("Адреса", address, ""),
+        ("Телефон", phone, f"tel:{''.join(ch for ch in phone if ch.isdigit() or ch == '+')}" if phone else ""),
+    ]
+
+
 async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
     """
     Кому піде розсилка: (усі клієнти закладу, унікальні адресати, скільки відписалось, скільки адрес некоректні).
@@ -748,6 +758,7 @@ async def send_campaign(
     background_tasks.add_task(
         run_campaign, campaign.id, items, business.name, payload.subject, payload.message,
         (getattr(business, "email", None) or ""),
+        _business_contacts(business),
     )
 
     return {

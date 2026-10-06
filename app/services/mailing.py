@@ -167,7 +167,7 @@ def unique_recipients(clients: Iterable, blocked: Set[str]):
     return out, unsub, invalid
 
 
-async def run_campaign(campaign_id: int, items: list, business_name: str, subject: str, message: str, reply_to: str = "") -> None:
+async def run_campaign(campaign_id: int, items: list, business_name: str, subject: str, message: str, reply_to: str = "", contacts: Optional[list] = None) -> None:
     """
     Фонова відправка розсилки: будує листи, шле пакетом, записує результат у журнал розсилок.
     Працює у власній сесії бази: сесія запиту до цього часу вже закрита.
@@ -192,7 +192,7 @@ async def run_campaign(campaign_id: int, items: list, business_name: str, subjec
             build_campaign_message(
                 to_email=email, client_name=name, business_name=business_name, subject=subject, message=message,
                 unsubscribe_url=frontend_unsubscribe_url(token), one_click_url=one_click_unsubscribe_url(token),
-                reply_to=reply_to,
+                reply_to=reply_to, contacts=contacts,
             )
             for email, name, token in items
         ]

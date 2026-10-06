@@ -804,6 +804,10 @@ const formatRole = (role?: string) => {
     return [...seen.filter(c => c !== OTHER_CATEGORY), ...seen.filter(c => c === OTHER_CATEGORY)];
   }, [services]);
 
+  // Категорії-чіпи - лише коли заклад створив їх у кабінеті (в послугах є хоч одна справжня категорія).
+  // Послуги без категорії самі по собі чіпа «Інше» не породжують.
+  const hasRealCategory = useMemo(() => services.some((srv: any) => String(srv.category || '').trim() !== ''), [services]);
+
   const processedServices = useMemo(() => {
     let result = [...services];
     if (selectedCategory) {
@@ -1486,10 +1490,9 @@ const formatRole = (role?: string) => {
           .sl-svc-head { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem 0.6rem !important; border-bottom: none !important; padding-bottom: 0 !important; margin-bottom: 0.9rem !important; }
           .sl-svc-left { display: contents !important; }
           .sl-svc-left h2 { grid-column: 1 / -1; margin: 0 !important; }
-          .sl-svc-search { height: 44px; background: #F5F5F7; border-radius: 12px; padding: 0 0.85rem; box-sizing: border-box; }
-          .sl-svc-search svg { left: 0.85rem !important; }
-          .sl-svc-search input { width: 100% !important; padding-left: 1.7rem !important; font-size: 16px !important; }
-          .sl-svc-head .sort-dd-trigger { height: 44px; background: #F5F5F7; border-radius: 12px; padding: 0 0.7rem; gap: 0.35rem; }
+          .sl-svc-search { height: 44px; box-sizing: border-box; }
+          .sl-svc-search input { width: 100% !important; padding-left: 1.8rem !important; font-size: 16px !important; }
+          .sl-svc-head .sort-dd-trigger { height: 44px; background: none !important; border: none !important; padding: 0 0.25rem; gap: 0.35rem; }
           .sl-svc-head .sort-dd-chev { display: none; }
           .footer-support-col { grid-column: 1 / -1; }
           .footer-support { flex-direction: row !important; flex-wrap: wrap; gap: 0 1.5rem !important; }
@@ -2303,7 +2306,7 @@ const formatRole = (role?: string) => {
                 </div>
               </div>
 
-              {serviceCategories.length > 1 && (
+              {hasRealCategory && serviceCategories.length > 1 && (
                 <div className="hide-scrollbar" role="tablist" aria-label="Категорії послуг" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', marginBottom: '1.25rem', paddingBottom: '2px' }}>
                   {[null, ...serviceCategories].map(cat => {
                     const on = selectedCategory === cat;

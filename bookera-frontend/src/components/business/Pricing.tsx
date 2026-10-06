@@ -56,7 +56,7 @@ export default function Pricing({ terms, onStart }: { terms: PlatformTerms; onSt
               <div><h3>А з вітрини BookEra?</h3><p>Комісія {Math.round(rate)}% береться лише з першого завершеного візиту нового клієнта. Усі наступні візити — ваші, без комісії.</p></div>
               <div className="pz-visit"><label htmlFor="pz-visit">Візит коштує</label><output htmlFor="pz-visit">{money(visit)}</output></div>
             </div>
-            <input id="pz-visit" type="range" min={300} max={3000} step={100} value={visit} onChange={e => setVisit(Number(e.target.value))} aria-label="Вартість візиту" />
+            <input id="pz-visit" type="range" min={300} max={3000} step={100} value={visit} onChange={e => setVisit(Number(e.target.value))} aria-label="Вартість візиту" style={{ ['--p' as string]: `${((visit - 300) / 2700) * 100}%` }} />
             <div className="pz-rows">
               <div><span>Ваш клієнт <em>посилання, QR, розсилка</em></span><b>вам {money(visit)}</b></div>
               <div className="pz-bar"><i style={{ transform: 'scaleX(1)' }} /></div>
@@ -79,7 +79,13 @@ export default function Pricing({ terms, onStart }: { terms: PlatformTerms; onSt
           .pz-q { display: flex; justify-content: space-between; gap: 2rem; align-items: flex-end; margin-bottom: 1.2rem; flex-wrap: wrap; }
           .pz-q h3 { margin: 0 0 .4rem; font-size: 1.6rem; font-weight: 700; letter-spacing: -.025em; } .pz-q p { margin: 0; color: #6E6E73; max-width: 28em; line-height: 1.5; }
           .pz-visit { text-align: right; } .pz-visit label { display: block; color: #6E6E73; font-size: .9rem; } .pz-visit output { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-          .pz-calc input[type=range] { width: 100%; accent-color: #1D1D1F; margin: 0 0 1.6rem; cursor: pointer; }
+          /* Повзунок чорний у всіх браузерах: accent-color у Safari не завжди діє, тож малюємо доріжку й ручку самі */
+          .pz-calc input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 999px; margin: 0 0 1.6rem; cursor: pointer; outline: none;
+            background: linear-gradient(to right, #1D1D1F 0, #1D1D1F var(--p, 50%), #d6d6dc var(--p, 50%), #d6d6dc 100%); }
+          .pz-calc input[type=range]::-webkit-slider-runnable-track { height: 6px; background: transparent; border-radius: 999px; }
+          .pz-calc input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -10px; border-radius: 50%; background: #1D1D1F; border: 4px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,.28); }
+          .pz-calc input[type=range]::-moz-range-track { height: 6px; background: transparent; border-radius: 999px; }
+          .pz-calc input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #1D1D1F; border: 4px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,.28); }
           .pz-calc input[type=range]:focus-visible { outline: 3px solid #1D1D1F; outline-offset: 4px; }
           .pz-rows > div:not(.pz-bar) { display: flex; justify-content: space-between; gap: 1rem; font-weight: 600; margin-bottom: .55rem; } .pz-rows em { font-style: normal; font-weight: 500; color: #6E6E73; margin-left: .4rem; font-size: .9rem; }
           .pz-rows b { font-variant-numeric: tabular-nums; }

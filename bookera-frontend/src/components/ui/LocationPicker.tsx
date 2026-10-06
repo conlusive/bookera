@@ -28,6 +28,8 @@ interface Props {
   /** Місто - щоб мапа відкрилась там, а не посеред океану. */
   city?: string | null;
   height?: number;
+  /** Без власного пошуку над мапою: адресу вводять в іншому полі, мітка ставиться сама, тут її лише уточнюють. */
+  hideSearch?: boolean;
 }
 
 /** Центри найбільших міст - щоб не питати геокодер заради першого кадру. */
@@ -46,7 +48,7 @@ const CITY_CENTERS: Record<string, [number, number]> = {
 
 const DEFAULT_CENTER: [number, number] = CITY_CENTERS['київ'];
 
-export default function LocationPicker({ value, onChange, city, height = 320 }: Props) {
+export default function LocationPicker({ value, onChange, city, height = 320, hideSearch = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -203,7 +205,7 @@ export default function LocationPicker({ value, onChange, city, height = 320 }: 
     <div>
       {/* Пошук над мапою - як у звичайних мапах: почали вводити адресу,
           обрали підказку, мітка стала на місце. */}
-      <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+      {!hideSearch && <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2.2" strokeLinecap="round"
           style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
           <circle cx="11" cy="11" r="7" /><path d="M16.5 16.5 21 21" />
@@ -262,7 +264,7 @@ export default function LocationPicker({ value, onChange, city, height = 320 }: 
             Нічого не знайдено - натисніть на мапі там, де вхід до закладу.
           </div>
         )}
-      </div>
+      </div>}
 
       <div
         ref={containerRef}
@@ -281,9 +283,9 @@ export default function LocationPicker({ value, onChange, city, height = 320 }: 
         margin: '0.6rem 0 0', lineHeight: 1.45,
       }}>
         {value
-          ? 'Мітку поставлено. Перетягніть її, якщо треба уточнити вхід.'
+          ? (hideSearch ? 'Мітку поставлено за вашою адресою. Перетягніть її, щоб уточнити вхід.' : 'Мітку поставлено. Перетягніть її, якщо треба уточнити вхід.')
           : isReady
-            ? 'Знайдіть адресу в пошуку або натисніть на мапі там, де вхід до закладу.'
+            ? (hideSearch ? 'Введіть адресу вище: мітка стане сама. Або натисніть на мапі там, де вхід до закладу.' : 'Знайдіть адресу в пошуку або натисніть на мапі там, де вхід до закладу.')
             : 'Завантажуємо мапу…'}
       </p>
     </div>

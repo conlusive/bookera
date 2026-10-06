@@ -103,6 +103,13 @@ export default function BusinessRegisterPage() {
   const [invite, setInvite] = useState<{ email: string; role: 'master' | 'admin' }>({ email: '', role: 'master' });
   const ready = useRef(false);
 
+  // Вулиця й будинок - єдине поле адреси: підказки під ним, а мітка на мапі ставиться сама.
+  // Мапа лише для уточнення входу (мітку можна перетягнути).
+  const [suggest, setSuggest] = useState<{ title: string; subtitle: string; lat: number; lng: number }[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [looking, setLooking] = useState(false);
+  const pickedStreet = useRef('');
+
   useEffect(() => {
     void getAuthTokenOrNull().then(t => { if (!t) router.replace('/business'); });
   }, [router]);
@@ -123,6 +130,37 @@ export default function BusinessRegisterPage() {
   }, [form, idx, created]);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm(f => ({ ...f, [k]: v }));
+
+  // Адреса змінилась - шукаємо її на мапі й ставимо мітку (через 450 мс після останньої літери).
+  // Підказку, яку людина вибрала сама, повторно не шукаємо.
+  useEffect(() => {
+    const street = form.street.trim();
+    const city = form.city.trim();
+    if (form.workspace !== 'my_place' || street.length < 3 || city.length < 2) { setSuggest([]); return; }
+    if (street === pickedStreet.current) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setLooking(true);
+      try {
+        const list = await api.geoSuggest(await getAuthToken(), `${city}, ${street}`);
+        if (cancelled) return;
+        setSuggest(list);
+        if (list[0]) setForm(f => (f.street.trim() === street ? { ...f, coords: { lat: list[0].lat, lng: list[0].lng } } : f));
+      } catch {
+        if (!cancelled) setSuggest([]);
+      } finally {
+        if (!cancelled) setLooking(false);
+      }
+    }, 450);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.street, form.city, form.workspace]);
+
+  const pickSuggestion = (s: { title: string; lat: number; lng: number }) => {
+    pickedStreet.current = s.title.trim();
+    setForm(f => ({ ...f, street: s.title, coords: { lat: s.lat, lng: s.lng } }));
+    setSuggest([]);
+    setSuggestOpen(false);
+  };
 
   // Кроки: адреса - лише для закладу, команда - лише для салону
   const steps = useMemo<StepId[]>(() => {
@@ -383,18 +421,30 @@ export default function BusinessRegisterPage() {
                   </label>
                   {form.workspace === 'my_place' && (
                     <>
-                      <label className="rg-field">
-                        <span>Вулиця та будинок</span>
-                        <input value={form.street} placeholder="вул. Івана Франка, 12" className={err('street') ? 'bad' : ''}
-                          onChange={e => set('street', e.target.value)} onBlur={() => setBlurred(b => ({ ...b, street: true }))} />
+                      <label className="rg-field rg-addr">
+                        <span>Вулиця та будинок {looking && <i>шукаємо на мапі…</i>}</span>
+                        <input value={form.street} placeholder="вул. Івана Франка, 12" className={err('street') ? 'bad' : ''} autoComplete="off"
+                          onChange={e => { set('street', e.target.value); setSuggestOpen(true); }}
+                          onFocus={() => setSuggestOpen(true)}
+                          onBlur={() => { setBlurred(b => ({ ...b, street: true })); setTimeout(() => setSuggestOpen(false), 150); }} />
                         {err('street') && <em>{err('street')}</em>}
+                        {suggestOpen && suggest.length > 0 && form.street.trim() !== pickedStreet.current && (
+                          <div className="rg-suggest" role="listbox">
+                            {suggest.slice(0, 5).map(s => (
+                              <button key={`${s.lat},${s.lng}`} type="button" role="option" aria-selected={false}
+                                onMouseDown={e => { e.preventDefault(); pickSuggestion(s); }}>
+                                <b>{s.title}</b>{s.subtitle && <small>{s.subtitle}</small>}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </label>
                       <label className="rg-field">
                         <span>Поверх, кабінет <i>необовʼязково</i></span>
                         <input value={form.details} placeholder="2 поверх, кабінет 4" onChange={e => set('details', e.target.value)} />
                       </label>
-                      <div className="rg-mapcap">Мітка на мапі {form.coords ? <b>✓ поставлено</b> : <i>— знайдіть адресу або перетягніть мітку</i>}</div>
-                      <div className="rg-map"><LocationPicker value={form.coords} city={form.city} height={230} onChange={c => set('coords', c)} /></div>
+                      <div className="rg-mapcap">Перевірте місце на мапі {form.coords ? <b>✓ мітку поставлено за адресою</b> : <i>— зʼявиться, щойно введете адресу</i>}</div>
+                      <div className="rg-map"><LocationPicker hideSearch value={form.coords} city={form.city} height={230} onChange={c => set('coords', c)} /></div>
                     </>
                   )}
                 </>
@@ -628,6 +678,13 @@ export default function BusinessRegisterPage() {
         .rg-option.on .radio::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: #0f172a; animation: rgPop .25s cubic-bezier(.34,1.56,.64,1); }
         @keyframes rgPop { from { transform: scale(0); } }
 
+        .rg-addr { position: relative; }
+        .rg-suggest { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; background: #fff; border-radius: 14px; padding: 6px;
+          box-shadow: 0 18px 40px -12px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.06); }
+        .rg-suggest button { display: block; width: 100%; text-align: left; border: none; background: transparent; border-radius: 10px; padding: 0.6rem 0.75rem; cursor: pointer; font-family: inherit; }
+        .rg-suggest button:hover, .rg-suggest button:focus { background: #f1f5f9; outline: none; }
+        .rg-suggest b { display: block; font-size: 0.92rem; font-weight: 600; color: #0f172a; }
+        .rg-suggest small { display: block; font-size: 0.78rem; color: #94a3b8; margin-top: 1px; }
         .rg-mapcap { font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.5rem; }
         .rg-mapcap b { color: #10b981; text-transform: none; letter-spacing: 0; }
         .rg-mapcap i { font-style: normal; font-weight: 500; color: #94a3b8; text-transform: none; letter-spacing: 0; }

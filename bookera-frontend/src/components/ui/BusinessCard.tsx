@@ -171,7 +171,7 @@ export default function BusinessCard({
           <span className="card-ellipsis" title={category}>{category}</span>
         </div>
 
-        <div className="card-meta-row" style={{ gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
+        <div className="card-meta-row card-meta-loc" style={{ gap: '5px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.85rem' }}>
           {(() => {
             const status = getOpenStatus(biz);
             if (!status.label) return null;
@@ -279,19 +279,23 @@ export function BusinessCardStyles() {
         }
         /* Телефон: плитки нижчі, а порожній рядок «Немає слотів» не займає місця. */
         @media (max-width: 640px) {
-          .apple-biz-card { display: grid; grid-template-columns: 108px minmax(0, 1fr); column-gap: 14px; align-items: start; padding: 0.85rem 0; border-bottom: 1px solid #f1f5f9; }
-          .card-photo-box { aspect-ratio: 1 / 1; border-radius: 14px; }
-          .card-body { min-width: 0; display: flex; flex-direction: column; }
-          .card-body .card-meta-row { margin-bottom: 0.3rem !important; }
-          .card-title-row { flex-direction: column; align-items: flex-start; gap: 1px; margin-bottom: 3px; }
+          /* Телефон: дві колонки, фото зверху, мінімум тексту - назва, рейтинг, статус, ціна */
+          .apple-biz-card .card-photo-box { aspect-ratio: 5 / 4; border-radius: 16px; }
+          .card-body { min-width: 0; display: flex; flex-direction: column; padding-top: 0.5rem; }
+          .card-title-row { flex-direction: column; align-items: flex-start; gap: 1px; margin-bottom: 2px; }
           .card-title-main { width: 100%; flex: none; }
-          .card-title-main .card-heading { white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.25; font-size: 1rem; }
-          .card-price { font-size: 0.82rem; color: #475569; }
+          .card-title-main .card-heading { white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.25; font-size: 0.95rem; font-weight: 600; }
+          .card-price { order: 3; font-size: 0.82rem; font-weight: 700; color: #111827; }
+          .card-body .card-meta-row { margin-bottom: 0.2rem !important; font-size: 0.78rem !important; }
+          .card-meta-loc > span:nth-last-child(-n+2) { display: none; }
           .card-foot-empty { display: none; }
-          .card-foot { min-height: 0; padding-top: 0.5rem !important; flex-wrap: wrap; justify-content: flex-start; }
-          .apple-biz-card .glass-pill { padding: 2px 7px; font-size: 0.66rem; }
-          .apple-biz-card .glass-fav-btn { top: 6px; right: 6px; width: 28px; height: 28px; }
-          .apple-biz-card .card-photo-box > div:first-of-type { top: auto !important; bottom: 6px; left: 6px !important; }
+          .card-foot { min-height: 0; padding-top: 0.45rem !important; margin-top: 0.1rem; border-top: none !important; flex-wrap: wrap; justify-content: flex-start; gap: 5px; }
+          .card-foot > span:first-child { display: none; }
+          .card-foot > div { justify-content: flex-start !important; }
+          .card-foot > div > button:nth-child(n+3) { display: none; }
+          .apple-biz-card .glass-pill { padding: 2px 8px; font-size: 0.68rem; }
+          .apple-biz-card .glass-fav-btn { top: 8px; right: 8px; width: 30px; height: 30px; }
+          .apple-biz-card .card-photo-box > div:first-of-type { top: auto !important; bottom: 8px; left: 8px !important; }
         }
         .card-photo-img {
           transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);

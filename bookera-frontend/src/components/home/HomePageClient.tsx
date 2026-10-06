@@ -960,6 +960,12 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     }
   }, [searchDate, urlDate]);
 
+  // Телефон: вибраний чіп категорії підʼїжджає в зону видимості (ряд гортається вбік)
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('.cat-chip[data-on="1"]');
+    if (el && el.offsetParent) el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [activeCategory]);
+
   const handleCategorySelect = (slug: string) => {
     setActiveCategory(slug);
     setAppliedSearch('');
@@ -1582,8 +1588,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         }
         @media (max-width: 820px) { .salons-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
-        @media (max-width: 560px) { .salons-layout { grid-template-columns: minmax(0, 1fr); }
+        @media (max-width: 560px) { .salons-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem 0.8rem; }
         }
+        @media (max-width: 340px) { .salons-layout { grid-template-columns: minmax(0, 1fr); } }
 
         /* ОДНАКОВИЙ РОЗМІР КАРТОК У КАРУСЕЛІ */
         .nearby-carousel {
@@ -1810,11 +1817,16 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
           animation: slideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
         }
+        .cat-chips { display: none; }
         .hs-pill input { min-width: 0; }
         @media (max-width: 768px) {
           .hero-sec { height: auto !important; padding: 7rem 0 3rem; }
           .hero-sub { display: none !important; }
-          .cat-row { justify-content: flex-start !important; }
+          .cat-row { display: none !important; }
+          .cat-sec { padding-top: 1.25rem !important; padding-bottom: 0.5rem !important; }
+          .cat-chips { display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x proximity; margin: 0 -1.25rem; padding: 0.25rem 1.25rem 0.5rem; }
+          .cat-chip { flex: 0 0 auto; scroll-snap-align: center; height: 40px; padding: 0 1rem; border-radius: 999px; border: 1px solid #e2e8f0; background: #fff; color: #475569; font: inherit; font-size: 0.9rem; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color .2s ease, color .2s ease, border-color .2s ease; }
+          .cat-chip.on { background: #111827; border-color: #111827; color: #fff; }
           .salons-sec { padding-bottom: 1rem !important; }
           .tips-sec { padding: 3rem 0 3rem !important; }
           .sort-rule-note { display: none; }
@@ -2188,7 +2200,26 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
 
       {/* КАТЕГОРІЇ ПОСЛУГ */}
-      <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '3rem', paddingBottom: '2.5rem', position: 'relative', zIndex: 40 }}>
+      <section className="container reveal-on-scroll delay-100 cat-sec" style={{ paddingTop: '3rem', paddingBottom: '2.5rem', position: 'relative', zIndex: 40 }}>
+        {/* Телефон: усі категорії - чіпи в одному ряду з «Усі»; вибрана чорна, повторний дотик її знімає */}
+        <div className="cat-chips hide-scrollbar" role="tablist" aria-label="Категорії закладів">
+          {[{ name: 'Усі', slug: 'all' }, ...categoriesData, ...extraCategoriesData].map(cat => {
+            const on = cat.slug === 'all' ? (activeCategory === 'all' && !appliedSearch) : (activeCategory === cat.slug && !appliedSearch);
+            return (
+              <button
+                key={cat.slug}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                data-on={on ? '1' : undefined}
+                className={`cat-chip${on ? ' on' : ''}`}
+                onClick={() => handleCategorySelect(cat.slug !== 'all' && on ? 'all' : cat.slug)}
+              >
+                {cat.name}
+              </button>
+            );
+          })}
+        </div>
         <div className="hide-scrollbar cat-row" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.75rem', flexWrap: 'nowrap', borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
           {categoriesData.map((cat) => {
             const isActive = activeCategory === cat.slug && !appliedSearch;

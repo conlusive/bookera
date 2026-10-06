@@ -70,6 +70,8 @@ export default function MarketingTab({ business }: { business: any }) {
   const [links, setLinks] = useState<{ direct_url: string; marketplace_url: string } | null>(null);
   const [copied, setCopied] = useState<'direct' | 'market' | null>(null);
   const [commission, setCommission] = useState(10);
+  const [owed, setOwed] = useState(0);
+  const [payingCommission, setPayingCommission] = useState(false);
 
   const loadRadar = useCallback(async () => {
     if (!bid) return;
@@ -92,7 +94,9 @@ export default function MarketingTab({ business }: { business: any }) {
         setHistory(await api.getCampaigns(t, bid));
       } catch { /* розсилка покаже порожні лічильники */ }
       try {
-        setCommission(Number((await api.getMonetizationSummary(await getAuthToken(), bid)).commission_rate) || 10);
+        const summary = await api.getMonetizationSummary(await getAuthToken(), bid);
+        setCommission(Number(summary.commission_rate) || 10);
+        setOwed(Number(summary.total_commission_owed) || 0);
       } catch { /* лишається стандартні 10% */ }
       try {
         // Пряме посилання - окремим запитом: у публічній відповіді закладу
@@ -129,6 +133,24 @@ export default function MarketingTab({ business }: { business: any }) {
       notify(err?.message || 'Не вдалося підключити Радар', 'error');
     } finally {
       setPaying(false);
+    }
+  };
+
+  const payCommission = async () => {
+    setPayingCommission(true);
+    try {
+      const t = await getAuthToken();
+      const res = await api.checkoutCommissions(t, bid);
+      if (res.paid) {
+        setOwed(0);
+        notify('Комісію сплачено. Дякуємо!', 'info');
+      } else if (!goToCheckout(res)) {
+        notify('Не вдалося відкрити оплату', 'error');
+      }
+    } catch (err: any) {
+      notify(err?.message || 'Не вдалося сплатити комісію', 'error');
+    } finally {
+      setPayingCommission(false);
     }
   };
 
@@ -455,6 +477,17 @@ export default function MarketingTab({ business }: { business: any }) {
                 <div className="widget-title">Звідки клієнт</div>
                 <div className="mk-row"><span>Пряме посилання</span><b className="up">0%</b></div>
                 <div className="mk-row"><span>Вітрина BookEra</span><b>{commission}%</b></div>
+                {owed > 0 && (
+                  <div className="mk-row" style={{ alignItems: 'center' }}>
+                    <span>До сплати за візити з вітрини</span>
+                    <b>{owed.toLocaleString('uk-UA')} ₴</b>
+                  </div>
+                )}
+                {owed > 0 && (
+                  <button type="button" className="clean-btn" style={{ width: '100%', marginTop: '0.6rem' }} disabled={payingCommission} onClick={() => void payCommission()}>
+                    {payingCommission ? 'Зачекайте…' : 'Сплатити комісію'}
+                  </button>
+                )}
                 <p className="mk-note">Комісія — лише з першого завершеного візиту нового клієнта з вітрини, не за запис. Розсилки, QR, власні й повторні клієнти її не мають.</p>
               </div>
             )}

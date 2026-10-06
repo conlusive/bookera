@@ -27,6 +27,9 @@ from app.schemas.monetization import (
 
 router = APIRouter(tags=["CRM - Monetization"])
 
+# Комісії, що ще не оплачені: нараховані й виставлені в платежі, який не підтверджено
+OWED_STATUSES = ("pending", "invoiced")
+
 
 
 # === Зведена інформація ===
@@ -61,7 +64,8 @@ async def get_monetization_summary(
 
     owed_res = await db.execute(
         select(func.coalesce(func.sum(ReferralCommission.amount), 0)).where(
-            ReferralCommission.business_id == business_id, ReferralCommission.status == "pending"
+            ReferralCommission.business_id == business_id,
+            ReferralCommission.status.in_(OWED_STATUSES),
         )
     )
     total_owed = owed_res.scalar() or Decimal("0")
@@ -109,6 +113,71 @@ async def get_commissions(
         .order_by(ReferralCommission.created_at.desc()).limit(100)
     )
     return result.scalars().all()
+
+
+@router.post("/crm/businesses/{business_id}/commissions/checkout")
+async def checkout_commissions(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Оплата накопиченої комісії карткою - так само, як підписка чи Радар. Без ключів WayForPay оплата
+    тестова й комісії закриваються одразу; зі справжніми повертаємо підписану форму, а закриває їх
+    підтвердження від платіжної системи (callback, замовлення cm-...).
+
+    Грошима керує лише власник чи адміністратор. У платіж потрапляють усі неоплачені комісії закладу;
+    суму рахує сервер, а не клієнт. Рядки, виставлені в покинутому платежі, перевиставляються в новому.
+    """
+    await assert_business_admin(db, current_user, business_id)
+    business = await _get_business_or_404(db, business_id)
+
+    rows = (await db.execute(
+        select(ReferralCommission).where(
+            ReferralCommission.business_id == business_id, ReferralCommission.status.in_(OWED_STATUSES),
+        ).with_for_update()
+    )).scalars().all()
+    amount = sum((Decimal(r.amount) for r in rows), Decimal("0")).quantize(Decimal("0.01"))
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Немає комісії до сплати")
+
+    order_id = f"cm-{business_id}-{secrets.token_hex(6)}"
+    intent = create_payment_intent(
+        amount, order_id, f"Комісія BookEra за клієнтів з вітрини — {business.name}", return_url="/cabinet",
+    )
+    payment = Payment(
+        business_id=business_id, purpose="commission", amount=amount,
+        provider=intent.provider, provider_ref=order_id, status="pending",
+    )
+    db.add(payment)
+    await db.flush()
+    for r in rows:
+        r.payment_id = payment.id
+        r.status = "invoiced"
+    await db.flush()  # сесія без autoflush: без цього вибірка за payment_id нічого не знайшла б
+
+    paid = False
+    if intent.status == "completed":
+        await complete_commission_payment(db, payment)
+        paid = True
+        from app.services.audit import record as _audit
+        await _audit(db, business_id, str(current_user.id), "marketing", "commission_paid",
+                     f"Сплачено комісію BookEra: {amount} ₴ ({len(rows)} візитів)")
+    await db.commit()
+    return {"amount": amount, "visits": len(rows), "paid": paid, "checkout": intent.checkout, "checkout_url": intent.checkout_url}
+
+
+async def complete_commission_payment(db: AsyncSession, payment: Payment) -> None:
+    """Платіж комісії підтверджено: закриваємо всі комісії, виставлені в ньому. Повтор нічого не змінює."""
+    if payment.status == "completed":
+        return
+    payment.status = "completed"
+    payment.completed_at = utc_now()
+    rows = (await db.execute(
+        select(ReferralCommission).where(ReferralCommission.payment_id == payment.id)
+    )).scalars().all()
+    for r in rows:
+        r.status = "paid"
 
 
 # === Radar (платне просування) ===

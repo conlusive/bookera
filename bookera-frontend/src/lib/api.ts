@@ -1253,6 +1253,13 @@ export const api = {
     return authFetch(`/crm/businesses/${businessId}/points-ledger`, token);
   },
 
+  /** Оплата накопиченої комісії карткою; без ключів платіжки - тестова, закриває одразу. */
+  async checkoutCommissions(token: string, businessId: number): Promise<{
+    amount: number; visits: number; paid: boolean; checkout?: { action: string; fields: Record<string, string> } | null; checkout_url?: string | null;
+  }> {
+    return authFetch(`/crm/businesses/${businessId}/commissions/checkout`, token, { method: 'POST' });
+  },
+
   async getCommissions(token: string, businessId: number) {
     return authFetch(`/crm/businesses/${businessId}/commissions`, token);
   },

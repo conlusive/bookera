@@ -47,7 +47,11 @@ class ReferralCommission(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     rate_applied = Column(Numeric(5, 2), nullable=False)
     reason = Column(String, nullable=False)  # завжди 'marketplace_source': комісія лише за клієнтів з вітрини
-    status = Column(String, default="pending", nullable=False)  # pending, invoiced, paid, waived
+    # pending - нараховано; invoiced - увійшло в платіж, що ще не підтверджено; paid; waived
+    status = Column(String, default="pending", nullable=False)
+    # Платіж, яким комісію закрито (чи який виставлено на неї). Той самий рядок можна перевиставити
+    # в новому платежі, поки перший не підтверджено: покинутий платіж не «заморожує» борг.
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=utc_now)
 
     business = relationship("Business", back_populates="commissions")

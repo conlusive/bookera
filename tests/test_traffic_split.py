@@ -189,3 +189,77 @@ async def test_platform_terms_describe_first_visit_policy(client):
     body = r.json()
     assert body["commission_first_visit_only"] is True
     assert body["direct_link_days"] == 30
+
+
+async def _owed(client, headers, business_id) -> float:
+    r = await client.get(f"/crm/businesses/{business_id}/monetization", headers=headers)
+    return float(r.json()["total_commission_owed"])
+
+
+@pytest.mark.asyncio
+async def test_commission_checkout_closes_owed_amount(client, auth_headers):
+    headers = auth_headers("split-owner-9")
+    business_id, service_id, _ = await _salon(client, headers, "Pay Salon")
+    first = await _book_by_phone(client, business_id, service_id, _slot(2, 9), None, "+380671000001", "p1")
+    await _complete(client, headers, first["id"])
+    assert await _owed(client, headers, business_id) == 100.0
+
+    r = await client.post(f"/crm/businesses/{business_id}/commissions/checkout", headers=headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert float(body["amount"]) == 100.0 and body["visits"] == 1 and body["paid"] is True  # без ключів - тестова оплата
+
+    assert await _owed(client, headers, business_id) == 0.0
+    rows = await _commissions(client, headers, business_id)
+    assert [c["status"] for c in rows] == ["paid"]
+
+    again = await client.post(f"/crm/businesses/{business_id}/commissions/checkout", headers=headers)
+    assert again.status_code == 400, "платити нічого: другий запит не створює порожнього платежу"
+
+    second = await _book_by_phone(client, business_id, service_id, _slot(3, 9), None, "+380671000002", "p2")
+    await _complete(client, headers, second["id"])
+    assert await _owed(client, headers, business_id) == 100.0, "нова комісія накопичується окремо від сплаченої"
+
+
+@pytest.mark.asyncio
+async def test_commission_checkout_is_admin_only(client, auth_headers):
+    owner = auth_headers("split-owner-10")
+    business_id, service_id, _ = await _salon(client, owner, "Guard Salon")
+    stranger = auth_headers("split-stranger", role="master")
+    r = await client.post(f"/crm/businesses/{business_id}/commissions/checkout", headers=stranger)
+    assert r.status_code in (401, 403, 404)
+
+
+@pytest.mark.asyncio
+async def test_commission_callback_marks_paid_once_and_checks_amount(client, auth_headers):
+    """Справжній шлях оплати: платіж pending, закриває його підтвердження платіжної системи."""
+    from sqlalchemy import select, update
+    from app.core.database import AsyncSessionLocal
+    from app.models import Payment, ReferralCommission
+
+    headers = auth_headers("split-owner-11")
+    business_id, service_id, _ = await _salon(client, headers, "Callback Salon")
+    appt = await _book_by_phone(client, business_id, service_id, _slot(2, 9), None, "+380671000003", "p3")
+    await _complete(client, headers, appt["id"])
+
+    order = f"cm-{business_id}-abc123"
+    async with AsyncSessionLocal() as db:
+        pay = Payment(business_id=business_id, purpose="commission", amount=100, provider="wayforpay", provider_ref=order, status="pending")
+        db.add(pay)
+        await db.flush()
+        await db.execute(update(ReferralCommission).where(ReferralCommission.business_id == business_id)
+                         .values(status="invoiced", payment_id=pay.id))
+        await db.commit()
+    assert await _owed(client, headers, business_id) == 100.0, "виставлено, але не оплачено - ще борг"
+
+    wrong = await client.post("/payments/wayforpay/callback", json={"orderReference": order, "amount": "5", "transactionStatus": "Approved"})
+    assert wrong.status_code == 400
+    assert await _owed(client, headers, business_id) == 100.0
+
+    for _ in range(2):  # повторне підтвердження нічого не ламає
+        ok = await client.post("/payments/wayforpay/callback", json={"orderReference": order, "amount": "100", "transactionStatus": "Approved"})
+        assert ok.status_code == 200, ok.text
+    assert await _owed(client, headers, business_id) == 0.0
+    async with AsyncSessionLocal() as db:
+        statuses = (await db.execute(select(ReferralCommission.status).where(ReferralCommission.business_id == business_id))).scalars().all()
+    assert statuses == ["paid"]

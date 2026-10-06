@@ -9,6 +9,8 @@ from app.core.time_utils import utc_now
 from app.models import Appointment, Business, Client, PointsLedgerEntry, PointsReasonEnum, ReferralCommission
 
 POINTS_PER_NEW_CLIENT = 10
+# Комісія платформи з завершеного візиту, що прийшов із вітрини (власні клієнти її не мають)
+DEFAULT_COMMISSION_RATE = Decimal("10.00")
 
 
 async def award_points_for_new_client(
@@ -65,7 +67,7 @@ async def charge_commission_if_applicable(db: AsyncSession, appointment: Appoint
     if not appointment.price:
         return
 
-    rate = business.commission_rate or Decimal("10.00")
+    rate = business.commission_rate or DEFAULT_COMMISSION_RATE
     amount = (Decimal(str(appointment.price)) * rate / Decimal("100")).quantize(Decimal("0.01"))
 
     db.add(

@@ -6,11 +6,15 @@ import Link from 'next/link';
 import ArsenalMosaic from '@/components/business/ArsenalMosaic';
 import GrowthHero from '@/components/business/GrowthHero';
 import HeroCards from '@/components/business/HeroCards';
-import StatsStrip from '@/components/business/StatsStrip';
+import FactsStrip from '@/components/business/FactsStrip';
+import PricingBlock from '@/components/business/PricingBlock';
+import StartSteps from '@/components/business/StartSteps';
+import ForWhom from '@/components/business/ForWhom';
+import SecurityBlock from '@/components/business/SecurityBlock';
 import SiteFooter from '@/components/ui/SiteFooter';
 import { createClient } from '@/lib/supabase/client';
 import { authErrorText, passwordProblem, CONFIRM_EMAIL_NOTICE } from '@/lib/auth-errors';
-import { api } from '@/lib/api';
+import { api, type PlatformTerms } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
@@ -20,11 +24,17 @@ import { resolveDisplayName } from '@/lib/displayName';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
-const faqs = [
-  { q: "Що таке BookEra Business?", a: "Це комплексний сервіс для автоматизації: онлайн-запис 24/7, клієнтська база та фінанси." },
-  { q: "Чи дійсно базовий функціонал безкоштовний?", a: "Так! Ви можете створити сторінку, додати послуги та приймати записи абсолютно безкоштовно." },
-  { q: "Як клієнти можуть записатися?", a: "Ви отримуєте персональне посилання (bookera.com/ваш-бізнес), яке легко додати в Instagram." },
-  { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам та всім, хто працює за попереднім записом." }
+const buildFaqs = (t: PlatformTerms | null) => [
+  { q: "Що таке BookEra Business?", a: "Це комплексний сервіс для автоматизації: онлайн-запис 24/7, клієнтська база, розсилки та фінанси в одному кабінеті." },
+  { q: "Скільки це коштує?", a: t
+    ? `Один тариф: ${t.price_uah.toLocaleString('uk-UA')} ₴ за ${t.period_days} днів. Перші ${t.trial_days} днів безкоштовно, щоб усе спробувати. Окремого безкоштовного тарифу немає: після пробного періоду потрібна підписка.`
+    : "Один тариф із безкоштовним пробним періодом. Окремого безкоштовного тарифу немає: після пробного періоду потрібна підписка." },
+  { q: "Яка комісія?", a: t
+    ? `З клієнтів, яких ви привели самі (посилання, QR, розсилка, власна база), комісії немає: ${t.own_clients_commission_percent}%. З візитів, що прийшли з вітрини BookEra, ${Math.round(t.marketplace_commission_percent)}% від завершеного візиту. Якщо клієнт не прийшов, комісія не береться.`
+    : "З клієнтів, яких ви привели самі, комісії немає. З візитів із вітрини BookEra береться відсоток від завершеного візиту." },
+  { q: "Як клієнти можуть записатися?", a: "Ви отримуєте персональне посилання на сторінку закладу. Його легко додати в Instagram, на візитку чи показати QR-кодом. Клієнти ще й знаходять вас у вітрині BookEra." },
+  { q: "Чи безпечні дані моїх клієнтів?", a: "Так. Пошта акаунта підтверджується, майстри бачать лише своїх клієнтів, у розсилках є згода й відписка, а база закрита від прямого доступу з браузера." },
+  { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам, масажистам та всім, хто працює за попереднім записом." },
 ];
 
 export default function BusinessLandingPage() {
@@ -60,6 +70,10 @@ export default function BusinessLandingPage() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  // Ціна, пробний період і комісія приходять із бекенду: на лендінгу немає власних копій цих чисел
+  const [terms, setTerms] = useState<PlatformTerms | null>(null);
+  useEffect(() => { api.getPlatformTerms().then(setTerms).catch(() => setTerms(null)); }, []);
+  const faqs = useMemo(() => buildFaqs(terms), [terms]);
 
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -345,7 +359,7 @@ export default function BusinessLandingPage() {
         .anim { transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); will-change: transform, opacity; }
         
         .hero-title { font-size: clamp(3rem, 6vw, 5.2rem); font-weight: 900; letter-spacing: -0.04em; line-height: 1.05; color: #111827; margin-bottom: 1.5rem; position: relative; z-index: 2; }
-        .hero-subtitle { font-size: clamp(1.1rem, 2vw, 1.25rem); font-weight: 400; color: #64748b; max-width: 600px; margin: 0 auto 2.5rem auto; line-height: 1.5; position: relative; z-index: 2; }
+        .hero-subtitle { font-size: clamp(1.1rem, 2vw, 1.25rem); font-weight: 400; color: #475569; max-width: 600px; margin: 0 auto 2.5rem auto; line-height: 1.5; position: relative; z-index: 2; }
 
         .btn-primary { background-color: #C2D8C4; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1.1rem 2.4rem; border-radius: 999px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.3s ease, box-shadow 0.3s ease; box-shadow: 0 10px 25px rgba(194, 216, 196, 0.4); will-change: transform; }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 15px 30px rgba(194, 216, 196, 0.6); }
@@ -435,7 +449,7 @@ export default function BusinessLandingPage() {
 
         .faq-answer-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
         .faq-answer-wrapper.open { grid-template-rows: 1fr; }
-        .faq-answer-inner { overflow: hidden; color: #64748b; font-size: 1rem; line-height: 1.6; }
+        .faq-answer-inner { overflow: hidden; color: #475569; font-size: 1rem; line-height: 1.6; }
         .faq-icon { transition: transform 0.3s ease; }
         .faq-icon.open { transform: rotate(180deg); }
 
@@ -548,7 +562,7 @@ export default function BusinessLandingPage() {
               Керуйте бізнесом.<br />
               <span style={{ position: 'relative', display: 'inline-block' }}>
                  <div className="text-glow-bg"></div>
-                 <span style={{ color: '#8fae92', position: 'relative', zIndex: 1 }}>Легко. Красиво.</span>
+                 <span style={{ color: '#4C7A55', position: 'relative', zIndex: 1 }}>Легко. Красиво.</span>
               </span>
             </h1>
             <p className="hero-subtitle">
@@ -563,9 +577,11 @@ export default function BusinessLandingPage() {
                 Огляд функцій
               </button>
             </div>
-            <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: '1.5rem', fontWeight: '500' }}>
-              Базовий функціонал назавжди безкоштовний.
-            </p>
+            {terms && (
+              <p style={{ color: '#475569', fontSize: '0.92rem', marginTop: '1.5rem', fontWeight: '500' }}>
+                {terms.trial_days} днів безкоштовно · далі {terms.price_uah.toLocaleString('uk-UA')} ₴ за {terms.period_days === 30 ? 'місяць' : `${terms.period_days} днів`}
+              </p>
+            )}
           </div>
           {/* Віяло карток: стирчать із лінії знизу, а при скролі падають за неї */}
           <HeroCards />
@@ -575,7 +591,7 @@ export default function BusinessLandingPage() {
       {/* STATS STRIP */}
       <section className="reveal-on-scroll delay-100" style={{ padding: '0 0 5rem 0', marginTop: '-1px' }}>
         <div className="container">
-          <StatsStrip />
+          {terms ? <FactsStrip terms={terms} /> : <div style={{ minHeight: 190 }} aria-hidden="true" />}
         </div>
       </section>
 
@@ -599,21 +615,27 @@ export default function BusinessLandingPage() {
           третя однакова кнопка лише відволікала від самих можливостей. */}
       <GrowthHero />
 
+      {/* КОМУ ПІДХОДИТЬ, СТАРТ, ЦІНА, БЕЗПЕКА */}
+      <ForWhom />
+      <StartSteps />
+      {terms && <PricingBlock terms={terms} onStart={handleStartBusinessClick} />}
+      <SecurityBlock />
+
       {/* FINAL HERO */}
-      <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+      <section className="reveal-on-scroll" style={{ backgroundColor: '#EAF2EB', position: 'relative', zIndex: 20, padding: '0' }}>
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '-10%', right: '5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, rgba(255,255,255,0) 70%)', filter: 'blur(50px)' }}></div>
+          <div style={{ position: 'absolute', top: '-10%', right: '5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(255, 255, 255, 0.7) 0%, rgba(255,255,255,0) 70%)', filter: 'blur(50px)' }}></div>
         </div>
 
         <div className="container" style={{ position: 'relative', zIndex: 10 }}>
           <div className="dark-hero-grid">
 
             <div className="dark-hero-content" style={{ padding: '8rem 0' }}>
-              <h2 style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', fontWeight: '900', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.04em', lineHeight: '1.05' }}>
+              <h2 style={{ fontSize: 'clamp(2.2rem, 4.6vw, 3.6rem)', fontWeight: '800', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.035em', lineHeight: '1.08' }}>
                 Управління бізнесом. <br/> На новому рівні.
               </h2>
-              <p style={{ color: '#1f2937', fontSize: '1.05rem', marginBottom: '2.5rem', lineHeight: '1.5', maxWidth: '450px', fontWeight: '500' }}>
-                Всі необхідні інструменти для бронювання, фінансів та клієнтів — в одному зручному додатку.
+              <p style={{ color: '#374151', fontSize: '1.08rem', marginBottom: '2.5rem', lineHeight: '1.6', maxWidth: '450px', fontWeight: '500' }}>
+                Бронювання, клієнти, розсилки та фінанси — в одному кабінеті.
               </p>
               <button onClick={handleStartBusinessClick} style={{ backgroundColor: '#111827', color: '#ffffff', fontWeight: '700', fontSize: '1rem', padding: '1.1rem 2.8rem', borderRadius: '999px', border: 'none', cursor: 'pointer', transition: '0.3s', boxShadow: '0 15px 30px rgba(17, 24, 39, 0.15)', willChange: 'transform' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-3px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
                 {isBusinessRole(userRole) ? 'Перейти в кабінет' : 'Створити акаунт'}
@@ -678,8 +700,8 @@ export default function BusinessLandingPage() {
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '4rem' }}>
             <div>
-              <h2 style={{ fontSize: 'clamp(2.2rem, 4vw, 3rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', lineHeight: '1.1', marginBottom: '1rem' }}>Часті<br/>питання</h2>
-              <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>Ми зібрали відповіді на найпопулярніші питання користувачів.</p>
+              <h2 style={{ fontSize: 'clamp(2rem, 4.4vw, 3.25rem)', fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.035em', lineHeight: '1.08', marginBottom: '1rem' }}>Часті<br/>питання</h2>
+              <p style={{ color: '#475569', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>Ми зібрали відповіді на найпопулярніші питання користувачів.</p>
             </div>
 
             <div style={{ borderTop: '1px solid #e2e8f0' }}>

@@ -5,7 +5,6 @@
 «власник салону» і «власник сервісу» в одному файлі - вірний спосіб
 одного дня видати першому права другого.
 """
-import os
 from datetime import timedelta
 from decimal import Decimal
 from typing import List, Optional
@@ -22,6 +21,8 @@ from app.core.time_utils import utc_now
 from app.models import Business, Payment, User
 from app.services.payments import create_payment_intent, is_live, verify_callback_signature
 from app.services.subscription import (
+    SUBSCRIPTION_PERIOD_DAYS,
+    SUBSCRIPTION_PRICE_UAH,
     STATUS_ACTIVE,
     STATUS_EXPIRED,
     assert_platform_admin,
@@ -205,8 +206,6 @@ async def platform_stats(
 # доступ вручну, тут заклад платить сам. Різні дійові особи й різні
 # перевірки, тому й розділено.
 
-SUBSCRIPTION_PRICE_UAH = Decimal(os.getenv("SUBSCRIPTION_PRICE_UAH", "490"))
-SUBSCRIPTION_PERIOD_DAYS = 30
 
 
 class SubscriptionCheckoutResponse(BaseModel):

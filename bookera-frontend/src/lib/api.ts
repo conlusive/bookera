@@ -363,6 +363,10 @@ const isPlainGet = (o: RequestInit) => (!o.method || o.method.toUpperCase() === 
  * відвідувача. Тому `revalidate` (секунди) дозволяє кешувати там, де
  * дані можуть бути хвилину старими.
  */
+export interface PlatformTerms {
+  price_uah: number; period_days: number; trial_days: number;
+  marketplace_commission_percent: number; own_clients_commission_percent: number;
+}
 export interface CampaignQuota {
   daily_recipient_limit: number; daily_campaign_limit: number;
   used_recipients: number; used_campaigns: number;
@@ -1266,6 +1270,11 @@ export const api = {
   },
 
   /** Ваги позиції у видачі - ті самі, що на сервері. */
+  /** Умови платформи для бізнесу: ціна єдиного тарифу, пробний період і комісія (бізнес-лендінг). */
+  async getPlatformTerms(): Promise<PlatformTerms> {
+    return publicFetch('/businesses/platform-terms');
+  },
+
   async getRankingRules(revalidate?: number): Promise<RankingRules> {
     return publicFetch('/businesses/ranking-rules', { revalidate });
   },

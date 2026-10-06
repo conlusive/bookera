@@ -43,6 +43,24 @@ async def get_ranking_rules(response: Response):
     return ranking.ranking_rules()
 
 
+@router.get("/platform-terms")
+async def get_platform_terms(response: Response):
+    """
+    Умови платформи для бізнесу: ціна єдиного тарифу, пробний період і комісія.
+    Бізнес-лендінг показує саме ці числа, а не власні копії: змінили ціну в налаштуваннях - змінилась і на сайті.
+    """
+    from app.services.monetization import DEFAULT_COMMISSION_RATE
+    from app.services.subscription import SUBSCRIPTION_PERIOD_DAYS, SUBSCRIPTION_PRICE_UAH, TRIAL_DAYS
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return {
+        "price_uah": int(SUBSCRIPTION_PRICE_UAH),
+        "period_days": SUBSCRIPTION_PERIOD_DAYS,
+        "trial_days": TRIAL_DAYS,
+        "marketplace_commission_percent": float(DEFAULT_COMMISSION_RATE),
+        "own_clients_commission_percent": 0,
+    }
+
+
 # Поля, які картці каталогу не потрібні: внутрішні налаштування закладу (безпека,
 # платежі, сповіщення), власник, оформлення сторінки й галерея. Їх віддає лише
 # GET /businesses/{slug}. У списку з 100 закладів це прибирає найважчі частини

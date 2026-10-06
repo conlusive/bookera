@@ -11,7 +11,9 @@
 і щось неодмінно пропустити - а пропущена перевірка в платному
 продукті помічається не одразу.
 """
+import os
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import HTTPException, status
@@ -19,6 +21,10 @@ from fastapi import HTTPException, status
 from app.core.time_utils import utc_now
 
 TRIAL_DAYS = 14
+
+# Єдиний тариф: ціна й тривалість періоду. Ціну можна змінити змінною оточення без релізу.
+SUBSCRIPTION_PRICE_UAH = Decimal(os.getenv("SUBSCRIPTION_PRICE_UAH", "490"))
+SUBSCRIPTION_PERIOD_DAYS = 30
 
 # Стани, у яких заклад може перебувати:
 #   'trial'   - пробний період після реєстрації

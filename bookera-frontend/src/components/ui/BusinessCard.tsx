@@ -279,8 +279,15 @@ export function BusinessCardStyles() {
         }
         /* Телефон: плитки нижчі, а порожній рядок «Немає слотів» не займає місця. */
         @media (max-width: 640px) {
-          .card-photo-box { aspect-ratio: 16 / 10; }
+          .apple-biz-card { display: grid; grid-template-columns: 108px minmax(0, 1fr); column-gap: 14px; align-items: start; padding: 0.85rem 0; border-bottom: 1px solid #f1f5f9; }
+          .card-photo-box { aspect-ratio: 1 / 1; border-radius: 14px; }
+          .card-body { min-width: 0; display: flex; flex-direction: column; }
+          .card-body .card-meta-row { margin-bottom: 0.3rem !important; }
           .card-foot-empty { display: none; }
+          .card-foot { min-height: 0; padding-top: 0.5rem !important; flex-wrap: wrap; justify-content: flex-start; }
+          .apple-biz-card .glass-pill { padding: 2px 7px; font-size: 0.66rem; }
+          .apple-biz-card .glass-fav-btn { top: 6px; right: 6px; width: 28px; height: 28px; }
+          .apple-biz-card .card-photo-box > div:first-of-type { top: auto !important; bottom: 6px; left: 6px !important; }
         }
         .card-photo-img {
           transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);

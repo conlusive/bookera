@@ -84,22 +84,22 @@ export default function PricingBlock({ terms, onStart }: { terms: PlatformTerms;
         .pr-cur { font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 800; color: #111827; }
         .pr-per { font-size: 1.15rem; color: #475569; font-weight: 600; margin-left: 0.25rem; }
         .pr-trial { font-size: 1.12rem; color: #374151; line-height: 1.6; max-width: 470px; margin: 0 0 2rem; }
-        .pr-trial mark { background: none; color: #111827; font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+        .pr-trial mark { background: none; color: #111827; font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; text-decoration-color: #8fae92; }
         .pr-btn { background: #111827; color: #fff; font-weight: 700; font-size: 1.02rem; padding: 1.05rem 2.2rem; border-radius: 999px; border: none; cursor: pointer; transition: transform .25s ease, box-shadow .25s ease; }
         .pr-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(17,24,39,.18); }
         .pr-btn:focus-visible, input:focus-visible { outline: 3px solid #111827; outline-offset: 3px; }
-        .pr-right { background: #F5F5F7; border-radius: 32px; padding: 2.5rem; margin-top: 1rem; }
-        .pr-kicker { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #475569; margin-bottom: 1.4rem; }
+        .pr-right { background: #F3F8F4; border-radius: 32px; padding: 2.5rem; margin-top: 1rem; }
+        .pr-kicker { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #3F6B49; margin-bottom: 1.4rem; }
         .pr-slider { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6rem; }
         .pr-slider label { font-weight: 600; color: #374151; }
         .pr-slider output { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; color: #111827; font-variant-numeric: tabular-nums; }
-        input[type=range] { width: 100%; accent-color: #111827; margin: 0 0 1.8rem; cursor: pointer; }
-        .pr-row { padding: 1.2rem 0; border-top: 1px solid #e3e3e8; }
+        input[type=range] { width: 100%; accent-color: #4C7A55; margin: 0 0 1.8rem; cursor: pointer; }
+        .pr-row { padding: 1.2rem 0; border-top: 1px solid rgba(63,107,73,.16); }
         .pr-row-h { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-weight: 700; color: #111827; margin-bottom: 0.7rem; }
         .pr-row-h i { font-style: normal; font-weight: 500; color: #64748b; font-size: 0.88rem; margin-left: 0.4rem; }
         .pr-row-h b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-        .pr-bar { height: 10px; border-radius: 6px; background: #d9d9de; overflow: hidden; }
-        .pr-bar span { display: block; height: 100%; width: 100%; border-radius: 6px; background: #111827; transform-origin: left; transition: transform .5s cubic-bezier(.16,1,.3,1); }
+        .pr-bar { height: 10px; border-radius: 6px; background: #d6e3d8; overflow: hidden; }
+        .pr-bar span { display: block; height: 100%; width: 100%; border-radius: 6px; background: #4C7A55; transform-origin: left; transition: transform .5s cubic-bezier(.16,1,.3,1); }
         .pr-note { margin-top: 0.55rem; font-size: 0.9rem; color: #475569; }
         @media (max-width: 960px) { .pr-grid { grid-template-columns: 1fr; gap: 3rem; } .pr-right { margin-top: 0; padding: 1.75rem; } }
         @media (prefers-reduced-motion: reduce) { .pr-grid > div, .pr-bar span { transition: none; opacity: 1; transform: none; } }

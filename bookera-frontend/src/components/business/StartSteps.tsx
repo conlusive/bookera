@@ -78,27 +78,27 @@ export default function StartSteps() {
         .ss-grid.on .ss-step { opacity: 1; transform: translateY(calc(var(--i) * 44px)); }
         .ss-n { margin-bottom: 1rem; }
         .ss-n span { display: inline-block; font-size: 0.9rem; font-weight: 800; letter-spacing: 0.06em; color: #111827; background: var(--c); border-radius: 999px; padding: 0.25rem 0.8rem; }
-        .ss-mock { height: 168px; border-radius: 24px; background: #F5F5F7; padding: 1.4rem; margin-bottom: 1.5rem; display: flex; align-items: center; }
+        .ss-mock { height: 168px; border-radius: 24px; background: #F3F8F4; padding: 1.4rem; margin-bottom: 1.5rem; display: flex; align-items: center; }
         .ss-step h3 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; color: #111827; margin: 0 0 0.5rem; }
         .ss-step p { color: #475569; font-size: 1rem; line-height: 1.6; margin: 0; max-width: 340px; }
         :global(.m) { width: 100%; display: grid; gap: 0.7rem; }
         :global(.m-label) { font-size: 0.72rem; font-weight: 700; color: #64748b; letter-spacing: 0.04em; text-transform: uppercase; }
-        :global(.m-input) { height: 38px; border-radius: 12px; background: #fff; border: 1px solid #e3e3e8; display: flex; align-items: center; padding: 0 0.85rem; font-size: 0.9rem; font-weight: 600; color: #111827; }
+        :global(.m-input) { height: 38px; border-radius: 12px; background: #fff; border: 1px solid #dfe8e0; display: flex; align-items: center; padding: 0 0.85rem; font-size: 0.9rem; font-weight: 600; color: #111827; }
         :global(.m-type) { display: inline-block; overflow: hidden; white-space: nowrap; width: 0; }
         :global(.m-caret) { width: 2px; height: 18px; background: #111827; margin-left: 2px; animation: caret 1s steps(1) infinite; }
         :global(.ss-grid.on .m-type) { animation: typing 1.6s steps(11) .9s forwards; }
         @keyframes typing { to { width: 6.2em; } }
         @keyframes caret { 50% { opacity: 0; } }
         :global(.m-chips) { display: flex; gap: 0.45rem; flex-wrap: wrap; }
-        :global(.m-chips span) { background: #fff; border: 1px solid #e3e3e8; border-radius: 999px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 600; color: #374151; }
-        :global(.m-line) { display: flex; align-items: center; gap: 0.6rem; background: #fff; border: 1px solid #e3e3e8; border-radius: 12px; padding: 0.55rem 0.8rem; }
-        :global(.m-dot) { width: 10px; height: 10px; border-radius: 50%; background: #111827; flex: 0 0 auto; }
-        :global(.m-bar) { flex: 1; height: 7px; border-radius: 4px; background: #ececf0; overflow: hidden; }
-        :global(.m-bar i) { display: block; height: 100%; background: #111827; border-radius: 4px; transform: scaleX(0); transform-origin: left; }
+        :global(.m-chips span) { background: #fff; border: 1px solid #dfe8e0; border-radius: 999px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 600; color: #374151; }
+        :global(.m-line) { display: flex; align-items: center; gap: 0.6rem; background: #fff; border: 1px solid #dfe8e0; border-radius: 12px; padding: 0.55rem 0.8rem; }
+        :global(.m-dot) { width: 10px; height: 10px; border-radius: 50%; background: #8fae92; flex: 0 0 auto; }
+        :global(.m-bar) { flex: 1; height: 7px; border-radius: 4px; background: #e5ece6; overflow: hidden; }
+        :global(.m-bar i) { display: block; height: 100%; background: #8fae92; border-radius: 4px; transform: scaleX(0); transform-origin: left; }
         :global(.ss-grid.on .m-bar i) { animation: grow .9s cubic-bezier(.16,1,.3,1) calc(1s + var(--k) * .25s) forwards; }
         @keyframes grow { to { transform: scaleX(1); } }
-        :global(.m-tag) { font-size: 0.72rem; font-weight: 700; color: #475569; }
-        :global(.m-pill) { display: flex; align-items: center; justify-content: space-between; background: #fff; border: 1px solid #e3e3e8; border-radius: 999px; padding: 0.55rem 0.6rem 0.55rem 1rem; }
+        :global(.m-tag) { font-size: 0.72rem; font-weight: 700; color: #3F6B49; }
+        :global(.m-pill) { display: flex; align-items: center; justify-content: space-between; background: #fff; border: 1px solid #dfe8e0; border-radius: 999px; padding: 0.55rem 0.6rem 0.55rem 1rem; }
         :global(.m-pill-t) { font-size: 0.85rem; font-weight: 600; color: #374151; }
         :global(.m-copy) { position: relative; display: inline-grid; background: #111827; color: #fff; font-size: 0.74rem; padding: 0.4rem 0.8rem; border-radius: 999px; }
         :global(.m-copy b) { grid-area: 1 / 1; font-weight: 700; text-align: center; }

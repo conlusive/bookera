@@ -32,7 +32,7 @@ export default function ForWhom() {
         .fw-cloud { display: flex; flex-wrap: wrap; gap: 0.8rem; max-width: 980px; }
         .fw-slot { display: inline-block; opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .7s cubic-bezier(.16,1,.3,1); transition-delay: calc(var(--i) * 50ms); }
         .fw-cloud.on .fw-slot { opacity: 1; transform: none; }
-        .fw-chip { display: inline-block; background: #F5F5F7; border: 1px solid #e8e8ec; color: #1f2937; font-weight: 600; font-size: 1.02rem; padding: 0.7rem 1.25rem; border-radius: 999px; cursor: default; transition: background .25s ease, transform .3s cubic-bezier(.34,1.56,.64,1), border-color .25s ease; }
+        .fw-chip { display: inline-block; background: #F3F8F4; border: 1px solid #dfe8e0; color: #1f2937; font-weight: 600; font-size: 1.02rem; padding: 0.7rem 1.25rem; border-radius: 999px; cursor: default; transition: background .25s ease, transform .3s cubic-bezier(.34,1.56,.64,1), border-color .25s ease; }
         .fw-cloud.on .fw-chip { animation: breathe var(--d) ease-in-out infinite; }
         .fw-chip:hover { background: var(--t, #111827); border-color: transparent; transform: scale(1.07) rotate(-1.5deg); animation: none; }
         .fw-chip.more { background: #111827; border-color: #111827; color: #fff; }

@@ -33,7 +33,7 @@ export default function SecurityBlock() {
           <div className="sb-list">
             {FACTS.map((f, i) => (
               <div key={f.t} className="sb-item" style={{ ['--i' as string]: i }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="sb-ic">{ICONS[f.icon]}</svg>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3F6B49" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="sb-ic">{ICONS[f.icon]}</svg>
                 <div>
                   <h3>{f.t}</h3>
                   <p>{f.d}</p>

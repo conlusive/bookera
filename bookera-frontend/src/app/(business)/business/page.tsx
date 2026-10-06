@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import ArsenalMosaic from '@/components/business/ArsenalMosaic';
+import ArsenalCollage from '@/components/business/ArsenalCollage';
 import GrowthHero from '@/components/business/GrowthHero';
 import HeroCards from '@/components/business/HeroCards';
 import PricingBlock from '@/components/business/PricingBlock';
@@ -597,7 +597,7 @@ export default function BusinessLandingPage() {
           <h2 style={{ fontSize: 'clamp(2rem, 4.4vw, 3.25rem)', fontWeight: 700, letterSpacing: '-0.035em', lineHeight: 1.08, color: '#1D1D1F', margin: '0 0 2.5rem' }}>
             Базовий арсенал майстра.
           </h2>
-          <ArsenalMosaic />
+          <ArsenalCollage />
         </div>
       </section>
 

@@ -105,7 +105,7 @@ export default function SiteFooter() {
         @media (max-width: 860px) {
           .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 2rem 1.5rem !important; margin-bottom: 2.5rem !important; }
           .footer-grid > div:first-child { grid-column: 1 / -1; }
-          .footer-nav-link { padding: 0.6rem 0; }
+          .footer-nav-link { padding: 0.4rem 0; }
           .footer-legal { display: inline-block; padding: 0.5rem 0; }
           .clean-dark-footer { padding-top: 3rem !important; }
         }

@@ -359,7 +359,14 @@ export default function BusinessLandingPage() {
         .btn-secondary:hover { background-color: #f8fafc; border-color: #cbd5e1; transform: translateY(-2px); }
 
         .hdr-short { display: none; }
-        @media (max-width: 860px) { .faq-btn { padding: 0.6rem 0 !important; } }
+        @media (max-width: 860px) {
+          .faq-btn { padding: 0.6rem 0 !important; }
+          .biz-hero { padding-top: 110px !important; }
+          .dark-hero-content { padding: 4rem 0 1.5rem !important; }
+          .faq-sec { padding: 3.5rem 0 3rem !important; }
+          .faq-grid { gap: 1.25rem !important; }
+          .faq-intro { display: none; }
+        }
         @media (max-width: 560px) { .hdr-clients, .hdr-name, .hdr-long { display: none !important; } .hdr-short { display: inline; } }
         .main-header { position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000; display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent; will-change: transform, background-color; }
         .main-header.top { transform: translateY(0); }
@@ -551,7 +558,7 @@ export default function BusinessLandingPage() {
       </header>
 
       {/* HERO SECTION */}
-      <section style={{ paddingTop: '160px', paddingBottom: '0', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+      <section className="biz-hero" style={{ paddingTop: '160px', paddingBottom: '0', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div className="container" style={{ position: 'relative', zIndex: 10 }}>
           <div className="reveal-on-scroll">
             <h1 className="hero-title">
@@ -671,12 +678,12 @@ export default function BusinessLandingPage() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="reveal-on-scroll" style={{ padding: '8rem 0 6rem 0', backgroundColor: '#f8fafc', position: 'relative', zIndex: 10 }}>
+      <section id="faq" className="reveal-on-scroll faq-sec" style={{ padding: '8rem 0 6rem 0', backgroundColor: '#f8fafc', position: 'relative', zIndex: 10 }}>
         <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '4rem' }}>
+          <div className="faq-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '4rem' }}>
             <div>
               <h2 style={{ fontSize: 'clamp(2.2rem, 4vw, 3rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', lineHeight: '1.1', marginBottom: '1rem' }}>Часті<br/>питання</h2>
-              <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>Ми зібрали відповіді на найпопулярніші питання користувачів.</p>
+              <p className="faq-intro" style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>Ми зібрали відповіді на найпопулярніші питання користувачів.</p>
             </div>
 
             <div style={{ borderTop: '1px solid #e2e8f0' }}>

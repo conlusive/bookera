@@ -409,6 +409,14 @@ export default function BusinessShowcase() {
           .g-day, .g-week { display: none; }
         }
 
+        /* Телефон: без повноекранної висоти й порожнього скла. Лишаємо заголовок і дію. */
+        @media (max-width: 640px) {
+          .bh { height: auto; min-height: 0; }
+          .bh-content { height: auto; gap: 1.75rem; padding: 2.5rem 1.25rem 2.5rem; }
+          .bh-cards, .bh-text { display: none; }
+          .bh-title { font-size: 2rem; }
+        }
+
         /* Рядки чекають, поки блок зʼявиться в полі зору. */
         .bh .anim { opacity: 0; }
         .bh.in .anim { animation: bhFadeSlideUp 0.8s ease both; }

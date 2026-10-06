@@ -742,6 +742,16 @@ export default function HowItWorks() {
           .how .row.reversed .visual { order: 2; }
         }
 
+        /* Телефон: один абзац замість двох і менше повітря між блоками. */
+        @media (max-width: 640px) {
+          .how { padding: 1rem 0 2rem; }
+          .how .row { gap: 1.25rem; padding: 1.75rem 0; }
+          .how .text p:nth-of-type(n+2) { display: none; }
+          .how h3 { margin-bottom: 0.8rem; }
+          .how .device { max-width: 250px; }
+          .how .visual { min-height: 0; padding: 1.25rem 1rem; border-radius: 24px; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .how .text, .how .demo-card, .how .device, .how .notif,
           .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .demo-cursor, .how .bar-fill {

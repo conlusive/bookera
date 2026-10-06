@@ -1462,6 +1462,12 @@ const formatRole = (role?: string) => {
           .sl-h1 { font-size: 1.85rem !important; }
           .sl-main { grid-template-columns: minmax(0, 1fr) !important; gap: 2rem !important; }
           .sl-stack { gap: 1.75rem !important; }
+          /* Порядок на телефоні: що клієнту потрібно для запису - першим (послуги, майстри), довгі відгуки - останніми.
+             Обидві колонки розкладаємо в одну сітку (display: contents) і впорядковуємо блоки через order. */
+          .sl-main { display: flex !important; flex-direction: column; }
+          .sl-stack, .sl-aside, .sl-aside-in { display: contents !important; }
+          .sl-o-services { order: 1; } .sl-o-team { order: 2; } .sl-o-portfolio { order: 3; } .sl-o-about { order: 4; }
+          .sl-o-hours { order: 5; } .sl-o-map { order: 6; } .sl-o-amen { order: 7; } .sl-o-reviews { order: 8; }
           .footer-support-col { grid-column: 1 / -1; }
           .footer-support { flex-direction: row !important; flex-wrap: wrap; gap: 0 1.5rem !important; }
           .sl-sec { padding-top: 1.5rem !important; }
@@ -2229,7 +2235,7 @@ const formatRole = (role?: string) => {
         <div className="sl-main" style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '4rem' }}>
           <div className="sl-stack" style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
-            <div>
+            <div className="sl-o-services">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                   <h2 className="section-title">Послуги</h2>
@@ -2352,7 +2358,7 @@ const formatRole = (role?: string) => {
             {(() => {
               const about = salon?.description?.trim() || salon?.about?.trim() || '';
               return (
-                <div className={`sl-sec${about ? '' : ' sl-empty'}`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+                <div className={`sl-sec sl-o-about${about ? '' : ' sl-empty'}`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
                   <h2 className="section-title" style={{ marginBottom: '1.25rem' }}>Про заклад</h2>
                   <p className={`sl-about${aboutOpen ? ' open' : ''}`} style={{ color: '#475569', lineHeight: '1.7', fontSize: '1rem', margin: 0, whiteSpace: 'pre-wrap', fontWeight: '400' }}>
                     {about || "Опис закладу наразі відсутній."}
@@ -2366,7 +2372,7 @@ const formatRole = (role?: string) => {
 
             {/* ГРАФІК РОБОТИ - з тієї ж таблиці, що й календар у кабінеті */}
             {Array.isArray(salon?.working_hours) && salon.working_hours.length > 0 && (
-              <div className="sl-sec" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+              <div className="sl-sec sl-o-hours" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
                   <h2 className="section-title" style={{ margin: 0 }}>Графік роботи</h2>
                   {salonOpenNow && (
@@ -2381,7 +2387,7 @@ const formatRole = (role?: string) => {
             )}
 
             {/* ВІДГУКИ КЛІЄНТІВ ТА ВІДПОВІДІ */}
-            <div className="sl-sec" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+            <div className="sl-sec sl-o-reviews" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <h2 className="section-title">Відгуки клієнтів</h2>
                 {reviews.length > 0 && <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2698,8 +2704,8 @@ const formatRole = (role?: string) => {
           </div>
 
           {/* ПРАВА КОЛОНКА (ЛИПКИЙ СКРОЛ STICKY) */}
-          <div>
-            <div ref={sideRef} style={{ position: 'sticky', top: `${sideTop}px`, alignSelf: 'start', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="sl-aside">
+            <div ref={sideRef} className="sl-aside-in" style={{ position: 'sticky', top: `${sideTop}px`, alignSelf: 'start', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
               {/* НАША КОМАНДА
                   showTeam перевіряється тут, а не лише в редакторі вітрини:
@@ -2709,7 +2715,7 @@ const formatRole = (role?: string) => {
                   які нічого не налаштовували, поля немає взагалі, і вони
                   мають бачити команду за замовчуванням. */}
               {salon?.layout_config?.showTeam !== false && (
-              <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
+              <div className="section-card sl-o-team" style={{ padding: '1.75rem 2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                   <h3 className="section-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
                   {storefrontTeam.length > TEAM_PREVIEW && (
@@ -2764,7 +2770,7 @@ const formatRole = (role?: string) => {
               {/* РОБОТИ МАЙСТРІВ - портфоліо, яке майстри додають у кабінеті.
                   Лише коли хтось щось додав: порожній блок нічого не каже. */}
               {portfolio.length > 0 && (
-              <div className="section-card" style={{ padding: '1.75rem 2rem' }}>
+              <div className="section-card sl-o-portfolio" style={{ padding: '1.75rem 2rem' }}>
                 <h3 className="section-title" style={{ fontSize: '1.25rem', margin: '0 0 1.25rem' }}>Роботи майстрів</h3>
                 {portfolio.map(m => (
                   <div key={m.user_id} style={{ marginBottom: '1.25rem' }}>
@@ -2800,7 +2806,7 @@ const formatRole = (role?: string) => {
                   showMap теж не перевірявся: власник вимикав карту
                   в редакторі, а клієнт її бачив. */}
               {salon?.layout_config?.showMap !== false && salonMap && (
-              <div className="section-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div className="section-card sl-o-map" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', borderRadius: '24px 24px 0 0', background: '#e2e8f0' }}>
                   <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
                     <iframe
@@ -2855,7 +2861,7 @@ const formatRole = (role?: string) => {
 
               {/* ЗРУЧНОСТІ */}
               {salon?.layout_config?.showAmenities !== false && activeAmenities.length > 0 && (
-                <div className="section-card">
+                <div className="section-card sl-o-amen">
                   <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Зручності</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
                     {activeAmenities.map((item) => (

@@ -283,6 +283,10 @@ export function BusinessCardStyles() {
           .card-photo-box { aspect-ratio: 1 / 1; border-radius: 14px; }
           .card-body { min-width: 0; display: flex; flex-direction: column; }
           .card-body .card-meta-row { margin-bottom: 0.3rem !important; }
+          .card-title-row { flex-direction: column; align-items: flex-start; gap: 1px; margin-bottom: 3px; }
+          .card-title-main { width: 100%; flex: none; }
+          .card-title-main .card-heading { white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.25; font-size: 1rem; }
+          .card-price { font-size: 0.82rem; color: #475569; }
           .card-foot-empty { display: none; }
           .card-foot { min-height: 0; padding-top: 0.5rem !important; flex-wrap: wrap; justify-content: flex-start; }
           .apple-biz-card .glass-pill { padding: 2px 7px; font-size: 0.66rem; }

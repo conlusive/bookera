@@ -204,6 +204,7 @@ export default function SalonClient({
 
   // --- Відгуки та відповіді ---
   const [reviewFilter, setReviewFilter] = useState('all');
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [currentReviewPage, setCurrentReviewPage] = useState(1);
   // Мої завершені візити в цей заклад - щоб оцінити прямо тут
   const [myVisitsHere, setMyVisitsHere] = useState<any[] | null>(null);
@@ -1416,6 +1417,7 @@ const formatRole = (role?: string) => {
         .sl-hd-short, .sl-hd-find { display: none; }
         .sl-hd-find { width: 44px; height: 44px; align-items: center; justify-content: center; color: #111827; }
         /* ТЕЛЕФОН (лише до 860px, комп'ютер не змінюється) */
+        .sl-more { display: none; }
         @media (max-width: 860px) {
           .container { padding: 0 1.25rem; }
           .sl-hd-logo { width: auto !important; }
@@ -1429,6 +1431,11 @@ const formatRole = (role?: string) => {
           .sl-gallery > div:first-child { border-radius: 18px !important; }
           .sl-h1 { font-size: 1.85rem !important; }
           .sl-main { grid-template-columns: minmax(0, 1fr) !important; gap: 2rem !important; }
+          .sl-stack { gap: 1.75rem !important; }
+          .sl-sec { padding-top: 1.5rem !important; }
+          .sl-empty { display: none; }
+          .sl-about:not(.open) { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+          .sl-more { display: inline-block; margin-top: 0.5rem; padding: 0.5rem 0; border: none; background: none; font: inherit; font-weight: 600; font-size: 0.92rem; color: #1D1D1F; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
           .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 2rem 1.5rem !important; margin-bottom: 2.5rem !important; }
           .footer-grid > div:first-child { grid-column: 1 / -1; }
           .footer-nav-link { padding: 0.25rem 0; }
@@ -2188,7 +2195,7 @@ const formatRole = (role?: string) => {
       {/* --- СПИСОК ПОСЛУГ (ЧИСТИЙ БЕЙДЖ БЕЗ БОРДЕРА) --- */}
       <main className="container main-content-wrapper" style={{ paddingBottom: '6rem' }}>
         <div className="sl-main" style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '4rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
+          <div className="sl-stack" style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -2310,16 +2317,24 @@ const formatRole = (role?: string) => {
             </div>
 
             {/* ПРО ЗАКЛАД */}
-            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
-              <h2 className="section-title" style={{ marginBottom: '1.25rem' }}>Про заклад</h2>
-              <p style={{ color: '#475569', lineHeight: '1.7', fontSize: '1rem', margin: 0, whiteSpace: 'pre-wrap', fontWeight: '400' }}>
-                {salon?.description?.trim() || salon?.about?.trim() || "Опис закладу наразі відсутній."}
-              </p>
-            </div>
+            {(() => {
+              const about = salon?.description?.trim() || salon?.about?.trim() || '';
+              return (
+                <div className={`sl-sec${about ? '' : ' sl-empty'}`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+                  <h2 className="section-title" style={{ marginBottom: '1.25rem' }}>Про заклад</h2>
+                  <p className={`sl-about${aboutOpen ? ' open' : ''}`} style={{ color: '#475569', lineHeight: '1.7', fontSize: '1rem', margin: 0, whiteSpace: 'pre-wrap', fontWeight: '400' }}>
+                    {about || "Опис закладу наразі відсутній."}
+                  </p>
+                  {about.length > 200 && (
+                    <button type="button" className="sl-more" onClick={() => setAboutOpen(o => !o)}>{aboutOpen ? 'Згорнути' : 'Показати більше'}</button>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ГРАФІК РОБОТИ - з тієї ж таблиці, що й календар у кабінеті */}
             {Array.isArray(salon?.working_hours) && salon.working_hours.length > 0 && (
-              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+              <div className="sl-sec" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
                   <h2 className="section-title" style={{ margin: 0 }}>Графік роботи</h2>
                   {salonOpenNow && (
@@ -2334,7 +2349,7 @@ const formatRole = (role?: string) => {
             )}
 
             {/* ВІДГУКИ КЛІЄНТІВ ТА ВІДПОВІДІ */}
-            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+            <div className="sl-sec" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <h2 className="section-title">Відгуки клієнтів</h2>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>

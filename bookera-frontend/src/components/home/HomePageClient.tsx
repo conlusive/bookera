@@ -1815,6 +1815,10 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           .hero-sec { height: auto !important; padding: 7rem 0 3rem; }
           .hero-sub { display: none !important; }
           .cat-row { justify-content: flex-start !important; }
+          .salons-sec { padding-bottom: 1rem !important; }
+          .tips-sec { padding: 3rem 0 3rem !important; }
+          .sort-rule-note { display: none; }
+          .sort-rule { min-height: 0; margin: 0.6rem 0 1rem; }
         }
         @media (max-width: 560px) {
           .hs-ico { display: none !important; }
@@ -2228,7 +2232,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
       {/* 🟢 1. СПЕРШУ: ПОБЛИЗУ ВАС ІЗ ВІЛЬНИМИ ВІКНАМИ (КАРУСЕЛЬ З ОДНАКОВИМ РОЗМІРОМ) */}
       {showNearby && (
-        <section id="salons-section" className="reveal-on-scroll" style={{ padding: '0 0 5rem' }}>
+        <section id="salons-section" className="reveal-on-scroll salons-sec" style={{ padding: '0 0 5rem' }}>
           <div className="container">
             {/* Пропозиція показати найближчі - ТУТ, над самим блоком
                 «поблизу», а не після вибору категорії.
@@ -2337,7 +2341,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
               }
               return (
                 <div className="sort-rule">
-                  <p>{text}</p>
+                  <p className={hasLoc ? 'sort-rule-note' : undefined}>{text}</p>
                   <div className="sort-rule-actions">
                     {sortBy !== 'distance' && hasLoc && radius ? (
                       <div className="sort-scope" role="tablist" aria-label="Охоплення">
@@ -2451,7 +2455,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       <BusinessShowcase />
 
       {/* ПОРАДИ СТИЛЮ - на місці колишнього блоку міст. */}
-      <section className="reveal-on-scroll" style={{ padding: '6rem 0 5rem', background: '#ffffff' }}>
+      <section className="reveal-on-scroll tips-sec" style={{ padding: '6rem 0 5rem', background: '#ffffff' }}>
         <div className="container">
           <SectionHeader
             eyebrow="Натхнення"

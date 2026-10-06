@@ -43,9 +43,9 @@ export default function SiteFooter() {
               </div>
             </div>
 
-            <div>
+            <div className="footer-support-col">
               <div className="footer-col-title">Підтримка</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+              <div className="footer-support" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                 <Link href="#" className="footer-nav-link">Служба турботи</Link>
                 <Link href="/#faq" className="footer-nav-link">Поширені запитання</Link>
                 <Link href="#" className="footer-nav-link">Безпека клієнтів</Link>
@@ -106,7 +106,9 @@ export default function SiteFooter() {
           .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 2rem 1.5rem !important; margin-bottom: 2.5rem !important; }
           .footer-grid > div:first-child { grid-column: 1 / -1; }
           .footer-nav-link { padding: 0.4rem 0; }
-          .footer-legal { display: inline-block; padding: 0.5rem 0; }
+          .footer-legal { display: inline-block; padding: 0.3rem 0; }
+          .footer-support-col { grid-column: 1 / -1; }
+          .footer-support { flex-direction: row !important; flex-wrap: wrap; gap: 0 1.5rem !important; }
           .clean-dark-footer { padding-top: 3rem !important; }
         }
         .clean-dark-footer {

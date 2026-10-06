@@ -749,7 +749,8 @@ export default function HowItWorks() {
           .how .text p:nth-of-type(n+2) { display: none; }
           .how h3 { margin-bottom: 0.8rem; }
           .how .device { max-width: 250px; }
-          .how .visual { min-height: 0; padding: 1.25rem 1rem; border-radius: 24px; }
+          .how .visual { min-height: 0; padding: 1rem 0.9rem; border-radius: 24px; }
+          .how .demo-card { min-height: 0 !important; }
         }
 
         @media (prefers-reduced-motion: reduce) {

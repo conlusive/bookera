@@ -3,15 +3,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import PricingBlock from '@/components/business/PricingBlock';
-import ChaosHero from '@/components/business/ChaosHero';
-import Worries from '@/components/business/Worries';
-import { Onest } from 'next/font/google';
-import StartSteps from '@/components/business/StartSteps';
+import ArsenalMosaic from '@/components/business/ArsenalMosaic';
+import GrowthHero from '@/components/business/GrowthHero';
+import HeroCards from '@/components/business/HeroCards';
+import StatsStrip from '@/components/business/StatsStrip';
 import SiteFooter from '@/components/ui/SiteFooter';
 import { createClient } from '@/lib/supabase/client';
 import { authErrorText, passwordProblem, CONFIRM_EMAIL_NOTICE } from '@/lib/auth-errors';
-import { api, type PlatformTerms } from '@/lib/api';
+import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
@@ -21,16 +20,12 @@ import { resolveDisplayName } from '@/lib/displayName';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
-const FAQS = [
-  { q: "Що буде після пробного періоду?", a: "Щоб далі користуватись кабінетом, потрібно оформити підписку. Поки триває пробний період, нічого не списується." },
-  { q: "Як мене знайдуть клієнти?", a: "За вашим посиланням чи QR-кодом, а також у вітрині BookEra серед закладів поруч. Для більшого охоплення є необовʼязкове платне просування «Радар»." },
-  { q: "Чи можна перенести клієнтів з Excel?", a: "Так. Імпорт з файлів .xlsx та .csv має шаблон і попередню перевірку: ви бачите, що буде додано, ще до імпорту." },
-  { q: "Чи можна брати передоплату?", a: "Так. Заклад сам вирішує, чи потрібна передоплата й скільки: фіксована сума або відсоток від вартості. Це допомагає зменшити неявки." },
-  { q: "Можна вести кілька закладів?", a: "Так, одним акаунтом. Для кожного закладу окремі послуги, команда й розклад." },
+const faqs = [
+  { q: "Що таке BookEra Business?", a: "Це комплексний сервіс для автоматизації: онлайн-запис 24/7, клієнтська база та фінанси." },
+  { q: "Чи дійсно базовий функціонал безкоштовний?", a: "Так! Ви можете створити сторінку, додати послуги та приймати записи абсолютно безкоштовно." },
+  { q: "Як клієнти можуть записатися?", a: "Ви отримуєте персональне посилання (bookera.com/ваш-бізнес), яке легко додати в Instagram." },
+  { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам та всім, хто працює за попереднім записом." }
 ];
-
-// Onest: сучасний гротеск із повною кирилицею; рукописний Caveat лишається лише для нотаток у герої
-const onest = Onest({ subsets: ['latin', 'cyrillic'], weight: ['400', '500', '600', '700', '800', '900'], display: 'swap' });
 
 export default function BusinessLandingPage() {
   const router = useRouter();
@@ -65,10 +60,6 @@ export default function BusinessLandingPage() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-  // Ціна, пробний період і комісія приходять із бекенду: на лендінгу немає власних копій цих чисел
-  const [terms, setTerms] = useState<PlatformTerms | null>(null);
-  useEffect(() => { api.getPlatformTerms().then(setTerms).catch(() => setTerms(null)); }, []);
-  const faqs = FAQS;
 
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -345,7 +336,7 @@ export default function BusinessLandingPage() {
   if (!mounted) return null;
 
   return (
-    <div className={onest.className} style={{ backgroundColor: '#ffffff', minHeight: '100vh', color: '#1E2124', overflowX: 'hidden' }}>
+    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', color: '#111827', overflowX: 'hidden' }}>
 
       <style dangerouslySetInnerHTML={{ __html: `
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; position: relative; z-index: 10; }
@@ -354,12 +345,7 @@ export default function BusinessLandingPage() {
         .anim { transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); will-change: transform, opacity; }
         
         .hero-title { font-size: clamp(3rem, 6vw, 5.2rem); font-weight: 900; letter-spacing: -0.04em; line-height: 1.05; color: #111827; margin-bottom: 1.5rem; position: relative; z-index: 2; }
-        .hl { display: inline-block; opacity: 0; animation: heroLine .9s cubic-bezier(.16,1,.3,1) forwards; }
-        .hl-1 { animation-delay: .05s; }
-        .hl-2 { animation-delay: .25s; }
-        @keyframes heroLine { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
-        @media (prefers-reduced-motion: reduce) { .hl { animation: none; opacity: 1; } }
-        .hero-subtitle { font-size: clamp(1.1rem, 2vw, 1.25rem); font-weight: 400; color: #475569; max-width: 600px; margin: 0 auto 2.5rem auto; line-height: 1.5; position: relative; z-index: 2; }
+        .hero-subtitle { font-size: clamp(1.1rem, 2vw, 1.25rem); font-weight: 400; color: #64748b; max-width: 600px; margin: 0 auto 2.5rem auto; line-height: 1.5; position: relative; z-index: 2; }
 
         .btn-primary { background-color: #C2D8C4; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1.1rem 2.4rem; border-radius: 999px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.3s ease, box-shadow 0.3s ease; box-shadow: 0 10px 25px rgba(194, 216, 196, 0.4); will-change: transform; }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 15px 30px rgba(194, 216, 196, 0.6); }
@@ -367,7 +353,6 @@ export default function BusinessLandingPage() {
         .btn-secondary { background-color: #ffffff; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1rem 2.4rem; border-radius: 999px; border: 1px solid #e2e8f0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease; will-change: transform; }
         .btn-secondary:hover { background-color: #f8fafc; border-color: #cbd5e1; transform: translateY(-2px); }
 
-        @media (max-width: 560px) { .hdr-clients, .hdr-name { display: none !important; } }
         .main-header { position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000; display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent; will-change: transform, background-color; }
         .main-header.top { transform: translateY(0); }
         .main-header.scrolled { position: fixed; background-color: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05); animation: slideDown 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
@@ -431,7 +416,7 @@ export default function BusinessLandingPage() {
 
         .reveal-on-scroll.is-visible .anim-slide-1 { opacity: 0; animation: slideInUp 0.5s ease forwards 0.2s; }
         .reveal-on-scroll.is-visible .anim-slide-2 { opacity: 0; animation: slideInUp 0.5s ease forwards 0.4s; }
-        .reveal-on-scroll.is-visible .anim-pop { opacity: 0; animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 1.1s; }
+        .reveal-on-scroll.is-visible .anim-pop { opacity: 0; animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 0.3s; }
         .reveal-on-scroll.is-visible .anim-toggle-bg { animation: toggleBg 0.4s ease forwards 0.5s; background-color: #e2e8f0; }
         .reveal-on-scroll.is-visible .anim-toggle-circle { animation: toggleCir 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 0.5s; }
 
@@ -450,7 +435,7 @@ export default function BusinessLandingPage() {
 
         .faq-answer-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease; }
         .faq-answer-wrapper.open { grid-template-rows: 1fr; }
-        .faq-answer-inner { overflow: hidden; color: #475569; font-size: 1rem; line-height: 1.6; }
+        .faq-answer-inner { overflow: hidden; color: #64748b; font-size: 1rem; line-height: 1.6; }
         .faq-icon { transition: transform 0.3s ease; }
         .faq-icon.open { transform: rotate(180deg); }
 
@@ -507,7 +492,6 @@ export default function BusinessLandingPage() {
           <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
             <Link
               href="/"
-              className="hdr-clients"
               style={{ whiteSpace: 'nowrap', color: '#475569', textDecoration: 'none', fontSize: '0.95rem', fontWeight: '600', transition: 'color 0.2s ease', cursor: 'pointer' }}
               onMouseOver={e => { e.currentTarget.style.color = '#8fae92'; }}
               onMouseOut={e => { e.currentTarget.style.color = '#475569'; }}
@@ -522,7 +506,7 @@ export default function BusinessLandingPage() {
                   style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.65rem', userSelect: 'none', padding: '0.3rem 0.5rem', borderRadius: '20px', transition: 'all 0.2s ease' }}
                   className="anim"
                 >
-                  <span className="hdr-name" style={{ color: '#111827', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
+                  <span style={{ color: '#111827', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
                     {userName}
                   </span>
 
@@ -556,20 +540,64 @@ export default function BusinessLandingPage() {
         </div>
       </header>
 
-      {/* ПЕРШИЙ ЕКРАН: хаос зливається в один календар */}
-      <ChaosHero
-        ctaLabel={isBusinessRole(userRole) ? 'Перейти в кабінет' : isLoggedIn ? 'Відкрити бізнес' : 'Створити профіль'}
-        onStart={handleStartBusinessClick}
-        onMore={() => document.getElementById('worries')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        trialLine={terms ? `${terms.trial_days} днів безкоштовно, далі ${terms.price_uah.toLocaleString('uk-UA')} ₴ за ${terms.period_days === 30 ? 'місяць' : `${terms.period_days} днів`}` : undefined}
-      />
+      {/* HERO SECTION */}
+      <section style={{ paddingTop: '160px', paddingBottom: '0', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+        <div className="container" style={{ position: 'relative', zIndex: 10 }}>
+          <div className="reveal-on-scroll">
+            <h1 className="hero-title">
+              Керуйте бізнесом.<br />
+              <span style={{ position: 'relative', display: 'inline-block' }}>
+                 <div className="text-glow-bg"></div>
+                 <span style={{ color: '#8fae92', position: 'relative', zIndex: 1 }}>Легко. Красиво.</span>
+              </span>
+            </h1>
+            <p className="hero-subtitle">
+              Більше часу на улюблену роботу, менше — на рутину. BookEra бере на себе онлайн-запис, нагадування та фінанси.
+            </p>
 
-      {/* КЛОПОТИ ВЛАСНИКА: п'ять фраз, відповідь і живий приклад */}
-      <Worries />
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center' }}>
+              <button onClick={handleStartBusinessClick} className="btn-primary">
+                {isBusinessRole(userRole) ? 'Перейти в кабінет' : isLoggedIn ? 'Відкрити бізнес' : 'Створити профіль'}
+              </button>
+              <button onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="btn-secondary">
+                Огляд функцій
+              </button>
+            </div>
+            <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: '1.5rem', fontWeight: '500' }}>
+              Базовий функціонал назавжди безкоштовний.
+            </p>
+          </div>
+          {/* Віяло карток: стирчать із лінії знизу, а при скролі падають за неї */}
+          <HeroCards />
+        </div>
+      </section>
 
-      {/* СТАРТ І ЦІНА */}
-      <StartSteps />
-      {terms && <PricingBlock terms={terms} onStart={handleStartBusinessClick} />}
+      {/* STATS STRIP */}
+      <section className="reveal-on-scroll delay-100" style={{ padding: '0 0 5rem 0', marginTop: '-1px' }}>
+        <div className="container">
+          <StatsStrip />
+        </div>
+      </section>
+
+      {/* BENTO GRID SECTION */}
+      {/* БАЗОВИЙ АРСЕНАЛ - мозаїка з пʼяти карток.
+          id="features" - сюди веде «Огляд функцій». Раніше кнопка шукала
+          id="bento", якого після переробки блоку не стало, і не робила
+          нічого. scrollMarginTop - щоб заголовок не ховався під шапкою. */}
+      <section id="features" style={{ padding: '6rem 0 3rem', background: '#fff', scrollMarginTop: '80px' }}>
+        <div className="container">
+          <h2 style={{ fontSize: 'clamp(2rem, 4.4vw, 3.25rem)', fontWeight: 700, letterSpacing: '-0.035em', lineHeight: 1.08, color: '#1D1D1F', margin: '0 0 2.5rem' }}>
+            Базовий арсенал майстра.
+          </h2>
+          <ArsenalMosaic />
+        </div>
+      </section>
+
+      {/* EXPLORE FEATURES */}
+      {/* МОЖЛИВОСТІ ДЛЯ РОСТУ - заголовок по центру, картки-теки по кутах. */}
+      {/* Без кнопки: «почати» - лише вгорі й унизу сторінки. Посередині
+          третя однакова кнопка лише відволікала від самих можливостей. */}
+      <GrowthHero />
 
       {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
@@ -618,24 +646,20 @@ export default function BusinessLandingPage() {
                           <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827' }}>Сьогодні</div>
                           <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.8rem' }}>+</div>
                         </div>
-                        <div className="anim-slide-1" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
+                        <div style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginBottom: '4px' }}>10:00 - 11:30</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Чоловіча стрижка</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Олександр П.</div>
                         </div>
-                        <div className="anim-slide-2" style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
+                        <div style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '700', marginBottom: '4px' }}>12:00 - 14:00</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Фарбування</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Марія К.</div>
                         </div>
-                        <div className="anim-slide-2" style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '16px', padding: '1rem' }}>
+                        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '16px', padding: '1rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '700', marginBottom: '4px' }}>15:00 - 16:00</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Корекція бороди</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Іван С.</div>
-                        </div>
-                        <div className="anim-pop phone-toast" style={{ marginTop: '0.9rem', background: '#111827', color: '#fff', borderRadius: '14px', padding: '0.7rem 1rem', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
-                          Новий запис онлайн
                         </div>
                       </div>
                       <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '4px', backgroundColor: '#cbd5e1', borderRadius: '10px', zIndex: 20 }}></div>
@@ -654,8 +678,8 @@ export default function BusinessLandingPage() {
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '4rem' }}>
             <div>
-              <h2 style={{ fontSize: 'clamp(2rem, 4.4vw, 3.25rem)', fontWeight: 700, color: '#1D1D1F', letterSpacing: '-0.035em', lineHeight: '1.08', marginBottom: '1rem' }}>Часті<br/>питання</h2>
-              <p style={{ color: '#475569', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>Ми зібрали відповіді на найпопулярніші питання користувачів.</p>
+              <h2 style={{ fontSize: 'clamp(2.2rem, 4vw, 3rem)', fontWeight: '900', color: '#111827', letterSpacing: '-0.04em', lineHeight: '1.1', marginBottom: '1rem' }}>Часті<br/>питання</h2>
+              <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2rem', maxWidth: '350px', lineHeight: '1.5' }}>Ми зібрали відповіді на найпопулярніші питання користувачів.</p>
             </div>
 
             <div style={{ borderTop: '1px solid #e2e8f0' }}>

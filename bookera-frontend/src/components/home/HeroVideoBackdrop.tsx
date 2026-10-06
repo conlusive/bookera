@@ -78,7 +78,8 @@ function useVideoAllowed(): boolean {
   useEffect(() => {
     const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
     const slow = !!nav.connection && (nav.connection.saveData || ['slow-2g', '2g', '3g'].includes(nav.connection.effectiveType || ''));
-    if (slow || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // На телефоні банер спокійний, без відео: воно там не вміщається й вантажить трафік
+    if (slow || window.matchMedia('(prefers-reduced-motion: reduce)').matches || window.matchMedia('(max-width: 768px)').matches) return;
 
     let cancelled = false;
     const start = () => { if (!cancelled) setAllowed(true); };
@@ -108,7 +109,11 @@ export default function HeroVideoBackdrop() {
   }, [hasMultipleSets]);
 
   return (
-    <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 1, overflow: 'hidden' }}>
+    <div aria-hidden className="hv-root" style={{ position: 'absolute', inset: 0, zIndex: 1, overflow: 'hidden' }}>
+      <style>{`@media (max-width: 768px) {
+        .hv-root { background: linear-gradient(160deg, #2f3d35 0%, #1f2924 100%); }
+        .hv-hide { display: none !important; }
+      }`}</style>
       {/* Усі набори лежать один на одному; видно той, чия черга.
           Так наступний уже завантажений до моменту появи - інакше
           зміна сцени щоразу починалася б із порожніх заглушок. */}
@@ -119,6 +124,7 @@ export default function HeroVideoBackdrop() {
       {/* Затемнення: градієнт, а не суцільний колір - угорі темніше
           під заголовок, посередині світліше під пошук. */}
       <div
+        className="hv-hide"
         style={{
           position: 'absolute',
           inset: 0,
@@ -127,7 +133,7 @@ export default function HeroVideoBackdrop() {
         }}
       />
 
-      <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', pointerEvents: 'none' }}>
+      <div className="hv-hide" style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', pointerEvents: 'none' }}>
         <div />
         <div style={{ borderLeft: '1px solid rgba(255,255,255,0.09)', borderRight: '1px solid rgba(255,255,255,0.09)' }} />
         <div />
@@ -141,6 +147,7 @@ function VideoRow({ set, isActive, videoAllowed }: { set: VideoSet; isActive: bo
 
   return (
     <div
+      className="hv-hide"
       style={{
         position: 'absolute',
         inset: 0,

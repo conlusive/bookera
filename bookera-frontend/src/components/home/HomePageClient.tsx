@@ -1811,6 +1811,11 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           animation: slideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
         }
         .hs-pill input { min-width: 0; }
+        @media (max-width: 768px) {
+          .hero-sec { height: auto !important; padding: 7rem 0 3rem; }
+          .hero-sub { display: none !important; }
+          .cat-row { justify-content: flex-start !important; }
+        }
         @media (max-width: 560px) {
           .hs-ico { display: none !important; }
           .hs-pill > div:not([style*="width: 1px"]) { padding-left: 0.6rem !important; padding-right: 0.4rem !important; }
@@ -2047,7 +2052,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       </header>
 
       {/* HERO БАНЕР */}
-      <section style={{
+      <section className="hero-sec" style={{
         position: 'relative', width: '100%',
         // Висота від пропорцій кадру, а не фіксовані 560px.
         //
@@ -2081,7 +2086,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           {/* Підзаголовок виринає після заголовка - коли фраза вже
               прочитана. Одночасна поява робить із них один блок,
               а це два різні повідомлення. */}
-          <p style={{
+          <p className="hero-sub" style={{
             fontSize: '1.15rem', color: 'rgba(255,255,255,0.92)', maxWidth: '600px',
             margin: '0 auto 2.5rem auto', lineHeight: 1.5, fontWeight: 400,
             animation: 'heroWordIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) 620ms both',
@@ -2180,7 +2185,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
       {/* КАТЕГОРІЇ ПОСЛУГ */}
       <section className="container reveal-on-scroll delay-100" style={{ paddingTop: '3rem', paddingBottom: '2.5rem', position: 'relative', zIndex: 40 }}>
-        <div className="hide-scrollbar" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.75rem', flexWrap: 'nowrap', borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
+        <div className="hide-scrollbar cat-row" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.75rem', flexWrap: 'nowrap', borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
           {categoriesData.map((cat) => {
             const isActive = activeCategory === cat.slug && !appliedSearch;
             return (

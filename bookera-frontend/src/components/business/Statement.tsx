@@ -7,7 +7,7 @@ import { motion, useScroll, useTransform, useReducedMotion, type MotionValue } f
  * Одне велике речення, яке «проявляється» слово за словом, поки сторінку гортають.
  * Прив'язане до прокрутки, а не до часу: людина сама керує темпом.
  */
-const DEFAULT_TEXT = 'Календар, клієнти, нагадування й фінанси. В одному кабінеті. Без блокнотів і без хаосу в месенджерах.';
+const TEXT = 'Календар, клієнти, нагадування й фінанси. В одному кабінеті. Без блокнотів і без хаосу в месенджерах.';
 
 function Word({ w, i, n, progress }: { w: string; i: number; n: number; progress: MotionValue<number> }) {
   const start = i / n;
@@ -16,8 +16,7 @@ function Word({ w, i, n, progress }: { w: string; i: number; n: number; progress
   return <motion.span style={{ opacity }}>{w} </motion.span>;
 }
 
-export default function Statement({ text = DEFAULT_TEXT }: { text?: string }) {
-  const TEXT = text;
+export default function Statement() {
   const ref = useRef<HTMLParagraphElement>(null);
   const reduce = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.9', 'end 0.55'] });

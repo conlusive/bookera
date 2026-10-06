@@ -3,13 +3,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import ArsenalCollage from '@/components/business/ArsenalCollage';
-import GrowthHero from '@/components/business/GrowthHero';
-import HeroCards from '@/components/business/HeroCards';
 import PricingBlock from '@/components/business/PricingBlock';
+import ChaosHero from '@/components/business/ChaosHero';
+import Worries from '@/components/business/Worries';
+import { Onest } from 'next/font/google';
 import StartSteps from '@/components/business/StartSteps';
-import ForWhom from '@/components/business/ForWhom';
-import SecurityBlock from '@/components/business/SecurityBlock';
 import SiteFooter from '@/components/ui/SiteFooter';
 import { createClient } from '@/lib/supabase/client';
 import { authErrorText, passwordProblem, CONFIRM_EMAIL_NOTICE } from '@/lib/auth-errors';
@@ -30,6 +28,9 @@ const FAQS = [
   { q: "Чи можна брати передоплату?", a: "Так. Заклад сам вирішує, чи потрібна передоплата й скільки: фіксована сума або відсоток від вартості. Це допомагає зменшити неявки." },
   { q: "Можна вести кілька закладів?", a: "Так, одним акаунтом. Для кожного закладу окремі послуги, команда й розклад." },
 ];
+
+// Onest: сучасний гротеск із повною кирилицею; рукописний Caveat лишається лише для нотаток у герої
+const onest = Onest({ subsets: ['latin', 'cyrillic'], weight: ['400', '500', '600', '700', '800', '900'], display: 'swap' });
 
 export default function BusinessLandingPage() {
   const router = useRouter();
@@ -344,7 +345,7 @@ export default function BusinessLandingPage() {
   if (!mounted) return null;
 
   return (
-    <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', color: '#111827', overflowX: 'hidden' }}>
+    <div className={onest.className} style={{ backgroundColor: '#ffffff', minHeight: '100vh', color: '#1E2124', overflowX: 'hidden' }}>
 
       <style dangerouslySetInnerHTML={{ __html: `
         .container { max-width: 1340px; margin: 0 auto; padding: 0 4rem; width: 100%; box-sizing: border-box; position: relative; z-index: 10; }
@@ -366,6 +367,7 @@ export default function BusinessLandingPage() {
         .btn-secondary { background-color: #ffffff; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1rem 2.4rem; border-radius: 999px; border: 1px solid #e2e8f0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.3s ease; will-change: transform; }
         .btn-secondary:hover { background-color: #f8fafc; border-color: #cbd5e1; transform: translateY(-2px); }
 
+        @media (max-width: 560px) { .hdr-clients, .hdr-name { display: none !important; } }
         .main-header { position: absolute; top: 0; left: 0; width: 100%; height: 72px; z-index: 1000; display: flex; align-items: center; background-color: transparent; border-bottom: 1px solid transparent; will-change: transform, background-color; }
         .main-header.top { transform: translateY(0); }
         .main-header.scrolled { position: fixed; background-color: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid #f1f5f9; box-shadow: 0 4px 30px rgba(0,0,0,0.05); animation: slideDown 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
@@ -505,6 +507,7 @@ export default function BusinessLandingPage() {
           <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1.5rem' }}>
             <Link
               href="/"
+              className="hdr-clients"
               style={{ whiteSpace: 'nowrap', color: '#475569', textDecoration: 'none', fontSize: '0.95rem', fontWeight: '600', transition: 'color 0.2s ease', cursor: 'pointer' }}
               onMouseOver={e => { e.currentTarget.style.color = '#8fae92'; }}
               onMouseOut={e => { e.currentTarget.style.color = '#475569'; }}
@@ -519,7 +522,7 @@ export default function BusinessLandingPage() {
                   style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.65rem', userSelect: 'none', padding: '0.3rem 0.5rem', borderRadius: '20px', transition: 'all 0.2s ease' }}
                   className="anim"
                 >
-                  <span style={{ color: '#111827', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
+                  <span className="hdr-name" style={{ color: '#111827', fontSize: '0.95rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
                     {userName}
                   </span>
 
@@ -553,65 +556,20 @@ export default function BusinessLandingPage() {
         </div>
       </header>
 
-      {/* HERO SECTION */}
-      <section style={{ paddingTop: '160px', paddingBottom: '0', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-        <div className="container" style={{ position: 'relative', zIndex: 10 }}>
-          <div className="reveal-on-scroll">
-            <h1 className="hero-title">
-              <span className="hl hl-1">Керуйте бізнесом.</span><br />
-              <span className="hl hl-2" style={{ position: 'relative', display: 'inline-block' }}>
-                 <div className="text-glow-bg"></div>
-                 <span style={{ color: '#4C7A55', position: 'relative', zIndex: 1 }}>Легко. Красиво.</span>
-              </span>
-            </h1>
-            <p className="hero-subtitle">
-              Більше часу на улюблену роботу, менше — на рутину. BookEra бере на себе онлайн-запис, нагадування та фінанси.
-            </p>
+      {/* ПЕРШИЙ ЕКРАН: хаос зливається в один календар */}
+      <ChaosHero
+        ctaLabel={isBusinessRole(userRole) ? 'Перейти в кабінет' : isLoggedIn ? 'Відкрити бізнес' : 'Створити профіль'}
+        onStart={handleStartBusinessClick}
+        onMore={() => document.getElementById('worries')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        trialLine={terms ? `${terms.trial_days} днів безкоштовно, далі ${terms.price_uah.toLocaleString('uk-UA')} ₴ за ${terms.period_days === 30 ? 'місяць' : `${terms.period_days} днів`}` : undefined}
+      />
 
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', alignItems: 'center' }}>
-              <button onClick={handleStartBusinessClick} className="btn-primary">
-                {isBusinessRole(userRole) ? 'Перейти в кабінет' : isLoggedIn ? 'Відкрити бізнес' : 'Створити профіль'}
-              </button>
-              <button onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="btn-secondary">
-                Огляд функцій
-              </button>
-            </div>
-            {terms && (
-              <p style={{ color: '#475569', fontSize: '0.92rem', marginTop: '1.5rem', fontWeight: '500' }}>
-                {terms.trial_days} днів безкоштовно · далі {terms.price_uah.toLocaleString('uk-UA')} ₴ за {terms.period_days === 30 ? 'місяць' : `${terms.period_days} днів`}
-              </p>
-            )}
-          </div>
-          {/* Віяло карток: стирчать із лінії знизу, а при скролі падають за неї */}
-          <HeroCards />
-        </div>
-      </section>
+      {/* КЛОПОТИ ВЛАСНИКА: п'ять фраз, відповідь і живий приклад */}
+      <Worries />
 
-      {/* BENTO GRID SECTION */}
-      {/* БАЗОВИЙ АРСЕНАЛ - мозаїка з пʼяти карток.
-          id="features" - сюди веде «Огляд функцій». Раніше кнопка шукала
-          id="bento", якого після переробки блоку не стало, і не робила
-          нічого. scrollMarginTop - щоб заголовок не ховався під шапкою. */}
-      <section id="features" style={{ padding: '6rem 0 3rem', background: '#fff', scrollMarginTop: '80px' }}>
-        <div className="container">
-          <h2 style={{ fontSize: 'clamp(2rem, 4.4vw, 3.25rem)', fontWeight: 700, letterSpacing: '-0.035em', lineHeight: 1.08, color: '#1D1D1F', margin: '0 0 2.5rem' }}>
-            Базовий арсенал майстра.
-          </h2>
-          <ArsenalCollage />
-        </div>
-      </section>
-
-      {/* EXPLORE FEATURES */}
-      {/* МОЖЛИВОСТІ ДЛЯ РОСТУ - заголовок по центру, картки-теки по кутах. */}
-      {/* Без кнопки: «почати» - лише вгорі й унизу сторінки. Посередині
-          третя однакова кнопка лише відволікала від самих можливостей. */}
-      <GrowthHero />
-
-      {/* КОМУ ПІДХОДИТЬ, СТАРТ, ЦІНА, БЕЗПЕКА */}
-      <ForWhom />
+      {/* СТАРТ І ЦІНА */}
       <StartSteps />
       {terms && <PricingBlock terms={terms} onStart={handleStartBusinessClick} />}
-      <SecurityBlock />
 
       {/* FINAL HERO */}
       <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>

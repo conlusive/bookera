@@ -2265,6 +2265,17 @@ const handleSaveShifts = async () => {
                       : (masterName || 'Не призначено')}
                   </span>
                 </div>
+                {!isBlock && selectedBooking.deposit_status && selectedBooking.deposit_due ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.875rem' }}>
+                    <span style={{ color: '#6B756A' }}>Завдаток</span>
+                    <span style={{ fontWeight: 600, textAlign: 'right', color: selectedBooking.deposit_status === 'awaiting' ? '#B45309' : '#222222' }}>
+                      {selectedBooking.deposit_status === 'awaiting' && `${selectedBooking.deposit_due} ₴ — чекаємо оплату`}
+                      {(selectedBooking.deposit_status === 'held' || selectedBooking.deposit_status === 'paid_out') && `${selectedBooking.deposit_paid ?? selectedBooking.deposit_due} ₴ сплачено${selectedBooking.price ? ` · у закладі ${Math.max(Number(selectedBooking.price) - Number(selectedBooking.deposit_paid ?? selectedBooking.deposit_due), 0)} ₴` : ''}`}
+                      {selectedBooking.deposit_status === 'retained' && `${selectedBooking.deposit_paid ?? selectedBooking.deposit_due} ₴ — лишається вам (неявка)`}
+                      {selectedBooking.deposit_status === 'refunded' && `${selectedBooking.deposit_paid ?? selectedBooking.deposit_due} ₴ — повернено клієнту`}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               {!isBlock && (

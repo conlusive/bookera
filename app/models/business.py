@@ -65,6 +65,10 @@ class Business(Base):
     # тому окремий прапорець, а не порожнє поле.
     show_phone_publicly = Column(Boolean, default=True, nullable=False)
 
+    # Реквізити для виплат закладу: {"method": "card"|"iban", "value": "...", "holder": "..."}.
+    # Окремий стовпець, а не payments_settings: ті віддаються публічно разом зі сторінкою закладу.
+    payout_details = Column(JSON, nullable=True)
+
     # Координати закладу для пошуку «поблизу».
     #
     # Заклад ставить мітку сам при реєстрації - це точніше за

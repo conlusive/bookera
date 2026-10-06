@@ -9,6 +9,7 @@ import LocationPicker from '@/components/ui/LocationPicker';
 import { categoryTitle } from '@/lib/categories';
 import HelpTip from '@/components/ui/HelpTip';
 import SubscriptionPanel from '@/components/cabinet/SubscriptionPanel';
+import FinancePanel from '@/components/cabinet/FinancePanel';
 
 interface SettingsTabProps {
   onNavigate?: (tab: string) => void;
@@ -37,7 +38,8 @@ const businessSettingsCards = [
   { id: 'booking', title: 'Онлайн-запис', desc: 'Сітка, відпустки, мінімум часу до візиту.', icon: SvgGlobe, color: '#16a34a', bg: '#f0fdf4' },
   { id: 'notifications', title: 'Листи й сповіщення', desc: 'Підтвердження, нагадування, сповіщення команді.', icon: SvgBell, color: '#f59e0b', bg: '#fffbeb' },
   { id: 'security', title: 'Захист від неявок', desc: 'Автоблокування онлайн-запису для порушників.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
-  { id: 'payments', title: 'Передоплата', desc: 'Депозит за візит: сума або відсоток.', icon: SvgCreditCard, color: '#ec4899', bg: '#fdf2f8' },
+  { id: 'payments', title: 'Передоплата', desc: 'Завдаток за візит: сума або відсоток.', icon: SvgCreditCard, color: '#ec4899', bg: '#fdf2f8' },
+  { id: 'finance', title: 'Фінанси та виплати', desc: 'Завдатки, комісія, що вирахується, реквізити й виплати.', icon: SvgCreditCard, color: '#0ea5e9', bg: '#f0f9ff' },
   { id: 'billing', title: 'Підписка', desc: 'Скільки діє доступ, оплата й історія.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
 ];
 
@@ -45,7 +47,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   const { showToast } = useToast();
 
   // 🟢 Відновлення активного розділу при перезавантаженні сторінки
-  const [settingsView, setSettingsView] = useState<'main' | 'profile' | 'payments' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
+  const [settingsView, setSettingsView] = useState<'main' | 'profile' | 'payments' | 'finance' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
   // Стан автозбереження - щоб було видно, що зміна дійшла до сервера
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isReady, setIsReady] = useState(false);
@@ -90,12 +92,12 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   // 🟢 1. Відновлення розділу при завантаженні без перезаписування в localStorage
   useEffect(() => {
     try {
-      if (initialView && initialView !== 'main' && ['profile', 'payments', 'billing', 'notifications', 'booking', 'security'].includes(initialView)) {
+      if (initialView && initialView !== 'main' && ['profile', 'payments', 'finance', 'billing', 'notifications', 'booking', 'security'].includes(initialView)) {
         setSettingsView(initialView as any);
         localStorage.setItem('bookera_settings_view', initialView);
       } else {
         const saved = localStorage.getItem('bookera_settings_view');
-        const validViews = ['main', 'profile', 'payments', 'billing', 'notifications', 'booking', 'security'];
+        const validViews = ['main', 'profile', 'payments', 'finance', 'billing', 'notifications', 'booking', 'security'];
         if (saved && validViews.includes(saved)) {
           setSettingsView(saved as any);
         }
@@ -1002,7 +1004,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         {settingsView === 'payments' && (
           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', animation: 'fadeIn 0.3s ease-out' }}>
             <div className="clean-panel">
-              <p className="panel-subtitle">Сума, яку клієнт має внести наперед. Вона фіксується в записі й видна вам у календарі — оплату ви приймаєте своїм способом (переказ, готівка), а онлайн-оплата карткою з’явиться пізніше.</p>
+              <p className="panel-subtitle">Сума, яку клієнт сплачує карткою онлайн при записі. Платформа тримає завдаток до візиту й виплачує його вам, автоматично вирахувавши комісію за нових клієнтів з вітрини (див. «Фінанси та виплати»). Скасував клієнт — завдаток повертається, не прийшов — лишається вам.</p>
               <div className="list-row">
                 <div className="list-row-info">
                   <h4>Вказувати передоплату в записі</h4>
@@ -1046,6 +1048,8 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         )}
 
         {/* 6. ПІДПИСКА - справжні дані з сервера */}
+        {settingsView === 'finance' && <FinancePanel businessId={Number(business?.id)} />}
+
         {settingsView === 'billing' && <SubscriptionPanel businessId={Number(business?.id)} showPlans={showPlansView} onShowPlans={setShowPlansView} />}
 
           </div>

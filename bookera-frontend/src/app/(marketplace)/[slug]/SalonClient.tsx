@@ -1,6 +1,8 @@
 'use client';
 
 import { saveDirectLinkToken, getDirectLinkToken } from '@/lib/direct-link';
+import { depositFor } from '@/lib/deposit';
+import { goToCheckout } from '@/lib/checkout';
 import dynamic from 'next/dynamic';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -311,6 +313,14 @@ export default function SalonClient({
     const discount = certState?.valid ? Math.min(certState.amount, base + addons) : 0;
     return Math.max(0, base + addons - discount);
   }, [selectedService, selectedAddonIds, certState]);
+
+  // Завдаток, який заклад вимагає при записі (сервер вираховує те саме правило й вимагатиме саме його)
+  const [onlinePayments, setOnlinePayments] = useState(false);
+  useEffect(() => { void api.getPlatformTerms().then(t => setOnlinePayments(t.online_payments === true)).catch(() => {}); }, []);
+  const depositNow = useMemo(
+    () => (onlinePayments ? depositFor(salon?.deposit_rule, totalCalculatedPrice) : 0),
+    [onlinePayments, salon?.deposit_rule, totalCalculatedPrice],
+  );
 
   const totalCalculatedDuration = useMemo(() => {
     const base = Number(selectedService?.duration_minutes || selectedService?.duration || 60);
@@ -1061,7 +1071,7 @@ const formatRole = (role?: string) => {
       const { data: { user } } = await supabase.auth.getUser();
       const clientUserEmail = user?.email || loginEmail || '';
 
-      await api.createAppointment({
+      const created = await api.createAppointment({
         gift_certificate_code: certState?.valid ? certCode.trim() : undefined,
         business_id: salon.id,
         service_id: selectedService.id,
@@ -1079,8 +1089,15 @@ const formatRole = (role?: string) => {
         addon_service_ids: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,
       });
 
+      // Заклад вимагає завдаток: сплачуємо його зараз, інакше запис зніметься за 15 хвилин
+      if (created.deposit_status === 'awaiting' && created.deposit_token) {
+        const pay = await api.depositCheckout(created.id, created.deposit_token);
+        if (!pay.paid && goToCheckout(pay)) return;  // перехід на сторінку оплати
+        showToast('Завдаток сплачено, запис підтверджено!', 'success');
+      } else {
+        showToast('Запис успішно підтверджено!', 'success');
+      }
       setBookingSuccess(true);
-      showToast('Запис успішно підтверджено!', 'success');
       setTimeout(() => void closeModal(), 2200);
     } catch (e: any) {
       showToast(e.message || "Помилка підтвердження бронювання.", 'error');
@@ -3554,6 +3571,14 @@ const formatRole = (role?: string) => {
 
                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div>
+                        {depositNow > 0 && (
+                          <div style={{ marginBottom: '1.2rem', padding: '0.85rem 1rem', borderRadius: '14px', background: '#F4FAF5', border: '1px solid #E4EBE3' }}>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#1D1D1F' }}>Завдаток {depositNow} ₴ — онлайн, зараз</div>
+                            <div style={{ fontSize: '0.8rem', color: '#6B756A', marginTop: 4, lineHeight: 1.45 }}>
+                              Решту {Math.max(Math.round((Number(totalCalculatedPrice) - depositNow) * 100) / 100, 0)} ₴ — у закладі після візиту. Завдаток повертається, якщо скасувати запис; якщо не прийти — лишається закладу.
+                            </div>
+                          </div>
+                        )}
                         <div style={{ marginBottom: '1.2rem' }}>
                           <h4 style={{ fontSize: '0.92rem', fontWeight: '700', color: '#1D1D1F', margin: '0 0 0.65rem 0' }}>
                             Спосіб оплати
@@ -3749,7 +3774,7 @@ const formatRole = (role?: string) => {
                       className="apple-btn-primary"
                       style={{ padding: '0.75rem 2.2rem' }}
                     >
-                      {paymentMethod === 'online' ? 'Перейти до оплати' : 'Підтвердити запис'}
+                      {depositNow > 0 ? `Сплатити завдаток ${depositNow} ₴ і записатись` : paymentMethod === 'online' ? 'Перейти до оплати' : 'Підтвердити запис'}
                     </button>
                   )}
                 </div>

@@ -64,7 +64,7 @@ async def _read_payload(request: Request) -> dict:
 async def wayforpay_callback(request: Request, db: AsyncSession = Depends(get_db)):
     payload = await _read_payload(request)
     order_id = str(payload.get("orderReference") or "")
-    if not order_id.startswith(("tip-", "gc-", "rb-", "sub-", "cm-")):
+    if not order_id.startswith(("tip-", "gc-", "rb-", "sub-", "cm-", "dp-")):
         raise HTTPException(status_code=400, detail="Невідомий платіж")
     if not verify_callback_signature(payload):
         logger.warning("WayForPay: невірний підпис для %s", order_id)
@@ -89,6 +89,9 @@ async def wayforpay_callback(request: Request, db: AsyncSession = Depends(get_db
         elif order_id.startswith("sub-"):
             from app.api.platform import complete_subscription_payment
             await complete_subscription_payment(db, payment)
+        elif order_id.startswith("dp-"):
+            from app.services.deposits import mark_deposit_paid
+            await mark_deposit_paid(db, payment)
         elif order_id.startswith("cm-"):
             from app.api.crm.monetization import complete_commission_payment
             await complete_commission_payment(db, payment)

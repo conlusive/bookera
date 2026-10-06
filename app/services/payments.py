@@ -133,6 +133,26 @@ def create_payment_intent(amount: Decimal, order_id: str, product_name: str,
     return _mock_create_intent(amount, order_id)
 
 
+def online_payments_available() -> bool:
+    """
+    Чи можна зараз приймати оплату онлайн: є ключі платіжки або дозволена тестова оплата (не продакшн).
+    Інакше завдаток лишається, як і було, лише сумою в записі - клієнт не отримає помилку оплати,
+    якої заклад не очікував.
+    """
+    return is_live() or not (APP_ENV == "production" and os.getenv("ALLOW_MOCK_PAYMENTS") != "1")
+
+
+def refund_payment(payment) -> bool:
+    """
+    Повернення платежу клієнту. Тестова оплата (mock) повертається одразу. Зі справжнім провайдером API
+    повернення ще не підключено: повертаємо False, платіж стає refund_pending, гроші переказує адміністратор.
+    """
+    if payment.provider == "mock":
+        return True
+    logger.warning("Повернення платежу %s потребує ручного переказу (провайдер %s)", payment.id, payment.provider)
+    return False
+
+
 def verify_callback_signature(payload: dict) -> bool:
     """
     Перевірка підпису відповіді від платіжної системи.

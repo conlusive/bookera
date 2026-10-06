@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,7 @@ from app.core.rate_limit import rate_limit
 from app.models import Appointment, Business, GiftCertificate, Payment, PointsLedgerEntry, RadarBoost, ReferralCommission
 from app.models import Expense, StaffMembership, StaffPayout, User
 from app.services import ranking
+from app.services.deposits import finance_overview
 from app.services.monetization import (
     OWED_STATUSES, attach_commissions, calculate_payout_preview, commissions_total, owed_commissions, settle_commissions,
 )
@@ -166,6 +168,64 @@ async def complete_commission_payment(db: AsyncSession, payment: Payment) -> Non
     payment.status = "completed"
     payment.completed_at = utc_now()
     await settle_commissions(db, payment)
+
+
+# === Фінанси закладу: завдатки онлайн, виплати, комісія ===
+
+class PayoutDetailsIn(BaseModel):
+    method: str = Field(pattern="^(card|iban)$")
+    value: str = Field(min_length=10, max_length=40)
+    holder: str = Field(default="", max_length=120)
+
+
+def _clean_payout_value(method: str, raw: str) -> str:
+    value = "".join(ch for ch in raw if not ch.isspace()).upper()
+    if method == "card":
+        if not (value.isdigit() and len(value) == 16):
+            raise HTTPException(status_code=400, detail="Номер картки - 16 цифр")
+    else:
+        if not (value.startswith("UA") and len(value) == 29 and value[2:].isdigit()):
+            raise HTTPException(status_code=400, detail="IBAN має виглядати як UA + 27 цифр")
+    return value
+
+
+@router.get("/crm/businesses/{business_id}/finance")
+async def get_finance(
+    business_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Баланс завдатків, що вирахується з комісії, історія виплат. Гроші - лише власнику й адміністратору."""
+    await assert_business_admin(db, current_user, business_id)
+    business = await _get_business_or_404(db, business_id)
+    data = await finance_overview(db, business)
+    details = business.payout_details or {}
+    value = details.get("value") or ""
+    data["payout_details"] = {
+        "method": details.get("method"), "holder": details.get("holder", ""),
+        # реквізити не віддаємо цілком: у відповіді лише маска
+        "masked": (value[:4] + " **** " + value[-4:]) if value else "",
+    } if value else None
+    return data
+
+
+@router.put("/crm/businesses/{business_id}/payout-details")
+async def set_payout_details(
+    business_id: int,
+    payload: PayoutDetailsIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Реквізити для виплат (картка чи IBAN). Змінює лише власник чи адміністратор."""
+    await assert_business_admin(db, current_user, business_id)
+    business = await _get_business_or_404(db, business_id)
+    business.payout_details = {
+        "method": payload.method, "value": _clean_payout_value(payload.method, payload.value), "holder": payload.holder.strip(),
+    }
+    from app.services.audit import record as _audit
+    await _audit(db, business_id, str(current_user.id), "settings", "payout_details_changed", "Змінено реквізити для виплат")
+    await db.commit()
+    return {"ok": True}
 
 
 # === Radar (платне просування) ===

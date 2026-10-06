@@ -114,6 +114,10 @@ class AppointmentResponse(BaseModel):
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
     created_at: Optional[datetime] = None
+    # Завдаток онлайн: скільки вимагається, у якому він стані (awaiting/held/retained/refunded/paid_out) і скільки сплачено
+    deposit_due: Optional[float] = None
+    deposit_status: Optional[str] = None
+    deposit_paid: Optional[float] = None
 
     # Назви для сторінки клієнта. Без них людина бачить свій запис
     # без жодного натяку, куди й до кого вона йде: id послуги їй
@@ -133,6 +137,14 @@ class AppointmentResponse(BaseModel):
 
 
 AppointmentOut = AppointmentResponse
+
+
+class BookingCreatedResponse(AppointmentResponse):
+    """
+    Відповідь на створення запису. Токен керування сюди НЕ потрапляє (він лише в листі); для оплати завдатку
+    є окремий ключ, який нічого, крім цієї оплати, не відкриває.
+    """
+    deposit_token: Optional[str] = None
 
 
 class MyAppointmentResponse(AppointmentResponse):

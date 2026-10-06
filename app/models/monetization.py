@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Numeric, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, JSON, Numeric, Text
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now
@@ -52,6 +52,8 @@ class ReferralCommission(Base):
     # Платіж, яким комісію закрито (чи який виставлено на неї). Той самий рядок можна перевиставити
     # в новому платежі, поки перший не підтверджено: покинутий платіж не «заморожує» борг.
     payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True, index=True)
+    # Виплата закладу, з якої цю комісію вирахувано (замість окремої оплати)
+    payout_id = Column(Integer, ForeignKey("salon_payouts.id"), nullable=True)
     created_at = Column(DateTime, default=utc_now)
 
     business = relationship("Business", back_populates="commissions")
@@ -119,6 +121,25 @@ class Payment(Base):
     status = Column(String, default="pending", nullable=False)  # pending, completed, failed, refunded
     created_at = Column(DateTime, default=utc_now)
     completed_at = Column(DateTime, nullable=True)
+
+
+class SalonPayout(Base):
+    """
+    Виплата закладу: завдатки клієнтів, що пройшли через платформу, мінус комісія за нових клієнтів з вітрини.
+    pending - сформовано й чекає переказу; paid - платформа переказала гроші (відмічає адміністратор платформи,
+    поки немає платіжного провайдера з автоматичними виплатами).
+    """
+    __tablename__ = "salon_payouts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False, index=True)
+    gross = Column(Numeric(10, 2), nullable=False)
+    commission_offset = Column(Numeric(10, 2), nullable=False, default=0)
+    amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String, default="pending", nullable=False)  # pending, paid
+    details = Column(JSON, nullable=True)  # знімок реквізитів на момент формування
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    paid_at = Column(DateTime, nullable=True)
 
 
 class StaffPayout(Base):

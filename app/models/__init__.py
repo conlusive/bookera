@@ -8,7 +8,7 @@ from app.models.appointment import Appointment, AppointmentStatus, BookingSource
 from app.models.extras import Review, InventoryItem, Expense, ServiceMaterial, InventoryMovement, Task
 from app.models.monetization import (
     PointsLedgerEntry, PointsReasonEnum, ReferralCommission,
-    RadarBoost, GiftCertificate, Payment, StaffPayout,
+    RadarBoost, GiftCertificate, Payment, SalonPayout, StaffPayout,
  ClientBonusEntry)
 
 __all__ = [
@@ -19,6 +19,6 @@ __all__ = [
     "Appointment", "AppointmentStatus", "BookingSourceEnum",
     "Review", "InventoryItem", "Expense", "ServiceMaterial", "InventoryMovement", "Task",
     "PointsLedgerEntry", "PointsReasonEnum", "ReferralCommission",
-    "RadarBoost", "GiftCertificate", "Payment", "StaffPayout",
+    "RadarBoost", "GiftCertificate", "Payment", "SalonPayout", "StaffPayout",
 ]
 from app.models.master_tools import StaffRequest, PortfolioItem, AuditEvent

@@ -10,14 +10,16 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.appointment import AppointmentStatusUpdate, MyAppointmentResponse
+from app.services.payments import online_payments_available
 
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_business_access, assert_can_modify_appointment, get_current_user, require_business_access, is_limited_to_own_schedule
 from app.core.rate_limit import rate_limit, tokens_equal
-from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client
+from app.models import Business, User, RoleEnum, Appointment, Service, BookingSourceEnum, BusinessHours, GiftCertificate, Client, Payment
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
+    BookingCreatedResponse,
     AvailableSlotsResponse,
     LockSlotRequest,
     ManageBookingRequest,
@@ -401,6 +403,8 @@ async def lock_time_slot(
     _rl=Depends(rate_limit("lock", max_requests=20, window_seconds=60)),
 ):
     now = get_utc_now()
+    from app.services.deposits import expire_unpaid_deposits
+    await expire_unpaid_deposits(db, request.business_id)  # слоти без сплаченого завдатку знову вільні
 
     srv_result = await db.execute(
         select(Service).where(Service.id == request.service_id, Service.business_id == request.business_id)
@@ -535,7 +539,7 @@ async def unlock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(
 
 # === 3. ПІДТВЕРДЖЕННЯ ТА EMAIL-СПОВІЩЕННЯ ===
 
-@router.post("", response_model=AppointmentResponse)
+@router.post("", response_model=BookingCreatedResponse)
 async def create_appointment(
     appointment_in: AppointmentCreate,
     background_tasks: BackgroundTasks,
@@ -651,6 +655,9 @@ async def create_appointment(
     too_soon_or_far = booking_rules.advance_violation(rules, booking_start, local_now(business_for_rules).replace(tzinfo=None))
     if too_soon_or_far:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=too_soon_or_far)
+
+    from app.services.deposits import expire_unpaid_deposits
+    await expire_unpaid_deposits(db, appointment_in.business_id)
 
     lock_query = select(Appointment).where(
         Appointment.service_id == appointment_in.service_id,
@@ -792,6 +799,8 @@ async def create_appointment(
             client_email=appointment_in.client_email,
             source=resolved_source,
             deposit_due=deposit_due,
+            deposit_status="awaiting" if (deposit_due and online_payments_available()) else None,
+            deposit_token=secrets.token_urlsafe(18) if (deposit_due and online_payments_available()) else None,
             manage_token=secrets.token_urlsafe(24),
             created_at=now,
         )
@@ -805,6 +814,8 @@ async def create_appointment(
         appointment.client_phone = appointment_in.client_phone
         appointment.client_email = appointment_in.client_email
         appointment.deposit_due = deposit_due
+        appointment.deposit_status = "awaiting" if (deposit_due and online_payments_available()) else None
+        appointment.deposit_token = secrets.token_urlsafe(18) if appointment.deposit_status else None
         appointment.manage_token = secrets.token_urlsafe(24)
         # source визначає сервер (resolved_source), а не клієнтське поле -
         # раніше тут лишався appointment_in.source, якого в схемі вже немає.
@@ -901,6 +912,53 @@ async def create_appointment(
     return appointment
 
 
+@router.post("/{appointment_id}/deposit/checkout")
+async def checkout_deposit(
+    appointment_id: int,
+    payload: ManageBookingRequest,
+    db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("manage", max_requests=30, window_seconds=600)),
+):
+    """
+    Оплата завдатку за запис карткою - той, хто записався, за токеном керування. Суму бере сервер із запису,
+    а не з запиту. Без ключів платіжки оплата тестова й проходить одразу; зі справжніми повертаємо
+    підписану форму, а закриває завдаток підтвердження платіжної системи (callback dp-...).
+    """
+    from app.services.deposits import mark_deposit_paid
+    from app.services.payments import create_payment_intent
+    appointment = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalars().first()
+    allowed = bool(appointment) and (
+        (appointment.manage_token and tokens_equal(appointment.manage_token, payload.token))
+        or (appointment.deposit_token and tokens_equal(appointment.deposit_token, payload.token))
+    )
+    if not allowed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
+    if appointment.status == "cancelled" or appointment.deposit_status != "awaiting" or not appointment.deposit_due:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Завдаток за цей запис не потрібен або вже сплачений")
+    business = (await db.execute(select(Business).where(Business.id == appointment.business_id))).scalars().first()
+
+    order_id = f"dp-{appointment.id}-{secrets.token_hex(6)}"
+    intent = create_payment_intent(
+        Decimal(appointment.deposit_due), order_id, f"Завдаток за запис — {business.name if business else ''}",
+        return_url=f"/my-booking/{appointment.id}?token={appointment.manage_token}",
+        client_email=appointment.client_email,
+    )
+    payment = Payment(
+        business_id=appointment.business_id, purpose="deposit", amount=Decimal(appointment.deposit_due),
+        provider=intent.provider, provider_ref=order_id, status="pending",
+    )
+    db.add(payment)
+    await db.flush()
+    appointment.deposit_payment_id = payment.id
+    await db.flush()  # сесія без autoflush: mark_deposit_paid шукає запис за deposit_payment_id
+    paid = False
+    if intent.status == "completed":
+        await mark_deposit_paid(db, payment)
+        paid = True
+    await db.commit()
+    return {"amount": float(appointment.deposit_due), "paid": paid, "checkout": intent.checkout, "checkout_url": intent.checkout_url}
+
+
 @router.get("/{appointment_id}/manage", response_model=AppointmentResponse)
 async def get_appointment_for_client(
     appointment_id: int,
@@ -968,7 +1026,10 @@ async def cancel_appointment_by_client(
     if too_late:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=too_late)
 
+    from app.services.visit_hooks import on_status_change
+    _previous_status = appointment.status
     appointment.status = "cancelled"
+    await on_status_change(db, appointment, _previous_status, "cancelled")  # завдаток - назад клієнту
     await db.commit()
     await _notify_team(db, background_tasks, appointment, "Клієнт скасував запис",
                        [("Коли", appointment.start_time.strftime('%d.%m.%Y, %H:%M'), True)])

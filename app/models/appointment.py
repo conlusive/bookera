@@ -79,6 +79,15 @@ class Appointment(Base):
     # запису. Зберігаємо саме тут, а не рахуємо щоразу: правила можуть
     # змінитись, а домовленість із клієнтом лишається тією, що була.
     deposit_due = Column(Numeric(10, 2), nullable=True)
+    # Завдаток, що пройшов через платформу. awaiting - чекаємо оплату (15 хв, потім запис знімається);
+    # held - сплачено, чекає візиту; retained - клієнт не прийшов, завдаток лишається закладу;
+    # refunded - повернено клієнту; paid_out - увійшов у виплату закладу.
+    deposit_status = Column(String, nullable=True, index=True)
+    deposit_paid = Column(Numeric(10, 2), nullable=True)
+    # Ключ лише для оплати завдатку: його отримує той, хто записався (токен керування у відповідь API не віддаємо)
+    deposit_token = Column(String, nullable=True)
+    deposit_payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)
+    deposit_payout_id = Column(Integer, ForeignKey("salon_payouts.id"), nullable=True)
 
     # Коли надіслано нагадування. Саме дата, а не прапорець: з датою
     # видно, чи лист пішов вчасно, і можна розібратись, якщо клієнт

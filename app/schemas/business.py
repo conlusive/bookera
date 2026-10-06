@@ -206,5 +206,7 @@ class BusinessOut(BusinessBase):
     security_settings: Optional[dict] = None
     notification_settings: Optional[dict] = None
     payments_settings: Optional[dict] = None
+    # Правило завдатку - публічне (клієнт має бачити суму ДО запису): лише тип і сума, нічого іншого з платіжних налаштувань
+    deposit_rule: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)

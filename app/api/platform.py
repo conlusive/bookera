@@ -436,3 +436,58 @@ async def subscription_payment_callback(
     await db.commit()
 
     return {"status": "ok"}
+
+
+# === Виплати закладам (адміністратор платформи) ===
+
+@router.get("/payouts")
+async def list_payouts(
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Виплати закладам. Реквізити - повністю: адміністратор платформи переказує за ними гроші."""
+    await _require_admin(db, current_user)
+    from app.models import SalonPayout
+    stmt = select(SalonPayout).order_by(SalonPayout.created_at.desc()).limit(200)
+    if status:
+        stmt = stmt.where(SalonPayout.status == status)
+    rows = (await db.execute(stmt)).scalars().all()
+    names = {b.id: b.name for b in (await db.execute(select(Business).where(Business.id.in_({p.business_id for p in rows} or {0})))).scalars().all()}
+    return [{
+        "id": p.id, "business_id": p.business_id, "business_name": names.get(p.business_id),
+        "gross": float(p.gross), "commission_offset": float(p.commission_offset), "amount": float(p.amount),
+        "status": p.status, "details": p.details, "created_at": p.created_at.isoformat() + "Z" if p.created_at else None,
+    } for p in rows]
+
+
+@router.post("/payouts/run")
+async def run_payouts_now(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Сформувати виплати зараз (інакше це робиться щопонеділка)."""
+    await _require_admin(db, current_user)
+    from app.services.deposits import run_payouts
+    created = await run_payouts(db)
+    return {"created": len(created), "ids": [p.id for p in created]}
+
+
+@router.post("/payouts/{payout_id}/paid")
+async def mark_payout_paid(
+    payout_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Адміністратор переказав гроші закладу й відмічає виплату сплаченою."""
+    await _require_admin(db, current_user)
+    from app.models import SalonPayout
+    payout = await db.get(SalonPayout, payout_id)
+    if not payout:
+        raise HTTPException(status_code=404, detail="Виплату не знайдено")
+    if payout.status != "paid":
+        payout.status = "paid"
+        payout.paid_at = utc_now()
+        await db.commit()
+    return {"id": payout.id, "status": payout.status}
+

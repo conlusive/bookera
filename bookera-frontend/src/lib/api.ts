@@ -35,6 +35,8 @@ export interface Business {
   security_settings?: Record<string, any>;
   notification_settings?: Record<string, any>;
   payments_settings?: Record<string, any>;
+  /** Публічне правило завдатку (тип і сума) - клієнт бачить його до запису */
+  deposit_rule?: { require_deposit?: boolean; deposit_type?: string; deposit_amount?: number | string } | null;
   /** Координати закладу. Заповнюються автоматично за адресою. */
   latitude?: number | null;
   longitude?: number | null;
@@ -84,6 +86,17 @@ export interface Appointment {
   client_phone?: string;
   client_email?: string;
   created_at?: string;
+  /** Завдаток онлайн: скільки вимагається і стан (awaiting / held / retained / refunded / paid_out) */
+  deposit_due?: number | null;
+  deposit_status?: 'awaiting' | 'held' | 'retained' | 'refunded' | 'paid_out' | null;
+  deposit_paid?: number | null;
+}
+
+export interface FinanceOverview {
+  on_hold: number; ready_gross: number; commission_owed: number; next_payout: number; will_deduct: number; min_payout: number;
+  has_payout_details: boolean;
+  payout_details: { method: 'card' | 'iban' | null; holder: string; masked: string } | null;
+  payouts: { id: number; gross: number; commission_offset: number; amount: number; status: 'pending' | 'paid' | string; created_at: string | null; paid_at: string | null }[];
 }
 
 export interface Client {
@@ -372,6 +385,8 @@ export interface PlatformTerms {
   commission_first_visit_only: boolean;
   /** Скільки днів прямe посилання зараховує клієнта власним */
   direct_link_days: number;
+  /** Чи приймає платформа онлайн-оплату (завдаток) зараз */
+  online_payments?: boolean;
 }
 export interface CampaignQuota {
   daily_recipient_limit: number; daily_campaign_limit: number;
@@ -780,8 +795,15 @@ export const api = {
     marketing_consent?: boolean;
     gift_certificate_code?: string;
     addon_service_ids?: number[];
-  }): Promise<Appointment> {
+  }): Promise<Appointment & { deposit_token?: string }> {
     return publicFetch(`/appointments`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  /** Оплата завдатку за запис (за токеном керування): тестова оплата проходить одразу, справжня віддає форму. */
+  async depositCheckout(appointmentId: number, token: string): Promise<{
+    amount: number; paid: boolean; checkout?: { action: string; fields: Record<string, string> } | null; checkout_url?: string | null;
+  }> {
+    return publicFetch(`/appointments/${appointmentId}/deposit/checkout`, { method: 'POST', body: JSON.stringify({ token }) });
   },
 
   /** Клієнт переглядає своє бронювання за токеном з листа - без логіну. */
@@ -1260,6 +1282,14 @@ export const api = {
     amount: number; visits: number; paid: boolean; checkout?: { action: string; fields: Record<string, string> } | null; checkout_url?: string | null;
   }> {
     return authFetch(`/crm/businesses/${businessId}/commissions/checkout`, token, { method: 'POST' });
+  },
+
+  /** «Фінанси»: завдатки, комісія, що вирахується, виплати. */
+  async getFinance(token: string, businessId: number): Promise<FinanceOverview> {
+    return authFetch(`/crm/businesses/${businessId}/finance`, token);
+  },
+  async setPayoutDetails(token: string, businessId: number, body: { method: 'card' | 'iban'; value: string; holder: string }) {
+    return authFetch(`/crm/businesses/${businessId}/payout-details`, token, { method: 'PUT', body: JSON.stringify(body) });
   },
 
   async getCommissions(token: string, businessId: number) {

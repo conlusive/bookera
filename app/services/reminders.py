@@ -149,6 +149,11 @@ async def reminder_loop(session_factory, frontend_url: str = "") -> None:
                 # одного запиту раз на годину не вартий складності.
                 await complete_past_appointments(db)
                 await send_review_requests(db, frontend_url)
+                # Записи без сплаченого завдатку знімаємо, а виплати закладам формуємо щопонеділка
+                from app.services.deposits import expire_unpaid_deposits, run_payouts
+                await expire_unpaid_deposits(db)
+                if utc_now().weekday() == 0:
+                    await run_payouts(db)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

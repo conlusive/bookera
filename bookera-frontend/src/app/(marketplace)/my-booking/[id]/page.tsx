@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import VisitFeedback from '@/components/visit/VisitFeedback';
+import { goToCheckout } from '@/lib/checkout';
 
 /**
  * Сторінка запису для клієнта.
@@ -28,6 +29,7 @@ function BookingContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isCancelled, setIsCancelled] = useState(false);
+  const [payingDeposit, setPayingDeposit] = useState(false);
 
   useEffect(() => {
     if (!appointmentId || !token) {
@@ -129,10 +131,47 @@ function BookingContent() {
         )}
       </div>
 
+      {booking?.deposit_status && booking?.deposit_due ? (
+        <div style={{
+          marginTop: '1rem', padding: '0.9rem 1.1rem', borderRadius: '14px', fontSize: '0.875rem', lineHeight: 1.5,
+          background: booking.deposit_status === 'awaiting' ? '#FDF6E9' : '#F4FAF5',
+          border: `1px solid ${booking.deposit_status === 'awaiting' ? 'rgba(180,130,40,0.25)' : '#E4EBE3'}`, color: '#2E3A30',
+        }}>
+          {booking.deposit_status === 'awaiting' && !alreadyCancelled && (
+            <>
+              <b>Завдаток {booking.deposit_due} ₴ ще не сплачено.</b> Без нього запис зніметься за 15 хвилин після створення.
+              <button
+                type="button"
+                disabled={payingDeposit}
+                onClick={async () => {
+                  setPayingDeposit(true);
+                  try {
+                    const pay = await api.depositCheckout(appointmentId, token);
+                    if (!pay.paid && goToCheckout(pay)) return;
+                    setBooking(await api.getAppointmentForClient(appointmentId, token));
+                  } catch (err: any) {
+                    setError(err?.message || 'Не вдалося сплатити завдаток');
+                  } finally {
+                    setPayingDeposit(false);
+                  }
+                }}
+                style={{ display: 'block', width: '100%', height: '42px', marginTop: '0.7rem', borderRadius: '10px', border: 'none', background: '#222222', color: '#fff', fontSize: '0.9rem', fontWeight: 600, fontFamily: 'inherit', cursor: payingDeposit ? 'wait' : 'pointer' }}
+              >
+                {payingDeposit ? 'Зачекайте…' : `Сплатити завдаток ${booking.deposit_due} ₴`}
+              </button>
+            </>
+          )}
+          {booking.deposit_status === 'held' && !alreadyCancelled && (<><b>Завдаток {booking.deposit_paid ?? booking.deposit_due} ₴ сплачено.</b> Решту — у закладі. Якщо скасувати запис, завдаток повернеться.</>)}
+          {booking.deposit_status === 'paid_out' && <><b>Завдаток {booking.deposit_paid ?? booking.deposit_due} ₴ сплачено</b> і зарахований у вартість візиту.</>}
+          {booking.deposit_status === 'refunded' && <><b>Завдаток {booking.deposit_paid ?? booking.deposit_due} ₴ повернено.</b> Гроші повернуться на картку.</>}
+          {booking.deposit_status === 'retained' && <>Клієнт не прийшов, тож завдаток лишився закладу.</>}
+        </div>
+      ) : null}
+
       {!alreadyCancelled && !isPast && (
         <button
           onClick={async () => {
-            if (!confirm('Скасувати візит?')) return;
+            if (!confirm(booking?.deposit_status === 'held' ? `Скасувати візит? Завдаток ${booking.deposit_paid ?? booking.deposit_due} ₴ повернеться.` : 'Скасувати візит?')) return;
             setIsCancelling(true);
             try {
               await api.cancelAppointmentByClient(appointmentId, token);

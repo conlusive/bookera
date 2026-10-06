@@ -6,7 +6,6 @@ import Link from 'next/link';
 import ArsenalMosaic from '@/components/business/ArsenalMosaic';
 import GrowthHero from '@/components/business/GrowthHero';
 import HeroCards from '@/components/business/HeroCards';
-import FactsStrip from '@/components/business/FactsStrip';
 import PricingBlock from '@/components/business/PricingBlock';
 import StartSteps from '@/components/business/StartSteps';
 import ForWhom from '@/components/business/ForWhom';
@@ -24,17 +23,12 @@ import { resolveDisplayName } from '@/lib/displayName';
 
 // 1. ОПТИМІЗАЦІЯ: Виносимо статичні дані за межі компонента,
 // щоб вони не перестворювалися при кожному рендері
-const buildFaqs = (t: PlatformTerms | null) => [
-  { q: "Що таке BookEra Business?", a: "Це комплексний сервіс для автоматизації: онлайн-запис 24/7, клієнтська база, розсилки та фінанси в одному кабінеті." },
-  { q: "Скільки це коштує?", a: t
-    ? `Один тариф: ${t.price_uah.toLocaleString('uk-UA')} ₴ за ${t.period_days} днів. Перші ${t.trial_days} днів безкоштовно, щоб усе спробувати. Окремого безкоштовного тарифу немає: після пробного періоду потрібна підписка.`
-    : "Один тариф із безкоштовним пробним періодом. Окремого безкоштовного тарифу немає: після пробного періоду потрібна підписка." },
-  { q: "Яка комісія?", a: t
-    ? `З клієнтів, яких ви привели самі (посилання, QR, розсилка, власна база), комісії немає: ${t.own_clients_commission_percent}%. З візитів, що прийшли з вітрини BookEra, ${Math.round(t.marketplace_commission_percent)}% від завершеного візиту. Якщо клієнт не прийшов, комісія не береться.`
-    : "З клієнтів, яких ви привели самі, комісії немає. З візитів із вітрини BookEra береться відсоток від завершеного візиту." },
-  { q: "Як клієнти можуть записатися?", a: "Ви отримуєте персональне посилання на сторінку закладу. Його легко додати в Instagram, на візитку чи показати QR-кодом. Клієнти ще й знаходять вас у вітрині BookEra." },
-  { q: "Чи безпечні дані моїх клієнтів?", a: "Так. Пошта акаунта підтверджується, майстри бачать лише своїх клієнтів, у розсилках є згода й відписка, а база закрита від прямого доступу з браузера." },
-  { q: "Кому підходить цей сервіс?", a: "Барберам, перукарям, майстрам манікюру, косметологам, масажистам та всім, хто працює за попереднім записом." },
+const FAQS = [
+  { q: "Що буде після пробного періоду?", a: "Щоб далі користуватись кабінетом, потрібно оформити підписку. Поки триває пробний період, нічого не списується." },
+  { q: "Як мене знайдуть клієнти?", a: "За вашим посиланням чи QR-кодом, а також у вітрині BookEra серед закладів поруч. Для більшого охоплення є необовʼязкове платне просування «Радар»." },
+  { q: "Чи можна перенести клієнтів з Excel?", a: "Так. Імпорт з файлів .xlsx та .csv має шаблон і попередню перевірку: ви бачите, що буде додано, ще до імпорту." },
+  { q: "Чи можна брати передоплату?", a: "Так. Заклад сам вирішує, чи потрібна передоплата й скільки: фіксована сума або відсоток від вартості. Це допомагає зменшити неявки." },
+  { q: "Можна вести кілька закладів?", a: "Так, одним акаунтом. Для кожного закладу окремі послуги, команда й розклад." },
 ];
 
 export default function BusinessLandingPage() {
@@ -73,7 +67,7 @@ export default function BusinessLandingPage() {
   // Ціна, пробний період і комісія приходять із бекенду: на лендінгу немає власних копій цих чисел
   const [terms, setTerms] = useState<PlatformTerms | null>(null);
   useEffect(() => { api.getPlatformTerms().then(setTerms).catch(() => setTerms(null)); }, []);
-  const faqs = useMemo(() => buildFaqs(terms), [terms]);
+  const faqs = FAQS;
 
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -359,6 +353,14 @@ export default function BusinessLandingPage() {
         .anim { transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); will-change: transform, opacity; }
         
         .hero-title { font-size: clamp(3rem, 6vw, 5.2rem); font-weight: 900; letter-spacing: -0.04em; line-height: 1.05; color: #111827; margin-bottom: 1.5rem; position: relative; z-index: 2; }
+        .hl { display: inline-block; opacity: 0; animation: heroLine .9s cubic-bezier(.16,1,.3,1) forwards; }
+        .hl-1 { animation-delay: .05s; }
+        .hl-2 { animation-delay: .25s; }
+        @keyframes heroLine { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+        .hl-mark { position: absolute; left: 0; bottom: -0.12em; width: 100%; height: 0.28em; z-index: 0; overflow: visible; pointer-events: none; }
+        .hl-mark path { fill: none; stroke: #F5D547; stroke-width: 7; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; vector-effect: non-scaling-stroke; animation: markDraw 1s ease-out 1s forwards; }
+        @keyframes markDraw { to { stroke-dashoffset: 0; } }
+        @media (prefers-reduced-motion: reduce) { .hl { animation: none; opacity: 1; } .hl-mark path { animation: none; stroke-dashoffset: 0; } }
         .hero-subtitle { font-size: clamp(1.1rem, 2vw, 1.25rem); font-weight: 400; color: #475569; max-width: 600px; margin: 0 auto 2.5rem auto; line-height: 1.5; position: relative; z-index: 2; }
 
         .btn-primary { background-color: #C2D8C4; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1.1rem 2.4rem; border-radius: 999px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.3s ease, box-shadow 0.3s ease; box-shadow: 0 10px 25px rgba(194, 216, 196, 0.4); will-change: transform; }
@@ -430,7 +432,7 @@ export default function BusinessLandingPage() {
 
         .reveal-on-scroll.is-visible .anim-slide-1 { opacity: 0; animation: slideInUp 0.5s ease forwards 0.2s; }
         .reveal-on-scroll.is-visible .anim-slide-2 { opacity: 0; animation: slideInUp 0.5s ease forwards 0.4s; }
-        .reveal-on-scroll.is-visible .anim-pop { opacity: 0; animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 0.3s; }
+        .reveal-on-scroll.is-visible .anim-pop { opacity: 0; animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 1.1s; }
         .reveal-on-scroll.is-visible .anim-toggle-bg { animation: toggleBg 0.4s ease forwards 0.5s; background-color: #e2e8f0; }
         .reveal-on-scroll.is-visible .anim-toggle-circle { animation: toggleCir 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 0.5s; }
 
@@ -559,10 +561,11 @@ export default function BusinessLandingPage() {
         <div className="container" style={{ position: 'relative', zIndex: 10 }}>
           <div className="reveal-on-scroll">
             <h1 className="hero-title">
-              Керуйте бізнесом.<br />
-              <span style={{ position: 'relative', display: 'inline-block' }}>
+              <span className="hl hl-1">Керуйте бізнесом.</span><br />
+              <span className="hl hl-2" style={{ position: 'relative', display: 'inline-block' }}>
                  <div className="text-glow-bg"></div>
                  <span style={{ color: '#4C7A55', position: 'relative', zIndex: 1 }}>Легко. Красиво.</span>
+                 <svg className="hl-mark" viewBox="0 0 300 18" preserveAspectRatio="none" aria-hidden="true"><path d="M3 12 C 70 4, 150 16, 297 6" pathLength="1" /></svg>
               </span>
             </h1>
             <p className="hero-subtitle">
@@ -585,13 +588,6 @@ export default function BusinessLandingPage() {
           </div>
           {/* Віяло карток: стирчать із лінії знизу, а при скролі падають за неї */}
           <HeroCards />
-        </div>
-      </section>
-
-      {/* STATS STRIP */}
-      <section className="reveal-on-scroll delay-100" style={{ padding: '0 0 5rem 0', marginTop: '-1px' }}>
-        <div className="container">
-          {terms ? <FactsStrip terms={terms} /> : <div style={{ minHeight: 190 }} aria-hidden="true" />}
         </div>
       </section>
 
@@ -622,7 +618,7 @@ export default function BusinessLandingPage() {
       <SecurityBlock />
 
       {/* FINAL HERO */}
-      <section className="reveal-on-scroll" style={{ backgroundColor: '#EAF2EB', position: 'relative', zIndex: 20, padding: '0' }}>
+      <section className="reveal-on-scroll" style={{ backgroundColor: '#F5F5F7', position: 'relative', zIndex: 20, padding: '0' }}>
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', top: '-10%', right: '5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(255, 255, 255, 0.7) 0%, rgba(255,255,255,0) 70%)', filter: 'blur(50px)' }}></div>
         </div>
@@ -668,20 +664,24 @@ export default function BusinessLandingPage() {
                           <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#111827' }}>Сьогодні</div>
                           <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '0.8rem' }}>+</div>
                         </div>
-                        <div style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
+                        <div className="anim-slide-1" style={{ background: '#f0fdf4', borderLeft: '4px solid #16a34a', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginBottom: '4px' }}>10:00 - 11:30</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Чоловіча стрижка</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Олександр П.</div>
                         </div>
-                        <div style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
+                        <div className="anim-slide-2" style={{ background: '#eff6ff', borderLeft: '4px solid #2563eb', borderRadius: '16px', padding: '1rem', marginBottom: '0.8rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '700', marginBottom: '4px' }}>12:00 - 14:00</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Фарбування</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Марія К.</div>
                         </div>
-                        <div style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '16px', padding: '1rem' }}>
+                        <div className="anim-slide-2" style={{ background: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '16px', padding: '1rem' }}>
                           <div style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '700', marginBottom: '4px' }}>15:00 - 16:00</div>
                           <div style={{ fontSize: '1rem', color: '#111827', fontWeight: '800' }}>Корекція бороди</div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Іван С.</div>
+                        </div>
+                        <div className="anim-pop phone-toast" style={{ marginTop: '0.9rem', background: '#111827', color: '#fff', borderRadius: '14px', padding: '0.7rem 1rem', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#F5D547', display: 'inline-block' }} />
+                          Новий запис онлайн
                         </div>
                       </div>
                       <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '4px', backgroundColor: '#cbd5e1', borderRadius: '10px', zIndex: 20 }}></div>

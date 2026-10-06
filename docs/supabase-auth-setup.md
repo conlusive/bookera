@@ -18,8 +18,12 @@
 ## Крок 2. Вимоги до пароля
 Authentication → Sign In / Providers (або Policies) → Password:
 - Minimum password length: **8**
-- Password requirements: **Lowercase, uppercase letters and digits** (або «letters and digits»)
-- Prevent use of leaked passwords: увімкнути, якщо доступно на вашому плані
+- Password requirements: **Letters and digits** (латинські літери й цифри)
+- Prevent use of leaked passwords: лише на Pro-плані (на безкоштовному недоступно)
+
+> Кроки 2 і 4 вже застосовано через Management API (мінімум 8, латинська літера + цифра, `http://localhost:3000/**`
+> у списку переходів). Лишаються SMTP, шаблони й «Confirm email»: шаблони Supabase дозволяє змінювати
+> лише після підключення власного SMTP.
 
 ## Крок 3. Підтвердження пошти
 Authentication → Sign In / Providers → Email → **Confirm email: увімкнути**.

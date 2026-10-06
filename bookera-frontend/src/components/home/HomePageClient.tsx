@@ -1,7 +1,7 @@
 'use client';
 
 import type { RankingRules } from '@/lib/api';
-import { Fragment, Suspense, useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
+import { Fragment, Suspense, useState, useEffect, useRef, useMemo, useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import { imageLoadProps } from '@/lib/images';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -966,6 +966,13 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     if (el && el.offsetParent) el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [activeCategory]);
 
+  // Вузький екран: коротший підпис у пошуковому полі, щоб він не обрізався
+  const narrow = useSyncExternalStore(
+    (notify) => { const mq = window.matchMedia('(max-width: 560px)'); mq.addEventListener('change', notify); return () => mq.removeEventListener('change', notify); },
+    () => window.matchMedia('(max-width: 560px)').matches,
+    () => false,
+  );
+
   const handleCategorySelect = (slug: string) => {
     setActiveCategory(slug);
     setAppliedSearch('');
@@ -1619,6 +1626,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         .zone-h { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #86868B; padding-top: 0.4rem; }
         .zone-h em { font-style: normal; font-weight: 600; color: #A1A1A6; letter-spacing: 0; }
         .zone-h::after { content: ''; flex: 1; height: 1px; background: #E8E8ED; }
+        .salons-layout .nearby-carousel-item { min-width: 0; }  /* у сітці ширину задає колонка, інакше картки налазять одна на одну */
         .nearby-carousel-item {
           flex: 0 0 calc((100% - 4.5rem) / 4);
           min-width: 270px;
@@ -1836,6 +1844,11 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           .hs-ico { display: none !important; }
           .hs-pill > div:not([style*="width: 1px"]) { padding-left: 0.6rem !important; padding-right: 0.4rem !important; }
           .hs-pill input { font-size: 16px !important; }
+          /* Випадні списки пошуку: на всю ширину пошукової плашки (а не вузька колонка під одним полем) */
+          .hs-pill > div { position: static !important; }
+          .hs-pill .search-dropdown { left: 0 !important; right: 0 !important; width: auto !important; top: calc(100% + 8px) !important; max-height: 52vh; border-radius: 18px !important; }
+          .hs-pill .search-dropdown-item { padding: 0.8rem 0.9rem; font-size: 0.95rem; }
+          .hs-pill .search-dropdown[style*="padding: 1.5rem"] { padding: 1rem !important; max-height: none; }
           .hs-pill span { font-size: 0.9rem !important; }
         }
         .hd-short, .hd-find { display: none; }
@@ -2138,7 +2151,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
               <svg className="hs-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.6rem', flexShrink: 0 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               <input
                 type="text"
-                placeholder="Послуга, бренд або салон"
+                placeholder={narrow ? "Що шукаєте?" : "Послуга, бренд або салон"}
                 value={searchWhat}
                 onChange={(e) => { setSearchWhat(e.target.value); setIsWhatOpen(true); setActiveSearch('hero'); }}
                 onFocus={() => { setIsWhatOpen(true); setActiveSearch('hero'); }}

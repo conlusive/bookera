@@ -84,6 +84,8 @@ async def main(owner_email: str) -> None:
                 db.add(Appointment(business_id=biz.id, service_id=svc.id, master_id=master_id, client_id=client.id,
                                    start_time=start, end_time=start + timedelta(minutes=svc.duration_minutes), status="confirmed",
                                    price=svc.price, client_name=cname, client_phone=phone, source="manual"))
+            if owner.business_id is None:
+                owner.business_id = biz.id  # «поточний заклад»: саме його відкриває кабінет
             print("Додано:", s["name"], f"({len(services)} послуги, майстер {s['master']}, 2 записи на завтра)")
         await db.commit()
     await engine.dispose()

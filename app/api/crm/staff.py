@@ -51,23 +51,23 @@ def _invite_email(invite: StaffInvite, business_name: str) -> str:
     Лист із КНОПКОЮ. Раніше в листі був лише сирий токен без посилання -
     майстрові не було на що натиснути.
     """
+    from app.core.email_layout import button, layout
     url = _invite_url(invite)
     role = ROLE_LABELS.get(invite.role, "члена команди")
-    return f"""
-    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;color:#1D1D1F">
-      <h2 style="font-size:22px;margin:0 0 12px">Вас запросили в команду</h2>
-      <p style="font-size:15px;line-height:1.55;color:#3A3A3C;margin:0 0 22px">
-        <b>{esc(business_name)}</b> запрошує вас у BookEra як {esc(role)}. Ви бачитимете свій
-        розклад і записи клієнтів.
-      </p>
-      <a href="{url}" style="display:inline-block;background:#1D1D1F;color:#fff;text-decoration:none;
-         padding:13px 22px;border-radius:12px;font-size:15px;font-weight:600">Прийняти запрошення</a>
-      <p style="font-size:13px;color:#86868B;margin:22px 0 0">
-        Запрошення дійсне {INVITE_EXPIRY_DAYS} днів. Якщо кнопка не працює, відкрийте посилання:<br>
-        <a href="{url}" style="color:#6F9273;word-break:break-all">{url}</a>
-      </p>
-    </div>
-    """
+    intro = (
+        f"<b>{esc(business_name)}</b> запрошує вас у BookEra як {esc(role)}. "
+        "Ви бачитимете свій розклад і записи клієнтів."
+    )
+    return layout(
+        business_name=business_name,
+        title="Вас запросили в команду",
+        intro=intro,
+        body_html=button("Прийняти запрошення", url),
+        footer_note=(
+            f"Запрошення дійсне {INVITE_EXPIRY_DAYS} днів. Якщо кнопка не працює, відкрийте посилання:<br>"
+            f'<a href="{esc(url)}" style="color:#6B756A;word-break:break-all;">{esc(url)}</a>'
+        ),
+    )
 
 
 @router.post("/crm/businesses/{business_id}/invites", response_model=StaffInviteResponse, status_code=status.HTTP_201_CREATED)

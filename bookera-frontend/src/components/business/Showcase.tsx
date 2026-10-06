@@ -61,11 +61,6 @@ export default function Showcase() {
                 </div>
               </div>
 
-              <motion.div className="cal-toast" initial={{ opacity: 0, y: -14, scale: 0.94 }} whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                viewport={{ once: true, margin: '-60px' }} transition={{ ...spring, delay: 1.7 }}>
-                <span className="cal-tick"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>
-                <span><b>Новий запис онлайн</b><small>Манікюр · Олена, завтра</small></span>
-              </motion.div>
             </div>
           </motion.div>
 
@@ -93,14 +88,10 @@ export default function Showcase() {
           .cal-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background-image: linear-gradient(#f0f0f3 1px, transparent 1px); background-size: 100% calc(100% / 7); }
           .cal-col { position: relative; }
           .cal-slot { position: absolute; left: 3px; right: 3px; border-left: 4px solid; border-radius: 10px; padding: 0.4rem 0.6rem; font-size: clamp(0.66rem, 1.3vw, 0.86rem); font-weight: 700; color: #1D1D1F; overflow: hidden; }
-          .cal-toast { position: absolute; right: 18px; top: 52px; display: flex; align-items: center; gap: 10px; background: #1D1D1F; color: #fff; border-radius: 14px; padding: 0.65rem 1rem 0.65rem 0.7rem; box-shadow: 0 14px 30px rgba(0,0,0,.25); }
-          .cal-toast b { display: block; font-size: 0.85rem; } .cal-toast small { color: rgba(255,255,255,.7); font-size: 0.75rem; }
-          .cal-tick { width: 24px; height: 24px; border-radius: 50%; background: #5E9A6A; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-          .cal-tick svg { width: 13px; height: 13px; }
           .sc-ben { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3rem; margin-top: 4rem; }
           .sc-ben h3 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; color: #1D1D1F; margin: 0 0 0.5rem; }
           .sc-ben p { color: #6E6E73; font-size: 1.02rem; line-height: 1.55; margin: 0; }
-          @media (max-width: 800px) { .sc-ben { grid-template-columns: 1fr; gap: 2rem; } .cal-toast { display: none; } .cal-head { grid-template-columns: 44px repeat(3, 1fr); } .cal-body { grid-template-columns: 44px 1fr; } }
+          @media (max-width: 800px) { .sc-ben { grid-template-columns: 1fr; gap: 2rem; } .cal-head { grid-template-columns: 44px repeat(3, 1fr); } .cal-body { grid-template-columns: 44px 1fr; } }
         `}</style>
       </section>
     </MotionConfig>

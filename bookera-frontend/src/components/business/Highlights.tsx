@@ -113,8 +113,8 @@ export default function Highlights() {
           <div className="hl-pad" />
         </motion.div>
         <style jsx global>{`
-          .hl { padding: 5rem 0 6rem; background: #fff; }
-          .hl-top { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 2rem; }
+          .hl { padding: 7rem 0 6rem; background: #fff; }
+          .hl-top { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 2.75rem; }
           .hl-top h2 { font-size: clamp(2rem, 4.6vw, 3.4rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; color: #1D1D1F; margin: 0; }
           .hl-nav { display: flex; gap: 0.6rem; }
           .hl-nav button { width: 44px; height: 44px; border-radius: 50%; border: none; background: #E8E8ED; color: #1D1D1F; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background .2s ease, opacity .2s ease; }

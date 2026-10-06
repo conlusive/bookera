@@ -14,14 +14,14 @@ Supabase Auth з підтвердженням листом (supabase.auth.update
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser, get_current_user, sync_user_from_token
 from app.core.database import get_db
-from app.models import User
+from app.models import Business, Client, Favorite, StaffMembership, User
 
 router = APIRouter(prefix="/account", tags=["Account"])
 
@@ -115,3 +115,49 @@ async def update_me(
     await db.commit()
     await db.refresh(user)
     return _out(user, current_user)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Видалення власних даних. Викликається ПЕРЕД видаленням входу в Supabase (supabase.rpc('delete_user')).
+
+    Раніше «Видалити акаунт» стирало лише запис входу в Supabase, а профіль на нашому сервері (імʼя, пошта,
+    телефон, дата народження, фото) лишався назавжди, хоча інтерфейс обіцяв повне видалення. До того ж
+    стара пошта залишалась зайнятою в таблиці користувачів.
+
+    Робимо анонімізацію, а не фізичне видалення рядка: на нього посилаються записи закладів (виплати,
+    журнали), і їхня цілісність важливіша за порожній рядок. Особисті поля обнуляємо, пошту підміняємо
+    унікальною службовою - тож та сама людина може зареєструватися знову.
+    Відмовляємо, якщо людина власник закладу чи працює в команді: заклад залежить від неї, спершу треба
+    передати власність або вийти з команди.
+    """
+    res = await db.execute(select(User).where(User.id == str(current_user.id)))
+    user = res.scalars().first()
+    if not user:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    owned = (await db.execute(select(Business.name).where(Business.owner_id == user.id).limit(1))).first()
+    if owned:
+        raise HTTPException(status_code=409, detail=f"Ви власник закладу «{owned[0]}». Спершу передайте заклад іншій людині або видаліть його.")
+    working = (await db.execute(
+        select(Business.name).join(StaffMembership, StaffMembership.business_id == Business.id)
+        .where(StaffMembership.user_id == user.id, StaffMembership.is_active.is_(True)).limit(1)
+    )).first()
+    if working:
+        raise HTTPException(status_code=409, detail=f"Ви працюєте в закладі «{working[0]}». Спершу вийдіть із команди.")
+
+    await db.execute(delete(Favorite).where(Favorite.user_id == user.id))
+    # Картки клієнта в закладах належать закладам, але зв'язок з акаунтом розриваємо
+    await db.execute(update(Client).where(Client.linked_user_id == user.id).values(linked_user_id=None))
+    user.email = f"deleted-{user.id}@deleted.invalid"
+    user.full_name = "Видалений користувач"
+    user.phone = None
+    user.birthday = None
+    user.avatar_url = None
+    user.is_active = False
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

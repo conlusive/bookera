@@ -19,10 +19,12 @@ import BusinessCard, { BusinessCardStyles } from '@/components/ui/BusinessCard';
 import { categoryTitle, normalizeCategory } from '@/lib/categories';
 import { resolveDisplayName } from '@/lib/displayName';
 import { formatDuration } from '@/lib/duration';
+import { plural } from '@/lib/plural';
+import { authErrorText, passwordProblem } from '@/lib/auth-errors';
 import BirthdayInput from '@/components/ui/BirthdayInput';
 
 // Вкладки й модалка відкриваються не одразу - їхній код вантажиться лише тоді, коли потрібен
-const VisitsHeatmap = dynamic(() => import('@/components/profile/VisitsHeatmap'), { ssr: false });
+const VisitsYear = dynamic(() => import('@/components/profile/VisitsYear'), { ssr: false });
 const WorkDashboard = dynamic(() => import('@/components/work/WorkDashboard'), { ssr: false });
 const WalletTab = dynamic(() => import('@/components/profile/WalletTab'), { ssr: false });
 const VisitFeedback = dynamic(() => import('@/components/visit/VisitFeedback'), { ssr: false });
@@ -120,6 +122,9 @@ function ProfileContent() {
   const [isChangingEmail, setIsChangingEmail] = useState(false);
 
   // --- Зміна пароля ---
+  // Підтвердження під формами: «успіх = тиша» тут шкодить, бо людина не знає, що робити далі (підтвердити лист)
+  const [emailNotice, setEmailNotice] = useState('');
+  const [passwordNotice, setPasswordNotice] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -275,11 +280,10 @@ function ProfileContent() {
 
         if (isMounted) {
           setAvailableSlots(free);
-          if (free.length > 0) {
-            setNewRescheduleTime(prev => free.includes(prev) ? prev : free[0]);
-          } else {
-            setNewRescheduleTime('');
-          }
+          // Нічого не підставляємо за людину: власний слот візиту зайнятий самим візитом, тому
+          // раніше «поточний час» зникав зі списку й підміняв себе першим вільним (09:00), а один
+          // клік «Підтвердити» переносив візит о 13:00 на ранок. Лишаємо вибір лише якщо цей час вільний.
+          setNewRescheduleTime(prev => (free.includes(prev) ? prev : ''));
         }
       } catch (err) {
         console.error('Помилка отримання слотів:', err);
@@ -539,9 +543,10 @@ function ProfileContent() {
     setIsChangingEmail(false);
 
     if (error) {
-      showToast(`Помилка: ${error.message}`, 'error');
+      showToast(authErrorText(error.message), 'error');
     } else {
-      showToast('Лист із підтвердженням надіслано на вашу пошту', 'success');
+      // Supabase з увімкненою «безпечною зміною пошти» просить підтвердити зміну на ОБОХ адресах
+      setEmailNotice(`Ми надіслали листи на ${email} і на ${formattedEmail}. Підтвердьте зміну в обох: поки що діє стара адреса.`);
       setNewEmail('');
     }
   };
@@ -549,8 +554,9 @@ function ProfileContent() {
   // Зміна пароля
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      showToast('Пароль повинен містити щонайменше 6 символів', 'error', { field: 'new-password' });
+    const pwProblem = passwordProblem(newPassword);
+    if (pwProblem) {
+      showToast(pwProblem, 'error', { field: 'new-password' });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -563,9 +569,10 @@ function ProfileContent() {
     setIsChangingPassword(false);
 
     if (error) {
-      showToast(`Помилка: ${error.message}`, 'error');
+      showToast(authErrorText(error.message), 'error');
     } else {
-      showToast('Пароль успішно оновлено', 'success');
+      setPasswordNotice('Пароль оновлено. Наступного разу входьте з новим.');
+      window.setTimeout(() => setPasswordNotice(''), 8000);
       setNewPassword('');
       setConfirmPassword('');
     }
@@ -582,7 +589,12 @@ function ProfileContent() {
     setIsDeletingAccount(true);
 
     try {
-      // Викликаємо захищену функцію в Supabase
+      // 1) Спершу наш сервер: він стирає особисті дані профілю й відмовляє власникам та працівникам
+      //    закладів (з поясненням). Раніше видалявся лише вхід у Supabase, а профіль лишався назавжди.
+      const token = await getAuthToken();
+      await api.deleteMyAccount(token);
+
+      // 2) Потім сам вхід у Supabase (захищена функція)
       const { error } = await supabase.rpc('delete_user');
 
       if (error) throw error;
@@ -592,7 +604,7 @@ function ProfileContent() {
       showToast('Ваш обліковий запис повністю видалено', 'info');
       router.push('/');
     } catch (err: any) {
-      showToast(`Помилка видалення: ${err.message}`, 'error');
+      showToast(err?.message || 'Не вдалося видалити акаунт', 'error');
       setIsDeletingAccount(false);
     }
   };
@@ -733,7 +745,7 @@ function ProfileContent() {
     // не в тій вкладці.
     const now = new Date();
 
-    return appointments.filter(app => {
+    const list = appointments.filter(app => {
       const start = app.start_time ? new Date(app.start_time) : null;
       if (!start) return false;
 
@@ -751,6 +763,11 @@ function ProfileContent() {
       // «Минулі» - завершені АБО ті, чий час уже минув.
       return app.status === 'completed' || start < now;
     });
+    // Сервер віддає від найновіших. Майбутні мають іти від НАЙБЛИЖЧОГО, інакше при показі по три
+    // перші три - це найдальші візити, а той, що через два дні, ховається за «Показати ще».
+    // Історія й скасовані - від найновіших.
+    const time = (a: any) => new Date(a.start_time).getTime();
+    return list.sort((x, y) => (appointmentFilter === 'upcoming' ? time(x) - time(y) : time(y) - time(x)));
   }, [appointments, appointmentFilter]);
 
   /**
@@ -924,6 +941,23 @@ function ProfileContent() {
         .btn-danger-primary { background-color: #ef4444; color: #ffffff; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s ease; }
         .btn-danger-primary:hover { background-color: #dc2626; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
 
+        /* Телефон: бічне меню стає стрічкою вкладок угорі, вміст займає всю ширину */
+        @media (max-width: 860px) {
+          .pf-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 1.25rem !important; }
+          .pf-aside { flex-direction: row !important; overflow-x: auto; gap: 0.4rem !important; padding-bottom: 0.25rem; scrollbar-width: none; }
+          .pf-aside::-webkit-scrollbar { display: none; }
+          .pf-aside > div { display: none !important; }
+          .pf-aside .nav-item { width: auto; flex: 0 0 auto; gap: 0.5rem; white-space: nowrap; border: 1px solid #e8eaee; background: #fff; }
+          .pf-aside .nav-item.active { background: #111827; color: #fff; border-color: #111827; }
+          .pf-aside .nav-item.active svg { color: #fff; }
+        }
+        @media (max-width: 520px) {
+          .pf-row { gap: 0.9rem !important; flex-wrap: wrap; }
+          .pf-time { width: auto !important; }
+          .pf-actions { padding-left: 0 !important; }
+          .segmented-tabs { display: flex; width: 100%; }
+          .segmented-btn { flex: 1; padding: 0.45rem 0.4rem; }
+        }
         .nav-item {
           display: flex; align-items: center; justify-content: space-between;
           padding: 0.7rem 0.95rem; border-radius: 12px; color: #6b7280; font-weight: 550;
@@ -1032,13 +1066,13 @@ function ProfileContent() {
       <main style={{ padding: '2.5rem 0 5rem 0' }}>
         <div className="container">
 
-          <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '2.5rem', alignItems: 'start' }}>
+          <div className="pf-grid" style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '2.5rem', alignItems: 'start' }}>
 
             {/* ЛІВА КОЛОНКА (НАВІГАЦІЯ) */}
-            <aside style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <aside className="pf-aside" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
 
               {/* Віджет користувача */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0.25rem 1rem 0.25rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>
+              <div className="pf-user" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0.25rem 1rem 0.25rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>
                 <Avatar name={fullName} src={avatarUrl} size={40} />
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{ fontSize: '0.92rem', fontWeight: '700', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1182,9 +1216,9 @@ function ProfileContent() {
                           fontSize: '0.82rem', color: '#8E8E93', marginBottom: '0.9rem',
                           paddingLeft: '0.2rem',
                         }}>
-                          {historySummary.visits} візит{historySummary.visits >= 5 ? 'ів' : historySummary.visits > 1 ? 'и' : ''}
+                          {historySummary.visits} {plural(historySummary.visits, 'візит', 'візити', 'візитів')}
                           {' у '}
-                          {historySummary.places} заклад{historySummary.places >= 5 ? 'ах' : historySummary.places > 1 ? 'ах' : 'і'}
+                          {historySummary.places} {plural(historySummary.places, 'закладі', 'закладах', 'закладах')}
                         </div>
                       )}
 
@@ -1263,10 +1297,10 @@ function ProfileContent() {
                                     opacity: isCancelled ? 0.45 : 1,
                                   }}
                                 >
-                                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                                  <div className="pf-row" style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
 
                                     {/* Ліва колонка: Лише час і тривалість візиту */}
-                                    <div style={{ flexShrink: 0, width: '68px', paddingTop: '1px' }}>
+                                    <div className="pf-time" style={{ flexShrink: 0, width: '68px', paddingTop: '1px' }}>
                                       <div style={{
                                         fontSize: '1.125rem', fontWeight: 600,
                                         color: isUpcoming ? '#1D1D1F' : '#86868B',
@@ -1341,7 +1375,7 @@ function ProfileContent() {
 
                                   {/* Кнопки дій: ідеально починаються на одній лінії з текстом послуги */}
                                   {hasActions && (
-                                    <div style={{
+                                    <div className="pf-actions" style={{
                                       display: 'flex', gap: '0.5rem',
                                       marginTop: '1.125rem', paddingLeft: 'calc(68px + 1.5rem)',
                                       flexWrap: 'wrap',
@@ -1415,11 +1449,9 @@ function ProfileContent() {
                         </button>
                       )}
 
-                      {/* Теплова карта - лише в історії візитів.
-                          У «Майбутніх» вона показувала б минуле поруч
-                          зі списком того, що попереду: два різні часи
-                          на одному екрані плутають. */}
-                      <VisitsHeatmap appointments={appointments} />
+                      {/* «Ваш рік у візитах» - лише в історії: у «Майбутніх» вона показувала б минуле
+                          поруч зі списком того, що попереду, і два різні часи на одному екрані плутають. */}
+                      {appointmentFilter === 'completed' && <VisitsYear appointments={appointments} />}
                     </div>
                   )}
                 </div>
@@ -1676,6 +1708,9 @@ function ProfileContent() {
                           {isChangingEmail && <Loader2 className="w-4 h-4 animate-spin" />}
                           {isChangingEmail ? 'Відправка...' : 'Оновити Email'}
                         </button>
+                        {emailNotice && (
+                          <p role="status" style={{ margin: '0.9rem 0 0', padding: '0.8rem 1rem', borderRadius: '12px', background: '#F4FAF5', color: '#2F5A39', fontSize: '0.85rem', lineHeight: 1.5 }}>{emailNotice}</p>
+                        )}
                       </div>
                     </form>
                   </div>
@@ -1700,7 +1735,7 @@ function ProfileContent() {
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            placeholder="Мінімум 6 символів"
+                            placeholder="Від 8 символів: літери й цифри"
                             className="clean-input anim"
                             required
                           />
@@ -1740,6 +1775,9 @@ function ProfileContent() {
                           {isChangingPassword && <Loader2 className="w-4 h-4 animate-spin" />}
                           {isChangingPassword ? 'Оновлення...' : 'Змінити пароль'}
                         </button>
+                        {passwordNotice && (
+                          <p role="status" style={{ margin: '0.9rem 0 0', color: '#2F5A39', fontSize: '0.85rem' }}>{passwordNotice}</p>
+                        )}
                       </div>
                     </form>
                   </div>
@@ -1763,7 +1801,7 @@ function ProfileContent() {
                         Видалення акаунта
                       </div>
                       <p style={{ color: '#4b5563', fontSize: '0.85rem', margin: 0, lineHeight: '1.5', maxWidth: '520px' }}>
-                        Назавжди видалити цей обліковий запис. Історія візитів та збережені заклади будуть втрачені без можливості відновлення.
+                        Назавжди видалити цей обліковий запис. Ваші особисті дані й збережені заклади буде стерто без можливості відновлення. Записи в журналах закладів лишаються, але вже без зв’язку з вашим акаунтом.
                       </p>
                     </div>
 
@@ -1804,7 +1842,9 @@ function ProfileContent() {
               Скасувати візит?
             </div>
             <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '0.85rem', margin: '0 0 1.25rem 0', lineHeight: '1.4' }}>
-              Ви впевнені, що хочете скасувати візит на <strong>{cancelModalAppt.services?.name}</strong> в <strong>{cancelModalAppt.businesses?.name}</strong>?
+              Ви впевнені, що хочете скасувати візит: <strong>{cancelModalAppt.service_name || cancelModalAppt.services?.name || 'Візит'}</strong>
+              {(cancelModalAppt.business_name || cancelModalAppt.businesses?.name) && <> у <strong>{cancelModalAppt.business_name || cancelModalAppt.businesses?.name}</strong></>}
+              {cancelModalAppt.start_time && <>, {new Date(cancelModalAppt.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })} о {String(cancelModalAppt.start_time).split('T')[1]?.substring(0, 5)}</>}?
             </p>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1849,6 +1889,11 @@ function ProfileContent() {
               </span>
               <br />
               {[rescheduleModalAppt.business_name || rescheduleModalAppt.businesses?.name, rescheduleModalAppt.master_name].filter(Boolean).join(' • ')}
+              {rescheduleModalAppt.start_time && (
+                <div style={{ marginTop: '0.35rem', color: '#6b7280' }}>
+                  Зараз: {new Date(rescheduleModalAppt.start_time).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}, {String(rescheduleModalAppt.start_time).split('T')[1]?.substring(0, 5)}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', marginBottom: '1.5rem' }}>
@@ -1895,14 +1940,16 @@ function ProfileContent() {
                     maxHeight: '190px', overflowY: 'auto', paddingRight: '2px'
                   }}>
                     {availableSlots.map(t => (
-                      <div
+                      <button
+                        type="button"
                         key={t}
                         onClick={() => setNewRescheduleTime(t)}
+                        aria-pressed={newRescheduleTime === t}
                         className={`time-pill anim ${newRescheduleTime === t ? 'selected' : ''}`}
-                        style={{ padding: '0.55rem 0', fontWeight: 600, fontSize: '0.86rem' }}
+                        style={{ padding: '0.55rem 0', fontWeight: 600, fontSize: '0.86rem', fontFamily: 'inherit' }}
                       >
                         {t}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -1919,7 +1966,7 @@ function ProfileContent() {
                 cursor: (isSubmittingAction || isSlotsLoading || !newRescheduleTime) ? 'not-allowed' : 'pointer'
               }}
             >
-              {isSubmittingAction ? 'Збереження...' : 'Підтвердити зміну'}
+              {isSubmittingAction ? 'Збереження...' : !newRescheduleTime && availableSlots.length > 0 ? 'Оберіть час' : 'Підтвердити зміну'}
             </button>
           </div>
         </div>

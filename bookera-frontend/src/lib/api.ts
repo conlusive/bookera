@@ -533,6 +533,11 @@ export const api = {
     return authFetch('/account/me', token, { method: 'PATCH', body: JSON.stringify(payload) });
   },
 
+  /** Видалення власних даних на сервері (анонімізація). Викликати ПЕРЕД видаленням входу в Supabase. */
+  async deleteMyAccount(token: string): Promise<void> {
+    await authFetch('/account/me', token, { method: 'DELETE' });
+  },
+
   /** «Моя робота»: розклад, заробіток і салони майстра - по всіх салонах разом. */
   /** Порядок послуг у прайсі - одним запитом. */
   async reorderServices(token: string, businessId: number, ids: number[]): Promise<void> {

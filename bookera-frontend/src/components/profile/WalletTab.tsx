@@ -1,5 +1,6 @@
 'use client';
 
+import { plural } from '@/lib/plural';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -69,7 +70,10 @@ export default function WalletTab({ getToken }: { getToken: () => Promise<string
       {/* --- Бонуси --- */}
       <section className="wt-balance">
         <div className="wt-label">Бонуси BookEra</div>
-        <div className="wt-big">{wallet.bonus_balance.toLocaleString('uk-UA')}</div>
+        <div className="wt-big">
+          {wallet.bonus_balance.toLocaleString('uk-UA')}
+          <span className="wt-unit">{plural(wallet.bonus_balance, 'бонус', 'бонуси', 'бонусів')}</span>
+        </div>
         <div className="wt-sub">
           3% від кожного завершеного візиту - у будь-якому закладі. Витрачати на записи можна буде незабаром.
         </div>
@@ -140,6 +144,7 @@ export default function WalletTab({ getToken }: { getToken: () => Promise<string
         .wt-empty { padding: 3rem 1rem; text-align: center; color: #86868B; font-size: 0.95rem; }
         .wt-balance { padding: 1.6rem 1.75rem; border-radius: 22px; background: linear-gradient(160deg, #EAF1E9 0%, #DCE8DB 100%); }
         .wt-label { font-size: 0.8125rem; font-weight: 600; color: #5C7A61; }
+        .wt-unit { font-size: 1.1rem; font-weight: 600; letter-spacing: 0; color: #6E6E73; margin-left: .5rem; }
         .wt-big { font-size: 3rem; font-weight: 700; letter-spacing: -0.04em; color: #1D1D1F; line-height: 1.1; margin: 0.3rem 0 0.4rem; font-variant-numeric: tabular-nums; }
         .wt-sub { font-size: 0.9rem; line-height: 1.5; color: #4A5A4D; max-width: 460px; }
         .wt-block { border: 1px solid #EDEDF0; border-radius: 20px; padding: 1.25rem 1.4rem; }

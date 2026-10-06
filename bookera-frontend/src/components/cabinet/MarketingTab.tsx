@@ -362,7 +362,7 @@ export default function MarketingTab({ business }: { business: any }) {
                       <b>Доброго дня!</b>
                       {'\n\n'}{preview.text || 'Тут з’явиться ваш текст — пишіть ліворуч…'}
                       {preview.cta && <span className="mk-mail-btn">Записатися онлайн</span>}
-                      <span className="mk-mail-sign">— З повагою, {business?.name}</span>
+                      <span className="mk-mail-sign">З повагою,{'\n'}{business?.name}</span>
                     </div>
                   </div>
                 </div>
@@ -595,11 +595,11 @@ export default function MarketingTab({ business }: { business: any }) {
         .mk-campaign { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 2rem; align-items: start; }
         @media (max-width: 1250px) { .mk-campaign { grid-template-columns: 1fr; } }
         .mk-mail small { display: block; font-size: 0.72rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.6rem; }
-        .mk-mail-card { border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; padding: 1.2rem 1.3rem; }
+        .mk-mail-card { border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; padding: 1.6rem 1.6rem; }
         .mk-mail-from { font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; }
         .mk-mail-subj { font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid #e2e8f0; }
         .mk-mail-btn { display: block; text-align: center; margin: 1rem 0 0; background: #222; color: #fff; font-weight: 600; padding: 0.55rem 1.2rem; border-radius: 9px; }
-        .mk-mail-sign { display: block; text-align: right; margin-top: 1.1rem; font-weight: 600; color: #64748b; }
+        .mk-mail-sign { display: block; margin-top: 1.4rem; font-weight: 600; color: #64748b; }
         .mk-mail-body { white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; color: #334155; min-height: 120px; overflow-wrap: anywhere; }
         .mk-text { min-height: 190px; resize: vertical; line-height: 1.5; }
         .mk-send-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 0.9rem; flex-wrap: wrap; }

@@ -54,6 +54,22 @@ export default function ArsenalMosaic() {
     return () => o.disconnect();
   }, []);
 
+  // Сума «набігає» від нуля, коли блок зʼявляється (не для «зменшити рух»)
+  const [amount, setAmount] = useState(84500);
+  useEffect(() => {
+    if (!run || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let raf = 0;
+    const t0 = performance.now() + 700;
+    const tick = (now: number) => {
+      const p = Math.max(0, Math.min(1, (now - t0) / 1300));
+      setAmount(Math.round(84500 * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    setAmount(0);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [run]);
+
   const a = (name: string, dur: number, delay: number, ease?: string) => (run ? anim(name, dur, delay, ease) : undefined);
 
   return (
@@ -143,7 +159,7 @@ export default function ArsenalMosaic() {
         {/* 4. Фінанси */}
         <div className="am-card am-finance">
           <div className="am-tag am-anim" style={a('amRise', .46, .44)}>Фінанси</div>
-          <div className="am-big am-anim" style={a('amType', .62, .56, TYPE)}>84 500 ₴</div>
+          <div className="am-big am-anim" style={a('amType', .62, .56, TYPE)}>{amount.toLocaleString('uk-UA')} ₴</div>
           <div className="am-big-sub am-anim" style={a('amRise', .44, .75)}>дохід цього тижня</div>
           <div className="am-chart am-anim" style={a('amChart', .86, .72)} role="img" aria-label="Записи за днями тижня">
             {CHART.map((c, i) => (
@@ -162,7 +178,10 @@ export default function ArsenalMosaic() {
             <span className="am-mag">
               <svg viewBox="0 0 24 24" fill="none" stroke="#121212" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7.1" /><path d="M16.3 16.3 L21 21" /></svg>
             </span>
-            <span className="am-ph">Імʼя, телефон або послуга...</span>
+            <span className="am-field">
+              <span className="am-ph">Імʼя, телефон або послуга...</span>
+              <span className="am-typed" aria-hidden="true"><span className="am-typed-t">Марія В.</span><i /></span>
+            </span>
           </div>
         </div>
       </div>
@@ -180,9 +199,11 @@ export default function ArsenalMosaic() {
 .am-card {
   position: relative; overflow: hidden;
   border-radius: calc(22 * var(--u));
-  border: calc(1.6 * var(--u)) solid rgba(255,255,255,.92);
-  box-shadow: 0 calc(2 * var(--u)) calc(16 * var(--u)) rgba(24,30,45,.045);
+  border: calc(1.6 * var(--u)) solid #ececf0;
+  box-shadow: 0 calc(2 * var(--u)) calc(16 * var(--u)) rgba(17,17,20,.04);
+  transition: transform .45s cubic-bezier(.16,1,.3,1), box-shadow .45s ease;
 }
+.am-card:hover { transform: translateY(calc(-4 * var(--u))); box-shadow: 0 calc(10 * var(--u)) calc(28 * var(--u)) rgba(17,17,20,.09); }
 .am-notif    { grid-column: 1; grid-row: 1; }
 .am-clients  { grid-column: 1; grid-row: 2 / span 2; }
 .am-calendar { grid-column: 2; grid-row: 1 / span 2; }
@@ -192,23 +213,21 @@ export default function ArsenalMosaic() {
 /* ---------- 1. Нагадування ---------- */
 .am-notif {
   padding: calc(37 * var(--u)) calc(12 * var(--u)) 0 calc(11 * var(--u));
-  background:
-    radial-gradient(120% 140% at 92% 100%, rgba(244,250,245,.95) 0%, rgba(244,250,245,0) 62%),
-    linear-gradient(135deg, #DCE8DB 0%, #E4EEE3 55%, #EDF4EC 100%);
+  background: #F5F5F7;
 }
 .am-toast-wrap { position: relative; height: calc(70 * var(--u)); }
 .am-toast-ledge {
   position: absolute; left: calc(24 * var(--u)); right: calc(20 * var(--u)); top: calc(55 * var(--u)); height: calc(23 * var(--u)); border-radius: calc(14 * var(--u));
-  background: linear-gradient(100deg, #e9ece8 0%, #e2e9df 60%, #d6e2d4 100%);
-  box-shadow: 0 calc(3 * var(--u)) calc(9 * var(--u)) rgba(46,58,48,.08);
+  background: #e4e4e9;
+  box-shadow: 0 calc(3 * var(--u)) calc(9 * var(--u)) rgba(17,17,20,.07);
 }
 .am-toast {
   position: absolute; inset: 0; border-radius: calc(16 * var(--u));
-  background: linear-gradient(105deg, #ffffff 34%, #f4faf5 78%, #eaf3e9 100%);
-  box-shadow: 0 calc(3 * var(--u)) calc(10 * var(--u)) rgba(46,58,48,.10);
+  background: #fff;
+  box-shadow: 0 calc(3 * var(--u)) calc(10 * var(--u)) rgba(17,17,20,.10);
   display: flex; align-items: center; gap: calc(11 * var(--u)); padding: 0 calc(12 * var(--u)) 0 calc(13 * var(--u));
 }
-.am-toast-ico { width: calc(27 * var(--u)); height: calc(27 * var(--u)); flex-shrink: 0; border-radius: 50%; background: #1D1D1F; color: #C2D8C4; display: flex; align-items: center; justify-content: center; }
+.am-toast-ico { width: calc(27 * var(--u)); height: calc(27 * var(--u)); flex-shrink: 0; border-radius: 50%; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; }
 .am-toast-ico svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
 .am-toast-title { font-size: calc(11.2 * var(--u)); font-weight: 800; letter-spacing: -0.012em; line-height: 1.1; color: #0d0d0d; }
 .am-toast-sub { font-size: calc(10 * var(--u)); line-height: 1.28; color: #2b2b2b; margin-top: calc(3.6 * var(--u)); max-width: calc(150 * var(--u)); }
@@ -217,7 +236,7 @@ export default function ArsenalMosaic() {
 /* ---------- 2. Клієнти ---------- */
 .am-clients {
   padding: calc(32 * var(--u)) 0 0 calc(20 * var(--u));
-  background: linear-gradient(180deg, #fcfdfd 0%, #f5f7f6 30%, #e6ece8 66%, #d5e1d8 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #ffffff 40%, #F5F5F7 100%);
 }
 .am-h2 { font-size: calc(28 * var(--u)); font-weight: 800; line-height: 1.1; letter-spacing: -0.028em; color: #0c0c0c; margin: 0; }
 .am-sub { margin-top: calc(14 * var(--u)); font-size: calc(17 * var(--u)); line-height: 1.3; letter-spacing: -0.013em; color: #1c1c1c; }
@@ -226,50 +245,52 @@ export default function ArsenalMosaic() {
 .am-row.r2 { padding-left: calc(10 * var(--u)); }
 .am-chip {
   height: calc(42 * var(--u)); display: inline-flex; align-items: center; gap: calc(10 * var(--u)); padding: 0 calc(17 * var(--u)); border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255,255,255,.97) 0%, rgba(247,250,248,.93) 100%);
-  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(0,0,0,.047);
+  background: #fff;
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(0,0,0,.06);
   backdrop-filter: blur(calc(7 * var(--u))); -webkit-backdrop-filter: blur(calc(7 * var(--u)));
   font-size: calc(16 * var(--u)); font-weight: 500; letter-spacing: -0.018em; color: #131313; white-space: nowrap;
 }
-.am-chip svg { width: calc(19 * var(--u)); height: calc(19 * var(--u)); flex-shrink: 0; color: #6F9273; }
-.am-chip-float { position: absolute; right: calc(6 * var(--u)); bottom: calc(124 * var(--u)); transform: rotate(-12deg); z-index: 3; box-shadow: 0 0 0 calc(3.2 * var(--u)) rgba(0,0,0,.052); }
+.am-chip svg { width: calc(19 * var(--u)); height: calc(19 * var(--u)); flex-shrink: 0; color: #111827; }
+.am-chip-float { background: #FDE6D3; position: absolute; right: calc(6 * var(--u)); bottom: calc(172 * var(--u)); transform: rotate(-9deg); z-index: 3; box-shadow: 0 0 0 calc(3.2 * var(--u)) rgba(0,0,0,.052); }
 
 /* ---------- 3. Календар - головна картка ---------- */
 .am-calendar {
-  background:
-    radial-gradient(90% 70% at 6% 0%, rgba(228,238,227,.95) 0%, rgba(228,238,227,0) 70%),
-    linear-gradient(168deg, #E4EEE3 0%, #DCE8DB 48%, #CFE0CE 78%, #C2D8C4 100%);
+  background: linear-gradient(160deg, #1d1d21 0%, #111114 100%);
+  border-color: #111114;
 }
+.am-calendar .am-sub { color: rgba(255,255,255,.72); }
 .am-copy { position: relative; z-index: 3; padding: calc(37 * var(--u)) 0 0 calc(45 * var(--u)); }
-.am-hero { font-size: calc(35 * var(--u)); font-weight: 800; line-height: 1.3; letter-spacing: -0.03em; color: #15201a; margin: 0; }
-.am-hero .g { color: #5C7A61; }
+.am-hero { font-size: calc(35 * var(--u)); font-weight: 800; line-height: 1.3; letter-spacing: -0.03em; color: #fff; margin: 0; }
+.am-hero .g { color: #AFC0F5; }
 .am-illo { position: absolute; inset: 0; z-index: 2; }
-.am-win { position: absolute; border-radius: calc(11 * var(--u)); border: calc(3 * var(--u)) solid #fff; overflow: hidden; box-shadow: 0 calc(12 * var(--u)) calc(28 * var(--u)) rgba(46,58,48,.16); }
+.am-win { position: absolute; border-radius: calc(11 * var(--u)); border: calc(3 * var(--u)) solid #fff; overflow: hidden; box-shadow: 0 calc(12 * var(--u)) calc(28 * var(--u)) rgba(0,0,0,.35); }
 .am-win-bar { height: calc(13.4 * var(--u)); background: #242424; display: flex; align-items: center; gap: calc(4.6 * var(--u)); padding-left: calc(4.9 * var(--u)); }
 .am-win-bar i { width: calc(6 * var(--u)); height: calc(6 * var(--u)); border-radius: 50%; background: linear-gradient(150deg, #fff 0%, #f6f6f6 50%, #dcdcdc 100%); }
 .am-win-body { position: relative; height: calc(100% - calc(13.4 * var(--u))); display: flex; }
 .am-win-back { left: calc(121 * var(--u)); top: calc(245 * var(--u)); width: calc(324 * var(--u)); height: calc(250 * var(--u)); transform: rotate(-7deg); }
-.am-win-back .am-win-body { background: #eef3ec; }
-.am-win-back .am-strip { width: 23.7%; background: #d3e2d0; }
+.am-win-back .am-win-body { background: #e9e9ee; }
+.am-win-back .am-strip { width: 23.7%; background: #d6d6dd; }
 .am-win-front { left: calc(180 * var(--u)); top: calc(283 * var(--u)); width: calc(322 * var(--u)); height: calc(250 * var(--u)); transform: rotate(4.2deg); border-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: 0 calc(14 * var(--u)) calc(32 * var(--u)) rgba(46,58,48,.2); }
 .am-win-front .am-win-body { background: #fff; }
-.am-win-front .am-strip { width: 16%; background: #F4FAF5; }
-/* Записи в передньому вікні - як у календарі кабінету */
+.am-win-front .am-strip { width: 16%; background: #F5F5F7; }
+/* Записи в передньому вікні - як у календарі кабінету; кольори з палітри карток-віяла */
+.am-slot:nth-child(2) { background: #FBDDE8; border-left-color: #F28BB0; }
+.am-slot:nth-child(3) { background: #DDE5FB; border-left-color: #AFC0F5; }
 .am-slots { flex: 1; position: relative; padding: calc(10 * var(--u)) calc(10 * var(--u)) 0; }
-.am-slot { position: absolute; left: calc(10 * var(--u)); right: calc(10 * var(--u)); border-radius: calc(6 * var(--u)); background: #E4EEE3; border-left: calc(3 * var(--u)) solid #6F9273; padding: calc(3 * var(--u)) calc(6 * var(--u)); font-size: calc(8.5 * var(--u)); font-weight: 600; color: #2E3A30; white-space: nowrap; overflow: hidden; }
+.am-slot { position: absolute; left: calc(10 * var(--u)); right: calc(10 * var(--u)); border-radius: calc(6 * var(--u)); background: #FDE6D3; border-left: calc(3 * var(--u)) solid #F2A168; padding: calc(3 * var(--u)) calc(6 * var(--u)); font-size: calc(8.5 * var(--u)); font-weight: 600; color: #2E3A30; white-space: nowrap; overflow: hidden; }
 .am-pill {
   position: absolute; left: calc(380 * var(--u)); top: calc(349 * var(--u)); height: calc(30 * var(--u)); display: flex; align-items: center; gap: calc(7 * var(--u));
   padding: 0 calc(14 * var(--u)) 0 calc(6 * var(--u)); border-radius: 999px; background: #fff; box-shadow: 0 0 0 calc(2.8 * var(--u)) rgba(0,0,0,.045);
   transform: rotate(-1.2deg); font-size: calc(11.5 * var(--u)); font-weight: 600; letter-spacing: -0.014em; color: #151515; white-space: nowrap;
 }
-.am-tick { width: calc(20 * var(--u)); height: calc(20 * var(--u)); border-radius: 50%; background: linear-gradient(145deg, #e6f3df 0%, #cfe0bd 47%, #b9cfa5 100%); display: flex; align-items: center; justify-content: center; }
-.am-tick svg { width: calc(11 * var(--u)); height: calc(11 * var(--u)); }
+.am-tick { width: calc(20 * var(--u)); height: calc(20 * var(--u)); border-radius: 50%; background: #111827; display: flex; align-items: center; justify-content: center; }
+.am-tick svg { stroke: #fff; width: calc(11 * var(--u)); height: calc(11 * var(--u)); }
 .am-card-mini {
   position: absolute; left: calc(60 * var(--u)); top: calc(404 * var(--u)); width: calc(160 * var(--u)); height: calc(52 * var(--u)); border-radius: calc(10 * var(--u)); background: #fff;
   box-shadow: 0 0 0 calc(2.8 * var(--u)) rgba(0,0,0,.045); transform: rotate(-1deg);
   display: flex; align-items: center; gap: calc(9 * var(--u)); padding: 0 calc(12 * var(--u));
 }
-.am-ava { width: calc(28 * var(--u)); height: calc(28 * var(--u)); border-radius: 50%; background: #EEF1F6; display: flex; align-items: center; justify-content: center; font-size: calc(9 * var(--u)); font-weight: 700; color: #222; flex-shrink: 0; }
+.am-ava { width: calc(28 * var(--u)); height: calc(28 * var(--u)); border-radius: 50%; background: #ececf0; display: flex; align-items: center; justify-content: center; font-size: calc(9 * var(--u)); font-weight: 700; color: #222; flex-shrink: 0; }
 .am-mini-t { font-size: calc(10 * var(--u)); font-weight: 700; color: #151515; }
 .am-mini-s { font-size: calc(8.5 * var(--u)); color: #86868B; margin-top: calc(1 * var(--u)); }
 .am-cursor { position: absolute; left: calc(490 * var(--u)); top: calc(454 * var(--u)); width: calc(30 * var(--u)); height: calc(35 * var(--u)); }
@@ -277,35 +298,42 @@ export default function ArsenalMosaic() {
 /* ---------- 4. Фінанси ---------- */
 .am-finance {
   padding: calc(29 * var(--u)) calc(25 * var(--u)) calc(23 * var(--u)) calc(21 * var(--u)); display: flex; flex-direction: column;
-  background:
-    radial-gradient(115% 70% at 22% 0%, #FAF8F5 0%, rgba(250,248,245,0) 68%),
-    linear-gradient(180deg, #F4F1EC 0%, #F1EDE6 100%);
+  background: #fff;
 }
 .am-tag {
   align-self: flex-start; height: calc(31 * var(--u)); display: inline-flex; align-items: center; padding: 0 calc(17 * var(--u)); border-radius: 999px; margin-left: calc(4 * var(--u));
-  background: linear-gradient(100deg, #ffffff 18%, #F4FAF5 100%); border: calc(1.2 * var(--u)) solid rgba(255,255,255,.9);
-  box-shadow: 0 calc(3 * var(--u)) calc(9 * var(--u)) rgba(46,58,48,.08); font-size: calc(12 * var(--u)); font-weight: 700; letter-spacing: -0.01em; color: #111;
+  background: #F5F5F7; border: calc(1.2 * var(--u)) solid #ececf0; font-size: calc(12 * var(--u)); font-weight: 700; letter-spacing: -0.01em; color: #111;
 }
 .am-big { margin-top: calc(22 * var(--u)); font-size: calc(37 * var(--u)); font-weight: 800; letter-spacing: -0.035em; line-height: 1; color: #0b0b0b; }
 .am-big-sub { margin-top: calc(12 * var(--u)); font-size: calc(14.5 * var(--u)); letter-spacing: -0.012em; color: #1d1d1d; }
 .am-chart { margin-top: auto; height: calc(294 * var(--u)); display: flex; align-items: flex-end; gap: calc(13 * var(--u)); }
 .am-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-.am-bar { width: 100%; border-radius: calc(7 * var(--u)); background: #E6E1D8; padding-top: calc(9 * var(--u)); display: flex; justify-content: center; font-size: calc(11 * var(--u)); font-weight: 500; color: #A1978A; }
-.am-bar.now { background: linear-gradient(180deg, #C2D8C4 0%, #8FAE93 45%, #6F9273 100%); color: #fff; font-weight: 600; box-shadow: 0 calc(4 * var(--u)) calc(12 * var(--u)) rgba(46,58,48,.2); }
-.am-day { margin-top: calc(10 * var(--u)); font-size: calc(10.4 * var(--u)); font-weight: 500; letter-spacing: 0.05em; color: #A79C8E; }
+.am-bar { width: 100%; border-radius: calc(7 * var(--u)); background: #ececf0; padding-top: calc(9 * var(--u)); display: flex; justify-content: center; font-size: calc(11 * var(--u)); font-weight: 500; color: #9a9aa3; }
+.am-bar.now { background: linear-gradient(180deg, #2b2b31 0%, #111114 100%); color: #fff; font-weight: 600; box-shadow: 0 calc(4 * var(--u)) calc(12 * var(--u)) rgba(17,17,20,.25); }
+.am-day { margin-top: calc(10 * var(--u)); font-size: calc(10.4 * var(--u)); font-weight: 500; letter-spacing: 0.05em; color: #9a9aa3; }
 
 /* ---------- 5. Пошук ---------- */
 .am-search {
   display: flex; align-items: center; padding: 0 calc(25 * var(--u)) 0 calc(46 * var(--u));
-  background: linear-gradient(103deg, #EEF1F6 0%, #E6EAF1 40%, #DDE2EC 100%);
+  background: #F5F5F7;
 }
 .am-search .am-h2 { font-size: calc(23 * var(--u)); line-height: 1.39; }
 .am-bar-search {
   margin-left: auto; width: calc(612 * var(--u)); height: calc(64 * var(--u)); border-radius: 999px; background: #fff;
-  box-shadow: 0 calc(4 * var(--u)) calc(14 * var(--u)) rgba(60,70,100,.10); display: flex; align-items: center; gap: calc(16 * var(--u)); padding: 0 calc(22 * var(--u)) 0 calc(10 * var(--u));
+  box-shadow: 0 calc(4 * var(--u)) calc(14 * var(--u)) rgba(17,17,20,.08); display: flex; align-items: center; gap: calc(16 * var(--u)); padding: 0 calc(22 * var(--u)) 0 calc(10 * var(--u));
 }
-.am-mag { width: calc(44 * var(--u)); height: calc(44 * var(--u)); border-radius: 50%; background: #F1F2F5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.am-mag { width: calc(44 * var(--u)); height: calc(44 * var(--u)); border-radius: 50%; background: #ececf0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .am-mag svg { width: calc(18 * var(--u)); height: calc(18 * var(--u)); }
+.am-field { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; }
+.am-typed { position: absolute; left: 0; display: inline-flex; align-items: center; font-size: calc(18 * var(--u)); font-weight: 600; letter-spacing: -0.015em; color: #111827; white-space: nowrap; }
+.am-typed-t { display: inline-block; overflow: hidden; width: 0; }
+.am-typed i { width: calc(2 * var(--u)); height: calc(22 * var(--u)); background: #111827; margin-left: calc(2 * var(--u)); opacity: 0; }
+.am.run .am-ph { animation: amPhOut .3s ease 2.3s forwards; }
+.am.run .am-typed-t { animation: amTyping 1s steps(8) 2.5s forwards; }
+.am.run .am-typed i { animation: amCaret 1s steps(1) 2.4s 4; }
+@keyframes amPhOut { to { opacity: 0; } }
+@keyframes amTyping { to { width: 4.6em; } }
+@keyframes amCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 .am-ph { font-size: calc(16.5 * var(--u)); letter-spacing: -0.015em; color: #8C8C99; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- Поява: при прокрутці, один раз ---------- */
@@ -340,6 +368,8 @@ export default function ArsenalMosaic() {
 }
 @media (prefers-reduced-motion: reduce) {
   .am .am-card, .am .am-anim { opacity: 1 !important; animation: none !important; }
+  .am-card { transition: none; }
+  .am .am-typed { display: none; }
 }
 `}</style>
     </div>

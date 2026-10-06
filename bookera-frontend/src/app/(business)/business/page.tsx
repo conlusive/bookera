@@ -357,10 +357,7 @@ export default function BusinessLandingPage() {
         .hl-1 { animation-delay: .05s; }
         .hl-2 { animation-delay: .25s; }
         @keyframes heroLine { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
-        .hl-mark { position: absolute; left: 0; bottom: -0.12em; width: 100%; height: 0.28em; z-index: 0; overflow: visible; pointer-events: none; }
-        .hl-mark path { fill: none; stroke: #F5D547; stroke-width: 7; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; vector-effect: non-scaling-stroke; animation: markDraw 1s ease-out 1s forwards; }
-        @keyframes markDraw { to { stroke-dashoffset: 0; } }
-        @media (prefers-reduced-motion: reduce) { .hl { animation: none; opacity: 1; } .hl-mark path { animation: none; stroke-dashoffset: 0; } }
+        @media (prefers-reduced-motion: reduce) { .hl { animation: none; opacity: 1; } }
         .hero-subtitle { font-size: clamp(1.1rem, 2vw, 1.25rem); font-weight: 400; color: #475569; max-width: 600px; margin: 0 auto 2.5rem auto; line-height: 1.5; position: relative; z-index: 2; }
 
         .btn-primary { background-color: #C2D8C4; color: #111827; font-weight: 700; font-size: 1.05rem; padding: 1.1rem 2.4rem; border-radius: 999px; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.3s ease, box-shadow 0.3s ease; box-shadow: 0 10px 25px rgba(194, 216, 196, 0.4); will-change: transform; }
@@ -565,7 +562,6 @@ export default function BusinessLandingPage() {
               <span className="hl hl-2" style={{ position: 'relative', display: 'inline-block' }}>
                  <div className="text-glow-bg"></div>
                  <span style={{ color: '#4C7A55', position: 'relative', zIndex: 1 }}>Легко. Красиво.</span>
-                 <svg className="hl-mark" viewBox="0 0 300 18" preserveAspectRatio="none" aria-hidden="true"><path d="M3 12 C 70 4, 150 16, 297 6" pathLength="1" /></svg>
               </span>
             </h1>
             <p className="hero-subtitle">
@@ -618,20 +614,20 @@ export default function BusinessLandingPage() {
       <SecurityBlock />
 
       {/* FINAL HERO */}
-      <section className="reveal-on-scroll" style={{ backgroundColor: '#F5F5F7', position: 'relative', zIndex: 20, padding: '0' }}>
+      <section className="reveal-on-scroll" style={{ backgroundColor: '#8fae92', position: 'relative', zIndex: 20, padding: '0', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '-10%', right: '5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(255, 255, 255, 0.7) 0%, rgba(255,255,255,0) 70%)', filter: 'blur(50px)' }}></div>
+          <div style={{ position: 'absolute', top: '-10%', right: '5%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, rgba(255,255,255,0) 70%)', filter: 'blur(50px)' }}></div>
         </div>
 
         <div className="container" style={{ position: 'relative', zIndex: 10 }}>
           <div className="dark-hero-grid">
 
             <div className="dark-hero-content" style={{ padding: '8rem 0' }}>
-              <h2 style={{ fontSize: 'clamp(2.2rem, 4.6vw, 3.6rem)', fontWeight: '800', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.035em', lineHeight: '1.08' }}>
+              <h2 style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', fontWeight: '900', color: '#111827', marginBottom: '1rem', letterSpacing: '-0.04em', lineHeight: '1.05' }}>
                 Управління бізнесом. <br/> На новому рівні.
               </h2>
-              <p style={{ color: '#374151', fontSize: '1.08rem', marginBottom: '2.5rem', lineHeight: '1.6', maxWidth: '450px', fontWeight: '500' }}>
-                Бронювання, клієнти, розсилки та фінанси — в одному кабінеті.
+              <p style={{ color: '#1f2937', fontSize: '1.05rem', marginBottom: '2.5rem', lineHeight: '1.5', maxWidth: '450px', fontWeight: '500' }}>
+                Всі необхідні інструменти для бронювання, фінансів та клієнтів — в одному зручному додатку.
               </p>
               <button onClick={handleStartBusinessClick} style={{ backgroundColor: '#111827', color: '#ffffff', fontWeight: '700', fontSize: '1rem', padding: '1.1rem 2.8rem', borderRadius: '999px', border: 'none', cursor: 'pointer', transition: '0.3s', boxShadow: '0 15px 30px rgba(17, 24, 39, 0.15)', willChange: 'transform' }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-3px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
                 {isBusinessRole(userRole) ? 'Перейти в кабінет' : 'Створити акаунт'}
@@ -680,7 +676,7 @@ export default function BusinessLandingPage() {
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Іван С.</div>
                         </div>
                         <div className="anim-pop phone-toast" style={{ marginTop: '0.9rem', background: '#111827', color: '#fff', borderRadius: '14px', padding: '0.7rem 1rem', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#F5D547', display: 'inline-block' }} />
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
                           Новий запис онлайн
                         </div>
                       </div>

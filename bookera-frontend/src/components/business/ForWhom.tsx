@@ -8,7 +8,7 @@ import { useReveal } from './useReveal';
  * Плашки спокійно «дихають» різними темпами, поки блок у вікні, а при наведенні підстрибують
  * і підсвічуються кольором картки-віяла. Лише transform/opacity.
  */
-const TINTS = ['#F2A168', '#F28BB0', '#F5D547', '#9ED6A8', '#AFC0F5'];
+const TINTS = ['#F2A168', '#F28BB0', '#9ED6A8', '#AFC0F5', '#C9B8F0'];
 
 export default function ForWhom() {
   const [ref, shown] = useReveal<HTMLDivElement>(0.2);

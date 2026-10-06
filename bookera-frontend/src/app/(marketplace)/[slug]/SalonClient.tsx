@@ -150,6 +150,15 @@ export default function SalonClient({
   const [reviews, setReviews] = useState<any[]>(initialReviews || []);
   // Команда: згорнута до першого ряду, розгортається; клік по майстру - його рейтинг і відгуки
   const [teamExpanded, setTeamExpanded] = useState(false);
+  // На телефоні довгі блоки згорнуті в рядок із заголовком (розкриваються дотиком); на комп'ютері показані завжди
+  const [openSecs, setOpenSecs] = useState<Record<string, boolean>>({});
+  const foldOn = (id: string) => (openSecs[id] ? ' is-open' : '');
+  const foldHead = (id: string, title: string, sub?: string | null) => (
+    <button type="button" className="sl-fold-head" aria-expanded={!!openSecs[id]} onClick={() => setOpenSecs(o => ({ ...o, [id]: !o[id] }))}>
+      <span><b>{title}</b>{sub ? <small>{sub}</small> : null}</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+    </button>
+  );
   // Права колонка залипає при прокрутці. Якщо вона вища за екран, її нижні блоки (карта, зручності)
   // були б недосяжні, поки не домотаєш усю сторінку. Тому відступ вимірюємо: висока колонка
   // прокручується разом зі сторінкою, а її низ зупиняється біля нижнього краю екрана.
@@ -1448,6 +1457,7 @@ const formatRole = (role?: string) => {
         .sl-hd-find { width: 44px; height: 44px; align-items: center; justify-content: center; color: #111827; }
         /* ТЕЛЕФОН (лише до 860px, комп'ютер не змінюється) */
         .sl-more { display: none; }
+        .sl-fold-head { display: none; }
         @media (max-width: 860px) {
           .container { padding: 0 1.25rem; }
           .sl-hd-logo { width: auto !important; }
@@ -1468,6 +1478,24 @@ const formatRole = (role?: string) => {
           .sl-stack, .sl-aside, .sl-aside-in { display: contents !important; }
           .sl-o-services { order: 1; } .sl-o-team { order: 2; } .sl-o-portfolio { order: 3; } .sl-o-about { order: 4; }
           .sl-o-hours { order: 5; } .sl-o-map { order: 6; } .sl-o-amen { order: 7; } .sl-o-reviews { order: 8; }
+          /* Згортані блоки: рядок із заголовком, вміст розкривається дотиком */
+          .sl-fold-head { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 1rem; min-height: 52px; background: none; border: none; padding: 0; font: inherit; text-align: left; cursor: pointer; color: #1D1D1F; }
+          .sl-fold-head b { font-size: 1.12rem; font-weight: 700; letter-spacing: -0.01em; }
+          .sl-fold-head small { display: block; font-size: 0.8rem; font-weight: 500; color: #86868B; margin-top: 1px; }
+          .sl-fold-head svg { flex-shrink: 0; color: #86868B; transition: transform 0.2s ease; }
+          .sl-fold.is-open > .sl-fold-head svg { transform: rotate(180deg); }
+          .sl-fold:not(.is-open) > .sl-fold-body { display: none; }
+          .sl-fold.is-open > .sl-fold-body { padding-top: 0.9rem; }
+          .sl-fold-title { display: none !important; }
+          .sl-fold.sl-sec { padding-top: 0.5rem !important; }
+          .sl-fold.section-card { padding: 0.3rem 1.25rem !important; }
+          .sl-fold.section-card.is-open { padding-bottom: 1.25rem !important; }
+          /* Рядок послуги: назва на всю ширину, нижче ціна й кнопка - нічого не налазить одне на одне */
+          .service-pill { padding: 1.1rem 0 !important; gap: 0.6rem !important; }
+          .service-pill-top { flex-direction: column !important; align-items: stretch !important; gap: 0.8rem !important; }
+          .service-pill-act { justify-content: space-between !important; width: 100% !important; }
+          .service-pill-act .service-btn { padding: 0.65rem 1.6rem !important; }
+          .sl-fold-chip { display: none !important; }
           .footer-support-col { grid-column: 1 / -1; }
           .footer-support { flex-direction: row !important; flex-wrap: wrap; gap: 0 1.5rem !important; }
           .sl-sec { padding-top: 1.5rem !important; }
@@ -2336,7 +2364,7 @@ const formatRole = (role?: string) => {
                                 )}
                               </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                            <div className="service-pill-act" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                               <div style={{ fontWeight: '800', color: '#1D1D1F', fontSize: '1.25rem', whiteSpace: 'nowrap' }}>{service.price} ₴</div>
                               <button className="service-btn" onClick={() => openModal(service)}>Вибрати</button>
                             </div>
@@ -2358,38 +2386,46 @@ const formatRole = (role?: string) => {
             {(() => {
               const about = salon?.description?.trim() || salon?.about?.trim() || '';
               return (
-                <div className={`sl-sec sl-o-about${about ? '' : ' sl-empty'}`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
-                  <h2 className="section-title" style={{ marginBottom: '1.25rem' }}>Про заклад</h2>
+                <div className={`sl-sec sl-fold${foldOn('about')} sl-o-about${about ? '' : ' sl-empty'}`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+                  {foldHead('about', 'Про заклад')}
+                  <div className="sl-fold-body">
+                  <h2 className="section-title sl-fold-title" style={{ marginBottom: '1.25rem' }}>Про заклад</h2>
                   <p className={`sl-about${aboutOpen ? ' open' : ''}`} style={{ color: '#475569', lineHeight: '1.7', fontSize: '1rem', margin: 0, whiteSpace: 'pre-wrap', fontWeight: '400' }}>
                     {about || "Опис закладу наразі відсутній."}
                   </p>
                   {about.length > 200 && (
                     <button type="button" className="sl-more" onClick={() => setAboutOpen(o => !o)}>{aboutOpen ? 'Згорнути' : 'Показати більше'}</button>
                   )}
+                  </div>
                 </div>
               );
             })()}
 
             {/* ГРАФІК РОБОТИ - з тієї ж таблиці, що й календар у кабінеті */}
             {Array.isArray(salon?.working_hours) && salon.working_hours.length > 0 && (
-              <div className="sl-sec sl-o-hours" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+              <div className={`sl-sec sl-fold${foldOn('hours')} sl-o-hours`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+                {foldHead('hours', 'Графік роботи', salonOpenNow?.text)}
+                <div className="sl-fold-body">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-                  <h2 className="section-title" style={{ margin: 0 }}>Графік роботи</h2>
+                  <h2 className="section-title sl-fold-title" style={{ margin: 0 }}>Графік роботи</h2>
                   {salonOpenNow && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, padding: '3px 8.5px', borderRadius: '6px', color: salonOpenNow.open ? '#065F46' : '#86868B', background: salonOpenNow.open ? 'rgba(16, 185, 129, 0.08)' : '#f5f5f7' }}>
+                    <span className="sl-fold-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, padding: '3px 8.5px', borderRadius: '6px', color: salonOpenNow.open ? '#065F46' : '#86868B', background: salonOpenNow.open ? 'rgba(16, 185, 129, 0.08)' : '#f5f5f7' }}>
 <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: salonOpenNow.open ? '#10B981' : '#cbd5e1', flexShrink: 0 }} />
                       {salonOpenNow.text}
                     </span>
                   )}
                 </div>
                 <WorkingHours rows={salon.working_hours} now={clientNow} />
+                </div>
               </div>
             )}
 
             {/* ВІДГУКИ КЛІЄНТІВ ТА ВІДПОВІДІ */}
-            <div className="sl-sec sl-o-reviews" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+            <div className={`sl-sec sl-fold${foldOn('reviews')} sl-o-reviews`} style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
+              {foldHead('reviews', 'Відгуки клієнтів', reviews.length > 0 ? `${reviews.length} ${reviews.length === 1 ? 'відгук' : 'відгуків'}${salon?.rating ? ` · ★ ${Number(salon.rating).toFixed(1)}` : ''}` : 'Поки немає')}
+              <div className="sl-fold-body">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                <h2 className="section-title">Відгуки клієнтів</h2>
+                <h2 className="section-title sl-fold-title">Відгуки клієнтів</h2>
                 {reviews.length > 0 && <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button className={`review-filter-btn ${reviewFilter === 'all' ? 'active' : ''}`} onClick={() => { setReviewFilter('all'); setCurrentReviewPage(1); }}>Всі</button>
                   <button className={`review-filter-btn ${reviewFilter === 'positive' ? 'active' : ''}`} onClick={() => { setReviewFilter('positive'); setCurrentReviewPage(1); }}>Позитивні</button>
@@ -2700,6 +2736,7 @@ const formatRole = (role?: string) => {
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </div>
 
@@ -2715,9 +2752,11 @@ const formatRole = (role?: string) => {
                   які нічого не налаштовували, поля немає взагалі, і вони
                   мають бачити команду за замовчуванням. */}
               {salon?.layout_config?.showTeam !== false && (
-              <div className="section-card sl-o-team" style={{ padding: '1.75rem 2rem' }}>
+              <div className={`section-card sl-fold${foldOn('team')} sl-o-team`} style={{ padding: '1.75rem 2rem' }}>
+                {foldHead('team', 'Наша команда', storefrontTeam.length ? `${storefrontTeam.length}` : null)}
+                <div className="sl-fold-body">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                  <h3 className="section-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
+                  <h3 className="section-title sl-fold-title" style={{ fontSize: '1.25rem', margin: 0 }}>Наша команда</h3>
                   {storefrontTeam.length > TEAM_PREVIEW && (
                     <button
                       type="button"
@@ -2763,6 +2802,7 @@ const formatRole = (role?: string) => {
                       )}
                     </button>
                   ))}
+                </div>
                 </div>
               </div>
               )}
@@ -2861,8 +2901,10 @@ const formatRole = (role?: string) => {
 
               {/* ЗРУЧНОСТІ */}
               {salon?.layout_config?.showAmenities !== false && activeAmenities.length > 0 && (
-                <div className="section-card sl-o-amen">
-                  <h3 className="section-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Зручності</h3>
+                <div className={`section-card sl-fold${foldOn('amen')} sl-o-amen`}>
+                  {foldHead('amen', 'Зручності', `${activeAmenities.length}`)}
+                  <div className="sl-fold-body">
+                  <h3 className="section-title sl-fold-title" style={{ fontSize: '1.25rem', marginBottom: '1.25rem' }}>Зручності</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.1rem' }}>
                     {activeAmenities.map((item) => (
                       <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: '#1D1D1F', fontSize: '0.86rem', fontWeight: '500' }}>
@@ -2870,6 +2912,7 @@ const formatRole = (role?: string) => {
                         <span>{item.label}</span>
                       </div>
                     ))}
+                  </div>
                   </div>
                 </div>
               )}

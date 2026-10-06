@@ -12,6 +12,20 @@ SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+# Адреса відправника на домені платформи (напр. noreply@bookera.com). Для SPF/DKIM/DMARC домен
+# у From має збігатися з доменом, який налаштовано в DNS; без SMTP_FROM береться SMTP_USER.
+SMTP_FROM = os.getenv("SMTP_FROM", "").strip() or SMTP_USER
+
+
+def _open_smtp(timeout: int = 30):
+    """Підключення й вхід: порт 465 - одразу TLS (SMTPS), інші (587) - STARTTLS."""
+    if SMTP_PORT == 465:
+        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=timeout)
+    else:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=timeout)
+        server.starttls()
+    server.login(SMTP_USER, SMTP_PASSWORD)
+    return server
 
 
 def send_email_sync(to_email: str, subject: str, html_content: str):
@@ -26,16 +40,20 @@ def send_email_sync(to_email: str, subject: str, html_content: str):
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = f"BookEra <{SMTP_USER}>"
+    msg["From"] = f"BookEra <{SMTP_FROM}>"
     msg["To"] = to_email
 
     part = MIMEText(html_content, "html", "utf-8")
     msg.attach(part)
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_USER, to_email, msg.as_string())
+    server = _open_smtp()
+    try:
+        server.sendmail(SMTP_FROM, to_email, msg.as_string())
+    finally:
+        try:
+            server.quit()
+        except Exception:
+            pass
 
 
 async def send_booking_confirmation_email(
@@ -224,7 +242,7 @@ def build_campaign_message(
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = formataddr((f"{business_name} через BookEra", SMTP_USER or "noreply@bookera.local"))
+    msg["From"] = formataddr((f"{business_name} через BookEra", SMTP_FROM or "noreply@bookera.local"))
     msg["To"] = "".join(str(to_email).split())
     if reply_to and "@" in reply_to:
         msg["Reply-To"] = _clean_header(reply_to)
@@ -261,20 +279,17 @@ def send_campaign_batch(messages: list) -> tuple[int, int]:
     server = None
 
     def connect():
-        s = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30)
-        s.starttls()
-        s.login(SMTP_USER, SMTP_PASSWORD)
-        return s
+        return _open_smtp()
 
     try:
         server = connect()
         for m in messages:
             try:
                 try:
-                    server.sendmail(SMTP_USER, m["To"], m.as_string())
+                    server.sendmail(SMTP_FROM, m["To"], m.as_string())
                 except smtplib.SMTPServerDisconnected:
                     server = connect()
-                    server.sendmail(SMTP_USER, m["To"], m.as_string())
+                    server.sendmail(SMTP_FROM, m["To"], m.as_string())
                 sent += 1
             except Exception as exc:  # одна відмова (адреса, ліміт) - не причина кидати решту
                 failed += 1

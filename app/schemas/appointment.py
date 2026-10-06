@@ -145,6 +145,8 @@ class BookingCreatedResponse(AppointmentResponse):
     є окремий ключ, який нічого, крім цієї оплати, не відкриває.
     """
     deposit_token: Optional[str] = None
+    # Після запису спитати про розсилку закладу: клієнта про це ще не питали й згоди немає
+    ask_marketing_consent: bool = False
 
 
 class MyAppointmentResponse(AppointmentResponse):

@@ -749,6 +749,7 @@ async def create_appointment(
     # Раніше це робив фронтенд, пишучи НАПРЯМУ в таблицю клієнтів чужого
     # бізнесу без авторизації - тепер це робить сервер, як і має бути.
     resolved_client_id = appointment_in.client_id
+    ask_marketing = False
     if resolved_client_id is None and appointment_in.client_phone and business:
         existing_client = await db.execute(
             select(Client).where(
@@ -774,6 +775,9 @@ async def create_appointment(
             # Згоду можна лише дати цим записом; мовчки забрати її (галочка не стоїть) - ні
             crm_client.marketing_consent = True
         resolved_client_id = crm_client.id
+        # Питання про розсилку - вже ПІСЛЯ підтвердженого запису (вікно на сайті), а не галочкою в формі.
+        # Питаємо лише тих, кого ще не питали й хто не погодився; пошта потрібна, інакше розсилати нічого.
+        ask_marketing = bool(appointment_in.client_email) and crm_client.marketing_asked_at is None and crm_client.marketing_consent is not True
 
     deposit_due = booking_rules.deposit_for(payments, final_price)
 
@@ -829,6 +833,7 @@ async def create_appointment(
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
     await db.refresh(appointment)
+    appointment.ask_marketing_consent = ask_marketing  # лише для відповіді, у базі цього поля немає
 
     # Імʼя майстра для листа. «Будь-який вільний» - чесніше за порожній
     # рядок: клієнт має розуміти, що конкретну людину не закріплено.
@@ -910,6 +915,38 @@ async def create_appointment(
         )
 
     return appointment
+
+
+class MarketingConsentIn(BaseModel):
+    consent: bool
+
+
+@router.post("/{appointment_id}/marketing-consent")
+async def answer_marketing_consent(
+    appointment_id: int,
+    payload: MarketingConsentIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Відповідь на питання про розсилку закладу після запису. Відповідає той, хто записався: його id збігається
+    з session_token запису або пошта з поштою в записі. Згода стосується клієнта саме цього закладу.
+    """
+    appointment = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalars().first()
+    me_email = (current_user.email or "").strip().lower()
+    is_booker = bool(appointment) and (
+        (appointment.session_token and str(appointment.session_token) == str(current_user.id))
+        or (me_email and (appointment.client_email or "").strip().lower() == me_email)
+    )
+    if not appointment or not is_booker or not appointment.client_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
+    client_row = (await db.execute(select(Client).where(Client.id == appointment.client_id))).scalars().first()
+    if not client_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бронювання не знайдено")
+    client_row.marketing_consent = payload.consent
+    client_row.marketing_asked_at = get_utc_now()
+    await db.commit()
+    return {"consent": payload.consent}
 
 
 @router.post("/{appointment_id}/deposit/checkout")

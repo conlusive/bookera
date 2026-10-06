@@ -165,3 +165,55 @@ async def test_online_booking_consent_checkbox(client, auth_headers):
     assert (await book("+380671110002", "b@test.com", 6)).status_code == 200
     aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
     assert aud["all"] == 2
+
+
+async def test_marketing_question_comes_after_booking_and_only_once(client, auth_headers):
+    """Питання про розсилку - після підтвердженого запису, один раз; відповідає лише той, хто записався."""
+    from datetime import timedelta
+    from app.core.time_utils import local_now
+
+    h = auth_headers("mail-ask-owner")
+    bid = (await client.post("/crm/businesses", json={"name": "Питання", "city": "Львів"}, headers=h)).json()["id"]
+    sid = (await client.post("/services", json={"business_id": bid, "name": "Стрижка", "duration_minutes": 60, "price": 500}, headers=h)).json()["id"]
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
+
+    async def book(offset, session="guest-ask"):
+        return await client.post("/appointments", json={
+            "business_id": bid, "service_id": sid, "start_time": (start + timedelta(hours=offset)).isoformat(),
+            "client_name": "Гість", "client_phone": "+380671119999", "client_email": "ask@test.com", "session_token": session})
+
+    first = (await book(0)).json()
+    assert first["ask_marketing_consent"] is True, "після першого запису в салон - питаємо"
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 0, "до відповіді людина в розсилку не потрапляє"
+
+    stranger = auth_headers("somebody-else")
+    assert (await client.post(f"/appointments/{first['id']}/marketing-consent", json={"consent": True}, headers=stranger)).status_code == 404
+
+    me = auth_headers("guest-ask")
+    ok = await client.post(f"/appointments/{first['id']}/marketing-consent", json={"consent": True}, headers=me)
+    assert ok.status_code == 200 and ok.json()["consent"] is True
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 1
+
+    second = (await book(3)).json()
+    assert second["ask_marketing_consent"] is False, "вже відповів - більше не питаємо"
+
+
+async def test_marketing_question_is_not_repeated_after_a_refusal(client, auth_headers):
+    from datetime import timedelta
+    from app.core.time_utils import local_now
+
+    h = auth_headers("mail-ask-owner-2")
+    bid = (await client.post("/crm/businesses", json={"name": "Питання 2", "city": "Львів"}, headers=h)).json()["id"]
+    sid = (await client.post("/services", json={"business_id": bid, "name": "Стрижка", "duration_minutes": 60, "price": 500}, headers=h)).json()["id"]
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
+    body = {"business_id": bid, "service_id": sid, "client_name": "Гість", "client_phone": "+380671118888",
+            "client_email": "no@test.com", "session_token": "guest-no"}
+    first = (await client.post("/appointments", json={**body, "start_time": start.isoformat()})).json()
+    assert first["ask_marketing_consent"] is True
+    await client.post(f"/appointments/{first['id']}/marketing-consent", json={"consent": False}, headers=auth_headers("guest-no"))
+    again = (await client.post("/appointments", json={**body, "start_time": (start + timedelta(hours=3)).isoformat()})).json()
+    assert again["ask_marketing_consent"] is False, "відмову поважаємо: не питаємо щоразу"
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 0

@@ -287,7 +287,11 @@ export default function SalonClient({
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'on_site' | 'online'>('on_site');
   // Згода на новини закладу: без попереднього вибору, лише за явним бажанням клієнта
-  const [marketingConsent, setMarketingConsent] = useState(false);
+  // Питання про розсилку: після підтвердженого запису, якщо клієнта в цьому закладі про це ще не питали
+  const [consentAppt, setConsentAppt] = useState<number | null>(null);
+  const [consentBusy, setConsentBusy] = useState(false);
+  // Резервування слота (крок 3 -> 4): поки сервер тримає слот, кнопка показує процес
+  const [isLocking, setIsLocking] = useState(false);
   const [certCode, setCertCode] = useState('');
   const [certState, setCertState] = useState<{ valid: boolean; amount: number; message: string } | null>(null);
   const [isCheckingCert, setIsCheckingCert] = useState(false);
@@ -970,7 +974,6 @@ const formatRole = (role?: string) => {
     setSelectedService(service || services[0] || null);
     setSelectedAddonIds([]);
     setPaymentMethod('on_site');
-    setMarketingConsent(false);
     setCertCode('');
     setCertState(null);
     setSelectedTime(null);
@@ -1022,6 +1025,7 @@ const formatRole = (role?: string) => {
 
     const directLinkToken = getDirectLinkToken(salon.id);
 
+    setIsLocking(true);
     try {
       // Той самий ідентифікатор, що й у підтвердженні запису (handleConfirmBooking): сервер знаходить
       // власний резерв слота за session_token. Раніше тут бралось лише userId зі сховища, а при
@@ -1043,6 +1047,8 @@ const formatRole = (role?: string) => {
       setCurrentStep(4);
     } catch (err: any) {
       showToast(err.message || "Цей час щойно зайняли. Будь ласка, оберіть інший слот.", 'error');
+    } finally {
+      setIsLocking(false);
     }
   };
 
@@ -1061,6 +1067,22 @@ const formatRole = (role?: string) => {
       setPendingBookingId(null);
     }
     setCurrentStep(3);
+  };
+
+  const answerConsent = async (consent: boolean) => {
+    const id = consentAppt;
+    if (id === null) return;
+    setConsentBusy(true);
+    try {
+      await api.answerMarketingConsent(await getAuthToken(), id, consent);
+      if (consent) showToast('Дякуємо! Ви підписані на новини закладу', 'success');
+    } catch {
+      /* відповідь не збереглась - спитаємо наступного разу; запис від цього не страждає */
+    } finally {
+      setConsentBusy(false);
+      setConsentAppt(null);
+      void closeModal();
+    }
   };
 
   const handleConfirmBooking = async () => {
@@ -1086,7 +1108,6 @@ const formatRole = (role?: string) => {
         client_phone: safePhone,
         client_email: clientUserEmail,
         direct_link_token: directLinkToken,
-        marketing_consent: marketingConsent,
         // Додаткові послуги. Без них клієнт обирав послуг на 800 ₴,
         // а заклад бачив у календарі 500 ₴ і 45 хвилин замість 75 -
         // майстер не знав, що робити, і не встигав.
@@ -1102,7 +1123,12 @@ const formatRole = (role?: string) => {
         showToast('Запис успішно підтверджено!', 'success');
       }
       setBookingSuccess(true);
-      setTimeout(() => void closeModal(), 2200);
+      if (created.ask_marketing_consent) {
+        // Спершу людина бачить підтвердження, і лише потім питаємо про розсилку
+        setTimeout(() => setConsentAppt(created.id), 1500);
+      } else {
+        setTimeout(() => void closeModal(), 2200);
+      }
     } catch (e: any) {
       showToast(e.message || "Помилка підтвердження бронювання.", 'error');
     }
@@ -1644,6 +1670,39 @@ const formatRole = (role?: string) => {
           box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
         }
 
+        /* РЕЗЕРВУВАННЯ СЛОТА: плашка виїжджає, замок защіпається, смужка поступово спорожніває */
+        @keyframes bkLockIn { from { opacity: 0; transform: translateY(-10px) scale(0.97); } to { opacity: 1; transform: none; } }
+        @keyframes bkShackle { 0% { transform: translateY(-3px); } 55% { transform: translateY(1px); } 100% { transform: translateY(0); } }
+        @keyframes bkRipple { 0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.38); } 100% { box-shadow: 0 0 0 14px rgba(217, 119, 6, 0); } }
+        @keyframes bkDrain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+        @keyframes bkPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+        @keyframes bkSpin { to { transform: rotate(360deg); } }
+        .bk-lock { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; background: #FDF8F0; border: 1px solid rgba(217, 119, 6, 0.16); color: #8A5314; padding: 0.75rem 1.25rem 0.85rem; border-radius: 14px; margin-bottom: 1.4rem; animation: bkLockIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; transition: background-color .4s ease, color .4s ease, border-color .4s ease; }
+        .bk-lock-label { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; font-weight: 600; }
+        .bk-lock-ico { width: 28px; height: 28px; border-radius: 50%; background: rgba(217, 119, 6, 0.12); display: inline-flex; align-items: center; justify-content: center; animation: bkRipple 0.9s ease-out 0.3s 1 both; }
+        .bk-lock-shackle { transform-box: fill-box; transform-origin: 50% 100%; animation: bkShackle 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.25s both; }
+        .bk-lock-time { font-size: 0.92rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .bk-lock-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: currentColor; opacity: 0.35; transform-origin: left; animation: bkDrain 600s linear forwards; }
+        .bk-lock.urgent { background: #FDF0EF; border-color: rgba(168, 57, 52, 0.2); color: #A83934; }
+        .bk-lock.urgent .bk-lock-time { animation: bkPulse 1s ease-in-out infinite; }
+        .bk-spin { display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #fff; animation: bkSpin 0.7s linear infinite; }
+        @media (prefers-reduced-motion: reduce) { .bk-lock, .bk-lock-ico, .bk-lock-shackle, .bk-lock-bar, .bk-lock.urgent .bk-lock-time { animation: none; } }
+
+        /* ПИТАННЯ ПРО РОЗСИЛКУ ПІСЛЯ ЗАПИСУ */
+        @keyframes mkFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes mkRise { from { opacity: 0; transform: translateY(18px) scale(0.97); } to { opacity: 1; transform: none; } }
+        .mk-ask-overlay { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: mkFade 0.25s ease both; }
+        .mk-ask { width: 100%; max-width: 380px; background: #fff; border-radius: 24px; padding: 1.75rem 1.5rem 1.4rem; text-align: center; box-shadow: 0 30px 70px -20px rgba(0,0,0,0.3); animation: mkRise 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both; }
+        .mk-ask-ico { width: 56px; height: 56px; border-radius: 50%; background: #F2F9F3; color: #166534; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 0.9rem; }
+        .mk-ask h3 { margin: 0 0 0.5rem; font-size: 1.25rem; font-weight: 700; color: #1D1D1F; letter-spacing: -0.01em; }
+        .mk-ask p { margin: 0 0 1.25rem; font-size: 0.9rem; line-height: 1.5; color: #6E6E73; }
+        .mk-ask button { display: block; width: 100%; height: 48px; border-radius: 14px; font: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: transform .15s ease, opacity .2s ease; }
+        .mk-ask button:active { transform: scale(0.98); }
+        .mk-ask button:disabled { opacity: 0.6; cursor: wait; }
+        .mk-ask-yes { background: #1D1D1F; color: #fff; border: none; margin-bottom: 0.5rem; }
+        .mk-ask-no { background: transparent; color: #6E6E73; border: none; }
+        @media (prefers-reduced-motion: reduce) { .mk-ask-overlay, .mk-ask { animation: none; } }
+
         .apple-step-anim {
           animation: appleStepIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
@@ -1847,6 +1906,21 @@ const formatRole = (role?: string) => {
           box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
         }
       `}} />
+
+      {/* ПІСЛЯ ЗАПИСУ: чи хоче клієнт отримувати розсилку цього закладу (питаємо один раз) */}
+      {consentAppt !== null && (
+        <div className="mk-ask-overlay" role="dialog" aria-modal="true" aria-label="Розсилка закладу">
+          <div className="mk-ask">
+            <span className="mk-ask-ico" aria-hidden>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 8 8 5.5L20 8" /></svg>
+            </span>
+            <h3>Новини від «{salon?.name}»?</h3>
+            <p>Можемо надсилати вам на пошту пропозиції та новини цього закладу. Відписатися можна в будь-який момент: у кожному листі є посилання.</p>
+            <button type="button" className="mk-ask-yes" disabled={consentBusy} onClick={() => void answerConsent(true)}>Так, підписатись</button>
+            <button type="button" className="mk-ask-no" disabled={consentBusy} onClick={() => void answerConsent(false)}>Ні, дякую</button>
+          </div>
+        </div>
+      )}
 
       {/* МОДАЛКА АВТОРИЗАЦІЇ */}
       {isGiftOpen && salon && (
@@ -3546,14 +3620,18 @@ const formatRole = (role?: string) => {
 
                 /* КРОК 4: ПІДСУМОК ТА ОПЛАТА */
                 <div className="apple-step-anim">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FDF8F0', border: '1px solid rgba(217, 119, 6, 0.16)', padding: '0.75rem 1.25rem', borderRadius: '14px', marginBottom: '1.4rem', color: '#8A5314' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: '600' }}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                      Слот зарезервовано для вас
+                  <div className={`bk-lock${timeLeft <= 60 ? ' urgent' : ''}`}>
+                    <div className="bk-lock-label">
+                      <span className="bk-lock-ico" aria-hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="5" y="11" width="14" height="9" rx="2.5" />
+                          <path className="bk-lock-shackle" d="M8 11V8a4 4 0 0 1 8 0v3" />
+                        </svg>
+                      </span>
+                      <span>Слот зарезервовано для вас</span>
                     </div>
-                    <span style={{ fontSize: '0.92rem', fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>
-                      {formatCountdown(timeLeft)}
-                    </span>
+                    <span className="bk-lock-time">{formatCountdown(timeLeft)}</span>
+                    <span className="bk-lock-bar" aria-hidden />
                   </div>
 
                   <div className="bk-two" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '2rem' }}>
@@ -3728,17 +3806,6 @@ const formatRole = (role?: string) => {
                         </div>
                       </div>
 
-                      <label style={{ display: 'flex', gap: '0.65rem', alignItems: 'flex-start', marginTop: '1rem', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={marketingConsent}
-                          onChange={(e) => setMarketingConsent(e.target.checked)}
-                          style={{ width: '18px', height: '18px', marginTop: '2px', accentColor: '#222222', flexShrink: 0 }}
-                        />
-                        <span style={{ fontSize: '0.8rem', lineHeight: 1.45, color: '#6E6E73' }}>
-                          Хочу отримувати новини та пропозиції цього закладу на пошту. Відписатися можна в будь-який момент.
-                        </span>
-                      </label>
                     </div>
                   </div>
                 </div>
@@ -3791,11 +3858,11 @@ const formatRole = (role?: string) => {
                   {currentStep === 3 && (
                     <button
                       type="button"
-                      disabled={!selectedTime}
+                      disabled={!selectedTime || isLocking}
                       onClick={handleProceedToConfirmation}
                       className="apple-btn-primary"
                     >
-                      Перейти до підтвердження
+                      {isLocking ? <><span className="bk-spin" aria-hidden /> Резервуємо слот…</> : 'Перейти до підтвердження'}
                     </button>
                   )}
 

@@ -795,8 +795,13 @@ export const api = {
     marketing_consent?: boolean;
     gift_certificate_code?: string;
     addon_service_ids?: number[];
-  }): Promise<Appointment & { deposit_token?: string }> {
+  }): Promise<Appointment & { deposit_token?: string; ask_marketing_consent?: boolean }> {
     return publicFetch(`/appointments`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  /** Відповідь на питання про розсилку закладу після запису (той, хто записався). */
+  async answerMarketingConsent(token: string, appointmentId: number, consent: boolean): Promise<{ consent: boolean }> {
+    return authFetch(`/appointments/${appointmentId}/marketing-consent`, token, { method: 'POST', body: JSON.stringify({ consent }) });
   },
 
   /** Оплата завдатку за запис (за токеном керування): тестова оплата проходить одразу, справжня віддає форму. */

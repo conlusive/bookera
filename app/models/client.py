@@ -36,6 +36,8 @@ class Client(Base):
     consent_procedure = Column(Boolean, default=False, nullable=False)
     # Згода на розсилки: NULL - не питали (було до цієї зміни), TRUE - погодився, FALSE - ні
     marketing_consent = Column(Boolean, nullable=True)
+    # Коли людину спитали про розсилки (після підтвердженого запису). Порожнє - ще не питали.
+    marketing_asked_at = Column(DateTime, nullable=True)
 
     visits_count = Column(Integer, default=0)
     total_spent = Column(Numeric(10, 2), default=0)

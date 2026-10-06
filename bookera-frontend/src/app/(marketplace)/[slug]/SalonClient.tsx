@@ -1,5 +1,6 @@
 'use client';
 
+import { saveDirectLinkToken, getDirectLinkToken } from '@/lib/direct-link';
 import dynamic from 'next/dynamic';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -473,10 +474,10 @@ export default function SalonClient({
     }
 
     const dl = searchParams.get('dl');
-    if (dl) localStorage.setItem('direct_link_token', dl);
+    if (dl && salon?.id) saveDirectLinkToken(salon.id, dl);
     // services у залежностях: на першому рендері список ще порожній,
     // і без цього «повторити візит» мовчки нічого не відкривало б.
-  }, [searchParams, services]);
+  }, [searchParams, services, salon?.id]);
 
   // Таймер бронювання
   useEffect(() => {
@@ -998,7 +999,7 @@ const formatRole = (role?: string) => {
       return;
     }
 
-    const directLinkToken = localStorage.getItem('direct_link_token') || undefined;
+    const directLinkToken = getDirectLinkToken(salon.id);
 
     try {
       const lockRes = await api.lockTimeSlot({
@@ -1042,7 +1043,7 @@ const formatRole = (role?: string) => {
       return;
     }
     try {
-      const directLinkToken = localStorage.getItem('direct_link_token') || undefined;
+      const directLinkToken = getDirectLinkToken(salon.id);
       const safePhone = localStorage.getItem('userPhone') || '';
       const clientDisplayName = userName || 'Гість';
       const { data: { user } } = await supabase.auth.getUser();

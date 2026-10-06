@@ -16,6 +16,11 @@ os.environ.setdefault("SUPABASE_JWT_SECRET", "test-secret-for-pytest-only")
 # (з мережею - дорожня відстань, без - пряма). Недоступна адреса = завжди пряма.
 os.environ["OSRM_URL"] = "http://127.0.0.1:9"
 os.environ["OSRM_FALLBACK_URLS"] = ""
+# Тести НІКОЛИ не шлють справжні листи: порожні SMTP-дані (load_dotenv їх не перезапише) вмикають
+# режим «Email Mock». Інакше з налаштованим Gmail кожен прогін розсилав би листи на вигадані
+# адреси test.com, а користувач отримував би сотні відскоків.
+for _k in ("SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"):
+    os.environ[_k] = ""
 JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
 DB_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/bookera_test")
 

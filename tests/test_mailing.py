@@ -100,3 +100,8 @@ def test_message_headers_and_batch(monkeypatch):
 
     # без SMTP-налаштувань пакет у режимі mock: усі «надіслані»
     assert email_mod.send_campaign_batch([msg, msg]) == (2, 0)
+
+
+def test_tests_never_send_real_email():
+    """Запобіжник: у тестах SMTP вимкнений, інакше листи пішли б на вигадані адреси."""
+    assert not (email_mod.SMTP_USER and email_mod.SMTP_PASSWORD)

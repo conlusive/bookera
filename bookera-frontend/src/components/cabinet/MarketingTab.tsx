@@ -356,6 +356,7 @@ export default function MarketingTab({ business }: { business: any }) {
                 <div className="mk-mail">
                   <small>Так виглядатиме лист</small>
                   <div className="mk-mail-card">
+                    <div className="mk-mail-logo">Book<span>Era</span></div>
                     <div className="mk-mail-from">{business?.name}</div>
                     <div className="mk-mail-subj">{subject.trim() || `Новини від ${business?.name || 'закладу'}`}</div>
                     <div className="mk-mail-body">
@@ -596,6 +597,8 @@ export default function MarketingTab({ business }: { business: any }) {
         @media (max-width: 1250px) { .mk-campaign { grid-template-columns: 1fr; } }
         .mk-mail small { display: block; font-size: 0.72rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.6rem; }
         .mk-mail-card { border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; padding: 1.6rem 1.6rem; }
+        .mk-mail-logo { font-size: 1.35rem; font-weight: 900; letter-spacing: -0.04em; color: #222; margin-bottom: 1.1rem; }
+        .mk-mail-logo span { color: #8fae92; }
         .mk-mail-from { font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; }
         .mk-mail-subj { font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid #e2e8f0; }
         .mk-mail-btn { display: block; text-align: center; margin: 1rem 0 0; background: #222; color: #fff; font-weight: 600; padding: 0.55rem 1.2rem; border-radius: 9px; }

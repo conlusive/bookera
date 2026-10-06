@@ -28,6 +28,13 @@ FONT = ("-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, "
         "'Helvetica Neue', Arial, sans-serif")
 
 
+def logo() -> str:
+    """Знак BookEra як на сайті: «Book» темним, «Era» кольором бренду. Текстом, а не картинкою:
+    поштові клієнти за замовчуванням ховають зображення, а текст видно завжди."""
+    return (f'<span style="font-family:{FONT};font-size:28px;font-weight:900;letter-spacing:-0.04em;color:{INK};">'
+            f'Book<span style="color:#8fae92;">Era</span></span>')
+
+
 def esc(text: Optional[str]) -> str:
     """Екранування тексту, який писала людина."""
     return _html.escape(str(text or ""))
@@ -35,7 +42,7 @@ def esc(text: Optional[str]) -> str:
 
 def button(label: str, url: str) -> str:
     """
-    Кнопка через таблицю.
+    Широка кнопка через таблицю.
 
     <a> зі стилями кнопки в Outlook перетворюється на звичайне
     посилання - тому обгортка таблицею, це єдиний надійний спосіб.
@@ -43,11 +50,11 @@ def button(label: str, url: str) -> str:
     if not url:
         return ""
     return f"""
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px auto 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:32px 0 0;">
       <tr>
-        <td align="center" bgcolor="{INK}" style="border-radius:10px;">
+        <td align="center" bgcolor="{INK}" style="border-radius:14px;">
           <a href="{url}" target="_blank"
-             style="display:inline-block;padding:13px 28px;font-family:{FONT};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;letter-spacing:-0.01em;">
+             style="display:block;padding:18px 24px;font-family:{FONT};font-size:17px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:14px;letter-spacing:-0.01em;">
             {esc(label)}
           </a>
         </td>
@@ -58,26 +65,26 @@ def button(label: str, url: str) -> str:
 
 def info_row(label: str, value: str, strike: bool = False, big: bool = False) -> str:
     """Рядок «підпис — значення» всередині картки."""
-    value_style = f"font-size:{'20px' if big else '15px'};font-weight:{'700' if big else '500'};color:{INK};letter-spacing:-0.01em;"
+    value_style = f"font-size:{'22px' if big else '17px'};font-weight:{'700' if big else '600'};color:{INK};letter-spacing:-0.01em;"
     if strike:
         value_style = "font-size:15px;color:#A5AEA3;text-decoration:line-through;"
     return f"""
     <tr>
-      <td style="padding:0 0 4px;font-family:{FONT};font-size:13px;color:{MUTED};">{esc(label)}</td>
+      <td style="padding:0 0 6px;font-family:{FONT};font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:{MUTED};">{esc(label)}</td>
     </tr>
     <tr>
-      <td style="padding:0 0 16px;font-family:{FONT};{value_style}">{esc(value)}</td>
+      <td style="padding:0 0 22px;font-family:{FONT};{value_style}">{esc(value)}</td>
     </tr>
     """
 
 
 def card(inner_rows: str) -> str:
-    """М'яка картка з даними візиту."""
+    """Блок з даними візиту: без коробки й заливки, лише тонкі лінії зверху й знизу."""
     return f"""
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-           style="background:{SOFT};border:1px solid {LINE};border-radius:14px;">
+           style="border-top:1px solid {LINE};border-bottom:1px solid {LINE};">
       <tr>
-        <td style="padding:22px 24px 6px;">
+        <td style="padding:26px 0 8px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
             {inner_rows}
           </table>
@@ -97,42 +104,23 @@ def layout(
     preheader: str = "",
 ) -> str:
     """
-    Обгортка листа: шапка з назвою закладу, тіло, підпис.
+    Обгортка листа на чистому білому тлі, без «коробки»: знак BookEra, назва закладу, заголовок, тіло.
 
-    Ширина 600px - усталений максимум для пошти: ширше обрізають
-    поштові клієнти на вужчих екранах.
+    Ширина колонки 560px, відступи великі: лист має дихати. Єдиний стиль для всіх листів платформи.
     """
+    quoted = business_name if "«" in business_name or "»" in business_name else "«" + business_name + "»"
     intro_block = f"""
-      <tr>
-        <td style="padding:0 0 24px;font-family:{FONT};font-size:15px;line-height:1.55;color:{MUTED};">
-          {intro}
-        </td>
-      </tr>
+        <tr><td style="padding:0 0 28px;font-family:{FONT};font-size:17px;line-height:1.7;color:#3A403A;">{intro}</td></tr>
     """ if intro else ""
-
     footer_block = f"""
-      <tr>
-        <td style="padding:24px 0 0;font-family:{FONT};font-size:13px;line-height:1.55;color:#A5AEA3;">
-          {footer_note}
-        </td>
-      </tr>
+        <tr><td style="padding:28px 0 0;font-family:{FONT};font-size:15px;line-height:1.65;color:{MUTED};">{footer_note}</td></tr>
     """ if footer_note else ""
-
-    # Посилання на відписку - не формальність: без нього листи швидко
-    # позначають як спам, і страждає вся розсилка закладу.
-    unsub_block = f"""
-      <tr>
-        <td style="padding:20px 0 0;border-top:1px solid {LINE};font-family:{FONT};font-size:12px;line-height:1.5;color:#A5AEA3;">
-          Ви отримуєте цей лист, бо є клієнтом {esc(business_name if "«" in business_name or "»" in business_name else "«" + business_name + "»")}.
-          Більше не хочете отримувати розсилки?
-          <a href="{unsubscribe_url}" style="color:{MUTED};text-decoration:underline;">Відписатися</a>
-        </td>
-      </tr>
-    """ if unsubscribe_url else ""
-
-    # Прихований текст-«прев'ю»: його поштові клієнти показують поруч із темою у списку листів
+    unsub = (
+        f'<p style="margin:0 0 16px;">Ви отримуєте цей лист, бо є клієнтом закладу {esc(quoted)}. '
+        f'<a href="{esc(unsubscribe_url)}" style="color:{MUTED};text-decoration:underline;">Відписатися від розсилок</a></p>'
+    ) if unsubscribe_url else ""
     preheader_block = (
-        f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:{PAGE_BG};">'
+        f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:#ffffff;">'
         f"{esc(preheader)}{'&nbsp;&zwnj;' * 40}</div>"
     ) if preheader else ""
 
@@ -143,50 +131,37 @@ def layout(
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{esc(title)}</title>
 </head>
-<body style="margin:0;padding:0;background:{PAGE_BG};">
+<body style="margin:0;padding:0;background:#ffffff;">
   {preheader_block}
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{PAGE_BG};">
-    <tr>
-      <td align="center" style="padding:32px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
+    <tr><td align="center" style="padding:0 20px;">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;">
 
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
-               style="width:600px;max-width:100%;background:#ffffff;border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:52px 0 0;">{logo()}</td></tr>
+        <tr>
+          <td style="padding:36px 0 24px;font-family:{FONT};font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{MUTED};">
+            {esc(business_name)}
+          </td>
+        </tr>
 
-          <!-- Шапка: смужка кольору бренду й назва закладу -->
-          <tr><td style="height:4px;background:{MATCHA};font-size:0;line-height:0;">&nbsp;</td></tr>
-          <tr>
-            <td style="padding:26px 32px 0;font-family:{FONT};font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:{MUTED};">
-              {esc(business_name)}
-            </td>
-          </tr>
+        <tr><td style="padding:0 0 28px;font-family:{FONT};font-size:34px;font-weight:800;line-height:1.15;letter-spacing:-0.03em;color:{INK};">{esc(title)}</td></tr>
+        {intro_block}
+        <tr><td>{body_html}</td></tr>
+        {footer_block}
 
-          <tr>
-            <td style="padding:14px 32px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td style="padding:0 0 10px;font-family:{FONT};font-size:23px;font-weight:700;line-height:1.25;letter-spacing:-0.02em;color:{INK};">
-                    {esc(title)}
-                  </td>
-                </tr>
-                {intro_block}
-                <tr><td>{body_html}</td></tr>
-                {footer_block}
-                {unsub_block}
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;">
-          <tr>
-            <td align="center" style="padding:18px 8px 0;font-family:{FONT};font-size:12px;color:#A5AEA3;">
-              Надіслано через BookEra
-            </td>
-          </tr>
-        </table>
-
-      </td>
-    </tr>
+        <tr>
+          <td style="padding:56px 0 56px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="padding:0 0 28px;border-top:1px solid {LINE};font-size:0;line-height:0;">&nbsp;</td></tr>
+              <tr><td style="font-family:{FONT};font-size:13px;line-height:1.65;color:{MUTED};">
+                {unsub}
+                <p style="margin:0;color:#A5AEA3;">Надіслано через BookEra</p>
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
   </table>
 </body>
 </html>"""
@@ -275,9 +250,10 @@ def campaign_layout(
 
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;">
 
-        <!-- Шапка: лише назва закладу, без ліній і рамок -->
+        <!-- Шапка: знак BookEra, під ним назва закладу -->
+        <tr><td style="padding:52px 0 0;">{logo()}</td></tr>
         <tr>
-          <td style="padding:56px 0 48px;font-family:{FONT};font-size:15px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{MUTED};">
+          <td style="padding:36px 0 40px;font-family:{FONT};font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{MUTED};">
             {esc(business_name)}
           </td>
         </tr>

@@ -1448,6 +1448,7 @@ const formatRole = (role?: string) => {
         .sl-hd-find { width: 44px; height: 44px; align-items: center; justify-content: center; color: #111827; }
         /* ТЕЛЕФОН (лише до 860px, комп'ютер не змінюється) */
         .sl-more { display: none; }
+        .sl-map-title { display: none; }
         @media (max-width: 860px) {
           .container { padding: 0 1.25rem; }
           .sl-hd-logo { width: auto !important; }
@@ -1466,8 +1467,30 @@ const formatRole = (role?: string) => {
              Обидві колонки розкладаємо в одну сітку (display: contents) і впорядковуємо блоки через order. */
           .sl-main { display: flex !important; flex-direction: column; }
           .sl-stack, .sl-aside, .sl-aside-in { display: contents !important; }
-          .sl-o-services { order: 1; } .sl-o-team { order: 2; } .sl-o-portfolio { order: 3; } .sl-o-about { order: 4; }
-          .sl-o-hours { order: 5; } .sl-o-map { order: 6; } .sl-o-amen { order: 7; } .sl-o-reviews { order: 8; }
+          .sl-o-services { order: 1; } .sl-o-team { order: 2; } .sl-o-portfolio { order: 3; } .sl-o-map { order: 4; }
+          .sl-o-amen { order: 5; } .sl-o-about { order: 6; } .sl-o-hours { order: 7; } .sl-o-reviews { order: 8; }
+          /* Усі блоки в одному стилі: без рамок і тіней, лише тонка лінія зверху й однаковий заголовок */
+          .sl-main { gap: 1.75rem !important; }
+          .section-card { background: none !important; border: none !important; border-top: 1px solid #f1f5f9 !important; box-shadow: none !important; border-radius: 0 !important; padding: 1.5rem 0 0 !important; overflow: visible !important; }
+          .section-card .section-title, .sl-sec .section-title { font-size: 1.35rem !important; margin: 0 0 1rem !important; }
+          .sl-map-title { display: block !important; }
+          /* Послуги: тонкий рядок - назва й тривалість ліворуч, ціна й маленька кнопка праворуч */
+          .service-pill { padding: 0.85rem 0 !important; gap: 0.3rem !important; }
+          .service-pill-top { flex-direction: row !important; align-items: center !important; gap: 0.75rem !important; }
+          .service-pill-top > div:first-child { flex: 1 1 auto; min-width: 0; }
+          .service-pill-top > div:first-child > div:first-child { font-size: 1rem !important; margin-bottom: 0.2rem !important; }
+          .service-pill-act { flex-direction: column !important; align-items: flex-end !important; gap: 0.35rem !important; flex-shrink: 0; }
+          .service-pill-act > div { font-size: 1rem !important; }
+          .service-pill-act .service-btn { padding: 0.4rem 1.05rem !important; font-size: 0.85rem !important; border-radius: 11px !important; }
+          /* Пошук і порядок: заголовок, нижче в одному ряду поле пошуку й кнопка порядку */
+          .sl-svc-head { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem 0.6rem !important; border-bottom: none !important; padding-bottom: 0 !important; margin-bottom: 0.9rem !important; }
+          .sl-svc-left { display: contents !important; }
+          .sl-svc-left h2 { grid-column: 1 / -1; margin: 0 !important; }
+          .sl-svc-search { height: 44px; background: #F5F5F7; border-radius: 12px; padding: 0 0.85rem; box-sizing: border-box; }
+          .sl-svc-search svg { left: 0.85rem !important; }
+          .sl-svc-search input { width: 100% !important; padding-left: 1.7rem !important; font-size: 16px !important; }
+          .sl-svc-head .sort-dd-trigger { height: 44px; background: #F5F5F7; border-radius: 12px; padding: 0 0.7rem; gap: 0.35rem; }
+          .sl-svc-head .sort-dd-chev { display: none; }
           .footer-support-col { grid-column: 1 / -1; }
           .footer-support { flex-direction: row !important; flex-wrap: wrap; gap: 0 1.5rem !important; }
           .sl-sec { padding-top: 1.5rem !important; }
@@ -1478,7 +1501,6 @@ const formatRole = (role?: string) => {
           .footer-grid > div:first-child { grid-column: 1 / -1; }
           .footer-nav-link { padding: 0.25rem 0; }
           .clean-dark-footer { padding-top: 3rem !important; }
-          .section-card { padding: 1.4rem !important; }
         }
         /* Вікно запису на телефоні - на весь екран, зручні відступи, у степері лише поточний крок підписаний */
         @media (max-width: 640px) {
@@ -2236,12 +2258,12 @@ const formatRole = (role?: string) => {
           <div className="sl-stack" style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
             <div className="sl-o-services">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+              <div className="sl-svc-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <div className="sl-svc-left" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                   <h2 className="section-title">Послуги</h2>
-                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                  <div className="sl-svc-search" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 0 }}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" placeholder="Пошук послуги..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 'none', outline: 'none', fontSize: '0.95rem', padding: '0.4rem 0 0.4rem 1.8rem', width: '200px', backgroundColor: 'transparent' }} />
+                    <input type="text" placeholder="Пошук послуги" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ border: 'none', outline: 'none', fontSize: '0.95rem', padding: '0.4rem 0 0.4rem 1.8rem', width: '200px', backgroundColor: 'transparent' }} />
                   </div>
                 </div>
                 {/* Порядок послуг - та сама кнопка зі списком, що й на головній:
@@ -2336,7 +2358,7 @@ const formatRole = (role?: string) => {
                                 )}
                               </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                            <div className="service-pill-act" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                               <div style={{ fontWeight: '800', color: '#1D1D1F', fontSize: '1.25rem', whiteSpace: 'nowrap' }}>{service.price} ₴</div>
                               <button className="service-btn" onClick={() => openModal(service)}>Вибрати</button>
                             </div>
@@ -2807,6 +2829,7 @@ const formatRole = (role?: string) => {
                   в редакторі, а клієнт її бачив. */}
               {salon?.layout_config?.showMap !== false && salonMap && (
               <div className="section-card sl-o-map" style={{ padding: 0, overflow: 'hidden' }}>
+                <h2 className="section-title sl-map-title">Адреса</h2>
                 <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', borderRadius: '24px 24px 0 0', background: '#e2e8f0' }}>
                   <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
                     <iframe

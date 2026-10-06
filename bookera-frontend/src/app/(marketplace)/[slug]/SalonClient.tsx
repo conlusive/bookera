@@ -13,6 +13,7 @@ import { imageLoadProps } from '@/lib/images';
 import { createClient } from '@/lib/supabase/client';
 import { Icons } from '@/components/shared';
 import { api, SlotStatusItem } from '@/lib/api';
+import { authErrorText, passwordProblem, CONFIRM_EMAIL_NOTICE } from '@/lib/auth-errors';
 import { useToast } from '@/context/ToastContext';
 import { isBusinessRole } from '@/lib/roles';
 import ProfileMenu from '@/components/ui/ProfileMenu';
@@ -274,6 +275,8 @@ export default function SalonClient({
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'on_site' | 'online'>('on_site');
+  // Згода на новини закладу: без попереднього вибору, лише за явним бажанням клієнта
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [certCode, setCertCode] = useState('');
   const [certState, setCertState] = useState<{ valid: boolean; amount: number; message: string } | null>(null);
   const [isCheckingCert, setIsCheckingCert] = useState(false);
@@ -833,7 +836,7 @@ const formatRole = (role?: string) => {
         });
 
         if (error) {
-          showToast(`Помилка входу: ${error.message}`, 'error');
+          showToast(`Помилка входу: ${authErrorText(error.message)}`, 'error');
           return;
         }
 
@@ -866,14 +869,30 @@ const formatRole = (role?: string) => {
         const targetEmail = loginEmail.trim().toLowerCase();
         const targetFullName = `${regFirstName} ${regLastName}`.trim();
 
+        const pwProblem = passwordProblem(loginPassword);
+        if (pwProblem) {
+          showToast(pwProblem, 'error');
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
           password: loginPassword,
-          options: { data: { full_name: targetFullName } }
+          options: {
+            data: { full_name: targetFullName },
+            emailRedirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
+          }
         });
 
         if (error) {
-          showToast(`Помилка реєстрації: ${error.message}`, 'error');
+          showToast(`Помилка реєстрації: ${authErrorText(error.message)}`, 'error');
+          return;
+        }
+
+        if (!data?.session) {
+          // Підтвердження пошти увімкнене: сесії ще немає, входити рано
+          setIsLoginView(true);
+          showToast(CONFIRM_EMAIL_NOTICE(targetEmail), 'info');
           return;
         }
 
@@ -928,6 +947,7 @@ const formatRole = (role?: string) => {
     setSelectedService(service || services[0] || null);
     setSelectedAddonIds([]);
     setPaymentMethod('on_site');
+    setMarketingConsent(false);
     setCertCode('');
     setCertState(null);
     setSelectedTime(null);
@@ -1038,6 +1058,7 @@ const formatRole = (role?: string) => {
         client_phone: safePhone,
         client_email: clientUserEmail,
         direct_link_token: directLinkToken,
+        marketing_consent: marketingConsent,
         // Додаткові послуги. Без них клієнт обирав послуг на 800 ₴,
         // а заклад бачив у календарі 500 ₴ і 45 хвилин замість 75 -
         // майстер не знав, що робити, і не встигав.
@@ -3579,6 +3600,18 @@ const formatRole = (role?: string) => {
                           <span style={{ fontSize: '1.65rem', fontWeight: '800', color: '#1D1D1F', letterSpacing: '-0.02em' }}>{totalCalculatedPrice} ₴</span>
                         </div>
                       </div>
+
+                      <label style={{ display: 'flex', gap: '0.65rem', alignItems: 'flex-start', marginTop: '1rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={marketingConsent}
+                          onChange={(e) => setMarketingConsent(e.target.checked)}
+                          style={{ width: '18px', height: '18px', marginTop: '2px', accentColor: '#222222', flexShrink: 0 }}
+                        />
+                        <span style={{ fontSize: '0.8rem', lineHeight: 1.45, color: '#6E6E73' }}>
+                          Хочу отримувати новини та пропозиції цього закладу на пошту. Відписатися можна в будь-який момент.
+                        </span>
+                      </label>
                     </div>
                   </div>
                 </div>

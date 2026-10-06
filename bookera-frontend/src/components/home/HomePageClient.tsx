@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
+import { authErrorText, passwordProblem, CONFIRM_EMAIL_NOTICE } from '@/lib/auth-errors';
 import { isBusinessRole } from '@/lib/roles';
 import Avatar from '@/components/ui/Avatar';
 import { useMyAvatar, resetAvatarSync } from '@/lib/useMyAvatar';
@@ -779,7 +780,7 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         });
 
         if (error) {
-          actionError(`Не вдалося увійти: ${error.message}`);
+          actionError(`Не вдалося увійти: ${authErrorText(error.message)}`);
           return;
         }
 
@@ -806,6 +807,12 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         const targetFullName = `${regFirstName} ${regLastName}`.trim();
         const targetPhone = regPhone.trim();
 
+        const pwProblem = passwordProblem(loginPassword);
+        if (pwProblem) {
+          actionError(pwProblem);
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
           password: loginPassword,
@@ -814,12 +821,20 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
               full_name: targetFullName,
               phone: targetPhone || null,
               role: 'client'
-            }
+            },
+            emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
           }
         });
 
         if (error) {
-          actionError(`Не вдалося зареєструватись: ${error.message}`);
+          actionError(`Не вдалося зареєструватись: ${authErrorText(error.message)}`);
+          return;
+        }
+
+        if (!data?.session) {
+          // Підтвердження пошти увімкнене: сесії ще немає, входити рано
+          setIsLoginView(true);
+          actionError(CONFIRM_EMAIL_NOTICE(targetEmail));
           return;
         }
 

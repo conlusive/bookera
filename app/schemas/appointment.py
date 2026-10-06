@@ -54,6 +54,8 @@ class AppointmentCreate(BaseModel):
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
     direct_link_token: Optional[str] = None
+    # Галочка «хочу отримувати новини закладу» при записі онлайн. Без неї клієнт у розсилки не потрапляє.
+    marketing_consent: Optional[bool] = None
     gift_certificate_code: Optional[str] = None
 
 
@@ -73,6 +75,7 @@ class ManualAppointmentCreate(BaseModel):
     client_phone: Optional[str] = None
     client_email: Optional[str] = None
     notes: Optional[str] = None
+    marketing_consent: Optional[bool] = None
     is_block: bool = False  # true = "заблокувати час" (обід тощо), не справжній запис клієнта
 
 

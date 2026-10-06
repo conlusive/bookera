@@ -105,3 +105,63 @@ def test_message_headers_and_batch(monkeypatch):
 def test_tests_never_send_real_email():
     """Запобіжник: у тестах SMTP вимкнений, інакше листи пішли б на вигадані адреси."""
     assert not (email_mod.SMTP_USER and email_mod.SMTP_PASSWORD)
+
+
+async def test_clients_who_declined_are_not_mailed(client, auth_headers):
+    h = auth_headers("mail-consent")
+    bid = (await client.post("/crm/businesses", json={"name": "Згода", "city": "Львів"}, headers=h)).json()["id"]
+    cases = [("old@test.com", None), ("yes@test.com", True), ("no@test.com", False)]
+    for i, (e, consent) in enumerate(cases):
+        body = {"business_id": bid, "name": f"К{i}", "phone": f"+38067222{i:04d}", "email": e}
+        if consent is not None:
+            body["marketing_consent"] = consent
+        r = await client.post("/crm/clients", json=body, headers=h)
+        assert r.status_code in (200, 201), r.text
+        assert r.json()["marketing_consent"] is consent
+
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 2, "старий клієнт (не питали) і згодний - так; відмовник - ні"
+    assert aud["no_consent"] == 1
+    sent = (await client.post("/crm/campaigns", json=_payload(bid), headers=h)).json()
+    assert sent["queued"] == 2 and sent["no_consent"] == 1
+
+    # згоду можна дати пізніше з картки клієнта
+    clients = (await client.get("/crm/clients", params={"business_id": bid}, headers=h)).json()
+    declined = next(c for c in clients if c["email"] == "no@test.com")
+    r = await client.patch(f"/crm/clients/{declined['id']}", json={"marketing_consent": True}, headers=h)
+    assert r.status_code == 200 and r.json()["marketing_consent"] is True
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 3 and aud["no_consent"] == 0
+
+
+async def test_online_booking_consent_checkbox(client, auth_headers):
+    """Онлайн-запис: без галочки клієнт не в розсилках, з галочкою - так, а повторний запис без неї згоду не забирає."""
+    from datetime import timedelta
+    from app.core.time_utils import local_now
+
+    h = auth_headers("mail-booking-consent")
+    bid = (await client.post("/crm/businesses", json={"name": "Онлайн", "city": "Львів"}, headers=h)).json()["id"]
+    sid = (await client.post("/services", json={"business_id": bid, "name": "Стрижка", "duration_minutes": 60, "price": 500}, headers=h)).json()["id"]
+    start = local_now().replace(tzinfo=None) + timedelta(days=2)
+
+    def book(phone, email, offset, consent=None):
+        body = {"business_id": bid, "service_id": sid, "start_time": (start + timedelta(hours=offset)).isoformat(),
+                "client_name": "Гість", "client_phone": phone, "client_email": email}
+        if consent is not None:
+            body["marketing_consent"] = consent
+        return client.post("/appointments", json=body)
+
+    assert (await book("+380671110001", "a@test.com", 0)).status_code == 200
+    assert (await book("+380671110002", "b@test.com", 2, True)).status_code == 200
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 1 and aud["no_consent"] == 1
+
+    # той, хто не ставив галочку, ставить її при наступному записі
+    assert (await book("+380671110001", "a@test.com", 4, True)).status_code == 200
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 2 and aud["no_consent"] == 0
+
+    # наступний запис без галочки згоду не скасовує
+    assert (await book("+380671110002", "b@test.com", 6)).status_code == 200
+    aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
+    assert aud["all"] == 2

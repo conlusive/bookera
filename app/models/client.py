@@ -34,6 +34,8 @@ class Client(Base):
     formulas = Column(Text, nullable=True)  # рецепти фарби/формули процедур
     consent_photo = Column(Boolean, default=False, nullable=False)
     consent_procedure = Column(Boolean, default=False, nullable=False)
+    # Згода на розсилки: NULL - не питали (було до цієї зміни), TRUE - погодився, FALSE - ні
+    marketing_consent = Column(Boolean, nullable=True)
 
     visits_count = Column(Integer, default=0)
     total_spent = Column(Numeric(10, 2), default=0)

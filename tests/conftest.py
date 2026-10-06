@@ -23,6 +23,15 @@ for _k in ("SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"):
     os.environ[_k] = ""
 JWT_SECRET = os.environ["SUPABASE_JWT_SECRET"]
 DB_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/bookera_test")
+# Запобіжник: тести очищають таблиці (TRUNCATE ... CASCADE). Якщо в оточенні (наприклад, після `source .env`)
+# лежить адреса справжньої бази, вони стерли б реальні дані. Дозволяємо лише базу з «test» у назві.
+_DB_NAME = DB_URL.rsplit("/", 1)[-1].split("?")[0]
+if "test" not in _DB_NAME.lower():
+    pytest.exit(
+        f"ВІДМОВА: DATABASE_URL вказує на базу «{_DB_NAME}», а не тестову. Тести очищають таблиці й знищили б реальні дані. "
+        "Запускайте без `source .env` або вкажіть базу на кшталт bookera_test.",
+        returncode=3,
+    )
 
 
 def make_token(user_id: str, role: str = "business_owner", email: str = None, full_name: str = None) -> str:

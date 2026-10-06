@@ -137,6 +137,7 @@ async def create_manual_appointment(
                 name=payload.client_name or payload.client_phone,
                 phone=payload.client_phone,
                 email=payload.client_email,
+                marketing_consent=payload.marketing_consent,
             )
             db.add(client)
             await db.flush()

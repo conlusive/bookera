@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { authErrorText, passwordProblem } from '@/lib/auth-errors';
 import { api } from '@/lib/api';
 
 /**
@@ -82,9 +83,11 @@ function InviteContent() {
     try {
       if (mode === 'signin') {
         const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (err) throw new Error(err.message === 'Invalid login credentials' ? 'Невірна пошта або пароль' : err.message);
+        if (err) throw new Error(authErrorText(err.message));
         await accept(data.session!.access_token);
       } else {
+        const pwProblem = passwordProblem(password);
+        if (pwProblem) throw new Error(pwProblem);
         const { data, error: err } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -95,7 +98,7 @@ function InviteContent() {
             emailRedirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
           },
         });
-        if (err) throw new Error(err.message);
+        if (err) throw new Error(authErrorText(err.message));
         if (!data.session) {
           // Supabase вимагає підтвердити пошту - сесії ще немає.
           setNeedsConfirm(true);

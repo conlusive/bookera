@@ -9,6 +9,7 @@ import HeroCards from '@/components/business/HeroCards';
 import StatsStrip from '@/components/business/StatsStrip';
 import SiteFooter from '@/components/ui/SiteFooter';
 import { createClient } from '@/lib/supabase/client';
+import { authErrorText, passwordProblem, CONFIRM_EMAIL_NOTICE } from '@/lib/auth-errors';
 import { api } from '@/lib/api';
 import { getAuthToken, getAuthTokenOrNull } from '@/lib/auth-token-client';
 import { isBusinessRole } from '@/lib/roles';
@@ -41,6 +42,7 @@ export default function BusinessLandingPage() {
   // Помилка входу чи реєстрації - текстом у самому вікні. Раніше -
   // системний alert(), що блокував сторінку й виглядав чужорідно.
   const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
   const [isLoginView, setIsLoginView] = useState(true);
 
   const [loginEmail, setLoginEmail] = useState('');
@@ -188,6 +190,7 @@ export default function BusinessLandingPage() {
   const handleModalAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+    setAuthNotice('');
     try {
       if (isLoginView) {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -196,7 +199,7 @@ export default function BusinessLandingPage() {
         });
 
         if (error) {
-          setAuthError(error.message === 'Invalid login credentials' ? 'Невірна пошта або пароль' : error.message);
+          setAuthError(authErrorText(error.message));
           return;
         }
 
@@ -230,18 +233,32 @@ export default function BusinessLandingPage() {
         const targetEmail = loginEmail.trim().toLowerCase();
         const targetFullName = `${regFirstName} ${regLastName}`.trim();
 
+        const pwProblem = passwordProblem(loginPassword);
+        if (pwProblem) {
+          setAuthError(pwProblem);
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: targetEmail,
           password: loginPassword,
           options: {
             data: {
               full_name: targetFullName
-            }
+            },
+            emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/business` : undefined,
           }
         });
 
         if (error) {
-          setAuthError(error.message);
+          setAuthError(authErrorText(error.message));
+          return;
+        }
+
+        if (!data?.session) {
+          // Підтвердження пошти увімкнене: сесії ще немає, входити рано
+          setIsLoginView(true);
+          setAuthNotice(CONFIRM_EMAIL_NOTICE(targetEmail));
           return;
         }
 
@@ -448,6 +465,9 @@ export default function BusinessLandingPage() {
               <input type="password" placeholder="Пароль" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="modal-input" required />
               {authError && (
                 <p style={{ color: '#B42318', fontSize: '0.85rem', margin: '0 0 0.75rem', textAlign: 'left' }}>{authError}</p>
+              )}
+              {authNotice && (
+                <p role="status" style={{ color: '#2F6B3A', fontSize: '0.85rem', margin: '0 0 0.75rem', textAlign: 'left' }}>{authNotice}</p>
               )}
               <button type="submit" style={{ width: '100%', padding: '1rem', backgroundColor: '#111827', color: '#fff', borderRadius: '12px', fontWeight: '700', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', marginTop: '0.5rem', fontSize: '1rem', transition: '0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='#0f172a'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#111827'}>{isLoginView ? 'Продовжити' : 'Зареєструватись'}</button>
             </form>

@@ -346,7 +346,7 @@ export default function MarketingTab({ business }: { business: any }) {
                   <textarea className="clean-input mk-text" data-field="mk-message" maxLength={3000} placeholder="Що ви хочете сказати клієнтам?" value={message} onChange={e => { setMessage(e.target.value); setSent(null); }} />
                   <div className="mk-send-row">
                     <span className="mk-reach">
-                      {counts ? <>Лист отримають: <b>{reachable}</b>{counts.without_email > 0 && <> · без пошти: {counts.without_email}</>}{counts.unsubscribed > 0 && <> · відписались: {counts.unsubscribed}</>}</> : 'Рахуємо аудиторію…'}
+                      {counts ? <>Лист отримають: <b>{reachable}</b>{counts.without_email > 0 && <> · без пошти: {counts.without_email}</>}{counts.unsubscribed > 0 && <> · відписались: {counts.unsubscribed}</>}{counts.no_consent > 0 && <> · без згоди: {counts.no_consent}</>}</> : 'Рахуємо аудиторію…'}
                     </span>
                     <button type="button" className="clean-btn" onClick={askSend}>Надіслати</button>
                   </div>
@@ -432,6 +432,7 @@ export default function MarketingTab({ business }: { business: any }) {
                 <div className="mk-row"><span>З поштою</span><b>{counts ? counts.total_clients - counts.without_email : '—'}</b></div>
                 <div className="mk-row"><span>Без пошти</span><b className="mute">{counts?.without_email ?? '—'}</b></div>
                 <div className="mk-row"><span>Відписались</span><b className="mute">{counts?.unsubscribed ?? '—'}</b></div>
+                <div className="mk-row"><span>Не погодились</span><b className="mute">{counts?.no_consent ?? '—'}</b></div>
                 {counts && (
                   <div className="mk-row"><span>Ліміт на добу</span><b>{counts.quota.remaining_recipients} з {counts.quota.daily_recipient_limit}</b></div>
                 )}

@@ -37,7 +37,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const [editingClientNotes, setEditingClientNotes] = useState('');
   const [editingClientAllergies, setEditingClientAllergies] = useState('');
   const [editingFormulas, setEditingFormulas] = useState('');
-  const [consents, setConsents] = useState({ photo: false, procedure: false });
+  const [consents, setConsents] = useState({ photo: false, procedure: false, marketing: false });
 
   // НОВЕ: Стани для редагування контактів прямо з картки
   const [editingInstagram, setEditingInstagram] = useState('');
@@ -51,7 +51,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   // Модалки
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
   const [isSavingClient, setIsSavingClient] = useState(false);
-  const [newClientForm, setNewClientForm] = useState({ name: '', phone: '+380', email: '', birthday: '' });
+  const [newClientForm, setNewClientForm] = useState({ name: '', phone: '+380', email: '', birthday: '', marketing: false });
 
   const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
   const [balanceOperation, setBalanceOperation] = useState<'add' | 'subtract'>('add');
@@ -277,12 +277,13 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         phone: finalPhone,
         email: email || undefined,
         birthday: newClientForm.birthday || undefined,
+        marketing_consent: newClientForm.marketing,
         tags: ['Новий'],
       });
 
       setClientsList((prev: any) => [...prev, created]);
       setIsAddClientModalOpen(false);
-      setNewClientForm({ name: '', phone: '+380', email: '', birthday: '' });
+      setNewClientForm({ name: '', phone: '+380', email: '', birthday: '', marketing: false });
     } catch (err: any) {
       const msg = err?.message || 'Не вдалося додати клієнта';
       showToast(msg, 'error', /номер/i.test(msg) ? { field: 'client-phone' } : undefined);
@@ -316,6 +317,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
       formulas: editingFormulas,
       consent_photo: consents.photo,
       consent_procedure: consents.procedure,
+      marketing_consent: consents.marketing,
       instagram: editingInstagram,
       birthday: editingBirthday || null
     };
@@ -330,6 +332,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         formulas: editingFormulas,
         consent_photo: consents.photo,
         consent_procedure: consents.procedure,
+        marketing_consent: consents.marketing,
         instagram: editingInstagram,
         birthday: editingBirthday || undefined,
       });
@@ -444,7 +447,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     setEditingFormulas(client.formulas || '');
     setEditingInstagram(client.instagram || '');
     setEditingBirthday(client.birthday || '');
-    setConsents({ photo: client.consent_photo || false, procedure: client.consent_procedure || false });
+    setConsents({ photo: client.consent_photo || false, procedure: client.consent_procedure || false, marketing: client.marketing_consent === true });
     setNewTagInput('');
     setActiveCardTab('info');
     if (saveToStorage && typeof window !== 'undefined') sessionStorage.setItem('openedClientId', client.id);
@@ -916,12 +919,22 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                           </div>
                        </div>
 
-                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px solid #f1f5f9', marginBottom: '1rem' }}>
                           <div>
                              <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a' }}>Медична згода</div>
                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>Згода на проведення процедур</div>
                           </div>
                           <div onClick={() => setConsents({...consents, procedure: !consents.procedure})} className={`apple-switch ${consents.procedure ? 'on' : ''}`}>
+                             <div className="apple-switch-knob"></div>
+                          </div>
+                       </div>
+
+                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                             <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a' }}>Розсилки на пошту</div>
+                             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>Новини й пропозиції закладу</div>
+                          </div>
+                          <div onClick={() => setConsents({...consents, marketing: !consents.marketing})} className={`apple-switch ${consents.marketing ? 'on' : ''}`}>
                              <div className="apple-switch-knob"></div>
                           </div>
                        </div>
@@ -1279,6 +1292,11 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
           onChange={v => setNewClientForm({ ...newClientForm, birthday: v })} />
             </Field>
           </div>
+          <label style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start', marginTop: '0.9rem', cursor: 'pointer' }}>
+            <input type="checkbox" checked={newClientForm.marketing} onChange={e => setNewClientForm({ ...newClientForm, marketing: e.target.checked })}
+              style={{ width: 18, height: 18, marginTop: 2, accentColor: '#222', flexShrink: 0 }} />
+            <span style={{ fontSize: '0.82rem', lineHeight: 1.45, color: '#64748b' }}>Клієнт погодився отримувати розсилки на пошту</span>
+          </label>
         </FormSection>
       </FormModal>
 

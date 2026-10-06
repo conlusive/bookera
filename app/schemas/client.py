@@ -12,6 +12,7 @@ class ClientBase(BaseModel):
     tags: Optional[List[str]] = None
     birthday: Optional[date] = None
     instagram: Optional[str] = None
+    marketing_consent: Optional[bool] = None
 
 
 class ClientCreate(ClientBase):
@@ -32,6 +33,7 @@ class ClientUpdate(BaseModel):
     formulas: Optional[str] = None
     consent_photo: Optional[bool] = None
     consent_procedure: Optional[bool] = None
+    marketing_consent: Optional[bool] = None
     balance: Optional[float] = None
 
     @field_validator("medical_pdf_url")

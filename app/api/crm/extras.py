@@ -633,8 +633,12 @@ async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
     stats = await client_stats(db, business_id, clients)
     today = _local_now().date()
     candidates = []
+    no_consent = 0
     for c in clients:
         if not c.email:
+            continue
+        if c.marketing_consent is False:
+            no_consent += 1  # явно не погодився на розсилки
             continue
         s = stats.get(c.id, {})
         if audience == "regular" and s.get("visits_count", 0) < 3:
@@ -648,7 +652,7 @@ async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
         candidates.append(c)
     # Відписаних і дублікатів пошти виключаємо тут, а не при відправці: число в інтерфейсі = число листів
     recipients, unsubscribed, invalid = mailing.unique_recipients(candidates, await mailing.suppressed_emails(db, business_id))
-    return clients, recipients, unsubscribed, invalid
+    return clients, recipients, unsubscribed, invalid, no_consent
 
 
 @router.get("/crm/campaigns/audience")
@@ -661,16 +665,17 @@ async def campaign_audience(
     from app.services import mailing
     await assert_section(db, current_user, business_id, "analytics")
     out = {}
-    unsubscribed = invalid = 0
+    unsubscribed = invalid = no_consent = 0
     for key in ("all", "regular", "lapsed"):
-        clients, recipients, unsub, inv = await _campaign_audience(db, business_id, key)
+        clients, recipients, unsub, inv, no_cons = await _campaign_audience(db, business_id, key)
         out[key] = len(recipients)
         if key == "all":
-            unsubscribed, invalid = unsub, inv
+            unsubscribed, invalid, no_consent = unsub, inv, no_cons
     out["total_clients"] = len(clients)
     out["without_email"] = sum(1 for c in clients if not c.email)
     out["unsubscribed"] = unsubscribed
     out["invalid_email"] = invalid
+    out["no_consent"] = no_consent
     out["quota"] = await mailing.quota(db, business_id)
     return out
 
@@ -723,11 +728,11 @@ async def send_campaign(
     if not business:
         raise HTTPException(status_code=404, detail="Заклад не знайдено")
 
-    clients, recipients, unsubscribed, invalid = await _campaign_audience(db, payload.business_id, payload.audience)
+    clients, recipients, unsubscribed, invalid, no_consent = await _campaign_audience(db, payload.business_id, payload.audience)
     if not recipients:
         return {"queued": 0, "campaign_id": None, "total_clients": len(clients),
                 "without_email": sum(1 for c in clients if not c.email), "unsubscribed": unsubscribed,
-                "invalid_email": invalid, "quota": await mailing.quota(db, payload.business_id)}
+                "invalid_email": invalid, "no_consent": no_consent, "quota": await mailing.quota(db, payload.business_id)}
 
     q = await mailing.quota(db, payload.business_id)
     if q["remaining_campaigns"] <= 0:
@@ -768,5 +773,6 @@ async def send_campaign(
         "without_email": sum(1 for c in clients if not c.email),
         "unsubscribed": unsubscribed,
         "invalid_email": invalid,
+        "no_consent": no_consent,
         "quota": await mailing.quota(db, payload.business_id),
     }

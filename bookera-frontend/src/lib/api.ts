@@ -106,6 +106,7 @@ export interface Client {
   formulas?: string;
   consent_photo?: boolean;
   consent_procedure?: boolean;
+  marketing_consent?: boolean | null;
   linked_client_ids?: number[];
   created_at?: string;
 }
@@ -761,6 +762,7 @@ export const api = {
     client_phone?: string;
     client_email?: string;
     direct_link_token?: string;
+    marketing_consent?: boolean;
     gift_certificate_code?: string;
     addon_service_ids?: number[];
   }): Promise<Appointment> {
@@ -917,7 +919,7 @@ export const api = {
     return authFetch(`/crm/clients?${query}`, token);
   },
 
-  async createClient(token: string, payload: { business_id: number; name: string; phone?: string; email?: string; notes?: string; allergies?: string; tags?: string[]; birthday?: string; instagram?: string }): Promise<Client> {
+  async createClient(token: string, payload: { business_id: number; name: string; phone?: string; email?: string; notes?: string; allergies?: string; tags?: string[]; birthday?: string; instagram?: string; marketing_consent?: boolean }): Promise<Client> {
     return authFetch(`/crm/clients`, token, { method: 'POST', body: JSON.stringify(payload) });
   },
 
@@ -1023,7 +1025,7 @@ export const api = {
   /** Скільки людей отримає розсилку для кожної аудиторії - до відправки. */
   async getCampaignAudience(token: string, businessId: number): Promise<{
     all: number; regular: number; lapsed: number; total_clients: number; without_email: number;
-    unsubscribed: number; invalid_email: number; quota: CampaignQuota;
+    unsubscribed: number; invalid_email: number; no_consent: number; quota: CampaignQuota;
   }> {
     return authFetch(`/crm/campaigns/audience?business_id=${businessId}`, token);
   },

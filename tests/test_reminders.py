@@ -28,6 +28,14 @@ async def _setup_with_appointment(client, headers, hours_ahead: float, name: str
     return business_id, r.json()["id"]
 
 
+@pytest.fixture(autouse=True)
+def _fake_smtp_keys(monkeypatch):
+    """Нагадування перевіряють наявність SMTP-ключів. Фіктивні лише для цієї перевірки: відправка підмінена,
+    а справжній модуль пошти в тестах вимкнений (conftest)."""
+    monkeypatch.setenv("SMTP_USER", "test@example.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "test-password")
+
+
 async def _run_reminders():
     """
     Запускає один прохід нагадувань із підміненою відправкою пошти.
@@ -36,8 +44,6 @@ async def _run_reminders():
     вході, щоб не робити марних запитів до бази в закладів без пошти.
     Сама відправка все одно підмінена.
     """
-    os.environ.setdefault("SMTP_USER", "test@example.com")
-    os.environ.setdefault("SMTP_PASSWORD", "test-password")
     from app.core.database import AsyncSessionLocal
     from app.services import reminders
 
@@ -163,8 +169,6 @@ async def test_failed_email_does_not_block_others(client, auth_headers):
     async def always_fail(**kwargs):
         raise RuntimeError("SMTP недоступний")
 
-    os.environ.setdefault("SMTP_USER", "test@example.com")
-    os.environ.setdefault("SMTP_PASSWORD", "test-password")
 
     with patch.object(reminders, "send_booking_reminder_email", side_effect=always_fail):
         async with AsyncSessionLocal() as db:

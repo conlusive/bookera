@@ -755,10 +755,15 @@ async def create_appointment(
                 phone=appointment_in.client_phone,
                 email=appointment_in.client_email,
                 tags=["Онлайн-запис"],
+                # Онлайн-запис - лише за згодою: без галочки клієнт у розсилки не потрапляє
+                marketing_consent=bool(appointment_in.marketing_consent),
             )
             db.add(crm_client)
             await db.flush()
             await award_points_for_new_client(db, business, appointment_in.client_phone, crm_client.id)
+        elif appointment_in.marketing_consent and crm_client.marketing_consent is not True:
+            # Згоду можна лише дати цим записом; мовчки забрати її (галочка не стоїть) - ні
+            crm_client.marketing_consent = True
         resolved_client_id = crm_client.id
 
     deposit_due = booking_rules.deposit_for(payments, final_price)

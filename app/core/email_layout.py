@@ -109,6 +109,12 @@ def layout(
     Ширина колонки 560px, відступи великі: лист має дихати. Єдиний стиль для всіх листів платформи.
     """
     quoted = business_name if "«" in business_name or "»" in business_name else "«" + business_name + "»"
+    # Листи самої платформи (підтвердження пошти тощо) йдуть без назви закладу - лише знак BookEra
+    name_row = f"""<tr>
+          <td style="padding:36px 0 24px;font-family:{FONT};font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{MUTED};">
+            {esc(business_name)}
+          </td>
+        </tr>""" if business_name else f'<tr><td style="padding:{"20px"} 0 0;font-size:0;line-height:0;">&nbsp;</td></tr>'
     intro_block = f"""
         <tr><td style="padding:0 0 28px;font-family:{FONT};font-size:17px;line-height:1.7;color:#3A403A;">{intro}</td></tr>
     """ if intro else ""
@@ -138,11 +144,7 @@ def layout(
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:100%;">
 
         <tr><td style="padding:52px 0 0;">{logo()}</td></tr>
-        <tr>
-          <td style="padding:36px 0 24px;font-family:{FONT};font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{MUTED};">
-            {esc(business_name)}
-          </td>
-        </tr>
+        {name_row}
 
         <tr><td style="padding:0 0 28px;font-family:{FONT};font-size:34px;font-weight:800;line-height:1.15;letter-spacing:-0.03em;color:{INK};">{esc(title)}</td></tr>
         {intro_block}

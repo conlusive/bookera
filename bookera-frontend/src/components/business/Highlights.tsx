@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { motion, MotionConfig } from 'motion/react';
 
 /**
@@ -58,41 +58,67 @@ const TILES: { h: string; s: string; art: ReactNode }[] = [
 
 export default function Highlights() {
   const rail = useRef<HTMLDivElement>(null);
-  const [edge, setEdge] = useState<'start' | 'mid' | 'end'>('start');
-  const scrollBy = (dir: 1 | -1) => rail.current?.scrollBy({ left: dir * 460, behavior: 'smooth' });
-  const onScroll = () => {
+  const idle = useRef<number>(0);
+  const N = TILES.length;
+
+  // Безкінечна стрічка: тричі той самий набір плиток, ми живемо в середньому. Коли прокрутка зупинилась
+  // біля краю, непомітно переставляємось на таку саму позицію в середньому наборі (плитки однакові, шва не видно).
+  const normalize = () => {
     const el = rail.current; if (!el) return;
-    setEdge(el.scrollLeft < 8 ? 'start' : el.scrollLeft + el.clientWidth > el.scrollWidth - 8 ? 'end' : 'mid');
+    const t = el.querySelectorAll<HTMLElement>('.tile');
+    if (t.length < N * 3) return;
+    const set = t[N].offsetLeft - t[0].offsetLeft;
+    let p = el.scrollLeft;
+    if (p < set * 0.5) p += set; else if (p >= set * 1.5) p -= set; else return;
+    el.style.scrollSnapType = 'none';
+    el.scrollLeft = p;
+    requestAnimationFrame(() => { el.style.scrollSnapType = ''; });
   };
+
+  useEffect(() => {
+    const el = rail.current; if (!el) return;
+    const t = el.querySelectorAll<HTMLElement>('.tile');
+    if (t.length >= N * 3) { el.style.scrollSnapType = 'none'; el.scrollLeft = t[N].offsetLeft - t[0].offsetLeft; requestAnimationFrame(() => { el.style.scrollSnapType = ''; }); }
+    return () => window.clearTimeout(idle.current);
+  }, [N]);
+
+  const onScroll = () => { window.clearTimeout(idle.current); idle.current = window.setTimeout(normalize, 140); };
+  const scrollBy = (dir: 1 | -1) => {
+    const el = rail.current; if (!el) return;
+    const t = el.querySelectorAll<HTMLElement>('.tile');
+    const step = t.length > 1 ? t[1].offsetLeft - t[0].offsetLeft : 460;
+    el.scrollBy({ left: dir * step, behavior: 'smooth' });
+  };
+  const tiles = [...TILES, ...TILES, ...TILES];
+
   return (
     <MotionConfig reducedMotion="user">
       <section className="hl">
         <div className="container hl-top">
           <h2>Що ще всередині.</h2>
           <div className="hl-nav">
-            <button type="button" onClick={() => scrollBy(-1)} disabled={edge === 'start'} aria-label="Назад"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></button>
-            <button type="button" onClick={() => scrollBy(1)} disabled={edge === 'end'} aria-label="Далі"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7" /></svg></button>
+            <button type="button" onClick={() => scrollBy(-1)} aria-label="Назад"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></button>
+            <button type="button" onClick={() => scrollBy(1)} aria-label="Далі"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7" /></svg></button>
           </div>
         </div>
-        <div className="hl-rail" ref={rail} onScroll={onScroll} tabIndex={0} aria-label="Можливості кабінету">
+        <motion.div className="hl-rail" ref={rail} onScroll={onScroll} tabIndex={0} aria-label="Можливості кабінету"
+          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }} transition={spring}>
           <div className="hl-pad" />
-          {TILES.map((t, i) => (
-            <motion.article key={t.h} className="tile" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '0px -60px 0px 0px' }}
-              transition={{ ...spring, delay: i * 0.06 }} whileHover={{ y: -6 }}>
+          {tiles.map((t, i) => (
+            <motion.article key={`${t.h}-${i}`} className="tile" aria-hidden={i < N || i >= N * 2 ? true : undefined} whileHover={{ y: -6 }} transition={spring}>
               <h3><b>{t.h}</b> <span>{t.s}</span></h3>
               <div className="tile-art">{t.art}</div>
             </motion.article>
           ))}
           <div className="hl-pad" />
-        </div>
+        </motion.div>
         <style jsx global>{`
           .hl { padding: 5rem 0 6rem; background: #fff; }
           .hl-top { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 2rem; }
           .hl-top h2 { font-size: clamp(2rem, 4.6vw, 3.4rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; color: #1D1D1F; margin: 0; }
           .hl-nav { display: flex; gap: 0.6rem; }
           .hl-nav button { width: 44px; height: 44px; border-radius: 50%; border: none; background: #E8E8ED; color: #1D1D1F; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background .2s ease, opacity .2s ease; }
-          .hl-nav button:hover:not(:disabled) { background: #d9d9df; }
-          .hl-nav button:disabled { opacity: .35; cursor: default; }
+          .hl-nav button:hover { background: #d9d9df; }
           .hl-nav button:focus-visible, .hl-rail:focus-visible { outline: 3px solid #1D1D1F; outline-offset: 3px; }
           .hl-rail { display: flex; gap: 1.25rem; overflow-x: auto; scroll-snap-type: x mandatory; padding: 0.5rem 0 1.5rem; scrollbar-width: none; }
           .hl-rail::-webkit-scrollbar { display: none; }

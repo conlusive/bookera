@@ -1,9 +1,10 @@
 import os
+import re
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import asyncio
-from app.core.email_layout import FONT, INK, button, card, esc, info_row, layout
+from app.core.email_layout import FONT, INK, MUTED, button, card, esc, info_row, layout
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -199,6 +200,43 @@ def _clean_header(value: str) -> str:
     return " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())
 
 
+_URL_RE = re.compile(r"https?://[^\s<>\"]+")
+
+
+def split_cta(message: str) -> tuple[str, str]:
+    """
+    Виокремлює посилання на запис: рядок виду «Запис: https://…» стає кнопкою, а не голим посиланням у тексті.
+    Повертає (текст без цього рядка, адреса кнопки). Якщо такого рядка немає - кнопки не буде.
+    """
+    lines = str(message).strip().splitlines()
+    for i, line in enumerate(lines):
+        m = _URL_RE.search(line)
+        if m and len(line.replace(m.group(0), "").strip(" :—-")) <= 20:
+            rest = "\n".join(lines[:i] + lines[i + 1:]).strip()
+            return rest, m.group(0).rstrip(".,)")
+    return str(message).strip(), ""
+
+
+def linkify(text: str) -> str:
+    """Екранує текст, робить клікабельними посилання; абзаци (порожній рядок) і переноси зберігає."""
+    out = []
+    last = 0
+    for m in _URL_RE.finditer(text):
+        url = m.group(0).rstrip(".,)")
+        out.append(esc(text[last:m.start()]))
+        out.append(f'<a href="{esc(url)}" style="color:{INK};text-decoration:underline;">{esc(url)}</a>')
+        last = m.start() + len(url)
+    out.append(esc(text[last:]))
+    html = "".join(out).replace("\r", "")
+    paragraphs = [p.replace("\n", "<br>") for p in html.split("\n\n") if p.strip()]
+    return "".join(f'<p style="margin:0 0 16px;">{p}</p>' for p in paragraphs)
+
+
+def _quoted(name: str) -> str:
+    """«Назва» в лапках; якщо лапки в назві вже є - без зайвих, щоб не вийшло «Студія «Лотос»»."""
+    return name if ("«" in name or "»" in name) else f"«{name}»"
+
+
 def build_campaign_message(
         to_email: str,
         client_name: str,
@@ -221,23 +259,30 @@ def build_campaign_message(
     from email.utils import formataddr
     subject = _clean_header(subject)
     business_name = _clean_header(business_name)
-    safe_message = esc(message).replace("\n", "<br>")
+    text_part, cta_url = split_cta(message)
+    first_name = (client_name or "").split()[0] if (client_name or "").strip() else ""
+    greeting = f"{first_name}, доброго дня!" if first_name else "Доброго дня!"
     body = f"""
-    <div style="font-family:{FONT};font-size:15px;line-height:1.65;color:{INK};">
-      {safe_message}
+    <div style="font-family:{FONT};font-size:16px;line-height:1.65;color:{INK};">
+      <p style="margin:0 0 16px;font-weight:600;">{esc(greeting)}</p>
+      <div>{linkify(text_part)}</div>
+      {button("Записатися онлайн", cta_url) if cta_url else ""}
+      <p style="margin:28px 0 28px;color:{MUTED};font-size:15px;">З повагою,<br>команда {esc(_quoted(business_name))}</p>
     </div>
     """
     html = layout(
         business_name=business_name,
         title=subject,
-        intro=f"{esc(client_name)}, вітаємо!" if client_name else "",
         body_html=body,
         unsubscribe_url=unsubscribe_url,
+        preheader=" ".join(text_part.split())[:110],
     )
     plain = (
-        (f"{client_name}, вітаємо!\n\n" if client_name else "")
-        + str(message).strip()
-        + f"\n\n--\nВи отримали цей лист, бо є клієнтом «{business_name}».\nВідписатись: {unsubscribe_url}\n"
+        f"{greeting}\n\n"
+        + text_part.strip()
+        + (f"\n\nЗаписатися онлайн: {cta_url}" if cta_url else "")
+        + f"\n\nЗ повагою,\nкоманда {_quoted(business_name)}"
+        + f"\n\n--\nВи отримуєте цей лист, бо є клієнтом {_quoted(business_name)}.\nВідписатися від розсилок: {unsubscribe_url}\n"
     )
 
     msg = MIMEMultipart("alternative")

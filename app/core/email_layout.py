@@ -94,6 +94,7 @@ def layout(
     body_html: str = "",
     footer_note: str = "",
     unsubscribe_url: str = "",
+    preheader: str = "",
 ) -> str:
     """
     Обгортка листа: шапка з назвою закладу, тіло, підпис.
@@ -122,11 +123,18 @@ def layout(
     unsub_block = f"""
       <tr>
         <td style="padding:20px 0 0;border-top:1px solid {LINE};font-family:{FONT};font-size:12px;line-height:1.5;color:#A5AEA3;">
-          Ви отримали цей лист, бо є клієнтом «{esc(business_name)}».
-          <a href="{unsubscribe_url}" style="color:{MUTED};text-decoration:underline;">Відписатись</a>
+          Ви отримуєте цей лист, бо є клієнтом {esc(business_name if "«" in business_name or "»" in business_name else "«" + business_name + "»")}.
+          Більше не хочете отримувати розсилки?
+          <a href="{unsubscribe_url}" style="color:{MUTED};text-decoration:underline;">Відписатися</a>
         </td>
       </tr>
     """ if unsubscribe_url else ""
+
+    # Прихований текст-«прев'ю»: його поштові клієнти показують поруч із темою у списку листів
+    preheader_block = (
+        f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:{PAGE_BG};">'
+        f"{esc(preheader)}{'&nbsp;&zwnj;' * 40}</div>"
+    ) if preheader else ""
 
     return f"""<!DOCTYPE html>
 <html lang="uk">
@@ -136,6 +144,7 @@ def layout(
   <title>{esc(title)}</title>
 </head>
 <body style="margin:0;padding:0;background:{PAGE_BG};">
+  {preheader_block}
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{PAGE_BG};">
     <tr>
       <td align="center" style="padding:32px 16px;">

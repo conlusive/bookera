@@ -41,9 +41,9 @@ const dayLabel = (s?: string | null) => utc(s)?.toLocaleDateString('uk-UA', { da
 const daysWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'день' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'дні' : 'днів');
 
 const TEMPLATES = (name: string, link: string) => [
-  { id: 'remind', label: 'Нагадування', subject: `Чекаємо вас у «${name}»`, message: `Вітаємо! Ви можете записатися до нас онлайн у зручний для вас час.${link ? `\n\nЗапис: ${link}` : ''}` },
-  { id: 'missed', label: 'Давно не бачились', subject: `Ми скучили за вами, ${name}`, message: `Давно не бачились! На цьому тижні є вільні вікна — будемо раді вас бачити.${link ? `\n\nЗапис: ${link}` : ''}` },
-  { id: 'news', label: 'Новинка', subject: `Новинка в «${name}»`, message: `У нас з'явилась нова послуга! Розкажемо деталі при записі.${link ? `\n\nЗапис: ${link}` : ''}` },
+  { id: 'remind', label: 'Нагадування', subject: `Чекаємо вас у ${name}`, message: `Запрошуємо вас до нас. Записатися можна онлайн у зручний для вас час.${link ? `\n\nЗапис: ${link}` : ''}` },
+  { id: 'missed', label: 'Давно не бачились', subject: 'Ми скучили за вами', message: `Давно не бачились! На цьому тижні в нас є вільні вікна, і ми будемо раді вас бачити.${link ? `\n\nЗапис: ${link}` : ''}` },
+  { id: 'news', label: 'Новинка', subject: `Новинка в ${name}`, message: `У нас з'явилась нова послуга. Деталі розповімо при записі або відповімо на цей лист.${link ? `\n\nЗапис: ${link}` : ''}` },
 ];
 
 export default function MarketingTab({ business }: { business: any }) {
@@ -104,6 +104,12 @@ export default function MarketingTab({ business }: { business: any }) {
 
   const templates = useMemo(() => TEMPLATES(business?.name || 'наш заклад', links?.direct_url || ''), [business?.name, links?.direct_url]);
   const reachable = counts ? counts[audience] : 0;
+  // Те саме правило, що в листі на сервері: рядок «Запис: https://…» стає кнопкою
+  const preview = useMemo(() => {
+    const lines = message.trim().split('\n');
+    const i = lines.findIndex(l => { const m = l.match(/https?:\/\/\S+/); return !!m && l.replace(m[0], '').replace(/[\s:—-]/g, '').length <= 20; });
+    return i < 0 ? { text: message.trim(), cta: false } : { text: [...lines.slice(0, i), ...lines.slice(i + 1)].join('\n').trim(), cta: true };
+  }, [message]);
 
   // ---------- дії ----------
   const pay = async () => {
@@ -352,7 +358,12 @@ export default function MarketingTab({ business }: { business: any }) {
                   <div className="mk-mail-card">
                     <div className="mk-mail-from">{business?.name}</div>
                     <div className="mk-mail-subj">{subject.trim() || `Новини від ${business?.name || 'закладу'}`}</div>
-                    <div className="mk-mail-body">{message.trim() || 'Тут з’явиться ваш текст — пишіть ліворуч…'}</div>
+                    <div className="mk-mail-body">
+                      <b>Доброго дня!</b>
+                      {'\n\n'}{preview.text || 'Тут з’явиться ваш текст — пишіть ліворуч…'}
+                      {preview.cta && <span className="mk-mail-btn">Записатися онлайн</span>}
+                      <span className="mk-mail-sign">З повагою,{'\n'}команда {business?.name}</span>
+                    </div>
                   </div>
                 </div>
                 </div>
@@ -587,6 +598,8 @@ export default function MarketingTab({ business }: { business: any }) {
         .mk-mail-card { border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; padding: 1.2rem 1.3rem; }
         .mk-mail-from { font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.3rem; }
         .mk-mail-subj { font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid #e2e8f0; }
+        .mk-mail-btn { display: block; width: fit-content; margin: 1rem auto 0; background: #222; color: #fff; font-weight: 600; padding: 0.55rem 1.2rem; border-radius: 9px; }
+        .mk-mail-sign { display: block; margin-top: 1.1rem; color: #64748b; }
         .mk-mail-body { white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; color: #334155; min-height: 120px; overflow-wrap: anywhere; }
         .mk-text { min-height: 190px; resize: vertical; line-height: 1.5; }
         .mk-send-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 0.9rem; flex-wrap: wrap; }

@@ -496,7 +496,9 @@ async def lock_time_slot(
         start_time=request.start_time,
         end_time=requested_end_time,
         status="blocked",
-        source=str(getattr(request, "source", BookingSourceEnum.DIRECT)),
+        # Справжнє джерело сервер визначає при підтвердженні запису (за токеном); тут - лише чесне значення за замовчуванням.
+        # Раніше str(enum) давав у базі рядок «BookingSourceEnum.DIRECT».
+        source=BookingSourceEnum.MARKETPLACE.value,
         price=service.price,
         created_at=now,
         expires_at=now + timedelta(minutes=LOCK_TIMEOUT_MINUTES),

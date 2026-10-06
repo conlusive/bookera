@@ -1002,12 +1002,17 @@ const formatRole = (role?: string) => {
     const directLinkToken = getDirectLinkToken(salon.id);
 
     try {
+      // Той самий ідентифікатор, що й у підтвердженні запису (handleConfirmBooking): сервер знаходить
+      // власний резерв слота за session_token. Раніше тут бралось лише userId зі сховища, а при
+      // підтвердженні - ще й користувач сесії; якщо сховище було порожнім, резерв не знаходився
+      // і людина бачила «Цей час щойно зайняли» через власний же резерв.
+      const { data: { user: sessionUser } } = await supabase.auth.getUser();
       const lockRes = await api.lockTimeSlot({
         business_id: salon.id,
         service_id: selectedService.id,
         start_time: `${selectedDate}T${selectedTime}:00`,
         master_id: selectedMasterId ? String(selectedMasterId) : "0",
-        session_token: userId || undefined,
+        session_token: sessionUser?.id || userId || undefined,
         direct_link_token: directLinkToken,
         duration_minutes: totalCalculatedDuration,
         addon_service_ids: selectedAddonIds.length > 0 ? selectedAddonIds : undefined,

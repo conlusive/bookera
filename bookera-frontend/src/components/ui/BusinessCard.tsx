@@ -191,7 +191,7 @@ export default function BusinessCard({
 
         {/* РЕАЛЬНІ СЛОТИ ЧАСУ НА СЬОГОДНІ */}
         {showTimeSlots ? (
-          <div className="card-foot" style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+          <div className={`card-foot${salonSlots.length > 0 ? '' : ' card-foot-empty'}`} style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
             <span style={{ fontSize: '0.72rem', color: '#8fae92', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em', flex: 'none' }}>
               Сьогодні:
             </span>
@@ -276,6 +276,11 @@ export function BusinessCardStyles() {
            Підйом усієї картки зсуває сусідні рядки й ламає сітку. */
         .apple-biz-card:hover .card-photo-img {
           transform: scale(1.04);
+        }
+        /* Телефон: плитки нижчі, а порожній рядок «Немає слотів» не займає місця. */
+        @media (max-width: 640px) {
+          .card-photo-box { aspect-ratio: 16 / 10; }
+          .card-foot-empty { display: none; }
         }
         .card-photo-img {
           transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);

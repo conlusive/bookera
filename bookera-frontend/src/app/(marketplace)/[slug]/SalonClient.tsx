@@ -1432,6 +1432,8 @@ const formatRole = (role?: string) => {
           .sl-h1 { font-size: 1.85rem !important; }
           .sl-main { grid-template-columns: minmax(0, 1fr) !important; gap: 2rem !important; }
           .sl-stack { gap: 1.75rem !important; }
+          .footer-support-col { grid-column: 1 / -1; }
+          .footer-support { flex-direction: row !important; flex-wrap: wrap; gap: 0 1.5rem !important; }
           .sl-sec { padding-top: 1.5rem !important; }
           .sl-empty { display: none; }
           .sl-about:not(.open) { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
@@ -2299,7 +2301,7 @@ const formatRole = (role?: string) => {
                               </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                              <div style={{ fontWeight: '800', color: '#1D1D1F', fontSize: '1.25rem' }}>{service.price} ₴</div>
+                              <div style={{ fontWeight: '800', color: '#1D1D1F', fontSize: '1.25rem', whiteSpace: 'nowrap' }}>{service.price} ₴</div>
                               <button className="service-btn" onClick={() => openModal(service)}>Вибрати</button>
                             </div>
                           </div>
@@ -2352,11 +2354,11 @@ const formatRole = (role?: string) => {
             <div className="sl-sec" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '2.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <h2 className="section-title">Відгуки клієнтів</h2>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {reviews.length > 0 && <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button className={`review-filter-btn ${reviewFilter === 'all' ? 'active' : ''}`} onClick={() => { setReviewFilter('all'); setCurrentReviewPage(1); }}>Всі</button>
                   <button className={`review-filter-btn ${reviewFilter === 'positive' ? 'active' : ''}`} onClick={() => { setReviewFilter('positive'); setCurrentReviewPage(1); }}>Позитивні</button>
                   <button className={`review-filter-btn ${reviewFilter === 'negative' ? 'active' : ''}`} onClick={() => { setReviewFilter('negative'); setCurrentReviewPage(1); }}>Негативні</button>
-                </div>
+                </div>}
               </div>
 
               {/* Відгук - прямо тут, але лише про справжній візит: сторінка
@@ -2884,9 +2886,9 @@ const formatRole = (role?: string) => {
             </div>
 
             {/* 4. ПІДТРИМКА */}
-            <div>
+            <div className="footer-support-col">
               <div className="footer-col-title">Підтримка</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+              <div className="footer-support" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                 <Link href="#" className="footer-nav-link">Служба турботи</Link>
                 <Link href="/#faq" className="footer-nav-link">Поширені запитання</Link>
                 <Link href="#" className="footer-nav-link">Безпека клієнтів</Link>

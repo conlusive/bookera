@@ -113,7 +113,7 @@ export default function BusinessShowcase() {
         .bz-shot { display: block; width: 100%; height: auto; }
         /* Телефон: знімок заповнює екран повністю, низ рамки ховається за краєм секції */
         .bz-phone {
-          position: absolute; left: -1.5rem; bottom: -7.2rem; width: clamp(130px, 14vw, 165px);
+          position: absolute; right: 2.5rem; bottom: -8rem; width: clamp(190px, 19vw, 250px);
           padding: 7px; border-radius: 36px; background: #16211A;
           box-shadow: 0 30px 60px -18px rgba(22, 33, 26, 0.55), inset 0 0 0 1.5px rgba(255,255,255,0.12);
         }
@@ -124,7 +124,7 @@ export default function BusinessShowcase() {
         @media (max-width: 999px) {
           .bz-stage { min-height: 0; justify-content: center; padding-top: 0.5rem; }
           .bz-browser { display: none; }
-          .bz-phone { position: relative; left: 0; bottom: 0; margin: 0.5rem 0 -4.5rem; width: min(250px, 66vw); }
+          .bz-phone { position: relative; left: 0; right: auto; bottom: 0; margin: 0.5rem 0 -4.5rem; width: min(250px, 66vw); }
         }
 
         /* Поява одним рухом, коли блок у полі зору */

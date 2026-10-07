@@ -1194,7 +1194,7 @@ const handleSaveShifts = async () => {
           .cl-status { grid-area: status; justify-self: end; }
         }
         @media (min-width: 861px) and (max-width: 1600px) { .cal-toolbar__count { display: none !important; } }
-        @media (min-width: 861px) { .cal-view-menu { display: none !important; } }
+        .cal-toolbar__right { display: none !important; }
         @media (max-width: 860px) {
           .cal-left { display: none !important; }
           /* Панель у два рядки: зверху дата зі стрілками і шестерня, знизу майстри й вигляд */
@@ -1644,7 +1644,7 @@ const handleSaveShifts = async () => {
                 {([['grid', 'Сітка'], ['list', 'Список']] as const).map(([mode, label]) => (
                   <button key={mode} type="button" title={label} aria-label={label} aria-pressed={dayLayout === mode}
                     onClick={() => { setDayLayout(mode); try { localStorage.setItem('bookera_dayLayout', mode); } catch { /* */ } }}
-                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0.4rem 0.4rem 0.3rem', display: 'flex', alignItems: 'center', color: dayLayout === mode ? '#0f172a' : '#b6bfcb', borderBottom: `2px solid ${dayLayout === mode ? '#0f172a' : 'transparent'}` }}>
+                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0.4rem 0.4rem 0.3rem', display: 'flex', alignItems: 'center', color: dayLayout === mode ? '#0f172a' : '#b6bfcb' }}>
                     {mode === 'grid' ? (
                       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
                     ) : (
@@ -1782,10 +1782,10 @@ const handleSaveShifts = async () => {
                             </div>
                           );
                         })}
-                        {hidden > 0 && (
-                          <button type="button" onClick={() => setListExpanded(prev => ({ ...prev, [expKey]: true }))}
+                        {sec.apps.length > LIST_CAP && (
+                          <button type="button" onClick={() => setListExpanded(prev => ({ ...prev, [expKey]: !open }))}
                             style={{ width: '100%', padding: '0.7rem 0', border: 'none', background: 'transparent', color: '#475569', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', borderBottom: '1px solid #f4f6f8' }}>
-                            Показати ще {hidden}
+                            {open ? 'Згорнути' : `Показати ще ${hidden}`}
                           </button>
                         )}
                       </section>

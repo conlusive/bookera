@@ -1505,7 +1505,7 @@ export default function BusinessCabinet() {
 
         {activeTab === 'Marketing' && <MarketingTab business={business} preset={marketingPreset} services={services} />}
 
-        {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} initialView={settingsTarget} />}
+        {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} initialView={settingsTarget} onTargetUsed={() => setSettingsTarget(undefined)} />}
 
         {clipboardApp && (
            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, background: '#eff6ff', borderBottom: '1px solid #bfdbfe', padding: '0.6rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 101, animation: 'slideDown 0.2s ease-out' }}>

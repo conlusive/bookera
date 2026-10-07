@@ -14,6 +14,7 @@ import FinancePanel from '@/components/cabinet/FinancePanel';
 interface SettingsTabProps {
   onNavigate?: (tab: string) => void;
   initialView?: string;
+  onTargetUsed?: () => void;
   business: any;
   Icons?: any;
 }
@@ -46,7 +47,7 @@ const SETTINGS_CARDS: Record<string, { id: string; title: string; desc: string; 
 const SETTINGS_ORDER = ['profile', 'booking', 'payments', 'security', 'notifications', 'finance', 'billing'];
 const businessSettingsCards = Object.values(SETTINGS_CARDS);
 
-export default function SettingsTab({ business, onNavigate, initialView }: SettingsTabProps) {
+export default function SettingsTab({ business, onNavigate, initialView, onTargetUsed }: SettingsTabProps) {
   const { showToast } = useToast();
 
   // 🟢 Відновлення активного розділу при перезавантаженні сторінки
@@ -97,6 +98,7 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
   useEffect(() => {
     if (initialView && initialView !== 'main' && ['profile', 'payments', 'finance', 'billing', 'notifications', 'booking', 'security'].includes(initialView)) {
       setSettingsView(initialView as any);
+      onTargetUsed?.();  // розділ відкрито - наступного разу знову почнемо із загального списку
     }
     try { localStorage.removeItem('bookera_settings_view'); } catch {}
     setIsReady(true);

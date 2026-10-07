@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db
 from app.core.auth import CurrentUser, assert_section, get_current_user
 from app.core.rate_limit import rate_limit
-from app.models import Business, Promotion, Service
+from app.models import Promotion, Service
 from app.services import promotions as promo_service
 from app.services.audit import record as _audit
 

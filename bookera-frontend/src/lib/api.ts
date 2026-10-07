@@ -408,6 +408,8 @@ export interface PriceQuote {
   promotion: { id: number; name: string; discount_percent: number; label: string } | null;
 }
 
+const hoursCache = new Map<number, { at: number; promise: Promise<BusinessHoursItem[]> }>();
+
 async function publicFetch(path: string, options: RequestInit & { revalidate?: number } = {}) {
   const { revalidate, ...rest } = options;
   // Живий GET у браузері (без кешу сторінки): ділимо запит між компонентами
@@ -936,11 +938,18 @@ export const api = {
   },
 
   async setBusinessHours(token: string, businessId: number, hours: BusinessHoursItem[]): Promise<BusinessHoursItem[]> {
+    hoursCache.delete(businessId);  // після збереження наступне читання бере свіже
     return authFetch(`/crm/businesses/${businessId}/hours`, token, { method: 'PUT', body: JSON.stringify(hours) });
   },
 
+  /** Години роботи: кабінет читає їх у кількох місцях при вході (сторінка, календар, команда) - тримаємо відповідь на пів хвилини. */
   async getBusinessHours(businessId: number): Promise<BusinessHoursItem[]> {
-    return publicFetch(`/crm/businesses/${businessId}/hours`);
+    const hit = hoursCache.get(businessId);
+    if (hit && Date.now() - hit.at < 30_000) return hit.promise;
+    const promise: Promise<BusinessHoursItem[]> = publicFetch(`/crm/businesses/${businessId}/hours`);
+    hoursCache.set(businessId, { at: Date.now(), promise });
+    promise.catch(() => hoursCache.delete(businessId));
+    return promise;
   },
 
   // === CRM: ПОСЛУГИ ===

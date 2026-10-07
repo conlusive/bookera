@@ -144,13 +144,9 @@ export default function CalendarTab({ business, team = [], services = [], refres
     // Завантажуємо актуальний розклад із business_hours
     void (async () => {
       try {
-        const token = await getAuthToken();
+        const data = await api.getBusinessHours(business.id);
         const dayNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', "П'ятниця", 'Субота', 'Неділя'];
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/crm/businesses/${business.id}/hours`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (res.ok) {
-          const data = await res.json();
+        {
           if (Array.isArray(data) && data.length > 0) {
             const loaded = dayNames.map((day, idx) => {
               const item = data.find((h: any) => h.weekday === idx);
@@ -340,19 +336,7 @@ const handleSaveShifts = async () => {
         close_time: s.end ? s.end.substring(0, 5) : '20:00',
       }));
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/crm/businesses/${business.id}/hours`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(hoursPayload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Не вдалося зберегти графік');
-      }
+      await api.setBusinessHours(token, business.id, hoursPayload);
 
       showToast('Графік змін закладу збережено', 'success');
       setShowShiftsModal(false);
@@ -1246,7 +1230,7 @@ const handleSaveShifts = async () => {
         .fab-button:active { transform: scale(0.96); }
         .fab-button svg { width: 24px; height: 24px; }
         .cal-list-inner { padding: 0 1.75rem 6rem; }
-        .cal-list-row { padding-left: 0.75rem !important; padding-right: 0.25rem !important; display: grid; grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.6fr) 7rem 8.5rem; column-gap: 1.25rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f4f6f8; cursor: pointer; }
+        .cal-list-row { content-visibility: auto; contain-intrinsic-size: auto 62px; padding-left: 0.75rem !important; padding-right: 0.25rem !important; display: grid; grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.6fr) 7rem 8.5rem; column-gap: 1.25rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f4f6f8; cursor: pointer; }
         @media (hover: hover) { .cal-list-row:hover { background: #fafbfc; } }
         .cal-list-row.with-master { grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 0.9fr) 7rem 8.5rem; }
         .cl-status { text-align: right; }

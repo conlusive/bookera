@@ -1,7 +1,7 @@
 'use client';
 
 import ProfileMenu from '@/components/ui/ProfileMenu';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
@@ -40,6 +40,20 @@ const TabLoading = () => (
     Завантаження…
   </div>
 );
+// Один список завантажувачів: і для dynamic(), і для попереднього підвантаження. Вкладка відкривається миттєво,
+// якщо її код уже завантажено: на простої після входу й при наведенні на пункт меню.
+const tabLoaders: Record<string, () => Promise<unknown>> = {
+  Stats: () => import('@/components/cabinet/StatsTab'),
+  Clients: () => import('@/components/cabinet/ClientsTab'),
+  Services: () => import('@/components/cabinet/ServicesTab'),
+  Team: () => import('@/components/cabinet/TeamTab'),
+  Inventory: () => import('@/components/cabinet/InventoryTab'),
+  Marketing: () => import('@/components/cabinet/MarketingTab'),
+  Settings: () => import('@/components/cabinet/SettingsTab'),
+  Storefront: () => import('@/components/cabinet/StorefrontTab'),
+};
+const preloadTab = (id: string) => { void tabLoaders[id]?.().catch(() => {}); };
+
 const StatsTab = dynamic(() => import('@/components/cabinet/StatsTab'), { ssr: false, loading: TabLoading });
 const ClientsTab = dynamic(() => import('@/components/cabinet/ClientsTab'), { ssr: false, loading: TabLoading });
 const ServicesTab = dynamic(() => import('@/components/cabinet/ServicesTab'), { ssr: false, loading: TabLoading });
@@ -537,6 +551,20 @@ export default function BusinessCabinet() {
     void loadCabinetData();
     return () => { isMounted = false; };
   }, []);
+
+  // Коли кабінет завантажився й браузер вільний - підтягуємо код найчастіших вкладок, щоб перший клік не чекав мережі
+  useEffect(() => {
+    if (loading) return;
+    const run = () => {
+      ['Clients', 'Services', 'Team', 'Marketing'].forEach(preloadTab);
+      // Список клієнтів теж заздалегідь: вкладка «Клієнти» відкривається одразу, а не після запиту
+      if (business?.id && clientsReadyFor !== String(business.id)) void fetchClientsFromDB(business.id);
+    };
+    const w = window as any;
+    const id = w.requestIdleCallback ? w.requestIdleCallback(run, { timeout: 4000 }) : setTimeout(run, 2000);
+    return () => { if (w.cancelIdleCallback && w.requestIdleCallback) w.cancelIdleCallback(id); else clearTimeout(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, business?.id]);
 
   useEffect(() => {
     async function fetchAppointments() {
@@ -1272,7 +1300,12 @@ export default function BusinessCabinet() {
             return (
               <div key={item.id} className="nav-item-wrapper" style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
                 <button
-                  onClick={() => { setActiveTab(item.id); setMobileNavOpen(false); localStorage.setItem('bookera_activeTab', item.id); }}
+                  onMouseEnter={() => preloadTab(item.id)} onFocus={() => preloadTab(item.id)} onTouchStart={() => preloadTab(item.id)}
+                  onClick={() => {
+                    // У переході: поки код вкладки готується, лишається попередня вкладка, а не мигає «Завантаження…» із затримкою показу
+                    startTransition(() => setActiveTab(item.id));
+                    setMobileNavOpen(false); localStorage.setItem('bookera_activeTab', item.id);
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

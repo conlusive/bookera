@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, AuditEvent, AuditSummary } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
-import HelpTip from '@/components/ui/HelpTip';
 import HintCard from '@/components/ui/HintCard';
 
 /**
@@ -419,10 +418,6 @@ export default function AuditLog({ businessId }: { businessId: number }) {
         .al-bar i { display: block; height: 5px; border-radius: 3px; background: #e2e8f0; margin-top: 4px; overflow: hidden; } .al-bar em { display: block; height: 100%; border-radius: 3px; }
         .al-person { display: flex; justify-content: space-between; align-items: center; width: calc(100% + 0.8rem); margin: 0 -0.4rem; padding: 0.4rem; border: none; background: none; font-family: inherit; font-size: 0.8rem; color: #0f172a; cursor: pointer; border-radius: 8px; text-align: left; }
         .al-person:hover, .al-person.on { background: #fff; } .al-person small { display: block; font-size: 0.7rem; color: #94a3b8; } .al-person b { font-variant-numeric: tabular-nums; }
-        .al-hint { flex: none; margin: 0.4rem 1.2rem 1.2rem; background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
-        .al-hint-t { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
-        .al-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
-        .al-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
       `}</style>
     </div>
   );

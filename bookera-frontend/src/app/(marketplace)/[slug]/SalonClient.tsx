@@ -176,7 +176,6 @@ export default function SalonClient({
   // --- Стейт юзера ---
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
-  const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
   const [userId, setUserId] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -365,9 +364,6 @@ export default function SalonClient({
       setUserName(displayName);
       setUserRole(storedRole);
       setUserId(storedId);
-      const nameParts = displayName.split(' ');
-      const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-      setInitials(init.toUpperCase());
     }
   }, []);
 
@@ -414,7 +410,6 @@ export default function SalonClient({
    * починається лише коли вона натискає «Далі» на кроці часу.
    */
   const [preferredTime, setPreferredTime] = useState<{ date: string; time: string } | null>(null);
-  const [preferredMissed, setPreferredMissed] = useState<string | null>(null);
   // Для якої послуги, майстра й дати завантажені поточні слоти.
   // Без цього перевірка години могла спрацювати на СТАРИХ слотах -
   // у тому самому кадрі, коли людина дійшла до кроку часу, а свіжі
@@ -455,15 +450,11 @@ export default function SalonClient({
     );
     if (free) {
       setSelectedTime(preferredTime.time);
-      setPreferredMissed(null);
-    } else {
-      setPreferredMissed(preferredTime.time);
     }
     setPreferredTime(null);
   }, [preferredTime, currentStep, isLoadingSlots, slotItems, selectedDate, slotsKey, selectedService?.id, selectedMasterId]);
 
   // Людина обрала інший час - попередження про зайняту годину зайве.
-  useEffect(() => { if (selectedTime) setPreferredMissed(null); }, [selectedTime]);
 
   useEffect(() => {
     if (isModalOpen && selectedDate && selectedService && currentStep === 3) {
@@ -899,9 +890,6 @@ const formatRole = (role?: string) => {
         setUserRole(finalRole);
         setUserId(data.user.id);
         if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
-        const nameParts = finalName.split(' ');
-        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-        setInitials(init.toUpperCase());
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
@@ -948,7 +936,6 @@ const formatRole = (role?: string) => {
 
         setUserName(targetFullName);
         setUserRole('client');
-        setInitials((regFirstName[0] + (regLastName[0] || '')).toUpperCase());
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
@@ -1004,7 +991,6 @@ const formatRole = (role?: string) => {
 
   const closeModal = async () => {
     setPreferredTime(null);
-    setPreferredMissed(null);
     setIsModalOpen(false);
     if (pendingBookingId && !bookingSuccess) {
       try {

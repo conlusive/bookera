@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
-import HelpTip from '@/components/ui/HelpTip';
 import HintCard from '@/components/ui/HintCard';
 import { notify } from '@/lib/feedback';
 import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
@@ -54,8 +53,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   // НОВЕ: Стани для редагування контактів прямо з картки
   const [editingInstagram, setEditingInstagram] = useState('');
   const [editingBirthday, setEditingBirthday] = useState('');
-
-  const [newTagInput, setNewTagInput] = useState('');
 
   const [clientCurrentPage, setClientCurrentPage] = useState(1);
   const clientsPerPage = 12;
@@ -480,7 +477,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     setEditingInstagram(client.instagram || '');
     setEditingBirthday(client.birthday || '');
     setConsents({ photo: client.consent_photo || false, procedure: client.consent_procedure || false, marketing: client.marketing_consent === true });
-    setNewTagInput('');
     setActiveCardTab('info');
     if (saveToStorage && typeof window !== 'undefined') sessionStorage.setItem('openedClientId', client.id);
   };
@@ -684,12 +680,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-side-row b { font-weight: 700; color: #0f172a; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .cl-side-bd { display: inline-flex; align-items: center; gap: 0.35rem; }
         .cl-side-bd .cl-cake { margin-left: 0; }
-        .cl-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
-        .cl-hint-t svg { width: 14px; height: 14px; }
-        .cl-hint-t { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
-        .cl-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
-        .cl-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
-        .cl-hint button { margin-top: 0.6rem; border: none; background: none; padding: 0; font-family: inherit; font-size: 0.78rem; font-weight: 700; color: #7c3aed; cursor: pointer; }
         @media (max-width: 1100px) { .cl-grid { grid-template-columns: 1fr; } .cl-side { display: none; } .cl-main { border-right: none; } }
         @media (max-width: 860px) {
           .cl-toolbar { padding: 0.75rem 1rem 0 !important; flex-direction: column; align-items: stretch !important; gap: 0.6rem !important; }
@@ -707,7 +697,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
           .cl-toolbar-left .cl-chip { height: 42px; border-radius: 10px; }
           .cl-actions-top { justify-content: stretch; flex-wrap: nowrap; }
           .cl-actions-top > button { flex: 1 1 0; min-width: 0; padding-left: 0.5rem; padding-right: 0.5rem; white-space: nowrap; }
-          .cl-pills { padding: 0.75rem 1rem !important; }
           .category-pill { padding: 0.55rem 1.1rem; }
           .cl-main-inner { padding: 0 1rem 1rem !important; }
           .service-table, .service-table tbody { display: block; }
@@ -734,7 +723,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }
         .cl-search .clean-input { padding-left: 2.4rem; border-radius: 10px; height: 40px; box-sizing: border-box; }
         .cl-toolbar-left .cl-chip { height: 40px; padding: 0 1rem; border-radius: 10px; }
-        .cl-pills { display: flex; gap: 8px; overflow-x: auto; padding: 1rem 2rem; border-bottom: 1px solid #f1f5f9; }
         .cl-count { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
         .cl-who { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
         .cl-who b { display: block; font-size: 0.9rem; font-weight: 600; color: #0f172a; }

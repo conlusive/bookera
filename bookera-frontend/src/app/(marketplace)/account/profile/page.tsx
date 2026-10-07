@@ -105,7 +105,6 @@ function ProfileContent() {
 
   // --- Дані з БД ---
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<any[]>([]);
 
   // --- Форма налаштувань ---
@@ -220,7 +219,6 @@ function ProfileContent() {
         console.error("Помилка завантаження бронювань:", err);
         // Порожній список і помилка виглядають однаково, але означають
         // різне. Кажемо прямо, інакше людина вважатиме, що записів немає.
-        setAppointmentsError(err?.message || 'Не вдалося завантажити записи');
       }
 
       // 3. Улюблені заклади

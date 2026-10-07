@@ -600,7 +600,6 @@ export default function InventoryTab({ business }: any) {
         .iv-main-inner { width: 100%; max-width: 1200px; padding: 0 1.25rem 1rem; box-sizing: border-box; }
         .iv-side { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
         .iv-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 1.2rem 1.2rem 0.4rem; }
-        .iv-side .iv-hint { flex: none; margin: 0.4rem 1.2rem 1.2rem; }
         /* Телефон: у верхньому рядку вкладки «Витрати / Склад» і кнопка додавання, нижче пошук і період */
         @media (max-width: 860px) {
           .iv-toolbar { padding: 0.75rem 1rem 0; row-gap: 0.6rem; }
@@ -700,10 +699,6 @@ export default function InventoryTab({ business }: any) {
         .iv-rs-note { margin: 0 0 0.9rem; font-size: 0.82rem; line-height: 1.45; color: #64748b; }
         .iv-rs-note.small { margin: 0.35rem 0 0 1.7rem; font-size: 0.75rem; }
         .iv-rs-result { margin: 0.2rem 0 0.8rem; padding: 0.55rem 0.8rem; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 0.85rem; }
-        .iv-hint { background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
-        .iv-hint-t { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
-        .iv-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
-        .iv-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
 
         .iv-check { display: flex; align-items: center; gap: 0.6rem; font-size: 0.875rem; color: #334155; cursor: pointer; }
         .iv-moves { display: flex; flex-direction: column; }

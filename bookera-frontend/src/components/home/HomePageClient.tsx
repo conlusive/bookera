@@ -420,10 +420,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   const [loginPassword, setLoginPassword] = useState('');
   const [regFirstName, setRegFirstName] = useState('');
   const [regLastName, setRegLastName] = useState('');
-  const [regPhone, setRegPhone] = useState('');
+  const [regPhone] = useState('');
 
   const [userName, setUserName] = useState<string | null>(null);
-  const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   // Фото з сервера: коли localStorage порожній (інша вкладка/пристрій) чи застаріле
@@ -439,7 +438,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   const [appliedSearch, setAppliedSearch] = useState('');
   const [availableBizIds, setAvailableBizIds] = useState<number[] | null>(null);
   const [distanceById, setDistanceById] = useState<Record<number, number>>({});
-  const [nearbyOrder, setNearbyOrder] = useState<number[]>([]);
 
   /**
    * Відстань до закладу в людському вигляді.
@@ -477,7 +475,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   const distanceHint = (bizId: number): string =>
     isRoadDistance[bizId] ? 'Відстань дорогою від вашого місця' : 'По прямій: маршрут тимчасово недоступний';
   const [nearbySlots, setNearbySlots] = useState<Record<number, string[]>>({});
-  const [isLoadingNearbySlots, setIsLoadingNearbySlots] = useState<boolean>(true);
 
   const [isWhatOpen, setIsWhatOpen] = useState(false);
   const [isWhereOpen, setIsWhereOpen] = useState(false);
@@ -618,9 +615,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         const displayName = resolveDisplayName({ full_name: storedName, email: storedName });
         setUserName(displayName);
         setUserRole(storedRole);
-        const nameParts = displayName.split(' ');
-        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-        setInitials(init.toUpperCase());
       }
 
       // Імʼя в памʼяті браузера могло застаріти: у тих, хто увійшов
@@ -634,8 +628,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         localStorage.setItem('userName', fresh);
         setIsLoggedIn(true);
         setUserName(fresh);
-        const parts = fresh.split(' ');
-        setInitials((parts.length > 1 ? parts[0][0] + parts[1][0] : parts[0][0]).toUpperCase());
       })();
 
       const handleStorageUpdate = () => {
@@ -803,7 +795,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
         setUserName(finalName);
         setUserRole(finalRole);
-        setInitials(finalName.substring(0, 2).toUpperCase());
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
@@ -851,8 +842,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
 
         setUserName(targetFullName);
         setUserRole('client');
-        const initialsStr = targetFullName.length >= 2 ? targetFullName.substring(0, 2).toUpperCase() : 'К';
-        setInitials(initialsStr);
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
@@ -910,7 +899,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
         //
         // Лишаємо один розрахунок (нижче, з координат у списку): він
         // працює завжди, а цей - лише коли обрана дата.
-        setNearbyOrder(availableBizs.map((b: any) => b.id));
       } catch (error) {
         console.warn("Бекенд недоступний:", error);
         setAvailableBizIds(null);
@@ -1240,7 +1228,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
     })();
 
     async function loadRealSlots() {
-      setIsLoadingNearbySlots(true);
       const slotsMap: Record<number, string[]> = {};
 
       // ОДИН запит на всі картки замість окремого на кожну.
@@ -1262,7 +1249,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
       if (isMounted) {
         nearbySlotTargets.forEach((b: any) => slotsFetched.current.add(Number(b.id)));
         setNearbySlots(slotsMap);
-        setIsLoadingNearbySlots(false);
         setSlotsLoadedKey(nearbyIdsKey);
       }
     }

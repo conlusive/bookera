@@ -54,7 +54,6 @@ export default function SettingsTab({ business, onNavigate, initialView, onTarge
   const [settingsView, setSettingsView] = useState<'main' | 'profile' | 'payments' | 'finance' | 'billing' | 'notifications' | 'booking' | 'security'>('main');
   // Стан автозбереження - щоб було видно, що зміна дійшла до сервера
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [isReady, setIsReady] = useState(false);
   const [showPlansView, setShowPlansView] = useState(false);
 
   // СТАНИ НАЛАШТУВАНЬ
@@ -101,7 +100,6 @@ export default function SettingsTab({ business, onNavigate, initialView, onTarge
       onTargetUsed?.();  // розділ відкрито - наступного разу знову почнемо із загального списку
     }
     try { localStorage.removeItem('bookera_settings_view'); } catch {}
-    setIsReady(true);
   }, [initialView]);
 
   // 🟢 3. Завантаження даних бізнесу (залежить лише від business?.id, щоб не скидати змінені поля)

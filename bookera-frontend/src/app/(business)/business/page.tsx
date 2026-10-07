@@ -53,7 +53,6 @@ export default function BusinessLandingPage() {
   const [regLastName, setRegLastName] = useState('');
 
   const [userName, setUserName] = useState<string | null>(null);
-  const [initials, setInitials] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('client');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   // Фото з сервера: коли localStorage порожній (інша вкладка/пристрій) чи застаріле
@@ -101,9 +100,6 @@ export default function BusinessLandingPage() {
           }
         })();
 
-        const nameParts = displayName.split(' ');
-        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-        setInitials(init.toUpperCase());
       }
 
       // Слухач миттєвого оновлення аватарки при зміні в іншій вкладці
@@ -222,9 +218,6 @@ export default function BusinessLandingPage() {
 
         setUserName(finalName);
         setUserRole(finalRole);
-        const nameParts = finalName.split(' ');
-        const init = nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0];
-        setInitials(init.toUpperCase());
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);
@@ -275,7 +268,6 @@ export default function BusinessLandingPage() {
 
         setUserName(targetFullName);
         setUserRole('client');
-        setInitials((regFirstName[0] + (regLastName[0] || '')).toUpperCase());
 
         setIsLoggedIn(true);
         setIsAuthModalOpen(false);

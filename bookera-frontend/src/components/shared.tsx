@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Shop,
   Calendar1,
@@ -133,22 +133,7 @@ export const navItems = [
   { id: 'Settings', label: 'Налаштування', icon: Icons.Settings }
 ];
 
-export const sortOptions = [
-  { value: 'custom', label: 'Свій порядок (Вручну)', icon: <Icons.Grip /> },
-  { value: 'priceAsc', label: 'Від найдешевших', icon: <Icons.TrendingUp /> },
-  { value: 'priceDesc', label: 'Від найдорожчих', icon: <Icons.TrendingDown /> },
-  { value: 'nameAsc', label: 'За алфавітом (А-Я)', icon: <Icons.SortAlpha /> },
-];
-
-export const businessSettingsCards = [
-  { id: 'payments', title: 'Платежі та каса', desc: 'Налаштуйте методи оплати, депозити та захист від неявок.', icon: Icons.CreditCard },
-  { id: 'booking', title: 'Онлайн бронювання', desc: 'Вирішіть, які опції запису будуть доступні клієнтам.', icon: Icons.Globe },
-  { id: 'advanced', title: 'Системні правила', desc: 'Авто-підтвердження записів, сповіщення та безпека.', icon: Icons.Settings },
-  { id: 'inventory', title: 'Склад та Матеріали', desc: 'Ведіть облік витратних матеріалів та товарів.', icon: Icons.Box },
-  { id: 'billing', title: 'Підписка та білінг', desc: 'Деталі оплати, поточний тариф та методи платежу.', icon: Icons.Calendar },
-];
-
-export const MASTER_COLORS = [
+const MASTER_COLORS = [
   { pastelBg: '#e0e7ff', pastelBorder: '#818cf8', pastelText: '#312e81', vividBg: '#4f46e5', vividBorder: '#3730a3' },
   { pastelBg: '#dcfce7', pastelBorder: '#86efac', pastelText: '#14532d', vividBg: '#16a34a', vividBorder: '#15803d' },
   { pastelBg: '#fef08a', pastelBorder: '#fde047', pastelText: '#713f12', vividBg: '#eab308', vividBorder: '#ca8a04' },
@@ -209,7 +194,7 @@ export const CurrentTimeIndicator = ({ gridStartHour, gridTotalHours, isToday }:
 
   useEffect(() => {
     if (!isToday) return;
-    const interval = setInterval(() => setTime(new Date()), 1000);
+    const interval = setInterval(() => setTime(new Date()), 15_000);  // лінія часу рухається плавно (CSS), перемальовувати щосекунди не треба
     return () => clearInterval(interval);
   }, [isToday]);
 
@@ -221,7 +206,7 @@ export const CurrentTimeIndicator = ({ gridStartHour, gridTotalHours, isToday }:
   if (currentMinutesOffset < 0 || currentMinutesOffset > gridTotalHours * 60) return null;
 
   return (
-    <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, zIndex: 20, pointerEvents: 'none', transition: 'top 1s linear' }}>
+    <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, zIndex: 20, pointerEvents: 'none', transition: 'top 15s linear' }}>
       <div style={{ position: 'absolute', left: '56px', top: '-4px', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', zIndex: 11 }}></div>
       <div style={{ position: 'absolute', left: '60px', right: 0, top: '0', borderTop: '2px solid #ef4444', opacity: 0.8, zIndex: 9 }}></div>
       <div style={{ position: 'absolute', left: '68px', top: '-11px', backgroundColor: '#ef4444', color: '#ffffff', padding: '2px 6px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(239, 68, 68, 0.3)', zIndex: 12 }}>

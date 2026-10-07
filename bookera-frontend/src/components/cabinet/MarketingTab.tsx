@@ -142,7 +142,6 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
   }, [bid]);
   const themes = useMemo(() => THEMES(business?.name || 'наш заклад', links?.direct_url || '', promoLabel), [business?.name, links?.direct_url, promoLabel]);
   const pickTheme = (t: Theme) => { setTheme(t.id); setSubject(t.subject); setMessage(t.email); setSmsText(t.sms); setSent(null); };
-  const templates = themes;
   // «Нагадати» з вкладки «Клієнти»: одразу розсилки, потрібна група й шаблон «Давно не бачились»
   useEffect(() => {
     if (!preset) return;
@@ -776,10 +775,6 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
         .mk-link-btn { border: none; background: none; font-size: 0.78rem; font-weight: 600; color: #436b49; cursor: pointer; }
 
         /* підказка - закріплена внизу колонки */
-        .mk-hint { flex: none; margin: 0.4rem 1.2rem 1.2rem; background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
-        .mk-hint-t { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
-        .mk-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
-        .mk-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
 
         .mk-confirm p { margin: 0 0 0.6rem; font-size: 0.9rem; line-height: 1.5; color: #334155; }
         .mk-preview { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 12px; padding: 0.9rem 1rem; margin-bottom: 0.8rem; }

@@ -551,10 +551,6 @@ export default function StatsTab({ business, onNavigate }: { business: any; serv
         .st-link.right { margin: 0 0 0 auto; }
         .st-link { border: none; background: none; padding: 0; margin-top: 0.4rem; font-size: 0.78rem; font-weight: 600; color: #436b49; cursor: pointer; }
 
-        .st-hint { flex: none; margin: 0.4rem 1.2rem 1.2rem; background: #f5f3ff; border: 1px dashed #c4b5fd; border-radius: 12px; padding: 1rem; }
-        .st-hint-t { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #7c3aed; margin-bottom: 0.6rem; }
-        .st-hint b { display: block; font-weight: 700; color: #5b21b6; font-size: 0.85rem; margin-bottom: 0.3rem; }
-        .st-hint p { font-size: 0.75rem; color: #6d28d9; line-height: 1.45; margin: 0; }
       `}</style>
     </div>
   );

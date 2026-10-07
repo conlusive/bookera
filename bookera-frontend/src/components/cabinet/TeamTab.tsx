@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { isOwnerRole, OWNER_ROLE } from '@/lib/roles';
@@ -76,16 +76,8 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     let isMounted = true;
     (async () => {
       try {
-        const token = await getAuthToken();
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/crm/businesses/${business.id}/hours`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && Array.isArray(data) && data.length > 0) {
-            setSalonBusinessHours(data);
-          }
-        }
+        const data = await api.getBusinessHours(business.id);
+        if (isMounted && Array.isArray(data) && data.length > 0) setSalonBusinessHours(data);
       } catch (err) {
         console.error('Помилка завантаження графіка закладу:', err);
       }
@@ -102,7 +94,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     commission_part?: number; fixed_part?: number; tax_rate?: number; tax_amount?: number;
     materials_cost?: number; materials_deducted?: boolean;
   } | null>(null);
-  const [isLoadingFinance, setIsLoadingFinance] = useState(false);
   const [isSavingStaff, setIsSavingStaff] = useState(false);
 
   // СТАНИ МОДАЛОК
@@ -321,7 +312,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
   }, [business?.id, hasAdminRights, payoutHistory.length]);
 
   const fetchUnpaidAppointments = async (staffId: string, lastPayoutDate: string | null) => {
-    setIsLoadingFinance(true);
     try {
       const token = await getAuthToken();
       const [preview, history] = await Promise.all([
@@ -333,7 +323,6 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
     } catch (err) {
       console.error(err);
     } finally {
-      setIsLoadingFinance(false);
     }
   };
 

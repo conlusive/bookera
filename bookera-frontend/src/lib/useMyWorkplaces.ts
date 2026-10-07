@@ -50,7 +50,3 @@ export function useMyWorkplacesState(enabled = true): { list: Workplace[]; ready
   }, [enabled]);
   return state;
 }
-
-export function useMyWorkplaces(enabled = true): Workplace[] {
-  return useMyWorkplacesState(enabled).list;
-}

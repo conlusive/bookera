@@ -800,6 +800,25 @@ const handleSaveShifts = async () => {
   const gridTotalHours = gridEndHour - gridStartHour;
   const hoursArray = Array.from({length: gridTotalHours}, (_, i) => gridStartHour + i);
 
+  // Висота години підлаштовується під вікно: коротка робоча доба розтягується на весь екран замість порожньої смуги
+  // під сіткою, довга лишається по 60 px з прокруткою. На телефоні масштаб незмінний.
+  const [fitEl, setFitEl] = useState<HTMLElement | null>(null);
+  const [fitH, setFitH] = useState(0);
+  useEffect(() => {
+    if (!fitEl) return;
+    const measure = () => {
+      if (window.matchMedia('(max-width: 860px)').matches) { setFitH(0); return; }
+      const head = fitEl.querySelector('.cal-week-head') as HTMLElement | null;
+      setFitH(fitEl.clientHeight - (head ? head.offsetHeight : 0));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(fitEl);
+    return () => ro.disconnect();
+  }, [fitEl]);
+  const hourPx = fitH > 0 ? Math.max(60, Math.min(96, Math.floor(fitH / gridTotalHours))) : 60;
+  const pxK = hourPx / 60;
+
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => {
     let day = new Date(year, month, 1).getDay();
@@ -844,9 +863,9 @@ const handleSaveShifts = async () => {
     const [endH, endM] = endStr.split(':').map(Number);
     const adjustedStartH = startH < gridStartHour ? startH + 24 : startH;
     const adjustedEndH = endH <= startH ? endH + 24 : endH;
-    const startPx = Math.max(0, (adjustedStartH - gridStartHour) * 60 + (startM || 0));
-    const endPx = Math.max(0, (adjustedEndH - gridStartHour) * 60 + (endM || 0));
-    const totalPx = gridTotalHours * 60;
+    const startPx = Math.max(0, (adjustedStartH - gridStartHour) * 60 + (startM || 0)) * pxK;
+    const endPx = Math.max(0, (adjustedEndH - gridStartHour) * 60 + (endM || 0)) * pxK;
+    const totalPx = gridTotalHours * hourPx;
     return (
       <>
         {startPx > 0 && <div className="non-working-bg" style={{ position: 'absolute', top: 0, height: startPx, left: 0, right: 0, zIndex: 1, pointerEvents: 'none' }}></div>}
@@ -856,7 +875,7 @@ const handleSaveShifts = async () => {
   };
 
   const getCardPosition = (startTimeStr: string, endTimeStr: string, defaultDuration: number = 60) => {
-    if (!startTimeStr) return { top: 0, height: defaultDuration };
+    if (!startTimeStr) return { top: 0, height: defaultDuration * pxK };
     const [startH, startM] = startTimeStr.split(':').map(Number);
     const adjustedStartH = startH < gridStartHour ? startH + 24 : startH;
     const topPx = (adjustedStartH - gridStartHour) * 60 + startM;
@@ -867,7 +886,7 @@ const handleSaveShifts = async () => {
       if (adjustedEndH < adjustedStartH || (adjustedEndH === adjustedStartH && endM < startM)) adjustedEndH += 24;
       durationMins = (adjustedEndH - adjustedStartH) * 60 + (endM - startM);
     }
-    return { top: topPx, height: durationMins };
+    return { top: topPx * pxK, height: durationMins * pxK };
   };
 
   /**
@@ -946,7 +965,7 @@ const handleSaveShifts = async () => {
     );
 
     return [...globalBlocks, ...placedMasterApps];
-  }, [dayColumns, services]);
+  }, [dayColumns, services, hourPx, gridStartHour]);
 
   const processOverlaps = (appsForDay: any[]) => {
     const processed = appsForDay.map((app: any) => {
@@ -1913,7 +1932,7 @@ const handleSaveShifts = async () => {
             /* Шапка з іменами й сітка гортаються вбік РАЗОМ: коли в колонках багато майстрів,
                їх не стискаємо, а даємо провести пальцем (або коліщатком) ліворуч-праворуч.
                Мінімальна ширина колонки - 140px; на ПК, де місця вистачає, нічого не змінюється. */
-            <div className="cal-day-wrap" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflowX: 'auto', overflowY: 'auto', ['--day-min' as string]: `${76 + Math.max(dayColumns ? dayColumns.length : 1, 1) * 140}px` } as React.CSSProperties}>
+            <div className="cal-day-wrap" ref={setFitEl} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflowX: 'auto', overflowY: 'auto', ['--day-min' as string]: `${76 + Math.max(dayColumns ? dayColumns.length : 1, 1) * 140}px` } as React.CSSProperties}>
           {calendarView === 'day' && dayColumns && (
             /* Шапка колонок: без неї смуги нічого не означають.
                Липка, щоб імена не їхали вгору під час прокрутки дня. */
@@ -1934,12 +1953,12 @@ const handleSaveShifts = async () => {
 
           {calendarView === 'day' && (
             <div style={{ flex: 'none', display: 'flex', flexDirection: 'column', minWidth: 'max(100%, var(--day-min, 0px))', boxSizing: 'border-box' }}>
-              <div style={{ position: 'relative', height: `${gridTotalHours * 60}px`, flexShrink: 0, zIndex: 1 }}>
+              <div style={{ position: 'relative', height: `${gridTotalHours * hourPx}px`, flexShrink: 0, zIndex: 1 }}>
                 {hoursArray.map((hour, i) => {
                   const displayHour = hour % 24;
                   return (
                     <div
-                      key={i} className="cal-grid-row" style={{ height: '60px', cursor: 'pointer' }} onClick={() => handleQuickAdd(displayHour)}
+                      key={i} className="cal-grid-row" style={{ height: `${hourPx}px`, cursor: 'pointer' }} onClick={() => handleQuickAdd(displayHour)}
                       onDragOver={e => e.preventDefault()} onDrop={e => handleDropAppointment(e, currentDate, displayHour)}
                     >
                       <div className="cal-time-col">
@@ -1984,11 +2003,13 @@ const handleSaveShifts = async () => {
                     ? dayColumns.map((m: any, idx: number) => ({ key: String(m.id), gaps: getFreeGaps(currentDate, String(m.id)), laneIdx: idx, total: dayColumns.length + (hasUnassignedLane ? 1 : 0) }))
                     : [{ key: 'all', gaps: getFreeGaps(currentDate), laneIdx: 0, total: 1 }];
                   return lanes.flatMap(lane => lane.gaps.map((gap, i) => {
-                    const top = (gap.start - gridStartHour * 60);
-                    const height = gap.end - gap.start;
-                    if (top < 0 || height <= 0) return null;
-                    const hours = Math.floor(height / 60);
-                    const mins = height % 60;
+                    const topMin = (gap.start - gridStartHour * 60);
+                    const heightMin = gap.end - gap.start;
+                    if (topMin < 0 || heightMin <= 0) return null;
+                    const top = topMin * pxK;
+                    const height = heightMin * pxK;
+                    const hours = Math.floor(heightMin / 60);
+                    const mins = heightMin % 60;
                     const pos: React.CSSProperties = dayColumns
                       ? { left: `calc(68px + (100% - 76px) * ${lane.laneIdx / lane.total})`, width: `calc((100% - 76px) / ${lane.total} - 6px)` }
                       : { left: '60px', right: 0 };
@@ -2031,8 +2052,8 @@ const handleSaveShifts = async () => {
                   const widthPercent = (app.colSpan ?? 1) * 100;
                   // Висота картки ділиться між рядками: ім'я, послуга (до 3 рядків), майстер - лише якщо лишилось місце
                   const roomPx = Math.max(app.heightPx || 60, 14) - ((app.heightPx || 60) < 72 ? 10 : 16) - 18 - 14;
-                  const showMaster = !isBlock && !isCompact && roomPx - 14 >= 14;
-                  const svcLines = 1 + Math.max(0, Math.min(2, Math.floor((roomPx - 14 - (showMaster ? 14 : 0)) / 14)));
+                  const showMaster = !isBlock && !isCompact && roomPx - 14 >= 22;
+                  const svcLines = 1 + Math.max(0, Math.min(2, Math.floor((roomPx - 18 - (showMaster ? 16 : 0)) / 14)));
 
                   return (
                     <div
@@ -2097,9 +2118,9 @@ const handleSaveShifts = async () => {
                   );
                 })}
 
-                <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={isToday} />
+                <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={isToday} hourPx={hourPx} />
               </div>
-              <div style={{ flex: 1, display: 'flex', minHeight: '4rem' }}><div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}></div><div className="non-working-bg" style={{ flex: 1 }}></div></div>
+              <div style={{ flex: 1, display: 'flex', minHeight: hourPx > 60 ? 0 : '4rem' }}><div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}></div><div className="non-working-bg" style={{ flex: 1 }}></div></div>
             </div>
           )}
             </div>
@@ -2107,7 +2128,7 @@ const handleSaveShifts = async () => {
 
           {/* --- ТИЖДЕНЬ --- */}
           {calendarView === 'week' && dayLayout === 'grid' && (
-            <div className="custom-scroll cal-week-wrap" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+            <div className="custom-scroll cal-week-wrap" ref={setFitEl} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
               <div className="cal-week-head" style={{ width: 'max-content', minWidth: '100%', display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0, position: 'sticky', top: 0, zIndex: 12 }}>
                 <div className="cal-time-col" style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#ffffff' }}></div>
                 <div style={{ display: 'grid', gridTemplateColumns: weekTemplate(), flex: 1 }}>
@@ -2121,14 +2142,14 @@ const handleSaveShifts = async () => {
               </div>
 
               <div style={{ flex: 'none' }}>
-                <div className="cal-week-body" style={{ width: 'max-content', minWidth: '100%', position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
+                <div className="cal-week-body" style={{ width: 'max-content', minWidth: '100%', position: 'relative', display: 'flex', minHeight: `${gridTotalHours * hourPx}px` }}>
                   <div className="cal-time-col" style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#fff', position: 'sticky', left: 0, zIndex: 10 }}>
                     {Array.from({ length: gridEndHour - gridStartHour }).map((_, i) => (
-                      <div key={i} style={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '0.5rem 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', borderBottom: '1px solid transparent' }}>{gridStartHour + i}:00</div>
+                      <div key={i} style={{ height: `${hourPx}px`, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '0.5rem 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', borderBottom: '1px solid transparent' }}>{gridStartHour + i}:00</div>
                     ))}
                   </div>
 
-                  {isCurrentWeek && <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={true} />}
+                  {isCurrentWeek && <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={true} hourPx={hourPx} />}
 
                   <div style={{ display: 'grid', gridTemplateColumns: weekTemplate(), flex: 1 }}>
                     {weekDays.map((weekDay, i) => {
@@ -2141,7 +2162,7 @@ const handleSaveShifts = async () => {
                           <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, pointerEvents: 'none' }}>{renderNonWorkingHours(dayShift)}</div>
 
                           {Array.from({ length: gridEndHour - gridStartHour }).map((_, hIdx) => (
-                            <div key={hIdx} onClick={() => handleQuickAdd(gridStartHour + hIdx, weekDay)} className="cal-week-cell" style={{ height: '60px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', position: 'relative', zIndex: 1 }}
+                            <div key={hIdx} onClick={() => handleQuickAdd(gridStartHour + hIdx, weekDay)} className="cal-week-cell" style={{ height: `${hourPx}px`, borderBottom: '1px solid #f1f5f9', cursor: 'pointer', position: 'relative', zIndex: 1 }}
                                  onDragOver={e => e.preventDefault()} onDrop={e => handleDropAppointment(e, weekDay, gridStartHour + hIdx)}></div>
                           ))}
 

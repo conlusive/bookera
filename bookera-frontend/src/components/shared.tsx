@@ -189,7 +189,7 @@ export const checkSameDay = (dbDateStr: string, targetDateObj: Date) => {
          d.getDate() === targetDateObj.getDate();
 };
 
-export const CurrentTimeIndicator = ({ gridStartHour, gridTotalHours, isToday }: { gridStartHour: number, gridTotalHours: number, isToday: boolean }) => {
+export const CurrentTimeIndicator = ({ gridStartHour, gridTotalHours, isToday, hourPx = 60 }: { gridStartHour: number, gridTotalHours: number, isToday: boolean, hourPx?: number }) => {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -206,7 +206,7 @@ export const CurrentTimeIndicator = ({ gridStartHour, gridTotalHours, isToday }:
   if (currentMinutesOffset < 0 || currentMinutesOffset > gridTotalHours * 60) return null;
 
   return (
-    <div style={{ position: 'absolute', top: `${currentMinutesOffset}px`, left: 0, right: 0, zIndex: 20, pointerEvents: 'none', transition: 'top 15s linear' }}>
+    <div style={{ position: 'absolute', top: `${currentMinutesOffset * hourPx / 60}px`, left: 0, right: 0, zIndex: 20, pointerEvents: 'none', transition: 'top 15s linear' }}>
       <div style={{ position: 'absolute', left: '56px', top: '-4px', width: '9px', height: '9px', borderRadius: '50%', background: '#ef4444', zIndex: 11 }}></div>
       <div style={{ position: 'absolute', left: '60px', right: 0, top: '0', borderTop: '2px solid #ef4444', opacity: 0.8, zIndex: 9 }}></div>
       <div style={{ position: 'absolute', left: '68px', top: '-11px', backgroundColor: '#ef4444', color: '#ffffff', padding: '2px 6px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(239, 68, 68, 0.3)', zIndex: 12 }}>

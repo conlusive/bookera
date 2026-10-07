@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
-import { clearWorkplacesCache, useMyWorkplaces } from '@/lib/useMyWorkplaces';
+import { clearWorkplacesCache, useMyWorkplacesState } from '@/lib/useMyWorkplaces';
 
 /**
  * Меню акаунта - ОДНЕ на всіх сторінках: головна, бізнес-лендінг, сторінка закладу,
@@ -47,7 +47,7 @@ export default function ProfileMenu({
   /** Своє розташування (у кабінеті меню відкривається вгору й убік). */
   style?: CSSProperties;
 }) {
-  const workplaces = useMyWorkplaces(true);
+  const { list: workplaces, ready } = useMyWorkplacesState(true);
   // «Моя робота» - лише тим, хто працює в салоні; у самому кабінеті - лише якщо салонів кілька
   const showWork = context === 'cabinet' ? workplaces.length > 1 : workplaces.length > 0;
   const hasCabinet = showCabinet || workplaces.length > 0;
@@ -58,8 +58,11 @@ export default function ProfileMenu({
   const sep = (k: string) => <div key={k} className="um-sep" />;
 
   return (
-    <div className="um" role="menu" style={style}>
-      {context !== 'cabinet' ? (
+    <div className="um" role="menu" aria-busy={!ready} style={style}>
+      {!ready ? (
+        // Поки не відомо, де людина працює, склад меню неповний: замість «спершу два пункти, потім решта» - рівні заглушки
+        [0, 1, 2, 3].map(i => <div key={i} className="um-skel" style={{ width: `${70 - i * 8}%` }} />)
+      ) : context !== 'cabinet' ? (
         <>
           {item('/account/profile', I.user, 'Мій профіль')}
           {item('/account/profile?tab=appointments', I.calendar, 'Мої візити')}
@@ -76,7 +79,8 @@ export default function ProfileMenu({
         </>
       )}
 
-      {sep('s3')}
+      {ready && sep('s3')}
+      {!ready && <div className="um-sep" />}
       <button type="button" className="um-item um-out" role="menuitem" onClick={() => { clearWorkplacesCache(); onLogout(); }}>{I.logout}<span>Вийти</span></button>
 
       <style jsx global>{`
@@ -86,6 +90,8 @@ export default function ProfileMenu({
         .um-item svg { flex: none; color: #94a3b8; transition: color .12s ease; }
         .um-item:hover { background: #f4f6f8; color: #0f172a; }
         .um-item:hover svg { color: #475569; }
+        .um-skel { height: 16px; border-radius: 6px; background: linear-gradient(90deg, #f1f5f9, #e8edf3, #f1f5f9); background-size: 200% 100%; animation: umSk 1.1s linear infinite; margin: .62rem .6rem; }
+        @keyframes umSk { from { background-position: 100% 0; } to { background-position: -100% 0; } }
         .um-sep { height: 1px; background: #f1f5f9; margin: .25rem .3rem; }
         .um-out { color: #dc2626; }
         .um-out svg { color: #f08a8a; }

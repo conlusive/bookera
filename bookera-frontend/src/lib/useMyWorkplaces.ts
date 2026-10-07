@@ -35,13 +35,22 @@ async function load(): Promise<Workplace[]> {
 
 export function clearWorkplacesCache() { cache = null; }
 
-export function useMyWorkplaces(enabled = true): Workplace[] {
-  const [list, setList] = useState<Workplace[]>(cache?.data ?? []);
+/** Завантажити заздалегідь (наприклад, при вході на сторінку), щоб меню акаунта відкривалось уже повним. */
+export function prefetchMyWorkplaces() { void load(); }
+
+/** Список і прапорець «уже відомо»: меню не показує половину пунктів, а потім дописує решту. */
+export function useMyWorkplacesState(enabled = true): { list: Workplace[]; ready: boolean } {
+  const fresh = !!cache && Date.now() - cache.at < TTL;
+  const [state, setState] = useState<{ list: Workplace[]; ready: boolean }>({ list: cache?.data ?? [], ready: fresh });
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    void load().then(d => { if (alive) setList(d); });
+    void load().then(d => { if (alive) setState({ list: d, ready: true }); });
     return () => { alive = false; };
   }, [enabled]);
-  return list;
+  return state;
+}
+
+export function useMyWorkplaces(enabled = true): Workplace[] {
+  return useMyWorkplacesState(enabled).list;
 }

@@ -1187,6 +1187,16 @@ const handleSaveShifts = async () => {
           .month-view-cell > div:first-child { flex-direction: column-reverse; align-items: center !important; margin-bottom: 0.2rem !important; }
           .month-view-cell > div:first-child > div { padding-top: 2px !important; }
           .cal-m-chips { display: none !important; }
+          .cal-m-dots { display: flex !important; align-items: center; justify-content: center; gap: 3px; margin-top: auto; padding-bottom: 0.2rem; }
+          .cal-m-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+          .cal-m-dots b { font-size: 0.65rem; font-weight: 700; color: #64748b; margin-left: 2px; }
+          .cal-m-grid { grid-auto-rows: minmax(76px, 1fr) !important; }
+          /* Тиждень: сім колонок з мінімальною шириною, гортається вбік; години й шапка лишаються на місці */
+          .cal-week-head, .cal-week-body { min-width: 800px; }
+          .cal-week-wrap .cal-time-col { position: sticky; left: 0; z-index: 13; width: 44px !important; }
+          .cal-week-wrap .cal-week-head .cal-time-col { z-index: 14; }
+          .cal-week-hcell { padding: 0.55rem 0.2rem !important; }
+          .cal-week-hcell > div:last-child { font-size: 1.1rem !important; }
           .cal-m-count { font-size: 0.6rem !important; }
           .cal-toolbar .action-icon-btn { padding: 0.65rem !important; }
         }
@@ -1785,12 +1795,12 @@ const handleSaveShifts = async () => {
 
           {/* --- ТИЖДЕНЬ --- */}
           {calendarView === 'week' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0 }}>
-                <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0' }}></div>
+            <div className="custom-scroll cal-week-wrap" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+              <div className="cal-week-head" style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0, position: 'sticky', top: 0, zIndex: 12 }}>
+                <div className="cal-time-col" style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#ffffff' }}></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
                   {weekDays.map((day, i) => (
-                    <div key={i} style={{ padding: '1rem', textAlign: 'center', borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none' }}>
+                    <div key={i} className="cal-week-hcell" style={{ padding: '1rem', textAlign: 'center', borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>{['Нд', 'Пн', 'Вв', 'Ср', 'Чт', 'Пт', 'Сб'][day.getDay()]}</div>
                       <div style={{ fontSize: '1.4rem', fontWeight: '900', color: day.toDateString() === now.toDateString() ? '#0f172a' : '#475569' }}>{day.getDate()}</div>
                     </div>
@@ -1798,9 +1808,9 @@ const handleSaveShifts = async () => {
                 </div>
               </div>
 
-              <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto' }}>
-                <div style={{ position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
-                  <div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#fff', position: 'sticky', left: 0, zIndex: 10 }}>
+              <div style={{ flex: 'none' }}>
+                <div className="cal-week-body" style={{ position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
+                  <div className="cal-time-col" style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#fff', position: 'sticky', left: 0, zIndex: 10 }}>
                     {Array.from({ length: gridEndHour - gridStartHour }).map((_, i) => (
                       <div key={i} style={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '0.5rem 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', borderBottom: '1px solid transparent' }}>{gridStartHour + i}:00</div>
                     ))}
@@ -1935,6 +1945,16 @@ const handleSaveShifts = async () => {
                                 </div>
                               )}
 
+                              {dayApps.length > 0 && (
+                                <div className="cal-m-dots" style={{ display: 'none' }}>
+                                  {dayApps.filter((a: any) => a.status !== 'blocked' && a.color !== 'blocked').slice(0, 3).map((a: any) => (
+                                    <i key={a.id} style={{ background: getCardColor(a.staff_id).vividBg }} />
+                                  ))}
+                                  {dayApps.filter((a: any) => a.status !== 'blocked' && a.color !== 'blocked').length > 0 && (
+                                    <b>{dayApps.filter((a: any) => a.status !== 'blocked' && a.color !== 'blocked').length}</b>
+                                  )}
+                                </div>
+                              )}
                               {dayApps.length > 0 && (
                                 <div className="cal-m-chips" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1, overflow: 'hidden', width: '100%' }}>
                                   {dayApps.slice(0, 4).map((app: any) => {

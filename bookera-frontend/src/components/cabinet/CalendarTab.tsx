@@ -37,6 +37,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
   // --- СТАНИ КАЛЕНДАРЯ ---
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
+  // День можна дивитись сіткою (за годинами) або списком за майстрами - список зручніший на телефоні.
+  const [dayLayout, setDayLayout] = useState<'grid' | 'list'>('grid');
   // Пошук клієнта по всіх записах: знайти, коли людина записана, було
   // неможливо - доводилось гортати календар вручну.
   const [clientSearch, setClientSearch] = useState('');
@@ -162,6 +164,10 @@ export default function CalendarTab({ business, team = [], services = [], refres
 
     // Поточний вигляд має пріоритет над усталеним: якщо людина перемкнулась
     // на місяць вручну, після перезавантаження вона очікує побачити місяць.
+    try {
+      const savedLayout = localStorage.getItem('bookera_dayLayout');
+      if (savedLayout === 'list' || savedLayout === 'grid') setDayLayout(savedLayout);
+    } catch { /* приватний режим */ }
     const savedView = localStorage.getItem('bookera_calendarView');
     if (savedView) setCalendarView(savedView as any);
     else if (restored?.defaultView) setCalendarView(restored.defaultView);
@@ -1161,6 +1167,7 @@ const handleSaveShifts = async () => {
           ) !important;
           background-color: #ffffff !important;
         }
+        @media (min-width: 861px) and (max-width: 1600px) { .cal-toolbar__count { display: none !important; } }
         @media (max-width: 860px) {
           .cal-left { display: none !important; }
           .cal-toolbar { flex-wrap: wrap !important; padding: 0.5rem 0.75rem !important; row-gap: 0.5rem !important; }
@@ -1169,7 +1176,14 @@ const handleSaveShifts = async () => {
           .cal-toolbar__count { display: none !important; }
           .cal-toolbar__search { flex: 1 1 90px !important; }
           .cal-toolbar__search input { height: 36px !important; font-size: 16px !important; }
-          .cal-toolbar__right button { padding: 0.55rem 0.45rem !important; font-size: 0.8rem !important; }
+          .cal-toolbar__right button { padding: 0.5rem 0.3rem !important; font-size: 0.78rem !important; }
+          /* На телефоні показуємо лише той вигляд, на який можна перемкнутись: одна іконка замість двох */
+          .cal-layout-toggle { background: transparent !important; padding: 0 !important; }
+          .cal-layout-toggle button[aria-pressed="true"] { display: none !important; }
+          .cal-layout-toggle button { padding: 0.35rem 0.4rem !important; background: #f1f5f9 !important; }
+          .cal-toolbar__right button { padding: 0.5rem 0.22rem !important; }
+          .cal-master-btn { padding: 0.35rem 0.2rem !important; font-size: 0.8rem !important; gap: 0.2rem !important; }
+          .cal-toolbar__rest { gap: 0.1rem !important; }
           .cal-toolbar__rest { gap: 0.25rem !important; }
           .cal-time-input { width: 150px !important; }
           /* Колонка з годинами лишається на місці, коли день гортають убік */
@@ -1450,6 +1464,7 @@ const handleSaveShifts = async () => {
           <div className="cal-toolbar__rest" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0 }} ref={masterFilterRef}>
               <div
+                className="cal-master-btn"
                 onClick={() => { if (!isMasterUser) setIsMasterFilterOpen(!isMasterFilterOpen); }}
                 style={{
                   display: 'flex',
@@ -1580,6 +1595,22 @@ const handleSaveShifts = async () => {
                 })}
               </div>
 
+              {calendarView === 'day' && (
+                <div className="cal-layout-toggle" role="group" aria-label="Вигляд дня" style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px', flexShrink: 0 }}>
+                  {([['grid', 'Сітка'], ['list', 'Список']] as const).map(([mode, label]) => (
+                    <button key={mode} type="button" title={label} aria-label={label} aria-pressed={dayLayout === mode}
+                      onClick={() => { setDayLayout(mode); try { localStorage.setItem('bookera_dayLayout', mode); } catch { /* */ } }}
+                      style={{ border: 'none', cursor: 'pointer', borderRadius: '6px', padding: '0.3rem 0.45rem', display: 'flex', alignItems: 'center', background: dayLayout === mode ? '#fff' : 'transparent', color: dayLayout === mode ? '#0f172a' : '#94a3b8', boxShadow: dayLayout === mode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
+                      {mode === 'grid' ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowCalSettingsModal(true)}
@@ -1610,7 +1641,67 @@ const handleSaveShifts = async () => {
         <div className="animated-calendar" key={currentDate.toISOString() + calendarView} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* --- ДЕНЬ --- */}
-          {calendarView === 'day' && (
+          {calendarView === 'day' && dayLayout === 'list' && (() => {
+            // Список за майстрами: заголовок майстра, під ним його записи за часом - як у Booksy.
+            const dayApps = [...getAppointmentsForDay(currentDate)].sort((a: any, b: any) => String(a.start_time).localeCompare(String(b.start_time)));
+            const isBlockApp = (a: any) => a.status === 'blocked' || a.color === 'blocked' || !a.service_id;
+            const lanes: { key: string; name: string; staffId: string | null; apps: any[] }[] = dayColumns
+              ? dayColumns.map((m: any) => ({ key: String(m.id), name: m.name || m.full_name || 'Майстер', staffId: String(m.id), apps: dayApps.filter((a: any) => String(a.staff_id) === String(m.id)) }))
+              : [{ key: 'one', name: filterMaster !== 'all' ? ((team || []).find((m: any) => String(m.id) === String(filterMaster))?.name || 'Записи') : 'Записи', staffId: null, apps: dayApps.filter((a: any) => filterMaster === 'all' || String(a.staff_id) === String(filterMaster) || !a.staff_id) }];
+            if (dayColumns) {
+              const rest = dayApps.filter((a: any) => !dayColumns.some((m: any) => String(m.id) === String(a.staff_id)));
+              if (rest.length) lanes.push({ key: '__none', name: 'Без майстра', staffId: null, apps: rest });
+            }
+            const statusLabel: Record<string, string> = { completed: 'Завершено', cancelled: 'Скасовано', 'no-show': 'Не прийшов', pending: 'Очікує' };
+            return (
+              <div className="cal-list custom-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: '#fff', padding: '0.5rem 1rem 6rem' }}>
+                <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+                  {lanes.map(lane => {
+                    const real = lane.apps.filter((a: any) => !isBlockApp(a));
+                    const color = lane.staffId ? getCardColor(lane.staffId).vividBg : '#94a3b8';
+                    return (
+                      <section key={lane.key} style={{ paddingTop: '1.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+                          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{lane.name}</h3>
+                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>{real.length > 0 ? `${real.length} зап.` : ''}</span>
+                        </div>
+                        {lane.apps.length === 0 ? (
+                          <div style={{ padding: '0.7rem 0 0.9rem 1.15rem', fontSize: '0.875rem', color: '#94a3b8', borderBottom: '1px solid #f1f5f9' }}>Записів немає</div>
+                        ) : lane.apps.map((app: any) => {
+                          const block = isBlockApp(app);
+                          const svc = services.find((x: any) => String(x.id) === String(app.service_id));
+                          const off = app.status === 'cancelled' || app.status === 'no-show';
+                          const st = statusLabel[app.status as string];
+                          return (
+                            <div key={app.id} onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
+                              style={{ display: 'flex', gap: '0.9rem', alignItems: 'flex-start', padding: '0.85rem 0', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', opacity: off ? 0.5 : 1 }}>
+                              <div style={{ width: '52px', flexShrink: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.3 }}>
+                                {String(app.start_time).substring(0, 5)}
+                                {app.end_time && <div style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, color: block ? '#64748b' : '#0f172a', textDecoration: app.status === 'no-show' ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
+                                </div>
+                                {!block && <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{svc?.name || app.service_name || ''}</div>}
+                              </div>
+                              <div style={{ flexShrink: 0, textAlign: 'right', fontSize: '0.8rem', color: '#64748b' }}>
+                                {!block && app.price ? <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.9rem' }}>{Number(app.price).toLocaleString('uk-UA')} ₴</div> : null}
+                                {st && <div style={{ color: app.status === 'completed' ? '#4F7A5A' : '#94a3b8' }}>{st}</div>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </section>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {calendarView === 'day' && dayLayout === 'grid' && (
             /* Шапка з іменами й сітка гортаються вбік РАЗОМ: коли в колонках багато майстрів,
                їх не стискаємо, а даємо провести пальцем (або коліщатком) ліворуч-праворуч.
                Мінімальна ширина колонки - 140px; на ПК, де місця вистачає, нічого не змінюється. */

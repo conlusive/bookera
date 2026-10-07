@@ -13,7 +13,7 @@ import HelpTip from '@/components/ui/HelpTip';
 /**
  * Маркетинг - три розділи, і кожен робить те, що написано:
  *
- *   Радар     платне просування у видачі BookEra. Пакети 7 / 14 / 30 днів,
+ *   Радар     платне просування у видачі BookEra. Пакети від 1 дня до 3 місяців,
  *             оплата карткою або балами. Ціни, ваги й позицію віддає сервер
  *             (app/services/ranking.py) - тут жодних власних чисел.
  *   Розсилки  лист клієнтам закладу. Скільки людей отримає - видно до
@@ -346,11 +346,16 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
                   <h3 className="mk-h">{radar.active ? 'Продовжити' : 'Підключити'}</h3>
                   <div className="mk-packages">
                     {radar.packages.map(p => (
-                      <div key={p.days} className={`mk-pkg ${p.days === 14 ? 'best' : ''}`}>
+                      <div key={p.days} className={`mk-pkg ${p.days === 14 ? 'best' : ''} ${p.commitment ? 'commit' : ''}`}>
                         {p.discount_percent > 0 && <span className="mk-save">−{p.discount_percent}%</span>}
-                        <div className="mk-pkg-days">{p.days} {daysWord(p.days)}</div>
+                        <div className="mk-pkg-days">{p.days === 90 ? '3 місяці' : `${p.days} ${daysWord(p.days)}`}</div>
                         <div className="mk-pkg-price">{money(p.price_uah)}</div>
                         <div className="mk-pkg-day">{p.per_day_uah.toLocaleString('uk-UA')} ₴ за день</div>
+                        {p.commitment && (
+                          <div className="mk-pkg-perk">
+                            Комісія за нового клієнта з вітрини <b>{p.commission_rate}%</b> замість {commission}%. Оплата наперед, без скасування й повернення коштів.
+                          </div>
+                        )}
                         <button type="button" className="clean-btn" onClick={() => setConfirm({ pkg: p, method: 'card' })}>Сплатити карткою</button>
                         <button type="button" className="mk-points" disabled={!p.can_afford_points} onClick={() => setConfirm({ pkg: p, method: 'points' })}
                           title={p.can_afford_points ? '' : `Не вистачає ${p.price_points - radar.points_balance} балів`}>
@@ -359,6 +364,7 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
                       </div>
                     ))}
                   </div>
+                  <p className="mk-note">Короткі пакети дорожчі за день: їх беруть під разову акцію. Чим довший пакет, тим дешевший день.</p>
 
                   {w && (
                     <>
@@ -598,12 +604,15 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
       {/* --- ПІДТВЕРДЖЕННЯ ОПЛАТИ РАДАРА --- */}
       {confirm && (
         <FormModal open onClose={() => setConfirm(null)} width={460} title={radar?.active ? 'Продовжити Радар' : 'Підключити Радар'}
-          subtitle={`${confirm.pkg.days} ${daysWord(confirm.pkg.days)} · ${confirm.method === 'card' ? money(confirm.pkg.price_uah) : `${confirm.pkg.price_points} балів`}`}
+          subtitle={`${confirm.pkg.days === 90 ? '3 місяці' : `${confirm.pkg.days} ${daysWord(confirm.pkg.days)}`} · ${confirm.method === 'card' ? money(confirm.pkg.price_uah) : `${confirm.pkg.price_points} балів`}`}
           primary={{ label: confirm.method === 'card' ? `Сплатити ${money(confirm.pkg.price_uah)}` : `Списати ${confirm.pkg.price_points} балів`, onClick: () => void pay(), loading: paying }}>
           <div className="mk-confirm">
             <p>{radar?.active
               ? <>Дні додадуться до поточного пакета: Радар діятиме до <b>{dayLabel(new Date((utc(radar.expires_at)?.getTime() ?? 0) + confirm.pkg.days * 86400000).toISOString())}</b>.</>
               : <>Радар запрацює одразу й діятиме {confirm.pkg.days} {daysWord(confirm.pkg.days)}.</>}</p>
+            {confirm.pkg.commitment && (
+              <p className="mk-note"><b>Це зобов'язання на 3 місяці.</b> Оплату не можна скасувати й повернути. Комісія {confirm.pkg.commission_rate}% за нового клієнта з вітрини діє, поки йде цей пакет{radar?.active ? ' (почнеться після поточного)' : ''}.</p>
+            )}
             <p className="mk-note">{confirm.method === 'card'
               ? 'Оплата карткою на захищеній сторінці платіжної системи.'
               : `Після оплати на рахунку лишиться ${(radar?.points_balance ?? 0) - confirm.pkg.price_points} балів.`}</p>
@@ -688,6 +697,9 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
         .mk-pos-arrow { color: #cbd5e1; font-size: 1.2rem; }
 
         .mk-packages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.9rem; }
+        .mk-pkg.commit { border-color: #0f172a; }
+        .mk-pkg-perk { font-size: 0.76rem; line-height: 1.4; color: #475569; background: #f4f6f8; border-radius: 8px; padding: 0.5rem 0.6rem; margin-bottom: 0.4rem; }
+        .mk-pkg-perk b { color: #0f172a; }
         @media (max-width: 760px) { .mk-packages { grid-template-columns: 1fr; } }
         .mk-pkg { position: relative; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; background: #fff; }
         .mk-pkg.best { border-color: #c4b5fd; box-shadow: 0 0 0 3px rgba(139,92,246,.08); }

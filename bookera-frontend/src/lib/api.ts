@@ -483,6 +483,8 @@ export interface RadarPackage {
   per_day_uah: number;
   discount_percent: number;
   can_afford_points: boolean;
+  commitment?: boolean;
+  commission_rate?: number | null;
 }
 
 export interface RadarOverview {

@@ -34,6 +34,7 @@ RADAR_BONUS_KM. Так сортування за відстанню лишаєт
 заклад не піднімається над усіма), а промо-заклад помітно вище.
 """
 from datetime import timedelta
+from decimal import Decimal
 from typing import Iterable, Optional, Set
 
 from sqlalchemy import func, select
@@ -67,10 +68,17 @@ RADAR_BONUS_KM = 2.0   # у «Найближчих» заклад із Рада�
 # --- пакети Радара ---
 # Ціни - у гривнях і в балах (бал заробляється за нового клієнта екосистеми).
 # Довший пакет дешевший за день: це стимул не продовжувати по тижню.
+# 1 і 3 дні - для разової акції, найдорожче за день. 90 днів - зобов'язання: оплачується наперед, без скасування
+# й повернення, зате комісія за нового клієнта з вітрини на ці дні знижена (COMMITMENT_COMMISSION_RATE).
+COMMITMENT_DAYS = 90
+COMMITMENT_COMMISSION_RATE = Decimal("7.00")   # замість стандартних 10%
 RADAR_PACKAGES = (
+    {"days": 1, "price_uah": 99, "price_points": 40},
+    {"days": 3, "price_uah": 199, "price_points": 80},
     {"days": 7, "price_uah": 299, "price_points": 100},
     {"days": 14, "price_uah": 529, "price_points": 180},
     {"days": 30, "price_uah": 999, "price_points": 330},
+    {"days": COMMITMENT_DAYS, "price_uah": 2490, "price_points": 900, "commitment": True},
 )
 
 
@@ -89,6 +97,8 @@ def packages_view() -> list:
         per_day = p["price_uah"] / p["days"]
         out.append({
             **p,
+            "commitment": bool(p.get("commitment")),
+            "commission_rate": float(COMMITMENT_COMMISSION_RATE) if p.get("commitment") else None,
             "per_day_uah": round(per_day, 1),
             "discount_percent": max(0, round((1 - per_day / base) * 100)),
         })
@@ -133,6 +143,18 @@ def ranking_rules() -> dict:
 
 def _active_clauses():
     return (RadarBoost.status == "active", RadarBoost.expires_at > utc_now())
+
+
+async def commitment_active(db: AsyncSession, business_id: int) -> bool:
+    """Чи діє зараз «довгий» пакет-зобов'язання (90 днів): на цей час комісія за нового клієнта знижена."""
+    now = utc_now()
+    rows = (await db.execute(
+        select(RadarBoost.started_at, RadarBoost.expires_at).where(
+            RadarBoost.business_id == business_id, RadarBoost.status == "active",
+            RadarBoost.started_at <= now, RadarBoost.expires_at > now,
+        )
+    )).all()
+    return any((e - s_).days >= COMMITMENT_DAYS - 5 for s_, e in rows)
 
 
 async def active_radar_ids(db: AsyncSession, business_ids: Optional[Iterable[int]] = None) -> Set[int]:

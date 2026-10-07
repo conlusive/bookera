@@ -78,8 +78,8 @@ async def test_overview_lists_packages_and_affordability(client, auth_headers):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["active"] is False and body["days_left"] == 0
-    assert [p["days"] for p in body["packages"]] == [7, 14, 30]
-    assert [p["can_afford_points"] for p in body["packages"]] == [True, False, False]
+    assert [p["days"] for p in body["packages"]] == [1, 3, 7, 14, 30, 90]
+    assert [p["can_afford_points"] for p in body["packages"]] == [True, True, True, False, False, False]
     assert body["position"]["position_with_radar"] <= body["position"]["position_without_radar"]
     assert body["rules"]["weights"]["radar"] == ranking.RADAR_BONUS
 

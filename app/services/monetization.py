@@ -169,6 +169,9 @@ async def charge_commission_if_applicable(db: AsyncSession, appointment: Appoint
         return  # уже клієнт закладу - вітрина його не привела
 
     rate = business.commission_rate or DEFAULT_COMMISSION_RATE
+    from app.services import ranking
+    if await ranking.commitment_active(db, business.id):
+        rate = min(rate, ranking.COMMITMENT_COMMISSION_RATE)  # пакет-зобов'язання на 90 днів: знижена комісія
     amount = (Decimal(str(appointment.price)) * rate / Decimal("100")).quantize(Decimal("0.01"))
 
     db.add(

@@ -51,6 +51,8 @@ class RadarPackageOut(BaseModel):
     per_day_uah: float
     discount_percent: int
     can_afford_points: bool
+    commitment: bool = False
+    commission_rate: Optional[float] = None
 
 
 class RadarPositionOut(BaseModel):

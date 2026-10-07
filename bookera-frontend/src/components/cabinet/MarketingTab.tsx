@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PromotionsPanel from '@/components/cabinet/PromotionsPanel';
+import SocialPanel from '@/components/cabinet/SocialPanel';
 import { api, CampaignRow, RadarOverview, RadarPackage } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { notify } from '@/lib/feedback';
@@ -26,7 +27,7 @@ import HelpTip from '@/components/ui/HelpTip';
  * вкладці був вигаданою «аналітикою розкладу»; лояльність - заглушка.
  */
 
-type View = 'radar' | 'campaigns' | 'promos' | 'links';
+type View = 'radar' | 'campaigns' | 'promos' | 'social' | 'links';
 type Audience = string;
 
 const AUDIENCES: { id: Audience; label: string; hint: string }[] = [
@@ -45,11 +46,22 @@ const utc = (s?: string | null) => (s ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) 
 const dayLabel = (s?: string | null) => utc(s)?.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' }) ?? '';
 const daysWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'день' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'дні' : 'днів');
 
-const TEMPLATES = (name: string, link: string) => [
-  { id: 'remind', label: 'Нагадування', subject: `Чекаємо вас у ${name}`, message: `Запрошуємо вас до нас. Записатися можна онлайн у зручний для вас час.${link ? `\n\nЗапис: ${link}` : ''}` },
-  { id: 'missed', label: 'Давно не бачились', subject: 'Ми скучили за вами', message: `Давно не бачились! На цьому тижні в нас є вільні вікна, і ми будемо раді вас бачити.${link ? `\n\nЗапис: ${link}` : ''}` },
-  { id: 'news', label: 'Новинка', subject: `Новинка в ${name}`, message: `У нас з'явилась нова послуга. Деталі розповімо при записі або відповімо на цей лист.${link ? `\n\nЗапис: ${link}` : ''}` },
-];
+// Теми розсилки: для кожної - тема листа, довгий текст для пошти й короткий для SMS (його можна скопіювати)
+type Theme = { id: string; label: string; subject: string; email: string; sms: string };
+const THEMES = (name: string, link: string, promo: string): Theme[] => {
+  const book = link ? `\n\nЗапис: ${link}` : '';
+  const short = link ? ` ${link}` : '';
+  return [
+    { id: 'promo', label: 'Акція', subject: `Акція в ${name}`, email: `${promo ? `У нас діє акція: ${promo}.` : 'У нас діє акція.'} Запишіться онлайн у зручний для вас час.${book}`, sms: `${name}: ${promo || 'діє акція'}. Запис:${short}`.trim() },
+    { id: 'slots', label: 'Вільні місця', subject: `Є вільні місця в ${name}`, email: `Є вільні місця на найближчі дні. Оберіть зручний час і запишіться онлайн.${book}`, sms: `${name}: є вільні місця найближчими днями. Запис:${short}`.trim() },
+    { id: 'new', label: 'Нова послуга', subject: `Нова послуга в ${name}`, email: `У нас з'явилась нова послуга. Деталі розповімо при записі або відповімо на цей лист.${book}`, sms: `${name}: у нас нова послуга! Запис:${short}`.trim() },
+    { id: 'changes', label: 'Зміни', subject: `Зміни в ${name}`, email: `Повідомляємо про зміни: ... (напишіть, що саме змінилося: графік, адреса, ціни).${book}`, sms: `${name}: зміни у роботі закладу. Деталі:${short}`.trim() },
+    { id: 'special', label: 'Спеціальна пропозиція', subject: `Спеціально для вас від ${name}`, email: `Підготували для вас особливу пропозицію: ... (опишіть її).${book}`, sms: `${name}: спеціальна пропозиція для вас. Запис:${short}`.trim() },
+    { id: 'missed', label: 'Ми скучили', subject: 'Ми скучили за вами', email: `Давно не бачились! Будемо раді вас бачити. Запишіться онлайн у зручний час.${book}`, sms: `${name}: давно не бачились, чекаємо на вас! Запис:${short}`.trim() },
+  ];
+};
+// Кирилиця йде в SMS юнікодом: 70 символів в одному повідомленні, далі по 67
+const smsParts = (n: number) => (n === 0 ? 0 : n <= 70 ? 1 : Math.ceil(n / 67));
 
 export default function MarketingTab({ business, preset, services = [] }: { business: any; preset?: { audience: string; at: number } | null; services?: any[] }) {
   const [view, setView] = useState<View>('radar');
@@ -69,6 +81,11 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [sendConfirm, setSendConfirm] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [theme, setTheme] = useState('');
+  const [smsText, setSmsText] = useState('');
+  const [promoLabel, setPromoLabel] = useState('');
+  const [smsCopied, setSmsCopied] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
 
@@ -112,7 +129,19 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
     })();
   }, [bid, awayCustom]);
 
-  const templates = useMemo(() => TEMPLATES(business?.name || 'наш заклад', links?.direct_url || ''), [business?.name, links?.direct_url]);
+  useEffect(() => {
+    if (!bid) return;
+    void (async () => {
+      try {
+        const list = await api.listPromotions(await getAuthToken(), bid);
+        const first = list.find(p => p.is_active);
+        setPromoLabel(first ? (first.name.includes('%') ? `${first.name} (${first.label.replace(/^−\d+%\s*/, '') || 'зараз'})` : `${first.name}: ${first.label}`) : '');
+      } catch { /* без акцій шаблон лишається загальним */ }
+    })();
+  }, [bid]);
+  const themes = useMemo(() => THEMES(business?.name || 'наш заклад', links?.direct_url || '', promoLabel), [business?.name, links?.direct_url, promoLabel]);
+  const pickTheme = (t: Theme) => { setTheme(t.id); setSubject(t.subject); setMessage(t.email); setSmsText(t.sms); setSent(null); };
+  const templates = themes;
   // «Нагадати» з вкладки «Клієнти»: одразу розсилки, потрібна група й шаблон «Давно не бачились»
   useEffect(() => {
     if (!preset) return;
@@ -120,11 +149,19 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
     const m = /^away_(\d+)$/.exec(preset.audience);
     setAwayCustom(m ? Number(m[1]) : null);
     setAudience(preset.audience);
-    const t = templates.find(x => x.id === 'missed');
-    if (t) { setSubject(t.subject); setMessage(t.message); }
+    const t = themes.find(x => x.id === 'missed');
+    if (t) { setTheme(t.id); setSubject(t.subject); setMessage(t.email); setSmsText(t.sms); }
+    setStep(2);
     setSent(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset?.at]);
+  // Пряме посилання приходить окремим запитом: якщо шаблон «Ми скучили» вибрано раніше, дописуємо в нього посилання
+  useEffect(() => {
+    if (theme !== 'missed' || !links?.direct_url || message.includes(links.direct_url)) return;
+    const t = themes.find(x => x.id === 'missed');
+    if (t) { setMessage(t.email); setSmsText(t.sms); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [links?.direct_url]);
   const reachable = counts ? (Number((counts as any)[audience]) || 0) : 0;
   // Те саме правило, що в листі на сервері: рядок «Запис: https://…» стає кнопкою
   const preview = useMemo(() => {
@@ -234,6 +271,8 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
     ? { t: 'Радар — це реклама', x: 'Заклад отримує бали в позиції та позначку «Реклама» на картці. Комісії за Радар немає: 10% беруться лише з першого візиту нового клієнта, що прийшов з вітрини.' }
     : view === 'promos'
     ? { t: 'Як працюють акції', x: 'Знижку рахує сервер за годиною початку візиту. Якщо підходить кілька акцій, діє найбільша, вони не складаються. Подарунковий сертифікат віднімається від ціни вже після акції.' }
+    : view === 'social'
+    ? { t: 'Публікуйте самі', x: 'Картинка малюється у вашому браузері й нікуди не надсилається. Завантажте її або поділіться з телефона й опублікуйте у своєму акаунті. У підписі до посту — ваше пряме посилання без комісії.' }
     : view === 'campaigns'
       ? { t: 'Лист із вашим посиланням', x: 'Шаблони вже містять пряме посилання: клієнти, що запишуться з розсилки, не рахуються як клієнти вітрини — комісії за них немає.' }
       : { t: 'Куди ставити посилання', x: 'Шапка Instagram, Telegram, візитка, QR на дверях. Усі, хто запишеться за прямим посиланням, — ваші клієнти без комісії.' };
@@ -243,7 +282,7 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
       {/* --- ПАНЕЛЬ --- */}
       <div className="mk-toolbar">
         <div className="mk-seg" role="tablist">
-          {([['radar', 'Радар'], ['promos', 'Акції'], ['campaigns', 'Розсилки'], ['links', 'Посилання']] as [View, string][]).map(([id, label]) => (
+          {([['radar', 'Радар'], ['promos', 'Акції'], ['campaigns', 'Розсилки'], ['social', 'Соцмережі'], ['links', 'Посилання']] as [View, string][]).map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>
               {label}
               {id === 'radar' && radar?.active && <span className="mk-live" title="Радар активний" />}
@@ -366,36 +405,69 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
             {/* ================= АКЦІЇ ================= */}
             {view === 'promos' && <PromotionsPanel businessId={bid} services={services} />}
 
+            {/* ================= СОЦМЕРЕЖІ ================= */}
+            {view === 'social' && <SocialPanel business={business} directUrl={links?.direct_url} />}
+
             {/* ================= РОЗСИЛКИ ================= */}
             {view === 'campaigns' && (
               <>
-                <div className="mk-pills">
-                  {[...AUDIENCES, ...(awayCustom ? [{ id: `away_${awayCustom}`, label: `Не були понад ${awayCustom} ${daysWord(awayCustom)}`, hint: 'Обрано у списку клієнтів' }] : [])].map(a => (
-                    <button key={a.id} type="button" title={a.hint} className={`category-pill ${audience === a.id ? 'active' : ''}`} onClick={() => { setAudience(a.id); setSent(null); }}>
-                      {a.label} <span className="mk-c">{counts ? ((counts as any)[a.id] ?? 0) : '…'}</span>
-                    </button>
-                  ))}
-                </div>
+                <ol className="mk-steps">
+                  <li className={step === 1 ? 'on' : 'done'}><button type="button" onClick={() => setStep(1)}><i>1</i>Що розповісти</button></li>
+                  <li className={step === 2 ? 'on' : ''}><button type="button" onClick={() => { if (message.trim().length >= 10) setStep(2); else notify('Спершу напишіть текст листа', 'error', { field: 'mk-message' }); }}><i>2</i>Кому надіслати</button></li>
+                </ol>
 
                 <div className="mk-campaign">
                 <div className="mk-form">
-                  <div className="mk-chips">
-                    <span>Шаблон:</span>
-                    {templates.map(t => (
-                      <button key={t.id} type="button" className="mk-chip" onClick={() => { setSubject(t.subject); setMessage(t.message); setSent(null); }}>{t.label}</button>
-                    ))}
-                  </div>
-                  <label className="mk-lbl">Тема листа</label>
-                  <input className="clean-input" maxLength={150} placeholder={`Новини від ${business?.name || 'закладу'}`} value={subject} onChange={e => setSubject(e.target.value)} />
-                  <label className="mk-lbl">Текст <small>{message.trim().length}/3000</small></label>
-                  <textarea className="clean-input mk-text" data-field="mk-message" maxLength={3000} placeholder="Що ви хочете сказати клієнтам?" value={message} onChange={e => { setMessage(e.target.value); setSent(null); }} />
-                  <div className="mk-send-row">
-                    <span className="mk-reach">
-                      {counts ? <>Лист отримають: <b>{reachable}</b>{counts.without_email > 0 && <> · без пошти: {counts.without_email}</>}{counts.unsubscribed > 0 && <> · відписались: {counts.unsubscribed}</>}{counts.no_consent > 0 && <> · без згоди: {counts.no_consent}</>}</> : 'Рахуємо аудиторію…'}
-                    </span>
-                    <button type="button" className="clean-btn" onClick={askSend}>Надіслати</button>
-                  </div>
-                  {sent && <div className="mk-ok" role="status">{sent}</div>}
+                  {step === 1 ? (
+                    <>
+                      <div className="mk-chips">
+                        <span>Тема:</span>
+                        {themes.map(t => (
+                          <button key={t.id} type="button" className={`mk-chip ${theme === t.id ? 'on' : ''}`} onClick={() => pickTheme(t)}>{t.label}</button>
+                        ))}
+                      </div>
+                      <label className="mk-lbl">Тема листа</label>
+                      <input className="clean-input" maxLength={150} placeholder={`Новини від ${business?.name || 'закладу'}`} value={subject} onChange={e => setSubject(e.target.value)} />
+                      <label className="mk-lbl">Текст листа <small>{message.trim().length}/3000</small></label>
+                      <textarea className="clean-input mk-text" data-field="mk-message" maxLength={3000} placeholder="Що ви хочете сказати клієнтам?" value={message} onChange={e => { setMessage(e.target.value); setSent(null); }} />
+                      <label className="mk-lbl">
+                        Текст SMS <small>{smsText.length} симв. · {smsParts(smsText.length)} {smsParts(smsText.length) === 1 ? 'SMS' : 'SMS'}</small>
+                      </label>
+                      <textarea className="clean-input mk-sms" maxLength={300} placeholder="Короткий текст для SMS" value={smsText} onChange={e => setSmsText(e.target.value)} />
+                      <div className="mk-sms-row">
+                        <span>SMS з BookEra ще не надсилаємо: скопіюйте текст і відправте зі свого телефона чи месенджера.</span>
+                        <button type="button" className="clean-btn-ghost" disabled={!smsText.trim()} onClick={() => { void navigator.clipboard?.writeText(smsText); setSmsCopied(true); setTimeout(() => setSmsCopied(false), 1800); }}>{smsCopied ? 'Скопійовано ✓' : 'Копіювати SMS'}</button>
+                      </div>
+                      <div className="mk-send-row">
+                        <span className="mk-reach" />
+                        <button type="button" className="clean-btn" onClick={() => { if (message.trim().length < 10) return notify('Напишіть хоча б кілька слів (від 10 символів)', 'error', { field: 'mk-message' }); setStep(2); }}>Далі: кому надіслати →</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <label className="mk-lbl">Кому надіслати лист</label>
+                      <div className="mk-pills">
+                        {[...AUDIENCES, ...(awayCustom ? [{ id: `away_${awayCustom}`, label: `Не були понад ${awayCustom} ${daysWord(awayCustom)}`, hint: 'Обрано у списку клієнтів' }] : [])].map(a => (
+                          <button key={a.id} type="button" title={a.hint} className={`category-pill ${audience === a.id ? 'active' : ''}`} onClick={() => { setAudience(a.id); setSent(null); }}>
+                            {a.label} <span className="mk-c">{counts ? ((counts as any)[a.id] ?? 0) : '…'}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mk-aud-hint">{[...AUDIENCES, ...(awayCustom ? [{ id: `away_${awayCustom}`, hint: 'Ви обрали цю групу у списку клієнтів' }] : [])].find(a => a.id === audience)?.hint}</p>
+                      <div className="mk-summary">
+                        <b>{subject.trim() || `Новини від ${business?.name || 'закладу'}`}</b>
+                        <span>{message.trim().slice(0, 140)}{message.trim().length > 140 ? '…' : ''}</span>
+                        <button type="button" className="mk-link-btn" onClick={() => setStep(1)}>Змінити текст</button>
+                      </div>
+                      <div className="mk-send-row">
+                        <span className="mk-reach">
+                          {counts ? <>Лист отримають: <b>{reachable}</b>{counts.without_email > 0 && <> · без пошти: {counts.without_email}</>}{counts.unsubscribed > 0 && <> · відписались: {counts.unsubscribed}</>}{counts.no_consent > 0 && <> · без згоди: {counts.no_consent}</>}</> : 'Рахуємо…'}
+                        </span>
+                        <button type="button" className="clean-btn" onClick={askSend}>Надіслати</button>
+                      </div>
+                      {sent && <div className="mk-ok" role="status">{sent}</div>}
+                    </>
+                  )}
                 </div>
 
                 <div className="mk-mail">
@@ -406,7 +478,7 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
                     <div className="mk-mail-subj">{subject.trim() || `Новини від ${business?.name || 'закладу'}`}</div>
                     <div className="mk-mail-body">
                       <b>Доброго дня!</b>
-                      {'\n\n'}{preview.text || 'Тут з’явиться ваш текст — пишіть ліворуч…'}
+                      {'\n\n'}{preview.text || 'Тут з’явиться ваш текст — оберіть тему або пишіть ліворуч…'}
                       {preview.cta && <span className="mk-mail-btn">Записатися онлайн</span>}
                       <span className="mk-mail-sign">З повагою,{'\n'}{business?.name}</span>
                     </div>
@@ -642,7 +714,21 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
         .mk-tag { margin-left: 0.5rem; font-size: 0.68rem; font-weight: 700; color: #059669; background: #ecfdf5; border-radius: 999px; padding: 0.1rem 0.45rem; }
 
         /* Розсилки */
-        .mk-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.2rem; }
+        .mk-pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 0.4rem 0 0.6rem; }
+        .mk-steps { list-style: none; display: flex; gap: 1.4rem; margin: 0 0 1.2rem; padding: 0 0 0.8rem; border-bottom: 1px solid #f1f5f9; }
+        .mk-steps button { display: inline-flex; align-items: center; gap: 0.5rem; border: none; background: none; padding: 0; font-family: inherit; font-size: 0.88rem; font-weight: 600; color: #94a3b8; cursor: pointer; }
+        .mk-steps i { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid #cbd5e1; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 0.75rem; }
+        .mk-steps li.on button { color: #0f172a; } .mk-steps li.on i { background: #0f172a; border-color: #0f172a; color: #fff; }
+        .mk-steps li.done i { background: #e2e8f0; border-color: #e2e8f0; color: #475569; }
+        .mk-chip.on, .mk-chip.on:hover { background: #0f172a; border: 1px solid #0f172a; color: #fff; }
+        .mk-sms { min-height: 76px; resize: vertical; line-height: 1.45; }
+        .mk-sms-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; margin-top: 0.4rem; font-size: 0.78rem; color: #94a3b8; flex-wrap: wrap; }
+        .mk-sms-row span { flex: 1 1 260px; }
+        .mk-link-btn { border: none; background: none; padding: 0; font-family: inherit; font-size: 0.8rem; font-weight: 600; color: #475569; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+        .mk-aud-hint { margin: 0 0 0.9rem; font-size: 0.8rem; color: #94a3b8; }
+        .mk-summary { border: 1px solid #eef1f4; border-radius: 12px; padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+        .mk-summary b { color: #0f172a; font-size: 0.92rem; }
+        .mk-summary span { color: #64748b; font-size: 0.82rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
         .mk-c { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
         .mk-form { display: flex; flex-direction: column; gap: 0.35rem; }
         .mk-chips { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; font-size: 0.8rem; color: #94a3b8; }

@@ -39,7 +39,10 @@ export default function BusinessShowcase() {
       <div className="bz-bg" aria-hidden><i /><i /><i /></div>
       <div className="bz-card">
         <div className="bz-copy">
-          <span className="bz-badge bz-a" style={{ ['--d' as string]: '0.05s' }}>BookEra Business</span>
+          <div className="bz-logo bz-a" style={{ ['--d' as string]: '0.05s' }}>
+            <span className="bz-logo-mark">Book<span>Era</span></span>
+            <span className="bz-logo-sub">Business</span>
+          </div>
           <h2 id="bz-title" className="bz-title bz-a" style={{ ['--d' as string]: '0.12s' }}>
             Увесь ваш салон<br />в одному кабінеті
           </h2>
@@ -99,7 +102,10 @@ export default function BusinessShowcase() {
           .bz-copy { align-self: center; padding-bottom: 5rem; }
         }
 
-        .bz-badge { display: inline-block; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; color: #4F6E53; background: rgba(255,255,255,0.75); border: 1px solid #D5E3D7; border-radius: 999px; padding: 0.3rem 0.8rem; margin-bottom: 1.1rem; }
+        .bz-logo { display: flex; align-items: baseline; gap: 8px; margin-bottom: 1.2rem; }
+        .bz-logo-mark { font-size: 2rem; font-weight: 900; color: #111827; letter-spacing: -0.04em; line-height: 1; }
+        .bz-logo-mark span { color: #8fae92; }
+        .bz-logo-sub { font-size: 1rem; font-weight: 700; color: #64748b; }
         .bz-title { margin: 0 0 1rem; font-size: clamp(1.9rem, 4.4vw, 3.1rem); line-height: 1.08; font-weight: 700; letter-spacing: -0.03em; color: #16211A; }
         .bz-text { margin: 0 0 1.4rem; max-width: 30rem; font-size: 1.02rem; line-height: 1.6; color: #55655A; }
         .bz-points { list-style: none; margin: 0 0 1.9rem; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }

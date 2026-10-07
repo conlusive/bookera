@@ -39,6 +39,7 @@ export default function CalendarTab({ business, team = [], services = [], refres
   const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('day');
   // День можна дивитись сіткою (за годинами) або списком за майстрами - список зручніший на телефоні.
   const [dayLayout, setDayLayout] = useState<'grid' | 'list'>('grid');
+  const [listExpanded, setListExpanded] = useState<Record<string, boolean>>({});
   // Пошук клієнта по всіх записах: знайти, коли людина записана, було
   // неможливо - доводилось гортати календар вручну.
   const [clientSearch, setClientSearch] = useState('');
@@ -1170,18 +1171,17 @@ const handleSaveShifts = async () => {
         @media (min-width: 861px) and (max-width: 1600px) { .cal-toolbar__count { display: none !important; } }
         @media (max-width: 860px) {
           .cal-left { display: none !important; }
-          .cal-toolbar { flex-wrap: wrap !important; padding: 0.5rem 0.75rem !important; row-gap: 0.5rem !important; }
-          .cal-toolbar__left { flex-wrap: wrap; flex-shrink: 1 !important; }
-          .cal-toolbar__rest { flex: 1 1 100% !important; justify-content: space-between !important; }
-          .cal-toolbar__count { display: none !important; }
-          .cal-toolbar__search { flex: 1 1 90px !important; }
-          .cal-toolbar__search input { height: 36px !important; font-size: 16px !important; }
-          .cal-toolbar__right button { padding: 0.5rem 0.3rem !important; font-size: 0.78rem !important; }
-          .cal-layout-pill { padding: 0.3rem 0.6rem !important; font-size: 0.78rem !important; }
-          .cal-toolbar__right button { padding: 0.5rem 0.22rem !important; }
-          .cal-master-btn { padding: 0.35rem 0.2rem !important; font-size: 0.8rem !important; gap: 0.2rem !important; }
-          .cal-toolbar__rest { gap: 0.1rem !important; }
-          .cal-toolbar__rest { gap: 0.25rem !important; }
+          /* Панель у два рядки: зверху дата зі стрілками і шестерня, знизу майстри й вигляд */
+          .cal-toolbar { flex-wrap: wrap !important; padding: 0.5rem 0.75rem !important; row-gap: 0.35rem !important; column-gap: 0.25rem !important; }
+          .cal-toolbar__rest, .cal-toolbar__rightwrap { display: contents !important; }
+          .cal-toolbar__left { order: 1; flex: 1 1 auto !important; flex-shrink: 1 !important; min-width: 0; }
+          .cal-gear { order: 2; margin-left: auto; padding: 8px !important; }
+          .cal-master-wrap { order: 3; }
+          .cal-toolbar__right { order: 4; margin-left: auto; }
+          .cal-toolbar__count, .cal-toolbar__search { display: none !important; }
+          .cal-toolbar__right { gap: 0 !important; }
+          .cal-toolbar__right button { padding: 0.45rem 0.26rem !important; font-size: 0.76rem !important; }
+          .cal-master-btn { padding: 0.35rem 0.1rem !important; font-size: 0.78rem !important; gap: 0.2rem !important; }
           .cal-time-input { width: 150px !important; }
           /* Колонка з годинами лишається на місці, коли день гортають убік */
           .cal-day-wrap .cal-time-col { position: sticky; left: 0; z-index: 4; }
@@ -1456,27 +1456,10 @@ const handleSaveShifts = async () => {
                   : `${currentDate.toLocaleString('uk-UA', { weekday: 'short' })}, ${currentDate.getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
               }
             </div>
-            {calendarView === 'day' && (
-              /* Кнопка називає той вигляд, на який перемикає: з іконкою й словом зрозуміло, що день можна дивитись інакше */
-              <button
-                type="button"
-                className="cal-layout-pill"
-                title={dayLayout === 'grid' ? 'Показати списком за майстрами' : 'Показати сіткою за годинами'}
-                onClick={() => { const next = dayLayout === 'grid' ? 'list' : 'grid'; setDayLayout(next); try { localStorage.setItem('bookera_dayLayout', next); } catch { /* */ } }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', borderRadius: '999px', padding: '0.3rem 0.75rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
-              >
-                {dayLayout === 'grid' ? (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
-                ) : (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
-                )}
-                {dayLayout === 'grid' ? 'Список' : 'Сітка'}
-              </button>
-            )}
           </div>
 
           <div className="cal-toolbar__rest" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0 }} ref={masterFilterRef}>
+            <div className="cal-master-wrap" style={{ position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0 }} ref={masterFilterRef}>
               <div
                 className="cal-master-btn"
                 onClick={() => { if (!isMasterUser) setIsMasterFilterOpen(!isMasterFilterOpen); }}
@@ -1586,15 +1569,19 @@ const handleSaveShifts = async () => {
             </div>
 
             {/* Перемикач виглядів та іконка налаштувань (завжди зафіксовані праворуч) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+            <div className="cal-toolbar__rightwrap" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
               <div className="cal-toolbar__right" style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'transparent' }}>
-                {['day', 'week', 'month'].map(view => {
-                  const labels: any = { day: 'День', week: 'Тиждень', month: 'Місяць' };
-                  const isActive = calendarView === view;
+                {([['day', 'День', 'grid'], ['day', 'Список', 'list'], ['week', 'Тиждень', 'grid'], ['month', 'Місяць', 'grid']] as const).map(([view, label, layout]) => {
+                  // «День» і «Список» - один день, два вигляди: сітка за годинами або список за майстрами
+                  const isActive = calendarView === view && (view !== 'day' || dayLayout === layout);
                   return (
                     <button
-                      key={view}
-                      onClick={() => { setCalendarView(view as any); localStorage.setItem('bookera_calendarView', view); }}
+                      key={label}
+                      onClick={() => {
+                        setCalendarView(view);
+                        localStorage.setItem('bookera_calendarView', view);
+                        if (view === 'day') { setDayLayout(layout); try { localStorage.setItem('bookera_dayLayout', layout); } catch { /* */ } }
+                      }}
                       style={{
                         padding: '0.35rem 0.65rem', fontSize: '0.82rem', fontWeight: isActive ? '700' : '500',
                         color: isActive ? '#0f172a' : '#64748b', background: isActive ? '#f1f5f9' : 'transparent',
@@ -1603,7 +1590,7 @@ const handleSaveShifts = async () => {
                       onMouseOver={e => { if(!isActive) e.currentTarget.style.color = '#0f172a'; }}
                       onMouseOut={e => { if(!isActive) e.currentTarget.style.color = '#64748b'; }}
                     >
-                      {labels[view]}
+                      {label}
                     </button>
                   );
                 })}
@@ -1611,6 +1598,7 @@ const handleSaveShifts = async () => {
 
               <button
                 type="button"
+                className="cal-gear"
                 onClick={() => setShowCalSettingsModal(true)}
                 style={{
                   background: 'transparent',
@@ -1640,57 +1628,87 @@ const handleSaveShifts = async () => {
 
           {/* --- ДЕНЬ --- */}
           {calendarView === 'day' && dayLayout === 'list' && (() => {
-            // Список за майстрами: заголовок майстра, під ним його записи за часом - як у Booksy.
+            // Список за майстрами: заголовок майстра (липкий), під ним його записи за часом - як у Booksy.
+            // Список не безмежний: у кожного майстра показуємо перші записи, решта - за кнопкою «Ще N».
+            const LIST_CAP = 6;
+            const dayKey = currentDate.toDateString();
             const dayApps = [...getAppointmentsForDay(currentDate)].sort((a: any, b: any) => String(a.start_time).localeCompare(String(b.start_time)));
             const isBlockApp = (a: any) => a.status === 'blocked' || a.color === 'blocked' || !a.service_id;
             const lanes: { key: string; name: string; staffId: string | null; apps: any[] }[] = dayColumns
               ? dayColumns.map((m: any) => ({ key: String(m.id), name: m.name || m.full_name || 'Майстер', staffId: String(m.id), apps: dayApps.filter((a: any) => String(a.staff_id) === String(m.id)) }))
-              : [{ key: 'one', name: filterMaster !== 'all' ? ((team || []).find((m: any) => String(m.id) === String(filterMaster))?.name || 'Записи') : 'Записи', staffId: null, apps: dayApps.filter((a: any) => filterMaster === 'all' || String(a.staff_id) === String(filterMaster) || !a.staff_id) }];
+              : [{ key: 'one', name: filterMaster !== 'all' ? ((team || []).find((m: any) => String(m.id) === String(filterMaster))?.name || 'Записи') : 'Записи', staffId: filterMaster !== 'all' ? String(filterMaster) : null, apps: dayApps.filter((a: any) => filterMaster === 'all' || String(a.staff_id) === String(filterMaster) || !a.staff_id) }];
             if (dayColumns) {
               const rest = dayApps.filter((a: any) => !dayColumns.some((m: any) => String(m.id) === String(a.staff_id)));
               if (rest.length) lanes.push({ key: '__none', name: 'Без майстра', staffId: null, apps: rest });
             }
-            const statusLabel: Record<string, string> = { completed: 'Завершено', cancelled: 'Скасовано', 'no-show': 'Не прийшов', pending: 'Очікує' };
+            const statusStyle: Record<string, { label: string; color: string; bg: string }> = {
+              completed: { label: 'Завершено', color: '#3F6F4B', bg: '#EAF4EC' },
+              cancelled: { label: 'Скасовано', color: '#64748b', bg: '#f1f5f9' },
+              'no-show': { label: 'Не прийшов', color: '#B42318', bg: '#FEECEA' },
+              pending: { label: 'Очікує', color: '#8A5A00', bg: '#FFF4DC' },
+            };
+            const minutesOf = (a: any) => {
+              const t = (v: any) => { const m = String(v || '').match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+              const st = t(a.start_time), en = t(a.end_time);
+              return st !== null && en !== null && en > st ? en - st : (a.duration || null);
+            };
+            const fmtMin = (m: number | null) => !m ? '' : m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? ` ${m % 60} хв` : ''}` : `${m} хв`;
             return (
-              <div className="cal-list custom-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: '#fff', padding: '0.5rem 1rem 6rem' }}>
-                <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+              <div className="cal-list custom-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: '#fff' }}>
+                <div style={{ maxWidth: '720px', margin: '0 auto', padding: '0 1rem 6rem' }}>
                   {lanes.map(lane => {
                     const real = lane.apps.filter((a: any) => !isBlockApp(a));
+                    const sum = real.filter((a: any) => a.status !== 'cancelled' && a.status !== 'no-show').reduce((t: number, a: any) => t + (Number(a.price) || 0), 0);
                     const color = lane.staffId ? getCardColor(lane.staffId).vividBg : '#94a3b8';
+                    const expKey = `${dayKey}:${lane.key}`;
+                    const open = !!listExpanded[expKey];
+                    const shown = open ? lane.apps : lane.apps.slice(0, LIST_CAP);
+                    const hidden = lane.apps.length - shown.length;
                     return (
-                      <section key={lane.key} style={{ paddingTop: '1.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
-                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-                          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{lane.name}</h3>
-                          <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>{real.length > 0 ? `${real.length} зап.` : ''}</span>
+                      <section key={lane.key}>
+                        <div style={{ position: 'sticky', top: 0, zIndex: 3, background: '#fff', display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.8rem 0 0.5rem', borderBottom: '1px solid #eef1f4' }}>
+                          <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+                          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lane.name}</h3>
+                          <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {real.length === 0 ? 'Вільний' : `${real.length} зап.${sum ? ` · ${sum.toLocaleString('uk-UA')} ₴` : ''}`}
+                          </span>
                         </div>
-                        {lane.apps.length === 0 ? (
-                          <div style={{ padding: '0.7rem 0 0.9rem 1.15rem', fontSize: '0.875rem', color: '#94a3b8', borderBottom: '1px solid #f1f5f9' }}>Записів немає</div>
-                        ) : lane.apps.map((app: any) => {
+                        {shown.map((app: any) => {
                           const block = isBlockApp(app);
                           const svc = services.find((x: any) => String(x.id) === String(app.service_id));
                           const off = app.status === 'cancelled' || app.status === 'no-show';
-                          const st = statusLabel[app.status as string];
+                          const st = statusStyle[app.status as string];
+                          const dur = fmtMin(minutesOf(app));
                           return (
                             <div key={app.id} onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
-                              style={{ display: 'flex', gap: '0.9rem', alignItems: 'flex-start', padding: '0.85rem 0', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', opacity: off ? 0.5 : 1 }}>
-                              <div style={{ width: '52px', flexShrink: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', lineHeight: 1.3 }}>
-                                {String(app.start_time).substring(0, 5)}
-                                {app.end_time && <div style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
+                              style={{ display: 'grid', gridTemplateColumns: '3.4rem minmax(0, 1fr) auto', columnGap: '0.75rem', alignItems: 'center', padding: '0.65rem 0', borderBottom: '1px solid #f4f6f8', cursor: 'pointer', opacity: off ? 0.55 : 1 }}>
+                              <div style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
+                                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{String(app.start_time).substring(0, 5)}</div>
+                                {app.end_time && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
                               </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 600, color: block ? '#64748b' : '#0f172a', textDecoration: app.status === 'no-show' ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, fontSize: '0.92rem', color: block ? '#64748b' : '#0f172a', textDecoration: app.status === 'no-show' ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
                                 </div>
-                                {!block && <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{svc?.name || app.service_name || ''}</div>}
+                                {!block && (
+                                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {[svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
+                                  </div>
+                                )}
                               </div>
-                              <div style={{ flexShrink: 0, textAlign: 'right', fontSize: '0.8rem', color: '#64748b' }}>
-                                {!block && app.price ? <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.9rem' }}>{Number(app.price).toLocaleString('uk-UA')} ₴</div> : null}
-                                {st && <div style={{ color: app.status === 'completed' ? '#4F7A5A' : '#94a3b8' }}>{st}</div>}
+                              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                {!block && app.price ? <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>{Number(app.price).toLocaleString('uk-UA')} ₴</span> : null}
+                                {st && <span style={{ fontSize: '0.68rem', fontWeight: 600, color: st.color, background: st.bg, padding: '1px 7px', borderRadius: '999px', whiteSpace: 'nowrap' }}>{st.label}</span>}
                               </div>
                             </div>
                           );
                         })}
+                        {hidden > 0 && (
+                          <button type="button" onClick={() => setListExpanded(prev => ({ ...prev, [expKey]: true }))}
+                            style={{ width: '100%', padding: '0.7rem 0', border: 'none', background: 'transparent', color: '#475569', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', borderBottom: '1px solid #f4f6f8' }}>
+                            Показати ще {hidden}
+                          </button>
+                        )}
                       </section>
                     );
                   })}

@@ -529,6 +529,22 @@ const handleSaveShifts = async () => {
     }
   };
 
+  // Запит клієнта чекає відповіді закладу (режим «підтверджую записи вручну»): підтвердити чи відхилити. Клієнт отримає лист.
+  const handleDecideBooking = async (app: any, approve: boolean) => {
+    if (!app) return;
+    try {
+      const token = await getAuthToken();
+      await api.updateAppointmentStatus(token, app.id, (approve ? 'confirmed' : 'cancelled') as any);
+      setAppointments(prev => approve ? prev.map(a => a.id === app.id ? { ...a, status: 'confirmed' } : a) : prev.filter(a => String(a.id) !== String(app.id)));
+      if (selectedBooking && selectedBooking.id === app.id) {
+        if (approve) setSelectedBooking({ ...selectedBooking, status: 'confirmed' }); else { setIsBookingDetailsModalOpen(false); setSelectedBooking(null); }
+      }
+      showToast(approve ? 'Запис підтверджено, клієнт отримає лист' : 'Запис відхилено, клієнт отримає лист', approve ? 'success' : 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Не вдалося відповісти на запит', 'error');
+    }
+  };
+
   const handleCancelBooking = async (appToCancel?: any) => {
     const target = appToCancel || selectedBooking;
     if (!target) return;
@@ -1171,6 +1187,10 @@ const handleSaveShifts = async () => {
     return total;
   }, [calendarView, currentDate, weekDays, appointmentsByDate, getAppointmentsForDay, services]);
 
+  const pendingList = useMemo(() => appointments
+    .filter((a: any) => a.status === 'pending_approval')
+    .sort((a: any, b: any) => String(a.date || a.start_time).localeCompare(String(b.date || b.start_time))), [appointments]);
+
   const currentViewAppointmentsCount = useMemo(() => {
     const countReal = (list: any[]) =>
       list.filter(a => a.status !== 'blocked' && a.color !== 'blocked').length;
@@ -1211,6 +1231,16 @@ const handleSaveShifts = async () => {
         .cal-m-agenda-sub { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
         .cal-m-agenda-head button { border: 1px solid #e2e8f0; background: #fff; color: #0f172a; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
         .cal-m-agenda-more { width: 100%; padding: 0.7rem 0; border: none; background: transparent; color: #475569; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+        .cal-pending-chip { display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0; height: 30px; padding: 0 0.7rem; border-radius: 999px; border: 1px solid #fcd9a1; background: #fff8ec; color: #92400e; font-family: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .cal-pending-chip i { width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; display: block; }
+        .cal-pending-chip span { font-weight: 600; }
+        .cal-pending-box { border: 1px solid #fcd9a1; background: #fffaf0; border-radius: 12px; padding: 0.8rem 0.9rem; margin-bottom: 0.7rem; display: flex; flex-direction: column; gap: 0.6rem; }
+        .cal-pending-box b { display: block; font-size: 0.88rem; color: #92400e; }
+        .cal-pending-box span { font-size: 0.78rem; color: #b45309; }
+        .cal-pending-btns { display: flex; gap: 0.5rem; }
+        .cal-pending-btns button { flex: 1; height: 38px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; color: #0f172a; font-family: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+        .cal-pending-btns button.ok { background: #0f172a; border-color: #0f172a; color: #fff; }
+        .status-pending_approval { border: 1.5px dashed #f59e0b !important; }
         .fab-button { position: fixed; right: 1.5rem; bottom: 1.5rem; width: 56px; height: 56px; border-radius: 50%; border: none; background: #0f172a; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28); cursor: pointer; z-index: 30; transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .fab-button:hover { transform: scale(1.06); box-shadow: 0 10px 28px rgba(15, 23, 42, 0.34); }
         .fab-button:active { transform: scale(0.96); }
@@ -1223,6 +1253,7 @@ const handleSaveShifts = async () => {
         .cl-m-only { display: none; }
         @media (max-width: 860px) {
           .fab-button { right: 1rem; bottom: 1rem; }
+          .cal-pending-chip span { display: none; }
           .cal-list-inner { padding: 0 1rem 6rem; }
           .cal-list-row { grid-template-columns: 3.4rem minmax(0, 1fr) auto; grid-template-areas: "time client price" "time svc status"; column-gap: 0.75rem; row-gap: 2px; padding: 0.65rem 0; }
           .cal-list-row.with-master { grid-template-columns: 3.4rem minmax(0, 1fr) auto; }
@@ -1543,6 +1574,11 @@ const handleSaveShifts = async () => {
                   : `${currentDate.toLocaleString('uk-UA', { weekday: 'short' })}, ${currentDate.getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
               }
             </div>
+            {pendingList.length > 0 && (
+              <button type="button" className="cal-pending-chip" onClick={() => { setSelectedBooking(pendingList[0]); setIsBookingDetailsModalOpen(true); }} title="Записи, які чекають вашого підтвердження">
+                <i />{pendingList.length}<span> {pendingList.length === 1 ? 'чекає підтвердження' : 'чекають підтвердження'}</span>
+              </button>
+            )}
           </div>
 
           <div className="cal-toolbar__rest" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
@@ -2662,7 +2698,16 @@ const handleSaveShifts = async () => {
                 ) : null}
               </div>
 
-              {!isBlock && (
+              {!isBlock && selectedBooking.status === 'pending_approval' && (
+                <div className="cal-pending-box">
+                  <div><b>Чекає вашого підтвердження</b><span>Клієнт отримає лист із вашою відповіддю.</span></div>
+                  <div className="cal-pending-btns">
+                    <button type="button" className="ok" onClick={() => void handleDecideBooking(selectedBooking, true)}>Підтвердити</button>
+                    <button type="button" onClick={() => void handleDecideBooking(selectedBooking, false)}>Відхилити</button>
+                  </div>
+                </div>
+              )}
+              {!isBlock && selectedBooking.status !== 'pending_approval' && (
                 <>
                   <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
                     {statuses.map(s => {

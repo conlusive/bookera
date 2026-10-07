@@ -93,8 +93,14 @@ function BookingContent() {
       </div>
 
       <h1 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#222222', margin: '0 0 1.25rem', letterSpacing: '-0.02em' }}>
-        {alreadyCancelled ? 'Візит скасовано' : 'Ваш візит'}
+        {alreadyCancelled ? 'Візит скасовано' : booking?.status === 'pending_approval' ? 'Запит на запис' : 'Ваш візит'}
       </h1>
+
+      {booking?.status === 'pending_approval' && !alreadyCancelled && (
+        <div style={{ background: '#FFFAF0', border: '1px solid #FCD9A1', color: '#92400E', borderRadius: '12px', padding: '0.8rem 1rem', fontSize: '0.88rem', marginBottom: '1rem', lineHeight: 1.45 }}>
+          <b>Чекаємо відповіді закладу.</b> Час за вами зарезервовано, а підтвердження ми надішлемо листом.
+        </div>
+      )}
 
       <div style={{
         background: '#F4FAF5', border: '1px solid #E4EBE3', borderRadius: '14px',

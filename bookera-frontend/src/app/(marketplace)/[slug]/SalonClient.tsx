@@ -298,6 +298,8 @@ export default function SalonClient({
   const [pendingBookingId, setPendingBookingId] = useState<number | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookedMasterName, setBookedMasterName] = useState('');
+  // Заклад підтверджує записи вручну: клієнт побачить «запит надіслано», а не «запис підтверджено»
+  const [bookedPending, setBookedPending] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(600);
 
   const [slotItems, setSlotItems] = useState<SlotStatusItem[]>([]);
@@ -1133,10 +1135,13 @@ const formatRole = (role?: string) => {
         const pay = await api.depositCheckout(created.id, created.deposit_token);
         if (!pay.paid && goToCheckout(pay)) return;  // перехід на сторінку оплати
         showToast('Завдаток сплачено, запис підтверджено!', 'success');
+      } else if ((created as any).status === 'pending_approval') {
+        showToast('Запит надіслано. Заклад підтвердить запис, ми повідомимо вас листом', 'success');
       } else {
         showToast('Запис успішно підтверджено!', 'success');
       }
       setBookedMasterName(String((created as any).master_name || ''));
+      setBookedPending((created as any).status === 'pending_approval');
       setBookingSuccess(true);
       if (created.ask_marketing_consent) {
         // Спершу людина бачить підтвердження, і лише потім питаємо про розсилку
@@ -3358,9 +3363,11 @@ const formatRole = (role?: string) => {
                       <polyline className="success-check-stroke" points="20 6 9 17 4 12"></polyline>
                     </svg>
                   </div>
-                  <h3 style={{ fontSize: '1.55rem', fontWeight: '700', color: '#1D1D1F', margin: '0 0 0.5rem 0' }}>Запис підтверджено</h3>
+                  <h3 style={{ fontSize: '1.55rem', fontWeight: '700', color: '#1D1D1F', margin: '0 0 0.5rem 0' }}>{bookedPending ? 'Запит надіслано' : 'Запис підтверджено'}</h3>
                   <p style={{ color: '#86868B', fontSize: '0.95rem', maxWidth: '380px', lineHeight: '1.5', margin: 0 }}>
-                    Чекаємо на вас <strong>{fmtLongDate(selectedDate)}</strong> о <strong>{selectedTime}</strong>.
+                    {bookedPending
+                      ? <>Час <strong>{fmtLongDate(selectedDate)}</strong> о <strong>{selectedTime}</strong> за вами зарезервовано. Заклад підтвердить запис, і ми повідомимо вас листом.</>
+                      : <>Чекаємо на вас <strong>{fmtLongDate(selectedDate)}</strong> о <strong>{selectedTime}</strong>.</>}
                   </p>
                   {bookedMasterName && (
                     <p style={{ color: '#86868B', fontSize: '0.95rem', margin: '0.35rem 0 0 0' }}>

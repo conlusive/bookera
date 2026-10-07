@@ -33,15 +33,23 @@ const SvgShieldCheck = (p:any) => <SvgIcon {...p}><path d="M12 22s8-4 8-10V5l-8-
 const SvgLock = (p:any) => <SvgIcon {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></SvgIcon>;
 
 
-const businessSettingsCards = [
-  { id: 'profile', title: 'Профіль закладу', desc: 'Назва, контакти, адреса й тип бізнесу.', icon: SvgStorefront, color: '#3b82f6', bg: '#eff6ff' },
-  { id: 'booking', title: 'Онлайн-запис', desc: 'Сітка, відпустки, мінімум часу до візиту.', icon: SvgGlobe, color: '#16a34a', bg: '#f0fdf4' },
-  { id: 'notifications', title: 'Листи й сповіщення', desc: 'Підтвердження, нагадування, сповіщення команді.', icon: SvgBell, color: '#f59e0b', bg: '#fffbeb' },
-  { id: 'security', title: 'Захист від неявок', desc: 'Автоблокування онлайн-запису для порушників.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
-  { id: 'payments', title: 'Передоплата', desc: 'Завдаток за візит: сума або відсоток.', icon: SvgCreditCard, color: '#ec4899', bg: '#fdf2f8' },
-  { id: 'finance', title: 'Фінанси та виплати', desc: 'Завдатки, комісія, що вирахується, реквізити й виплати.', icon: SvgCreditCard, color: '#0ea5e9', bg: '#f0f9ff' },
-  { id: 'billing', title: 'Підписка', desc: 'Скільки діє доступ, оплата й історія.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
+const SETTINGS_CARDS: Record<string, { id: string; title: string; desc: string; icon: any; color: string; bg: string }> = {
+  profile: { id: 'profile', title: 'Профіль закладу', desc: 'Назва, контакти, адреса й тип бізнесу.', icon: SvgStorefront, color: '#3b82f6', bg: '#eff6ff' },
+  booking: { id: 'booking', title: 'Правила бронювання', desc: 'Підтвердження записів, сітка, відпустки, мінімум часу до візиту.', icon: SvgGlobe, color: '#16a34a', bg: '#f0fdf4' },
+  payments: { id: 'payments', title: 'Передоплата', desc: 'Завдаток за візит: сума або відсоток.', icon: SvgCreditCard, color: '#ec4899', bg: '#fdf2f8' },
+  security: { id: 'security', title: 'Захист від неявок', desc: 'Автоблокування онлайн-запису для порушників.', icon: SvgLock, color: '#ef4444', bg: '#fef2f2' },
+  notifications: { id: 'notifications', title: 'Листи й сповіщення', desc: 'Листи клієнтам, нагадування, сповіщення команді.', icon: SvgBell, color: '#f59e0b', bg: '#fffbeb' },
+  finance: { id: 'finance', title: 'Фінанси та виплати', desc: 'Завдатки, комісія, реквізити й виплати.', icon: SvgCreditCard, color: '#0ea5e9', bg: '#f0f9ff' },
+  billing: { id: 'billing', title: 'Підписка', desc: 'Скільки діє доступ, оплата й історія.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
+};
+// Розділи за змістом: що це за заклад, як приймаємо записи, кому й що повідомляємо, гроші
+const SETTINGS_GROUPS: { title: string; ids: string[] }[] = [
+  { title: 'Заклад', ids: ['profile'] },
+  { title: 'Запис клієнтів', ids: ['booking', 'payments', 'security'] },
+  { title: 'Сповіщення', ids: ['notifications'] },
+  { title: 'Гроші й доступ', ids: ['finance', 'billing'] },
 ];
+const businessSettingsCards = Object.values(SETTINGS_CARDS);
 
 export default function SettingsTab({ business, onNavigate, initialView }: SettingsTabProps) {
   const { showToast } = useToast();
@@ -337,6 +345,17 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         .custom-select { appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="6 9 12 15 18 9"></polyline></svg>'); background-repeat: no-repeat; background-position: right 1rem center; background-size: 18px; padding-right: 2.5rem; cursor: pointer; }
         .custom-select:disabled { opacity: 0.7; }
 
+        .sx-modes { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; }
+        .sx-mode { display: flex; align-items: flex-start; gap: 0.8rem; text-align: left; border: 1px solid #e2e8f0; background: #fff; border-radius: 12px; padding: 0.9rem 1rem; cursor: pointer; font-family: inherit; transition: border-color .15s; }
+        .sx-mode:hover { border-color: #cbd5e1; }
+        .sx-mode.on { border-color: #0f172a; box-shadow: 0 0 0 1px #0f172a; }
+        .sx-mode i { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #cbd5e1; flex-shrink: 0; margin-top: 2px; position: relative; }
+        .sx-mode.on i { border-color: #0f172a; }
+        .sx-mode.on i::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: #0f172a; }
+        .sx-mode span { display: flex; flex-direction: column; gap: 0.2rem; }
+        .sx-mode b { font-size: 0.92rem; color: #0f172a; }
+        .sx-mode small { font-size: 0.8rem; color: #64748b; line-height: 1.45; }
+        .sx-warn { margin: 0.8rem 0 0; font-size: 0.8rem; color: #b45309; background: #fffaf0; border: 1px solid #fcd9a1; border-radius: 10px; padding: 0.6rem 0.8rem; }
         .ios-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
         .ios-toggle input { opacity: 0; width: 0; height: 0; }
         .ios-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #e2e8f0; transition: .3s; border-radius: 34px; }
@@ -359,20 +378,26 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                   <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.35rem', letterSpacing: '-0.03em' }}>Налаштування</h2>
                   <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Системні параметри, безпека та правила вашого закладу.</p>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.5rem' }}>
-                  {businessSettingsCards.map(card => {
-                    const IconComponent = card.icon;
-                    return (
-                      <div key={card.id} onClick={() => setSettingsView(card.id as any)} className="settings-card">
-                        <div className="settings-icon-wrapper" style={{ background: card.bg, color: card.color }}><IconComponent /></div>
-                        <div>
-                          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.4rem' }}>{card.title}</h3>
-                          <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: 1.4 }}>{card.desc}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {SETTINGS_GROUPS.map(group => (
+                  <section key={group.title} style={{ marginBottom: '2rem' }}>
+                    <h3 style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 0.8rem' }}>{group.title}</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem' }}>
+                      {group.ids.map(id => {
+                        const card = SETTINGS_CARDS[id];
+                        const IconComponent = card.icon;
+                        return (
+                          <div key={card.id} onClick={() => setSettingsView(card.id as any)} className="settings-card">
+                            <div className="settings-icon-wrapper" style={{ background: card.bg, color: card.color }}><IconComponent /></div>
+                            <div>
+                              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.35rem' }}>{card.title}</h3>
+                              <p style={{ color: '#64748b', fontSize: '0.88rem', margin: 0, lineHeight: 1.4 }}>{card.desc}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             ) : (
               <header className="sx-head">
@@ -690,6 +715,25 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
         {settingsView === 'booking' && (
           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '100%', animation: 'fadeIn 0.3s ease-out' }}>
 
+            <div className="clean-panel">
+              <h3 className="panel-title">Підтвердження записів</h3>
+              <p className="panel-subtitle">Що відбувається, коли клієнт записується онлайн.</p>
+              <div className="sx-modes">
+                {([
+                  [true, 'Автоматично', 'Запис одразу підтверджується. Клієнт отримує лист-підтвердження.'],
+                  [false, 'Після вашого підтвердження', 'Запис чекає вашої відповіді й тримає час. Клієнт отримує лист «запит отримано», а потім — підтверджено чи ні. Підтвердити можна в календарі.'],
+                ] as [boolean, string, string][]).map(([val, title, text]) => (
+                  <button key={String(val)} type="button" className={`sx-mode ${notificationSettings.auto_approve === val ? 'on' : ''}`} onClick={() => setNotificationSettings({ ...notificationSettings, auto_approve: val })}>
+                    <i />
+                    <span><b>{title}</b><small>{text}</small></span>
+                  </button>
+                ))}
+              </div>
+              {!notificationSettings.notify_client_booking && (
+                <p className="sx-warn">Листи клієнтам вимкнено («Листи й сповіщення»): клієнт не дізнається про підтвердження чи відмову. Увімкніть їх, якщо підтверджуєте вручну.</p>
+              )}
+            </div>
+
             <div className="danger-zone">
               <div className="list-row">
                 <div className="list-row-info">
@@ -967,15 +1011,8 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
               <p className="panel-subtitle">Листи, які клієнт отримує автоматично.</p>
               <div className="list-row">
                 <div className="list-row-info">
-                  <h4>Авто-підтвердження записів</h4>
-                  <p>Нові записи з онлайну одразу стають підтвердженими. Вимкніть, щоб підтверджувати кожен запис вручну.</p>
-                </div>
-                <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.auto_approve} onChange={e => setNotificationSettings({...notificationSettings, auto_approve: e.target.checked})} /><span className="ios-slider"></span></label>
-              </div>
-              <div className="list-row">
-                <div className="list-row-info">
-                  <h4>Лист-підтвердження клієнту</h4>
-                  <p>Одразу після запису клієнт отримує лист із деталями візиту та посиланням, щоб його перенести чи скасувати.</p>
+                  <h4>Листи клієнту про запис</h4>
+                  <p>Лист при записі (або «запит отримано», якщо ви підтверджуєте вручну) і лист із вашою відповіддю: підтверджено чи ні. У листі є посилання, щоб перенести чи скасувати візит.</p>
                 </div>
                 <label className="ios-toggle"><input type="checkbox" checked={notificationSettings.notify_client_booking} onChange={e => setNotificationSettings({...notificationSettings, notify_client_booking: e.target.checked})} /><span className="ios-slider"></span></label>
               </div>

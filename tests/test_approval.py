@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.core import email as email_module
 
 
 def _slot(days=2, hour=10):
@@ -11,9 +10,11 @@ def _slot(days=2, hour=10):
 
 
 @pytest.fixture
-def outbox(monkeypatch):
+def outbox(monkeypatch, client):
+    # Імпорт app.core.email підтягує .env (load_dotenv), тому модуль підключаємо лише після фікстури client,
+    # яка вже виставила тестову базу: інакше в середовище потрапив би справжній DATABASE_URL.
     sent = []
-    monkeypatch.setattr(email_module, "send_email_sync", lambda to, subject, html: sent.append((to, subject, html)))
+    monkeypatch.setattr("app.core.email.send_email_sync", lambda to, subject, html: sent.append((to, subject, html)))
     return sent
 
 

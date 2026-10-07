@@ -1285,7 +1285,7 @@ function ProfileContent() {
                               const durationLabel = !minutes ? null : formatDuration(minutes);
 
                               const days = start ? Math.ceil((start.getTime() - Date.now()) / 86400000) : null;
-                              const countdown = !isUpcoming || days === null ? null
+                              const countdown = !isUpcoming || days === null || app.status === 'pending_approval' ? null
                                 : days <= 0 ? 'сьогодні'
                                 : days === 1 ? 'завтра'
                                 : days <= 7 ? `через ${days} дні${days >= 5 ? 'в' : ''}`
@@ -1380,6 +1380,11 @@ function ProfileContent() {
                                       {isCancelled && (
                                         <div className="pf-cd" style={{ fontSize: '0.78rem', color: '#AEAEB2', marginTop: '2px' }}>
                                           Скасовано
+                                        </div>
+                                      )}
+                                      {app.status === 'pending_approval' && !isCancelled && (
+                                        <div className="pf-cd" style={{ fontSize: '0.78rem', color: '#B45309', fontWeight: 600, marginTop: '2px' }}>
+                                          Очікує підтвердження
                                         </div>
                                       )}
                                     </div>

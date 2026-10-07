@@ -600,7 +600,7 @@ class CampaignRequest(BaseModel):
     subject: str = Field(..., min_length=3, max_length=150)
     message: str = Field(..., min_length=10, max_length=3000)
     # Кому: всі / лише постійні / лише ті, хто давно не був
-    audience: str = Field("all", description="all | regular | lapsed")
+    audience: str = Field("all", description="all | regular | new | lapsed1m | lapsed3m | lapsed1y | lost | lapsed | away_N")
 
 
 def _business_contacts(business) -> list:
@@ -621,9 +621,11 @@ async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
     """
     from app.models import Client
     from app.services.client_stats import client_stats
-    from app.services import mailing
+    from app.services import mailing, client_groups
     from app.core.time_utils import local_now as _local_now
 
+    if not client_groups.is_known(audience):
+        raise HTTPException(status_code=422, detail="Невідома аудиторія розсилки")
     clients = (await db.execute(select(Client).where(
         Client.business_id == business_id, Client.is_blacklisted.isnot(True),
     ))).scalars().all()
@@ -641,14 +643,13 @@ async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
             no_consent += 1  # явно не погодився на розсилки
             continue
         s = stats.get(c.id, {})
-        if audience == "regular" and s.get("visits_count", 0) < 3:
+        # Групи (регулярні, новачки, не були місяць тощо) - ті самі правила, що в кабінеті: app/services/client_groups.py.
+        # Тим, хто був учора чи записаний на завтра, «ми скучили» - безглуздо, тож «давно не були» без запису наперед.
+        if audience != "all" and not client_groups.in_group(
+            audience, visits=s.get("visits_count", 0), last_visit_at=s.get("last_visit_at"),
+            next_visit_at=s.get("next_visit_at"), created_at=c.created_at, today=today,
+        ):
             continue
-        if audience == "lapsed":
-            # «Давно не був» - понад 60 днів і без майбутнього запису. Тим,
-            # хто був учора чи записаний на завтра, «ми скучили» - безглуздо.
-            last = s.get("last_visit_at")
-            if not last or s.get("next_visit_at") or (today - last.date()).days < 60:
-                continue
         candidates.append(c)
     # Відписаних і дублікатів пошти виключаємо тут, а не при відправці: число в інтерфейсі = число листів
     recipients, unsubscribed, invalid = mailing.unique_recipients(candidates, await mailing.suppressed_emails(db, business_id))
@@ -658,6 +659,7 @@ async def _campaign_audience(db: AsyncSession, business_id: int, audience: str):
 @router.get("/crm/campaigns/audience")
 async def campaign_audience(
     business_id: int = Query(...),
+    away: Optional[int] = Query(None, ge=14, le=1825, description="Додатково порахувати тих, хто не був N днів і більше"),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -666,7 +668,8 @@ async def campaign_audience(
     await assert_section(db, current_user, business_id, "analytics")
     out = {}
     unsubscribed = invalid = no_consent = 0
-    for key in ("all", "regular", "lapsed"):
+    from app.services import client_groups
+    for key in ("all", "regular", "lapsed", *client_groups.GROUP_IDS, *([f"away_{away}"] if away else [])):
         clients, recipients, unsub, inv, no_cons = await _campaign_audience(db, business_id, key)
         out[key] = len(recipients)
         if key == "all":
@@ -753,7 +756,8 @@ async def send_campaign(
     await db.flush()
 
     from app.services.audit import record as _audit
-    audience_label = {"all": "усі", "regular": "постійні", "lapsed": "давно не були"}.get(payload.audience, payload.audience)
+    from app.services import client_groups as _cg
+    audience_label = {"all": "усі", "lapsed": "давно не були", **_cg.GROUP_LABELS}.get(payload.audience, payload.audience)
     await _audit(db, payload.business_id, str(current_user.id), "marketing", "campaign_sent",
                  f"Розсилка «{payload.subject[:80]}»: {len(recipients)} листів (аудиторія: {audience_label})",
                  meta={"queued": len(recipients), "audience": payload.audience, "campaign_id": campaign.id})

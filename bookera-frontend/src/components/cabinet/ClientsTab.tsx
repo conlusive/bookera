@@ -12,7 +12,7 @@ import BirthdayInput from '@/components/ui/BirthdayInput';
 import ClientImportModal from '@/components/cabinet/ClientImportModal';
 import ClientDuplicatesModal from '@/components/cabinet/ClientDuplicatesModal';
 
-export default function ClientsTab({ business, clientsList, setClientsList, fetchClientsFromDB, onBookAgain }: any) {
+export default function ClientsTab({ business, clientsList, setClientsList, fetchClientsFromDB, onBookAgain, onRemind }: any) {
   const supabase = createClient();
 
   // --- СТАНИ ---
@@ -30,7 +30,9 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
   const [clientSearch, setClientSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [activeSegment, setActiveSegment] = useState<'all' | 'new' | 'regular' | 'vip' | 'lost' | 'blacklist'>('all');
+  const [activeSegment, setActiveSegment] = useState<string>('all');
+  // «Не були понад N днів» - довільний поріг для нагадування (0 - вимкнено)
+  const [lapseDays, setLapseDays] = useState(0);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'recent', direction: 'desc' });
 
   // Дані для редагування
@@ -110,23 +112,42 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const phoneDigits = (v: string) => String(v || '').replace(/\D/g, '').replace(/^380/, '').slice(-9);
   // Хто в якому сегменті - одне правило і для фільтра, і для лічильників
   const DAY = 86400000;
-  // Межі сегментів - ОДНІ для фільтра над таблицею, лічильників і пояснень
-  // у бічній колонці, тож числа ніколи не розходяться.
-  const NEW_DAYS = 30, LOST_DAYS = 60, REGULAR_VISITS = 3;
+  // Групи клієнтів, як у Booksy. Межі дзеркалять app/services/client_groups.py: за ними ж формується аудиторія
+  // розсилки, тож число біля групи дорівнює числу тих, кому піде нагадування.
+  const NEW_DAYS = 30, LOST_DAYS = 60, REGULAR_VISITS = 3, REGULAR_WINDOW = 90, MONTH = 30, QUARTER = 90, YEAR = 365;
   const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
-  const newSince = startOfToday() - NEW_DAYS * DAY;      // додані з цієї дати
-  const lostBefore = startOfToday() - LOST_DAYS * DAY;   // останній візит раніше цієї дати
+  const daysSince = (iso?: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso); d.setHours(0, 0, 0, 0);
+    return Math.round((startOfToday() - d.getTime()) / DAY);
+  };
+  const GROUPS: { id: string; label: string; hint: string; remind: boolean }[] = [
+    { id: 'regular', label: 'Ходять регулярно', hint: 'Три й більше візитів, останній не давніше 90 днів', remind: false },
+    { id: 'new', label: 'Новоприбулі', hint: 'Додані за останні 30 днів, не більше одного візиту', remind: false },
+    { id: 'lapsed1m', label: 'Не були місяць', hint: 'Останній візит 30-89 днів тому, без запису наперед', remind: true },
+    { id: 'lapsed3m', label: 'Не були три місяці', hint: 'Останній візит 90-364 дні тому, без запису наперед', remind: true },
+    { id: 'lost', label: 'Втрачені', hint: 'Були один раз понад 60 днів тому й не повернулися', remind: true },
+    { id: 'lapsed1y', label: 'Не було понад рік', hint: 'Останній візит рік і більше тому', remind: true },
+  ];
   const segmentOf = (seg: string, c: any) => {
-    if (seg === 'new') return (c.visits_count || 0) <= 1 && !!c.created_at && new Date(c.created_at).getTime() >= newSince;
-    if (seg === 'regular') return (c.visits_count || 0) >= REGULAR_VISITS;
+    const visits = c.visits_count || 0;
+    const since = daysSince(c.last_visit_at);
+    const upcoming = !!c.next_visit_at;
+    if (seg === 'new') return visits <= 1 && !!c.created_at && (startOfToday() - new Date(c.created_at).setHours(0, 0, 0, 0)) / DAY <= NEW_DAYS;
+    if (seg === 'regular') return visits >= REGULAR_VISITS && (upcoming || (since !== null && since <= REGULAR_WINDOW));
+    if (seg === 'lost') return visits === 1 && !upcoming && since !== null && since >= LOST_DAYS;
+    if (seg === 'lapsed1m') return !upcoming && since !== null && since >= MONTH && since < QUARTER;
+    if (seg === 'lapsed3m') return !upcoming && since !== null && since >= QUARTER && since < YEAR;
+    if (seg === 'lapsed1y') return !upcoming && since !== null && since >= YEAR;
+    if (seg.startsWith('away_')) return !upcoming && since !== null && since >= Number(seg.slice(5));
     if (seg === 'vip') return (c.tags || []).some((t: string) => String(t).toLowerCase().includes('vip'));
-    if (seg === 'lost') return !!c.last_visit_at && !c.next_visit_at && new Date(c.last_visit_at).getTime() < lostBefore;
     if (seg === 'blacklist') return !!c.is_blacklisted;
     return true;
   };
   const segmentCounts = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const s of ['all', 'new', 'regular', 'vip', 'lost', 'blacklist']) out[s] = clientsList.filter((c: any) => segmentOf(s, c)).length;
+    for (const s of ['all', 'vip', 'blacklist', ...GROUPS.map(g => g.id)]) out[s] = clientsList.filter((c: any) => segmentOf(s, c)).length;
+    out.away = clientsList.filter((c: any) => segmentOf(`away_${MONTH}`, c)).length;
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientsList]);
@@ -171,7 +192,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     // Раніше «Давно не були» зараховував усіх без жодного візиту (щойно
     // доданий клієнт одразу ставав «втраченим»), а «Нові» - за місяцем
     // останнього візиту, тож торішній візит у тому ж місяці теж давав «нового».
-    filtered = filtered.filter((c: any) => segmentOf(activeSegment, c));
+    filtered = filtered.filter((c: any) => segmentOf(lapseDays > 0 ? `away_${lapseDays}` : activeSegment, c));
 
     return filtered.sort((a: any, b: any) => {
       const { key, direction } = sortConfig;
@@ -183,9 +204,9 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
       if (key === 'balance') return modifier * ((a.balance || 0) - (b.balance || 0));
       return 0;
     });
-  }, [clientsList, debouncedSearch, sortConfig, activeSegment]);
+  }, [clientsList, debouncedSearch, sortConfig, activeSegment, lapseDays]);
 
-  useEffect(() => { setClientCurrentPage(1); }, [debouncedSearch, sortConfig, activeSegment]);
+  useEffect(() => { setClientCurrentPage(1); }, [debouncedSearch, sortConfig, activeSegment, lapseDays]);
 
   // Автозаповнення за поштою: клієнт уже в базі - кажемо; людина вже була в
   // закладі й має акаунт - підставляємо імʼя, телефон, дату народження в
@@ -240,7 +261,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const sideHint = (() => {
     if (clientsList.length === 0) return { title: 'База порожня', text: 'Імпортуйте клієнтів з Excel чи іншої системи — так нагадування й розсилки запрацюють одразу.', action: canManageBase ? { label: 'Імпортувати', run: () => setIsImportOpen(true) } : null };
     if (canManageBase && dupCount > 0) return { title: `${dupCount} ${dupCount === 1 ? 'група дублів' : 'групи дублів'}`, text: 'Один клієнт у кількох картках — його візити й витрати розкидані. Обʼєднайте, щоб бачити правду.', action: { label: 'Обʼєднати', run: () => setIsDupOpen(true) } };
-    if (segmentCounts.lost > 0) return { title: `${segmentCounts.lost} давно не були`, text: 'Понад 60 днів без візиту й без запису. Коротке повідомлення зараз часто повертає людину.', action: { label: 'Показати', run: () => setActiveSegment('lost') } };
+    if (segmentCounts.away > 0) return { title: `${segmentCounts.away} давно не були`, text: 'Понад 30 днів без візиту й без запису наперед. Коротке повідомлення зараз часто повертає людину.', action: { label: 'Показати', run: () => { setActiveSegment('all'); setLapseDays(30); } } };
     if (sideStats.birthdays.length > 0) return { title: 'Скоро дні народження', text: 'Привітання з невеликим подарунком — найтепліший привід запросити клієнта.', action: null };
     return { title: 'База в порядку', text: 'Дублів немає, давно втрачених клієнтів теж. Так тримати.', action: null };
   })();
@@ -482,7 +503,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
   const loyaltyTarget = 10;
   const loyaltyProgress = viewingClient ? Math.min((viewingClient.visits_count || 0) / loyaltyTarget, 1) : 0;
-  const isClientLost = !!viewingClient && segmentOf('lost', viewingClient);
+  const isClientLost = !!viewingClient && segmentOf(`away_${MONTH}`, viewingClient);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, width: '100%', background: '#fff' }}>
@@ -599,6 +620,8 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .service-table td { color: #0f172a; }
         .service-table th { color: #64748b; }
         .cl-cake { display: inline-flex; vertical-align: -2px; margin-left: 0.35rem; color: #f59e0b; }
+        .cl-lapse { width: auto; min-width: 190px; max-width: 240px; margin-left: auto; cursor: pointer; }
+        .cl-remind span { margin-left: 0.35rem; background: rgba(255,255,255,0.2); border-radius: 999px; padding: 0 0.45rem; font-size: 0.75rem; }
         .cl-actions-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
         .cl-actions-top .clean-btn-ghost, .cl-actions-top .clean-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
         .cl-dup { color: #b45309 !important; border-color: #fcd34d !important; background: #fffbeb !important; }
@@ -632,6 +655,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         @media (max-width: 860px) {
           .cl-toolbar { padding: 0.75rem 1rem 0 !important; flex-direction: column; align-items: stretch !important; gap: 0.6rem !important; }
           .cl-search { width: 100% !important; }
+          .cl-lapse { width: 100%; max-width: none; margin-left: 0; font-size: 16px; }
           .cl-search .clean-input { font-size: 16px; padding-top: 0.65rem; padding-bottom: 0.65rem; }
           .cl-actions-top { justify-content: stretch; flex-wrap: nowrap; }
           .cl-actions-top > button { flex: 1 1 0; min-width: 0; padding-left: 0.5rem; padding-right: 0.5rem; white-space: nowrap; }
@@ -773,9 +797,9 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                <div style={{ fontSize: '1.8rem' }}>💡</div>
                <div>
                  <div style={{ fontWeight: '700', color: '#3730a3', fontSize: '0.95rem' }}>Клієнт давно не був</div>
-                 <div style={{ color: '#4338ca', fontSize: '0.85rem', marginTop: '0.2rem' }}>Минуло більше 30 днів з останнього візиту. Надіслати нагадування або запропонувати знижку 10%?</div>
+                 <div style={{ color: '#4338ca', fontSize: '0.85rem', marginTop: '0.2rem' }}>Минуло більше 30 днів з останнього візиту. Зателефонуйте або нагадайте про себе листом: група «Не були місяць» у списку клієнтів.</div>
                </div>
-               <button className="light-btn" style={{ marginLeft: 'auto', background: '#4f46e5' }} onClick={() => showToast('Повідомлення надіслано!', 'success')}>Надіслати SMS</button>
+               {viewingClient?.phone && <a className="light-btn" style={{ marginLeft: 'auto', background: '#4f46e5', textDecoration: 'none' }} href={`tel:${String(viewingClient.phone).replace(/[^\d+]/g, '')}`}>Зателефонувати</a>}
              </div>
            )}
 
@@ -1054,7 +1078,20 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                  <span className="cl-search-ico"><Icons.Search /></span>
                  <input type="text" className="clean-input" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Імʼя чи телефон…" />
               </div>
+              <select className="clean-input cl-lapse" value={lapseDays} onChange={e => { const v = Number(e.target.value); setLapseDays(v); if (v > 0) setActiveSegment('all'); }} title="Знайти тих, хто давно не був, щоб нагадати про себе" aria-label="Не були давно">
+                 <option value={0}>Не були: будь-коли</option>
+                 <option value={30}>Не були понад місяць</option>
+                 <option value={60}>Не були понад 2 місяці</option>
+                 <option value={90}>Не були понад 3 місяці</option>
+                 <option value={180}>Не були понад пів року</option>
+                 <option value={365}>Не були понад рік</option>
+              </select>
               <div className="cl-actions-top">
+                 {onRemind && ((lapseDays > 0) || GROUPS.some(g => g.id === activeSegment && g.remind)) && filteredAndSortedClients.length > 0 && (
+                   <button type="button" className="clean-btn cl-remind" onClick={() => onRemind(lapseDays > 0 ? `away_${lapseDays}` : activeSegment)} title="Перейти до розсилки з уже обраною групою">
+                     Нагадати <span>{filteredAndSortedClients.length}</span>
+                   </button>
+                 )}
                  {canManageBase && dupCount > 0 && (
                    <button type="button" className="clean-btn-ghost cl-dup" onClick={() => setIsDupOpen(true)} title="Картки з тим самим номером чи поштою">
                      <Icons.Duplicates /> Дублі <span>{dupCount}</span>
@@ -1074,16 +1111,14 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
            {/* Сегменти - із лічильниками, щоб одразу було видно, скільки кого */}
            <div className="hide-scrollbar cl-pills">
-              {([
-                ['all', 'Усі', 'Уся база закладу'],
-                ['new', 'Нові', 'Додані за останні 30 днів, не більше одного візиту'],
-                ['regular', 'Постійні', 'Три й більше завершених візитів'],
-                ['vip', 'VIP', 'З тегом VIP'],
-                ['lost', 'Давно не були', 'Понад 60 днів без візиту й без майбутнього запису - час нагадати про себе'],
-                ['blacklist', 'Чорний список', 'Не можуть записатись онлайн'],
-              ] as const).filter(([id]) => ['all', 'new', 'regular', 'lost'].includes(id) || segmentCounts[id] > 0 || activeSegment === id).map(([id, label, hint]) => (
-                <button key={id} type="button" title={hint} className={`category-pill ${activeSegment === id ? 'active' : ''}`} onClick={() => setActiveSegment(id)}>
-                  {label} <span className="cl-count">{segmentCounts[id] || 0}</span>
+              {[
+                { id: 'all', label: 'Усі клієнти', hint: 'Уся база закладу' },
+                ...GROUPS,
+                { id: 'vip', label: 'VIP', hint: 'З тегом VIP' },
+                { id: 'blacklist', label: 'Чорний список', hint: 'Не можуть записатись онлайн' },
+              ].filter(g => ['all', 'vip', 'blacklist'].includes(g.id) ? (g.id === 'all' || segmentCounts[g.id] > 0 || activeSegment === g.id) : true).map(g => (
+                <button key={g.id} type="button" title={g.hint} className={`category-pill ${activeSegment === g.id && lapseDays === 0 ? 'active' : ''}`} onClick={() => { setActiveSegment(g.id); setLapseDays(0); }}>
+                  {g.label} <span className="cl-count">{segmentCounts[g.id] || 0}</span>
                 </button>
               ))}
            </div>
@@ -1168,15 +1203,13 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
              {/* Бічна колонка - як у «Послугах»: стан бази, гроші, дні народження, підказка */}
              <aside className="custom-scroll cl-side">
                <div className="widget-card">
-                 <div className="widget-title">База клієнтів</div>
-                 {([
-                   ['all', 'Усього', segmentCounts.all, '#0f172a'],
-                   ['new', 'Нові за 30 днів', segmentCounts.new, '#0f172a'],
-                   ['regular', 'Постійні', segmentCounts.regular, '#10b981'],
-                   ['lost', 'Давно не були', segmentCounts.lost, segmentCounts.lost ? '#d97706' : '#0f172a'],
-                 ] as const).map(([id, label, n, color]) => (
-                   <button key={id} type="button" className={`cl-side-row ${activeSegment === id ? 'on' : ''}`} onClick={() => setActiveSegment(id)}>
-                     <span>{label}</span><b style={{ color }}>{n || 0}</b>
+                 <div className="widget-title">Групи</div>
+                 <button type="button" className={`cl-side-row ${activeSegment === 'all' && lapseDays === 0 ? 'on' : ''}`} onClick={() => { setActiveSegment('all'); setLapseDays(0); }}>
+                   <span>Усі клієнти</span><b>{segmentCounts.all || 0}</b>
+                 </button>
+                 {GROUPS.map(g => (
+                   <button key={g.id} type="button" title={g.hint} className={`cl-side-row ${activeSegment === g.id && lapseDays === 0 ? 'on' : ''}`} onClick={() => { setActiveSegment(g.id); setLapseDays(0); }}>
+                     <span>{g.label}</span><b style={{ color: g.remind && segmentCounts[g.id] ? '#d97706' : '#0f172a' }}>{segmentCounts[g.id] || 0}</b>
                    </button>
                  ))}
                </div>

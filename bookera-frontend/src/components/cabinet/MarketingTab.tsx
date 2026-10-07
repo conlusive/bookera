@@ -26,12 +26,16 @@ import HelpTip from '@/components/ui/HelpTip';
  */
 
 type View = 'radar' | 'campaigns' | 'links';
-type Audience = 'all' | 'regular' | 'lapsed';
+type Audience = string;
 
 const AUDIENCES: { id: Audience; label: string; hint: string }[] = [
   { id: 'all', label: 'Усі', hint: 'Усі клієнти з поштою' },
-  { id: 'regular', label: 'Постійні', hint: 'Від трьох візитів' },
-  { id: 'lapsed', label: 'Давно не були', hint: 'Понад 60 днів і без майбутнього запису' },
+  { id: 'regular', label: 'Ходять регулярно', hint: 'Три й більше візитів, останній не давніше 90 днів' },
+  { id: 'new', label: 'Новоприбулі', hint: 'Додані за останні 30 днів, не більше одного візиту' },
+  { id: 'lapsed1m', label: 'Не були місяць', hint: 'Останній візит 30-89 днів тому, без запису наперед' },
+  { id: 'lapsed3m', label: 'Не були три місяці', hint: 'Останній візит 90-364 дні тому, без запису наперед' },
+  { id: 'lost', label: 'Втрачені', hint: 'Були один раз понад 60 днів тому й не повернулися' },
+  { id: 'lapsed1y', label: 'Не було понад рік', hint: 'Останній візит рік і більше тому' },
 ];
 
 const money = (n: number) => `${Math.round(n).toLocaleString('uk-UA')} ₴`;
@@ -46,7 +50,7 @@ const TEMPLATES = (name: string, link: string) => [
   { id: 'news', label: 'Новинка', subject: `Новинка в ${name}`, message: `У нас з'явилась нова послуга. Деталі розповімо при записі або відповімо на цей лист.${link ? `\n\nЗапис: ${link}` : ''}` },
 ];
 
-export default function MarketingTab({ business }: { business: any }) {
+export default function MarketingTab({ business, preset }: { business: any; preset?: { audience: string; at: number } | null }) {
   const [view, setView] = useState<View>('radar');
   const bid = Number(business?.id);
 
@@ -60,6 +64,7 @@ export default function MarketingTab({ business }: { business: any }) {
   const [counts, setCounts] = useState<Awaited<ReturnType<typeof api.getCampaignAudience>> | null>(null);
   const [history, setHistory] = useState<CampaignRow[]>([]);
   const [audience, setAudience] = useState<Audience>('all');
+  const [awayCustom, setAwayCustom] = useState<number | null>(null);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [sendConfirm, setSendConfirm] = useState(false);
@@ -90,7 +95,7 @@ export default function MarketingTab({ business }: { business: any }) {
     void (async () => {
       try {
         const t = await getAuthToken();
-        setCounts(await api.getCampaignAudience(t, bid));
+        setCounts(await api.getCampaignAudience(t, bid, awayCustom ?? undefined));
         setHistory(await api.getCampaigns(t, bid));
       } catch { /* розсилка покаже порожні лічильники */ }
       try {
@@ -104,10 +109,22 @@ export default function MarketingTab({ business }: { business: any }) {
         setLinks(await api.getDirectLink(await getAuthToken(), bid));
       } catch { /* посилання - не критична частина екрана */ }
     })();
-  }, [bid]);
+  }, [bid, awayCustom]);
 
   const templates = useMemo(() => TEMPLATES(business?.name || 'наш заклад', links?.direct_url || ''), [business?.name, links?.direct_url]);
-  const reachable = counts ? counts[audience] : 0;
+  // «Нагадати» з вкладки «Клієнти»: одразу розсилки, потрібна група й шаблон «Давно не бачились»
+  useEffect(() => {
+    if (!preset) return;
+    setView('campaigns');
+    const m = /^away_(\d+)$/.exec(preset.audience);
+    setAwayCustom(m ? Number(m[1]) : null);
+    setAudience(preset.audience);
+    const t = templates.find(x => x.id === 'missed');
+    if (t) { setSubject(t.subject); setMessage(t.message); }
+    setSent(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset?.at]);
+  const reachable = counts ? (Number((counts as any)[audience]) || 0) : 0;
   // Те саме правило, що в листі на сервері: рядок «Запис: https://…» стає кнопкою
   const preview = useMemo(() => {
     const lines = message.trim().split('\n');
@@ -171,7 +188,7 @@ export default function MarketingTab({ business }: { business: any }) {
         setMessage(''); setSubject('');
         try {
           const t = await getAuthToken();
-          setCounts(await api.getCampaignAudience(t, bid));
+          setCounts(await api.getCampaignAudience(t, bid, awayCustom ?? undefined));
           setHistory(await api.getCampaigns(t, bid));
         } catch { /* лічильники оновляться при наступному відкритті */ }
       }
@@ -347,9 +364,9 @@ export default function MarketingTab({ business }: { business: any }) {
             {view === 'campaigns' && (
               <>
                 <div className="mk-pills">
-                  {AUDIENCES.map(a => (
+                  {[...AUDIENCES, ...(awayCustom ? [{ id: `away_${awayCustom}`, label: `Не були понад ${awayCustom} ${daysWord(awayCustom)}`, hint: 'Обрано у списку клієнтів' }] : [])].map(a => (
                     <button key={a.id} type="button" title={a.hint} className={`category-pill ${audience === a.id ? 'active' : ''}`} onClick={() => { setAudience(a.id); setSent(null); }}>
-                      {a.label} <span className="mk-c">{counts ? counts[a.id] : '…'}</span>
+                      {a.label} <span className="mk-c">{counts ? ((counts as any)[a.id] ?? 0) : '…'}</span>
                     </button>
                   ))}
                 </div>

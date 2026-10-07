@@ -1059,17 +1059,18 @@ export const api = {
    * ніж клієнтів у базі.
    */
   async sendCampaign(token: string, payload: {
-    business_id: number; subject: string; message: string; audience?: 'all' | 'regular' | 'lapsed';
+    business_id: number; subject: string; message: string; audience?: string;
   }): Promise<{ queued: number; total_clients: number; without_email: number; unsubscribed: number; quota: CampaignQuota }> {
     return authFetch('/crm/campaigns', token, { method: 'POST', body: JSON.stringify(payload) });
   },
 
   /** Скільки людей отримає розсилку для кожної аудиторії - до відправки. */
-  async getCampaignAudience(token: string, businessId: number): Promise<{
-    all: number; regular: number; lapsed: number; total_clients: number; without_email: number;
+  async getCampaignAudience(token: string, businessId: number, away?: number): Promise<{
+    all: number; regular: number; lapsed: number; new: number; lapsed1m: number; lapsed3m: number; lapsed1y: number; lost: number;
+    total_clients: number; without_email: number;
     unsubscribed: number; invalid_email: number; no_consent: number; quota: CampaignQuota;
   }> {
-    return authFetch(`/crm/campaigns/audience?business_id=${businessId}`, token);
+    return authFetch(`/crm/campaigns/audience?business_id=${businessId}${away ? `&away=${away}` : ''}`, token);
   },
 
   /** Останні розсилки закладу з результатом відправки. */

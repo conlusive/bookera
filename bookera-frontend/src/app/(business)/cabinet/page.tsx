@@ -93,6 +93,8 @@ export default function BusinessCabinet() {
   const [team, setTeam] = useState<any[]>([]);
 
   const [activeTab, setActiveTab] = useState('Calendar');
+  // «Нагадати» зі списку клієнтів відкриває розсилку з уже обраною групою
+  const [marketingPreset, setMarketingPreset] = useState<{ audience: string; at: number } | null>(null);
 
   /**
    * Вкладки за роллю.
@@ -1479,7 +1481,7 @@ export default function BusinessCabinet() {
 
         {activeTab === 'Calendar' && <CalendarTab business={business} team={team} services={services} userProfile={userProfile} />}
         {activeTab === 'Inventory' && <InventoryTab business={business} team={team} Icons={Icons} />}
-        {activeTab === 'Clients' && (clientsReadyFor === String(business?.id) ? <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} /> : <TabLoading />)}
+        {activeTab === 'Clients' && (clientsReadyFor === String(business?.id) ? <ClientsTab business={business} clientsList={clientsList} setClientsList={setClientsList} fetchClientsFromDB={fetchClientsFromDB} onBookAgain={handleBookAgain} onRemind={(audience: string) => { setMarketingPreset({ audience, at: Date.now() }); setActiveTab('Marketing'); localStorage.setItem('bookera_activeTab', 'Marketing'); }} /> : <TabLoading />)}
         {activeTab === 'Services' && <ServicesTab business={business} services={services} setServices={setServices} Icons={Icons} />}
         {activeTab === 'Storefront' && <StorefrontTab business={business} services={services} team={team} Icons={Icons} setActiveTab={setActiveTab} shifts={shifts} onSaved={(patch) => setBusiness(b => (b ? { ...b, ...patch } : b))} onEditHours={() => { setShiftsFromCalSettings(false); setShowShiftsModal(true); }} onNavigate={(tab: string, view?: string) => { setSettingsTarget(view); setActiveTab(tab); }} />}
 
@@ -1501,7 +1503,7 @@ export default function BusinessCabinet() {
 
         {activeTab === 'Team' && <TeamTab business={business} team={team} setTeam={setTeam} services={services} userProfile={userProfile} appointments={appointments} setActiveTab={setActiveTab} setFilterMaster={setFilterMaster} globalShifts={shifts} />}
 
-        {activeTab === 'Marketing' && <MarketingTab business={business} />}
+        {activeTab === 'Marketing' && <MarketingTab business={business} preset={marketingPreset} />}
 
         {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} initialView={settingsTarget} />}
 

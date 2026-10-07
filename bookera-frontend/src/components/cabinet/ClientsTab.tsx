@@ -34,6 +34,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   // «Не були понад N днів» - довільний поріг для нагадування (0 - вимкнено)
   const [lapseDays, setLapseDays] = useState(0);
   const [lapseMenuOpen, setLapseMenuOpen] = useState(false);
+  const LAPSE_SHORT: Record<number, string> = { 30: '1 міс', 60: '2 міс', 90: '3 міс', 180: '6 міс', 365: '1 рік' };
   const LAPSE_LABELS: Record<number, string> = { 30: 'місяць', 60: '2 місяці', 90: '3 місяці', 180: 'пів року', 365: 'рік' };
   useEffect(() => {
     if (!lapseMenuOpen) return;
@@ -637,8 +638,10 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-chip.on { background: #0f172a; border-color: #0f172a; color: #fff; }
         .cl-chip.on em { color: rgba(255,255,255,0.65); }
         .cl-context-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+        .cl-toolbar-left { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+        .cl-lapse-short { display: none; }
         .cl-lapse-menu { position: relative; flex-shrink: 0; }
-        .cl-lapse-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 28px rgba(15,23,42,0.12); padding: 4px; min-width: 170px; display: flex; flex-direction: column; }
+        .cl-lapse-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 28px rgba(15,23,42,0.12); padding: 4px; min-width: 170px; display: flex; flex-direction: column; }
         .cl-lapse-pop button { border: none; background: transparent; text-align: left; font-family: inherit; font-size: 0.88rem; color: #0f172a; padding: 0.5rem 0.7rem; border-radius: 8px; cursor: pointer; }
         .cl-lapse-pop button:hover { background: #f4f6f8; }
         .cl-lapse-pop button.on { font-weight: 700; }
@@ -683,7 +686,11 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
           .cl-chips { padding: 0.6rem 1rem 0.1rem !important; }
           .cl-context { padding: 0.45rem 1rem 0 !important; flex-wrap: wrap; }
           .cl-context p { flex: 1 1 100%; }
-          .cl-context-actions { width: 100%; }
+          .cl-context-actions { width: 100%; justify-content: flex-end; }
+          .cl-toolbar-left { width: 100%; }
+          .cl-toolbar-left .cl-search { flex: 1 1 auto; width: auto !important; min-width: 0; }
+          .cl-lapse-full { display: none; }
+          .cl-lapse-short { display: inline; }
           .cl-lapse-pop { right: auto; left: 0; }
           .cl-search .clean-input { font-size: 16px; padding-top: 0.65rem; padding-bottom: 0.65rem; }
           .cl-actions-top { justify-content: stretch; flex-wrap: nowrap; }
@@ -1109,9 +1116,27 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         <div className="page-transition" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
            {/* Панель - як у «Послугах»: пошук ліворуч, дія праворуч */}
            <div className="cl-toolbar">
+              <div className="cl-toolbar-left">
               <div className="cl-search">
                  <span className="cl-search-ico"><Icons.Search /></span>
                  <input type="text" className="clean-input" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Імʼя чи телефон…" />
+              </div>
+              <div className="cl-lapse-menu" onClick={e => e.stopPropagation()}>
+                  <button type="button" className={`cl-chip ${lapseDays > 0 ? 'on' : ''}`} onClick={() => setLapseMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={lapseMenuOpen}>
+                    {lapseDays > 0
+                    ? <><span className="cl-lapse-full">{`Не були понад ${LAPSE_LABELS[lapseDays] || `${lapseDays} дн.`}`}</span><span className="cl-lapse-short">{`Не були: ${LAPSE_SHORT[lapseDays] || `${lapseDays} дн.`}`}</span></>
+                    : <><span className="cl-lapse-full">Не були понад…</span><span className="cl-lapse-short">Не були…</span></>}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+                  {lapseMenuOpen && (
+                    <div className="cl-lapse-pop" role="menu">
+                      {[30, 60, 90, 180, 365].map(d => (
+                        <button key={d} type="button" role="menuitem" className={lapseDays === d ? 'on' : ''} onClick={() => { setLapseDays(d); setActiveSegment('all'); setLapseMenuOpen(false); }}>{LAPSE_LABELS[d]}</button>
+                      ))}
+                      {lapseDays > 0 && <button type="button" role="menuitem" className="reset" onClick={() => { setLapseDays(0); setLapseMenuOpen(false); }}>Скинути</button>}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="cl-actions-top">
                  {canManageBase && dupCount > 0 && (
@@ -1156,20 +1181,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                 <span>{lapseDays > 0 ? ' · без візиту й без запису наперед' : activeGroup ? ` · ${activeGroup.hint}` : ''}</span>
               </p>
               <div className="cl-context-actions">
-              <div className="cl-lapse-menu" onClick={e => e.stopPropagation()}>
-                  <button type="button" className={`cl-chip ${lapseDays > 0 ? 'on' : ''}`} onClick={() => setLapseMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={lapseMenuOpen}>
-                    {lapseDays > 0 ? `Не були понад ${LAPSE_LABELS[lapseDays] || `${lapseDays} дн.`}` : 'Не були понад…'}
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-                  </button>
-                  {lapseMenuOpen && (
-                    <div className="cl-lapse-pop" role="menu">
-                      {[30, 60, 90, 180, 365].map(d => (
-                        <button key={d} type="button" role="menuitem" className={lapseDays === d ? 'on' : ''} onClick={() => { setLapseDays(d); setActiveSegment('all'); setLapseMenuOpen(false); }}>{LAPSE_LABELS[d]}</button>
-                      ))}
-                      {lapseDays > 0 && <button type="button" role="menuitem" className="reset" onClick={() => { setLapseDays(0); setLapseMenuOpen(false); }}>Скинути</button>}
-                    </div>
-                  )}
-                </div>
                 {onRemind && (lapseDays > 0 || !!activeGroup?.remind) && filteredAndSortedClients.length > 0 && (
                   <button type="button" className="cl-remind" onClick={() => onRemind(lapseDays > 0 ? `away_${lapseDays}` : activeSegment)} title="Відкрити розсилку з цією групою">
                     Нагадати листом

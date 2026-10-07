@@ -41,6 +41,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
   const [dayLayout, setDayLayout] = useState<'grid' | 'list'>('grid');
   const [listExpanded, setListExpanded] = useState<Record<string, boolean>>({});
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  // Тиждень і місяць у списку: дні згорнуті, крім сьогоднішнього; клік по дню відкриває/закриває його
+  const [agendaOpen, setAgendaOpen] = useState<Record<string, boolean>>({});
   useEffect(() => {
     if (!viewMenuOpen) return;
     const close = () => setViewMenuOpen(false);
@@ -1027,7 +1029,7 @@ const handleSaveShifts = async () => {
    * закриття - не вікно, а просто неробочий час, він уже показаний
    * штрихуванням.
    */
-  const getFreeGaps = useCallback((date: Date) => {
+  const getFreeGaps = useCallback((date: Date, staffId?: string) => {
     const shiftIdx = date.getDay() === 0 ? 6 : date.getDay() - 1;
     const shift = shifts?.[shiftIdx];
     if (!shift?.active) return [];
@@ -1041,8 +1043,12 @@ const handleSaveShifts = async () => {
     const dayEnd = toMin(shift.end);
     if (dayEnd <= dayStart) return [];
 
-    const busy = (appointmentsByDate.get(toLocalDateStr(date)) || [])
-      .filter((a: any) => a.status !== 'cancelled')
+    const dayAll = (appointmentsByDate.get(toLocalDateStr(date)) || []).filter((a: any) => a.status !== 'cancelled');
+    // Для окремого майстра: його записи плюс спільні перерви закладу. Вільний майстер при зайнятих
+    // колегах теж отримує «Вільно» - на весь робочий день.
+    // Спільна перерва: блок без майстра. Звичайний запис без майстра не займає колег.
+    const isShared = (a: any) => (a.status === 'blocked' || a.color === 'blocked' || !a.service_id) && (!a.staff_id || a.staff_id === 'all' || a.staff_id === '0');
+    const busy = (staffId === undefined ? dayAll : dayAll.filter((a: any) => String(a.staff_id) === staffId || isShared(a)))
       .map((a: any) => {
         const s = toMin(a.start_time);
         let e = toMin(a.end_time);
@@ -1061,7 +1067,7 @@ const handleSaveShifts = async () => {
 
     // Порожній день - це не «вікно», а просто вільний день: підсвічувати
     // його цілком означало б кричати там, де й так усе видно.
-    if (busy.length === 0) return [];
+    if (dayAll.length === 0) return [];
     return gaps;
   }, [appointmentsByDate, shifts]);
 
@@ -1691,6 +1697,7 @@ const handleSaveShifts = async () => {
             const isBlockApp = (a: any) => a.status === 'blocked' || a.color === 'blocked' || !a.service_id;
             const byTime = (list: any[]) => [...list].sort((a: any, b: any) => String(a.start_time).localeCompare(String(b.start_time)));
             type Section = { key: string; title: string; sub?: string; dot?: string; today?: boolean; apps: any[]; empty: string };
+            const collapsible = calendarView !== 'day';
             let sections: Section[] = [];
             const withMaster = calendarView !== 'day';
             const masterName = (a: any) => (team || []).find((m: any) => String(m.id) === String(a.staff_id))?.name || '';
@@ -1739,11 +1746,22 @@ const handleSaveShifts = async () => {
                     const sum = real.filter((a: any) => a.status !== 'cancelled' && a.status !== 'no-show').reduce((t: number, a: any) => t + (Number(a.price) || 0), 0);
                     const expKey = `${calendarView}:${sec.key}:${currentDate.toDateString()}`;
                     const open = !!listExpanded[expKey];
-                    const shown = open ? sec.apps : sec.apps.slice(0, LIST_CAP);
-                    const hidden = sec.apps.length - shown.length;
+                    // День у тижні/місяці: за замовчуванням відкритий лише сьогоднішній (або перший із записами, якщо сьогодні поза періодом)
+                    const hasToday = sections.some(x => x.today);
+                    const defaultOpen = !!sec.today || (!hasToday && sec.key === (sections.find(x => x.apps.length > 0)?.key));
+                    const dayOpen = collapsible ? (agendaOpen[expKey] ?? defaultOpen) : true;
+                    const shown = dayOpen ? (open ? sec.apps : sec.apps.slice(0, LIST_CAP)) : [];
+                    const hidden = dayOpen ? sec.apps.length - shown.length : 0;
                     return (
                       <section key={sec.key}>
-                        <div style={{ position: 'sticky', top: 0, zIndex: 3, background: '#fff', display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.8rem 0 0.5rem', borderBottom: '1px solid #eef1f4' }}>
+                        <div
+                          onClick={collapsible && sec.apps.length > 0 ? () => setAgendaOpen(prev => ({ ...prev, [expKey]: !dayOpen })) : undefined}
+                          role={collapsible && sec.apps.length > 0 ? 'button' : undefined}
+                          aria-expanded={collapsible && sec.apps.length > 0 ? dayOpen : undefined}
+                          style={{ position: 'sticky', top: 0, zIndex: 3, background: '#fff', display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.8rem 0 0.5rem', borderBottom: '1px solid #eef1f4', cursor: collapsible && sec.apps.length > 0 ? 'pointer' : 'default' }}>
+                          {collapsible && sec.apps.length > 0 && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: dayOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}><path d="M9 6l6 6-6 6"/></svg>
+                          )}
                           {sec.dot && <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: sec.dot, flexShrink: 0 }} />}
                           <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.title}</h3>
                           {sec.today && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#fff', background: '#0f172a', padding: '1px 8px', borderRadius: '999px' }}>Сьогодні</span>}
@@ -1782,7 +1800,7 @@ const handleSaveShifts = async () => {
                             </div>
                           );
                         })}
-                        {sec.apps.length > LIST_CAP && (
+                        {dayOpen && sec.apps.length > LIST_CAP && (
                           <button type="button" onClick={() => setListExpanded(prev => ({ ...prev, [expKey]: !open }))}
                             style={{ width: '100%', padding: '0.7rem 0', border: 'none', background: 'transparent', color: '#475569', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', borderBottom: '1px solid #f4f6f8' }}>
                             {open ? 'Згорнути' : `Показати ще ${hidden}`}
@@ -1863,33 +1881,43 @@ const handleSaveShifts = async () => {
                 {/* Вільні вікна між записами - куди ще можна когось поставити.
                     pointerEvents: none, щоб підсвітка не перехоплювала клік:
                     натискання по вікну має створювати запис, як і будь-де. */}
-                {getFreeGaps(currentDate).map((gap, i) => {
-                  const top = (gap.start - gridStartHour * 60);
-                  const height = gap.end - gap.start;
-                  if (top < 0 || height <= 0) return null;
-                  const hours = Math.floor(height / 60);
-                  const mins = height % 60;
-                  return (
-                    <div
-                      key={`gap-${i}`}
-                      style={{
-                        position: 'absolute', left: '60px', right: 0,
-                        top: `${top}px`, height: `${height}px`,
-                        background: 'rgba(194, 216, 196, 0.14)',
-                        borderTop: '1px dashed rgba(143, 174, 147, 0.5)',
-                        borderBottom: '1px dashed rgba(143, 174, 147, 0.5)',
-                        pointerEvents: 'none', zIndex: 2,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}
-                    >
-                      {height >= 45 && (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6F9273', letterSpacing: '0.01em' }}>
-                          Вільно {hours > 0 ? `${hours} год ` : ''}{mins > 0 ? `${mins} хв` : ''}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
+                {(() => {
+                  // Без колонок - вікна всього дня; з колонками - окремо для кожного майстра в його смузі
+                  const hasUnassignedLane = !!dayColumns && getAppointmentsForDay(currentDate).some((a: any) => a.status !== 'blocked' && a.color !== 'blocked' && (!a.staff_id || !dayColumns.some((m: any) => String(m.id) === String(a.staff_id))));
+                  const lanes: { key: string; gaps: { start: number; end: number }[]; laneIdx: number; total: number }[] = dayColumns
+                    ? dayColumns.map((m: any, idx: number) => ({ key: String(m.id), gaps: getFreeGaps(currentDate, String(m.id)), laneIdx: idx, total: dayColumns.length + (hasUnassignedLane ? 1 : 0) }))
+                    : [{ key: 'all', gaps: getFreeGaps(currentDate), laneIdx: 0, total: 1 }];
+                  return lanes.flatMap(lane => lane.gaps.map((gap, i) => {
+                    const top = (gap.start - gridStartHour * 60);
+                    const height = gap.end - gap.start;
+                    if (top < 0 || height <= 0) return null;
+                    const hours = Math.floor(height / 60);
+                    const mins = height % 60;
+                    const pos: React.CSSProperties = dayColumns
+                      ? { left: `calc(68px + (100% - 76px) * ${lane.laneIdx / lane.total})`, width: `calc((100% - 76px) / ${lane.total} - 6px)` }
+                      : { left: '60px', right: 0 };
+                    return (
+                      <div
+                        key={`gap-${lane.key}-${i}`}
+                        style={{
+                          position: 'absolute', ...pos,
+                          top: `${top}px`, height: `${height}px`,
+                          background: 'rgba(194, 216, 196, 0.14)',
+                          borderTop: '1px dashed rgba(143, 174, 147, 0.5)',
+                          borderBottom: '1px dashed rgba(143, 174, 147, 0.5)',
+                          pointerEvents: 'none', zIndex: 2,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        {height >= 45 && (
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6F9273', letterSpacing: '0.01em' }}>
+                            Вільно {hours > 0 ? `${hours} год ` : ''}{mins > 0 ? `${mins} хв` : ''}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }));
+                })()}
 
                 {layoutDayAppointments(getAppointmentsForDay(currentDate)).map((app: any) => {
                   const serviceName = services.find((s:any) => String(s.id) === String(app.service_id))?.name || app.service_name;

@@ -76,28 +76,30 @@ export default function BusinessShowcase() {
       </div>
 
       <style jsx global>{`
-        .bz { padding: 0 1.25rem; margin: 3.5rem 0; }
-        @media (min-width: 768px) { .bz { padding: 0 2rem; margin: 5rem 0; } }
-        .bz-card {
-          position: relative; max-width: 1200px; margin: 0 auto; overflow: hidden; border-radius: 32px;
-          display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.5rem; align-items: center;
-          padding: 2.25rem 1.5rem 0;
+        /* Секція на всю ширину екрана: фон від краю до краю, вміст у центрі, знімок виходить за правий і нижній край */
+        .bz {
+          position: relative; width: 100%; margin: 3.5rem 0 0; overflow: hidden;
           background:
-            radial-gradient(70% 90% at 85% 15%, rgba(194, 216, 196, 0.75) 0%, rgba(194, 216, 196, 0) 70%),
-            linear-gradient(160deg, #F6F9F6 0%, #E9F1EA 100%);
-          border: 1px solid #E3ECE4;
+            radial-gradient(60% 80% at 82% 18%, rgba(194, 216, 196, 0.8) 0%, rgba(194, 216, 196, 0) 70%),
+            linear-gradient(165deg, #F6F9F6 0%, #E6EFE7 100%);
+          border-top: 1px solid #E3ECE4;
         }
+        .bz-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.5rem; align-items: center; padding: 3rem 1.25rem 0; }
         @media (min-width: 1000px) {
-          .bz-card { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 2rem; padding: 3.5rem 0 0 3.5rem; align-items: stretch; }
-          .bz-copy { align-self: center; padding-bottom: 3.5rem; }
+          .bz { margin-top: 5rem; }
+          .bz-card {
+            grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); gap: 2.5rem; align-items: stretch;
+            padding: 5rem 0 0 max(2rem, calc((100% - 1200px) / 2));
+          }
+          .bz-copy { align-self: center; padding-bottom: 5rem; }
         }
 
         .bz-badge { display: inline-block; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; color: #4F6E53; background: rgba(255,255,255,0.75); border: 1px solid #D5E3D7; border-radius: 999px; padding: 0.3rem 0.8rem; margin-bottom: 1.1rem; }
-        .bz-title { margin: 0 0 1rem; font-size: clamp(1.9rem, 4.4vw, 3rem); line-height: 1.08; font-weight: 700; letter-spacing: -0.03em; color: #16211A; }
+        .bz-title { margin: 0 0 1rem; font-size: clamp(1.9rem, 4.4vw, 3.1rem); line-height: 1.08; font-weight: 700; letter-spacing: -0.03em; color: #16211A; }
         .bz-text { margin: 0 0 1.4rem; max-width: 30rem; font-size: 1.02rem; line-height: 1.6; color: #55655A; }
-        .bz-points { list-style: none; margin: 0 0 1.9rem; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
-        .bz-points li { display: flex; align-items: flex-start; gap: 0.65rem; font-size: 0.95rem; line-height: 1.4; color: #2B3A30; }
-        .bz-points li span { flex-shrink: 0; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: #16211A; color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+        .bz-points { list-style: none; margin: 0 0 1.9rem; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+        .bz-points li { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: start; column-gap: 0.7rem; font-size: 0.95rem; line-height: 20px; color: #2B3A30; }
+        .bz-points li span { width: 20px; height: 20px; border-radius: 50%; background: #16211A; color: #fff; display: inline-flex; align-items: center; justify-content: center; }
         .bz-ctas { display: flex; align-items: center; flex-wrap: wrap; gap: 1.4rem; }
         .bz-cta { display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 12px; background: #16211A; color: #fff; padding: 0.8rem 1.4rem; font-size: 0.95rem; font-weight: 600; text-decoration: none; transition: transform 0.2s ease, background 0.2s ease; }
         .bz-cta:hover { transform: translateY(-1px); background: #0d150f; }
@@ -105,7 +107,7 @@ export default function BusinessShowcase() {
         .bz-link:hover { text-decoration-color: #2B3A30; }
 
         /* Сцена: вікно браузера з календарем і телефон поверх нього */
-        .bz-stage { position: relative; min-height: 400px; display: flex; align-items: flex-end; }
+        .bz-stage { position: relative; min-height: 420px; display: flex; align-items: flex-end; }
         .bz-browser {
           position: relative; width: 100%; background: #fff; border-radius: 16px 0 0 0; overflow: hidden;
           box-shadow: 0 40px 80px -30px rgba(22, 33, 26, 0.35), 0 0 0 1px rgba(22, 33, 26, 0.08);
@@ -114,13 +116,14 @@ export default function BusinessShowcase() {
         .bz-bar i { width: 10px; height: 10px; border-radius: 50%; background: #D8DDD8; }
         .bz-bar span { margin: 0 auto; transform: translateX(-16px); font-size: 0.72rem; color: #8A978D; background: #fff; border-radius: 6px; padding: 3px 28px; }
         .bz-shot { display: block; width: 100%; height: auto; }
+        /* Телефон: знімок заповнює екран повністю, низ рамки ховається за краєм секції */
         .bz-phone {
-          position: absolute; left: -1.5rem; bottom: -3rem; width: clamp(140px, 15vw, 185px);
-          padding: 7px; border-radius: 34px; background: #16211A;
+          position: absolute; left: -1.5rem; bottom: -4rem; width: clamp(150px, 16vw, 200px);
+          padding: 7px; border-radius: 36px; background: #16211A;
           box-shadow: 0 30px 60px -18px rgba(22, 33, 26, 0.55), inset 0 0 0 1.5px rgba(255,255,255,0.12);
         }
-        .bz-screen { position: relative; overflow: hidden; border-radius: 28px; aspect-ratio: 9 / 18.5; background: #fff; }
-        .bz-screen .bz-shot { width: 100%; height: auto; }
+        .bz-screen { position: relative; overflow: hidden; border-radius: 29px; aspect-ratio: 9 / 18.5; background: #fff; }
+        .bz-screen .bz-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
         .bz-toast {
           position: absolute; top: 0.2rem; right: 2rem; display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.95rem 0.7rem 0.8rem;
           background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border: 1px solid rgba(22,33,26,0.08); border-radius: 14px;
@@ -132,13 +135,11 @@ export default function BusinessShowcase() {
         .bz-dot span { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid #5E7A61; animation: bzPulse 2.4s ease-out infinite; }
         @keyframes bzPulse { from { transform: scale(1); opacity: 0.8; } to { transform: scale(3); opacity: 0; } }
 
-        /* Телефон: лише телефон по центру, без вікна браузера, щоб кадр лишався читабельним */
+        /* Телефон: лише телефон по центру під текстом, низ рамки за краєм секції */
         @media (max-width: 999px) {
-          .bz-stage { min-height: 0; display: flex; justify-content: center; padding-bottom: 0; }
-          .bz-browser { display: none; }
-          .bz-toast { display: none; }
-          .bz-phone { position: relative; left: 0; bottom: -3rem; width: min(240px, 62vw); margin-top: 0.5rem; }
-          .bz-card { padding-bottom: 0; overflow: hidden; }
+          .bz-stage { min-height: 0; justify-content: center; padding-top: 0.5rem; }
+          .bz-browser, .bz-toast { display: none; }
+          .bz-phone { position: relative; left: 0; bottom: 0; margin: 0.5rem 0 -4.5rem; width: min(250px, 66vw); }
         }
 
         /* Поява одним рухом, коли блок у полі зору */

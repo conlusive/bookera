@@ -952,15 +952,20 @@ function ProfileContent() {
           .pf-aside .nav-item.active svg { color: #fff; }
         }
         @media (max-width: 520px) {
-          /* Візит: зверху час зліва і ціна з датою справа, нижче на всю ширину послуга, заклад і майстер */
+          /* Візит на мобілці: рядок «час · дата … статус», далі «послуга … ціна», далі «заклад, майстер … тривалість» */
           .pf-card { padding: 0 1rem !important; border-radius: 16px !important; }
-          .pf-item { padding: 1.1rem 0 !important; }
-          .pf-row { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "time side" "mid mid"; gap: 0.6rem 0.75rem !important; }
-          .pf-time { grid-area: time; width: auto !important; }
-          .pf-side { grid-area: side; }
-          .pf-mid { grid-area: mid; }
-          .pf-actions { padding-left: 0 !important; margin-top: 0.85rem !important; }
-          .pf-actions > * { flex: 1 1 auto; justify-content: center; text-align: center; }
+          .pf-item { padding: 1rem 0 !important; }
+          .pf-row { display: grid !important; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "time date cd" "svc svc price" "place place dur"; gap: 0 0.6rem !important; align-items: baseline !important; }
+          .pf-time, .pf-side, .pf-mid { display: contents !important; }
+          .pf-t { grid-area: time; font-size: 1rem !important; }
+          .pf-date { grid-area: date; text-align: left; }
+          .pf-cd { grid-area: cd; margin: 0 !important; text-align: right; }
+          .pf-svc { grid-area: svc; margin-top: 0.6rem; }
+          .pf-price { grid-area: price; margin-top: 0.6rem; text-align: right; white-space: nowrap; }
+          .pf-place { grid-area: place; margin-top: 0.15rem !important; font-size: 0.875rem !important; }
+          .pf-dur { grid-area: dur; margin: 0.15rem 0 0 !important; text-align: right; }
+          .pf-actions { padding-left: 0 !important; margin-top: 0.85rem !important; display: grid !important; grid-template-columns: 1fr 1fr; gap: 0.5rem !important; }
+          .pf-actions > * { justify-content: center; text-align: center; width: 100%; box-sizing: border-box; }
           .segmented-tabs { display: flex; width: 100%; }
           .segmented-btn { flex: 1; padding: 0.45rem 0.4rem; }
         }
@@ -1308,7 +1313,7 @@ function ProfileContent() {
 
                                     {/* Ліва колонка: Лише час і тривалість візиту */}
                                     <div className="pf-time" style={{ flexShrink: 0, width: '68px', paddingTop: '1px' }}>
-                                      <div style={{
+                                      <div className="pf-t" style={{
                                         fontSize: '1.125rem', fontWeight: 600,
                                         color: isUpcoming ? '#1D1D1F' : '#86868B',
                                         fontVariantNumeric: 'tabular-nums',
@@ -1317,7 +1322,7 @@ function ProfileContent() {
                                         {timeLabel}
                                       </div>
                                       {durationLabel && (
-                                        <div style={{
+                                        <div className="pf-dur" style={{
                                           fontSize: '0.8125rem', color: '#AEAEB2',
                                           marginTop: '0.25rem', fontVariantNumeric: 'tabular-nums',
                                         }}>
@@ -1328,7 +1333,7 @@ function ProfileContent() {
 
                                     {/* Середня колонка: Назва послуг, заклад і майстер */}
                                     <div className="pf-mid" style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{
+                                      <div className="pf-svc" style={{
                                         fontSize: '1.0625rem', fontWeight: 600, color: '#1D1D1F',
                                         letterSpacing: '-0.01em', lineHeight: 1.4,
                                         textDecoration: isCancelled ? 'line-through' : 'none',
@@ -1337,7 +1342,7 @@ function ProfileContent() {
                                         {allServices || app.business_name || 'Візит'}
                                       </div>
 
-                                      <div style={{
+                                      <div className="pf-place" style={{
                                         fontSize: '0.9375rem', color: '#86868B',
                                         marginTop: '0.375rem', lineHeight: 1.45,
                                       }}>
@@ -1348,7 +1353,7 @@ function ProfileContent() {
                                     {/* Права колонка: Ціна, дата та статус */}
                                     <div className="pf-side" style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                       {app.price ? (
-                                        <div style={{
+                                        <div className="pf-price" style={{
                                           fontSize: '1.0625rem', fontWeight: 600, color: '#1D1D1F',
                                           letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums',
                                           lineHeight: 1.3,
@@ -1358,7 +1363,7 @@ function ProfileContent() {
                                       ) : null}
 
                                       {dateDayMonth && (
-                                        <div style={{
+                                        <div className="pf-date" style={{
                                           fontSize: '0.8125rem', fontWeight: 500,
                                           color: '#86868B', lineHeight: 1.3,
                                           textTransform: 'capitalize',
@@ -1368,12 +1373,12 @@ function ProfileContent() {
                                       )}
 
                                       {countdown && (
-                                        <div style={{ fontSize: '0.78rem', color: '#6F9273', fontWeight: 600, marginTop: '2px' }}>
+                                        <div className="pf-cd" style={{ fontSize: '0.78rem', color: '#6F9273', fontWeight: 600, marginTop: '2px' }}>
                                           {countdown}
                                         </div>
                                       )}
                                       {isCancelled && (
-                                        <div style={{ fontSize: '0.78rem', color: '#AEAEB2', marginTop: '2px' }}>
+                                        <div className="pf-cd" style={{ fontSize: '0.78rem', color: '#AEAEB2', marginTop: '2px' }}>
                                           Скасовано
                                         </div>
                                       )}

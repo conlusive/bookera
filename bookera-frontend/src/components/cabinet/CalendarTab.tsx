@@ -1112,10 +1112,10 @@ const handleSaveShifts = async () => {
     const gaps: { start: number; end: number }[] = [];
     let cursor = dayStart;
     for (const b of busy) {
-      if (b.s - cursor >= 30) gaps.push({ start: cursor, end: b.s });
+      if (b.s - cursor >= 15) gaps.push({ start: cursor, end: b.s });
       cursor = Math.max(cursor, b.e);
     }
-    if (dayEnd - cursor >= 30) gaps.push({ start: cursor, end: dayEnd });
+    if (dayEnd - cursor >= 15) gaps.push({ start: cursor, end: dayEnd });
 
     // Порожній день - це не «вікно», а просто вільний день: підсвічувати
     // його цілком означало б кричати там, де й так усе видно.

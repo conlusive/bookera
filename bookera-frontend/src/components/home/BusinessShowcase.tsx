@@ -60,17 +60,13 @@ export default function BusinessShowcase() {
 
         <div className="bz-stage" aria-hidden>
           <div className="bz-browser bz-a" style={{ ['--d' as string]: '0.15s' }}>
-            <div className="bz-bar"><i /><i /><i /><span>bookera.app/cabinet</span></div>
+            <div className="bz-bar"><i /><i /><i /></div>
             <Image src="/home/cabinet-calendar-v2.jpg" alt="" width={2880} height={1879} sizes="(max-width: 1100px) 90vw, 640px" className="bz-shot" />
           </div>
           <div className="bz-phone bz-a" style={{ ['--d' as string]: '0.35s' }}>
             <div className="bz-screen">
               <Image src="/home/cabinet-mobile-v2.jpg" alt="" width={1170} height={2410} sizes="200px" className="bz-shot" />
             </div>
-          </div>
-          <div className="bz-toast bz-a" style={{ ['--d' as string]: '0.7s' }}>
-            <span className="bz-dot"><span /></span>
-            <div><b>Новий запис</b><small>Дарина · манікюр, завтра 11:00</small></div>
           </div>
         </div>
       </div>
@@ -114,7 +110,6 @@ export default function BusinessShowcase() {
         }
         .bz-bar { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; background: #F4F6F4; border-bottom: 1px solid #E6EBE6; }
         .bz-bar i { width: 10px; height: 10px; border-radius: 50%; background: #D8DDD8; }
-        .bz-bar span { margin: 0 auto; transform: translateX(-16px); font-size: 0.72rem; color: #8A978D; background: #fff; border-radius: 6px; padding: 3px 28px; }
         .bz-shot { display: block; width: 100%; height: auto; }
         /* Телефон: знімок заповнює екран повністю, низ рамки ховається за краєм секції */
         .bz-phone {
@@ -124,21 +119,11 @@ export default function BusinessShowcase() {
         }
         .bz-screen { position: relative; overflow: hidden; border-radius: 29px; aspect-ratio: 9 / 18.5; background: #fff; }
         .bz-screen .bz-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
-        .bz-toast {
-          position: absolute; top: 0.2rem; right: 2rem; display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.95rem 0.7rem 0.8rem;
-          background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border: 1px solid rgba(22,33,26,0.08); border-radius: 14px;
-          box-shadow: 0 18px 36px -14px rgba(22,33,26,0.35);
-        }
-        .bz-toast b { display: block; font-size: 0.82rem; color: #16211A; }
-        .bz-toast small { display: block; font-size: 0.72rem; color: #66756A; margin-top: 1px; }
-        .bz-dot { position: relative; width: 9px; height: 9px; border-radius: 50%; background: #5E7A61; flex-shrink: 0; }
-        .bz-dot span { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid #5E7A61; animation: bzPulse 2.4s ease-out infinite; }
-        @keyframes bzPulse { from { transform: scale(1); opacity: 0.8; } to { transform: scale(3); opacity: 0; } }
 
         /* Телефон: лише телефон по центру під текстом, низ рамки за краєм секції */
         @media (max-width: 999px) {
           .bz-stage { min-height: 0; justify-content: center; padding-top: 0.5rem; }
-          .bz-browser, .bz-toast { display: none; }
+          .bz-browser { display: none; }
           .bz-phone { position: relative; left: 0; bottom: 0; margin: 0.5rem 0 -4.5rem; width: min(250px, 66vw); }
         }
 
@@ -148,7 +133,6 @@ export default function BusinessShowcase() {
         @keyframes bzUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
         @media (prefers-reduced-motion: reduce) {
           .bz .bz-a, .bz.in .bz-a { opacity: 1; transform: none; animation: none; }
-          .bz-dot span { animation: none; }
         }
       `}</style>
     </section>

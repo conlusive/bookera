@@ -36,6 +36,7 @@ export default function BusinessShowcase() {
 
   return (
     <section ref={ref} className={`bz ${inView ? 'in' : ''}`} aria-labelledby="bz-title">
+      <div className="bz-bg" aria-hidden><i /><i /><i /></div>
       <div className="bz-card">
         <div className="bz-copy">
           <span className="bz-badge bz-a" style={{ ['--d' as string]: '0.05s' }}>BookEra Business</span>
@@ -73,14 +74,22 @@ export default function BusinessShowcase() {
 
       <style jsx global>{`
         /* Секція на всю ширину екрана: фон від краю до краю, вміст у центрі, знімок виходить за правий і нижній край */
-        .bz {
-          position: relative; width: 100%; margin: 3.5rem 0 0; overflow: hidden;
-          background:
-            radial-gradient(60% 80% at 82% 18%, rgba(194, 216, 196, 0.8) 0%, rgba(194, 216, 196, 0) 70%),
-            linear-gradient(165deg, #F6F9F6 0%, #E6EFE7 100%);
-          border-top: 1px solid #E3ECE4;
+        .bz { position: relative; width: 100%; margin: 3.5rem 0 0; overflow: hidden; background: #F3F8F3; border-top: 1px solid #E3ECE4; isolation: isolate; }
+        /* Фон: м'які кольорові плями (кольори майстрів з календаря) й ледь помітна крапкова сітка, що тане до країв */
+        .bz-bg { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+        .bz-bg::after {
+          content: ''; position: absolute; inset: 0;
+          background-image: radial-gradient(rgba(22, 33, 26, 0.10) 1px, transparent 1.2px); background-size: 22px 22px;
+          -webkit-mask-image: radial-gradient(70% 90% at 70% 40%, #000 0%, transparent 85%); mask-image: radial-gradient(70% 90% at 70% 40%, #000 0%, transparent 85%);
         }
-        .bz-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.5rem; align-items: center; padding: 3rem 1.25rem 0; }
+        .bz-bg i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.7; will-change: transform; }
+        .bz-bg i:nth-child(1) { width: 46vw; height: 46vw; max-width: 640px; max-height: 640px; right: -6%; top: -22%; background: #BFD8C3; animation: bzDrift1 18s ease-in-out infinite alternate; }
+        .bz-bg i:nth-child(2) { width: 34vw; height: 34vw; max-width: 460px; max-height: 460px; left: -8%; bottom: -26%; background: #D9D8F5; opacity: 0.6; animation: bzDrift2 22s ease-in-out infinite alternate; }
+        .bz-bg i:nth-child(3) { width: 28vw; height: 28vw; max-width: 380px; max-height: 380px; right: 22%; bottom: -18%; background: #FBE7C6; opacity: 0.65; animation: bzDrift3 20s ease-in-out infinite alternate; }
+        @keyframes bzDrift1 { to { transform: translate3d(-4%, 8%, 0) scale(1.08); } }
+        @keyframes bzDrift2 { to { transform: translate3d(8%, -6%, 0) scale(1.1); } }
+        @keyframes bzDrift3 { to { transform: translate3d(-6%, -8%, 0) scale(0.92); } }
+        .bz-card { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.5rem; align-items: center; padding: 3rem 1.25rem 0; }
         @media (min-width: 1000px) {
           .bz { margin-top: 5rem; }
           .bz-card {
@@ -133,6 +142,7 @@ export default function BusinessShowcase() {
         @keyframes bzUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
         @media (prefers-reduced-motion: reduce) {
           .bz .bz-a, .bz.in .bz-a { opacity: 1; transform: none; animation: none; }
+          .bz-bg i { animation: none; }
         }
       `}</style>
     </section>

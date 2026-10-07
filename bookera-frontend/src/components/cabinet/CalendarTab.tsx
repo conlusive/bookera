@@ -1242,7 +1242,14 @@ const handleSaveShifts = async () => {
           .cal-m-dots { display: flex !important; align-items: center; justify-content: center; gap: 3px; margin-top: auto; padding-bottom: 0.2rem; }
           .cal-m-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
           .cal-m-dots b { font-size: 0.65rem; font-weight: 700; color: #64748b; margin-left: 2px; }
-          .cal-m-grid { grid-auto-rows: minmax(76px, 1fr) !important; }
+          /* Місяць на телефоні: рівні невисокі клітинки без рамок, число по центру, під ним крапки майстрів */
+          .cal-m-grid { grid-auto-rows: 62px !important; align-content: start; padding: 0 0.25rem; }
+          .month-view-cell { border: none !important; border-bottom: 1px solid #f3f5f7 !important; padding: 0.35rem 0 0.2rem !important; justify-content: flex-start; gap: 3px; }
+          .month-view-cell > div:first-child { margin-bottom: 0 !important; }
+          .cal-m-blank { background: transparent !important; border: none !important; }
+          .cal-m-load { display: none !important; }
+          .cal-m-dots { margin-top: 0 !important; padding-bottom: 0 !important; min-height: 10px; }
+          .cal-m-head { border-bottom: none !important; padding: 0.55rem 0 0.35rem !important; margin: 0 0.25rem; }
           /* Тиждень: сім колонок з мінімальною шириною, гортається вбік; години й шапка лишаються на місці */
           .cal-week-head, .cal-week-body { min-width: 800px; }
           .cal-week-wrap .cal-time-col { position: sticky; left: 0; z-index: 13; width: 44px !important; }
@@ -2126,7 +2133,7 @@ const handleSaveShifts = async () => {
               </div>
 
               <div className="custom-scroll cal-m-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(130px, 1fr)', overflowY: 'auto' }}>
-                  {blanks.map(blank => <div key={`blank-${blank}`} style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}></div>)}
+                  {blanks.map(blank => <div key={`blank-${blank}`} className="cal-m-blank" style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}></div>)}
 
                   {days.map(day => {
                       const dObj = new Date(currentYear, currentMonth, day);
@@ -2156,6 +2163,7 @@ const handleSaveShifts = async () => {
 
                               {dayLoad > 0 && (
                                 <div
+                                  className="cal-m-load"
                                   title={`Зайнято ${Math.round(dayLoad * 100)}% робочого часу`}
                                   style={{ height: '3px', borderRadius: '2px', background: '#eef2f0', overflow: 'hidden', marginBottom: '0.35rem', flexShrink: 0 }}
                                 >

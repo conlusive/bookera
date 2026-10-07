@@ -1177,11 +1177,16 @@ const handleSaveShifts = async () => {
         }
         .cal-list-inner { padding: 0 1.75rem 6rem; }
         .cal-list-row { display: grid; grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.6fr) 7rem 8.5rem; column-gap: 1.25rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f4f6f8; cursor: pointer; }
-        .cal-list-row:hover { background: #fafbfc; }
+        @media (hover: hover) { .cal-list-row:hover { background: #fafbfc; } }
+        .cal-list-row.with-master { grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 0.9fr) 7rem 8.5rem; }
         .cl-status { text-align: right; }
+        .cl-m-only { display: none; }
         @media (max-width: 860px) {
           .cal-list-inner { padding: 0 1rem 6rem; }
           .cal-list-row { grid-template-columns: 3.4rem minmax(0, 1fr) auto; grid-template-areas: "time client price" "time svc status"; column-gap: 0.75rem; row-gap: 2px; padding: 0.65rem 0; }
+          .cal-list-row.with-master { grid-template-columns: 3.4rem minmax(0, 1fr) auto; }
+          .cl-master { display: none !important; }
+          .cl-m-only { display: inline; }
           .cl-time { grid-area: time; }
           .cl-client { grid-area: client; }
           .cl-svc { grid-area: svc; }
@@ -1231,7 +1236,7 @@ const handleSaveShifts = async () => {
           .cal-week-wrap .cal-week-head .cal-time-col { z-index: 14; }
           .cal-week-hcell { padding: 0.55rem 0.2rem !important; }
           .cal-week-hcell > div:last-child { font-size: 1.1rem !important; }
-          .cal-m-count { font-size: 0.6rem !important; }
+          .cal-m-count { display: none !important; }
           .cal-toolbar .action-icon-btn { padding: 0.65rem !important; }
         }
       `}</style>
@@ -1475,7 +1480,7 @@ const handleSaveShifts = async () => {
               {calendarView === 'week'
                 ? `${weekDays[0].getDate()} - ${weekDays[6].getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
                 : calendarView === 'month'
-                  ? currentDate.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })
+                  ? `${currentDate.toLocaleString('uk-UA', { month: 'long' })} ${currentDate.getFullYear()}`
                   : `${currentDate.toLocaleString('uk-UA', { weekday: 'short' })}, ${currentDate.getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
               }
             </div>
@@ -1490,7 +1495,7 @@ const handleSaveShifts = async () => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.35rem',
-                  background: isMasterUser ? '#f1f5f9' : 'transparent',
+                  background: 'transparent',
                   padding: '0.35rem 0.65rem',
                   borderRadius: '8px',
                   fontSize: '0.85rem',
@@ -1499,8 +1504,6 @@ const handleSaveShifts = async () => {
                   cursor: isMasterUser ? 'default' : 'pointer',
                   transition: '0.2s'
                 }}
-                onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   {filterMaster !== 'all' && (
@@ -1618,7 +1621,7 @@ const handleSaveShifts = async () => {
               {/* Телефон: День / Тиждень / Місяць згорнуті в один випадний вибір, щоб не займати місце */}
               <div className="cal-view-menu" style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                 <button type="button" onClick={() => setViewMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={viewMenuOpen}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', border: 'none', background: '#f1f5f9', color: '#0f172a', borderRadius: '8px', padding: '0.4rem 0.6rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', border: 'none', background: 'transparent', color: '#0f172a', borderRadius: '8px', padding: '0.4rem 0.4rem', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
                   {calendarView === 'day' ? 'День' : calendarView === 'week' ? 'Тиждень' : 'Місяць'}
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                 </button>
@@ -1627,7 +1630,7 @@ const handleSaveShifts = async () => {
                     {([['day', 'День'], ['week', 'Тиждень'], ['month', 'Місяць']] as const).map(([view, label]) => (
                       <button key={view} type="button" role="menuitem"
                         onClick={() => { setCalendarView(view); localStorage.setItem('bookera_calendarView', view); setViewMenuOpen(false); }}
-                        style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: calendarView === view ? '#f1f5f9' : 'transparent', color: '#0f172a', fontWeight: calendarView === view ? 700 : 500, fontSize: '0.9rem', padding: '0.55rem 0.7rem', borderRadius: '7px', cursor: 'pointer' }}>
+                        style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: 'transparent', color: '#0f172a', fontWeight: calendarView === view ? 700 : 500, fontSize: '0.9rem', padding: '0.55rem 0.7rem', borderRadius: '7px', cursor: 'pointer' }}>
                         {label}
                       </button>
                     ))}
@@ -1636,21 +1639,20 @@ const handleSaveShifts = async () => {
               </div>
 
               {/* Сітка / список для дня - лише іконки */}
-              {calendarView === 'day' && (
-                <div className="cal-layout-icons" role="group" aria-label="Вигляд дня" style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px', flexShrink: 0 }}>
-                  {([['grid', 'Сітка за годинами'], ['list', 'Список за майстрами']] as const).map(([mode, label]) => (
-                    <button key={mode} type="button" title={label} aria-label={label} aria-pressed={dayLayout === mode}
-                      onClick={() => { setDayLayout(mode); try { localStorage.setItem('bookera_dayLayout', mode); } catch { /* */ } }}
-                      style={{ border: 'none', cursor: 'pointer', borderRadius: '6px', padding: '0.3rem 0.45rem', display: 'flex', alignItems: 'center', background: dayLayout === mode ? '#fff' : 'transparent', color: dayLayout === mode ? '#0f172a' : '#94a3b8', boxShadow: dayLayout === mode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
-                      {mode === 'grid' ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Сітка / список - лише іконки, для дня, тижня й місяця */}
+              <div className="cal-layout-icons" role="group" aria-label="Вигляд" style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                {([['grid', 'Сітка'], ['list', 'Список']] as const).map(([mode, label]) => (
+                  <button key={mode} type="button" title={label} aria-label={label} aria-pressed={dayLayout === mode}
+                    onClick={() => { setDayLayout(mode); try { localStorage.setItem('bookera_dayLayout', mode); } catch { /* */ } }}
+                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0.4rem 0.4rem 0.3rem', display: 'flex', alignItems: 'center', color: dayLayout === mode ? '#0f172a' : '#b6bfcb', borderBottom: `2px solid ${dayLayout === mode ? '#0f172a' : 'transparent'}` }}>
+                    {mode === 'grid' ? (
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
+                    ) : (
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+                    )}
+                  </button>
+                ))}
+              </div>
 
               <button
                 type="button"
@@ -1683,19 +1685,36 @@ const handleSaveShifts = async () => {
         <div className="animated-calendar" key={currentDate.toISOString() + calendarView} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* --- ДЕНЬ --- */}
-          {calendarView === 'day' && dayLayout === 'list' && (() => {
-            // Список за майстрами: заголовок майстра (липкий), під ним його записи за часом - як у Booksy.
-            // Список не безмежний: у кожного майстра показуємо перші записи, решта - за кнопкою «Ще N».
+          {dayLayout === 'list' && (() => {
+            // Список: день - за майстрами, тиждень і місяць - за днями. Заголовки липкі, довгі розділи обрізані кнопкою «Ще N».
             const LIST_CAP = 6;
-            const dayKey = currentDate.toDateString();
-            const dayApps = [...getAppointmentsForDay(currentDate)].sort((a: any, b: any) => String(a.start_time).localeCompare(String(b.start_time)));
             const isBlockApp = (a: any) => a.status === 'blocked' || a.color === 'blocked' || !a.service_id;
-            const lanes: { key: string; name: string; staffId: string | null; apps: any[] }[] = dayColumns
-              ? dayColumns.map((m: any) => ({ key: String(m.id), name: m.name || m.full_name || 'Майстер', staffId: String(m.id), apps: dayApps.filter((a: any) => String(a.staff_id) === String(m.id)) }))
-              : [{ key: 'one', name: filterMaster !== 'all' ? ((team || []).find((m: any) => String(m.id) === String(filterMaster))?.name || 'Записи') : 'Записи', staffId: filterMaster !== 'all' ? String(filterMaster) : null, apps: dayApps.filter((a: any) => filterMaster === 'all' || String(a.staff_id) === String(filterMaster) || !a.staff_id) }];
-            if (dayColumns) {
-              const rest = dayApps.filter((a: any) => !dayColumns.some((m: any) => String(m.id) === String(a.staff_id)));
-              if (rest.length) lanes.push({ key: '__none', name: 'Без майстра', staffId: null, apps: rest });
+            const byTime = (list: any[]) => [...list].sort((a: any, b: any) => String(a.start_time).localeCompare(String(b.start_time)));
+            type Section = { key: string; title: string; sub?: string; dot?: string; today?: boolean; apps: any[]; empty: string };
+            let sections: Section[] = [];
+            const withMaster = calendarView !== 'day';
+            const masterName = (a: any) => (team || []).find((m: any) => String(m.id) === String(a.staff_id))?.name || '';
+            if (calendarView === 'day') {
+              const dayApps = byTime(getAppointmentsForDay(currentDate));
+              const lanes: { key: string; name: string; staffId: string | null; apps: any[] }[] = dayColumns
+                ? dayColumns.map((m: any) => ({ key: String(m.id), name: m.name || m.full_name || 'Майстер', staffId: String(m.id) as string | null, apps: dayApps.filter((a: any) => String(a.staff_id) === String(m.id)) }))
+                : [{ key: 'one', name: filterMaster !== 'all' ? ((team || []).find((m: any) => String(m.id) === String(filterMaster))?.name || 'Записи') : 'Записи', staffId: (filterMaster !== 'all' ? String(filterMaster) : null) as string | null, apps: dayApps.filter((a: any) => filterMaster === 'all' || String(a.staff_id) === String(filterMaster) || !a.staff_id) }];
+              if (dayColumns) {
+                const rest = dayApps.filter((a: any) => !dayColumns.some((m: any) => String(m.id) === String(a.staff_id)));
+                if (rest.length) lanes.push({ key: '__none', name: 'Без майстра', staffId: null, apps: rest });
+              }
+              sections = lanes.map(l => ({ key: l.key, title: l.name, dot: l.staffId ? getCardColor(l.staffId).vividBg : '#94a3b8', apps: l.apps, empty: 'Вільний' }));
+            } else {
+              const dates: Date[] = calendarView === 'week' ? weekDays : days.map(d => new Date(currentYear, currentMonth, d));
+              sections = dates.map(d => ({
+                key: d.toDateString(),
+                title: (() => { const t = d.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })(),
+                today: d.toDateString() === now.toDateString(),
+                apps: byTime(getAppointmentsForDay(d)),
+                empty: 'Записів немає',
+              }));
+              // Місяць: лише дні із записами, інакше список на 30 порожніх рядків
+              if (calendarView === 'month') sections = sections.filter(sec => sec.apps.length > 0);
             }
             const statusStyle: Record<string, { label: string; color: string; bg: string }> = {
               completed: { label: 'Завершено', color: '#3F6F4B', bg: '#EAF4EC' },
@@ -1709,24 +1728,27 @@ const handleSaveShifts = async () => {
               return st !== null && en !== null && en > st ? en - st : (a.duration || null);
             };
             const fmtMin = (m: number | null) => !m ? '' : m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? ` ${m % 60} хв` : ''}` : `${m} хв`;
+            if (sections.length === 0) {
+              return <div className="cal-list" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.95rem', background: '#fff' }}>У цьому місяці записів немає</div>;
+            }
             return (
               <div className="cal-list custom-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: '#fff' }}>
                 <div className="cal-list-inner">
-                  {lanes.map(lane => {
-                    const real = lane.apps.filter((a: any) => !isBlockApp(a));
+                  {sections.map(sec => {
+                    const real = sec.apps.filter((a: any) => !isBlockApp(a));
                     const sum = real.filter((a: any) => a.status !== 'cancelled' && a.status !== 'no-show').reduce((t: number, a: any) => t + (Number(a.price) || 0), 0);
-                    const color = lane.staffId ? getCardColor(lane.staffId).vividBg : '#94a3b8';
-                    const expKey = `${dayKey}:${lane.key}`;
+                    const expKey = `${calendarView}:${sec.key}:${currentDate.toDateString()}`;
                     const open = !!listExpanded[expKey];
-                    const shown = open ? lane.apps : lane.apps.slice(0, LIST_CAP);
-                    const hidden = lane.apps.length - shown.length;
+                    const shown = open ? sec.apps : sec.apps.slice(0, LIST_CAP);
+                    const hidden = sec.apps.length - shown.length;
                     return (
-                      <section key={lane.key}>
+                      <section key={sec.key}>
                         <div style={{ position: 'sticky', top: 0, zIndex: 3, background: '#fff', display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.8rem 0 0.5rem', borderBottom: '1px solid #eef1f4' }}>
-                          <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-                          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lane.name}</h3>
+                          {sec.dot && <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: sec.dot, flexShrink: 0 }} />}
+                          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.title}</h3>
+                          {sec.today && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#fff', background: '#0f172a', padding: '1px 8px', borderRadius: '999px' }}>Сьогодні</span>}
                           <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            {real.length === 0 ? 'Вільний' : `${real.length} зап.${sum ? ` · ${sum.toLocaleString('uk-UA')} ₴` : ''}`}
+                            {real.length === 0 ? sec.empty : `${real.length} зап.${sum ? ` · ${sum.toLocaleString('uk-UA')} ₴` : ''}`}
                           </span>
                         </div>
                         {shown.map((app: any) => {
@@ -1735,8 +1757,9 @@ const handleSaveShifts = async () => {
                           const off = app.status === 'cancelled' || app.status === 'no-show';
                           const st = statusStyle[app.status as string];
                           const dur = fmtMin(minutesOf(app));
+                          const master = withMaster ? masterName(app) : '';
                           return (
-                            <div key={app.id} className="cal-list-row" onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
+                            <div key={app.id} className={`cal-list-row${withMaster ? ' with-master' : ''}`} onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
                               style={{ opacity: off ? 0.55 : 1 }}>
                               <div className="cl-time" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
                                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{String(app.start_time).substring(0, 5)}</div>
@@ -1747,7 +1770,9 @@ const handleSaveShifts = async () => {
                               </div>
                               <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
+                                {master && <span className="cl-m-only"> · {master}</span>}
                               </div>
+                              {withMaster && <div className="cl-master" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{master}</div>}
                               <div className="cl-price" style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', textAlign: 'right' }}>
                                 {!block && app.price ? `${Number(app.price).toLocaleString('uk-UA')} ₴` : ''}
                               </div>
@@ -1955,7 +1980,7 @@ const handleSaveShifts = async () => {
           )}
 
           {/* --- ТИЖДЕНЬ --- */}
-          {calendarView === 'week' && (
+          {calendarView === 'week' && dayLayout === 'grid' && (
             <div className="custom-scroll cal-week-wrap" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
               <div className="cal-week-head" style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0, position: 'sticky', top: 0, zIndex: 12 }}>
                 <div className="cal-time-col" style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#ffffff' }}></div>
@@ -2052,7 +2077,7 @@ const handleSaveShifts = async () => {
           )}
 
           {/* --- МІСЯЦЬ --- */}
-          {calendarView === 'month' && (
+          {calendarView === 'month' && dayLayout === 'grid' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
               <div className="cal-m-head" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #f1f5f9', textAlign: 'center', fontWeight: '600', color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '1rem 0', flexShrink: 0 }}>
                  <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div>

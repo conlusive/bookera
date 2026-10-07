@@ -61,11 +61,11 @@ export default function BusinessShowcase() {
         <div className="bz-stage" aria-hidden>
           <div className="bz-browser bz-a" style={{ ['--d' as string]: '0.15s' }}>
             <div className="bz-bar"><i /><i /><i /></div>
-            <Image src="/home/cabinet-calendar-v2.jpg" alt="" width={2950} height={1906} sizes="(max-width: 1100px) 90vw, 640px" className="bz-shot" />
+            <Image src="/home/cabinet-calendar-v3.jpg" alt="" width={2950} height={1906} sizes="(max-width: 1100px) 90vw, 640px" className="bz-shot" />
           </div>
           <div className="bz-phone bz-a" style={{ ['--d' as string]: '0.35s' }}>
             <div className="bz-screen">
-              <Image src="/home/cabinet-mobile-v2.jpg" alt="" width={1170} height={2442} sizes="200px" className="bz-shot" />
+              <Image src="/home/cabinet-mobile-v3.jpg" alt="" width={1170} height={2442} sizes="200px" className="bz-shot" />
             </div>
           </div>
         </div>

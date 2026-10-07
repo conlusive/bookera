@@ -987,7 +987,21 @@ async def create_appointment(
                 )
 
     # Фонова відправка листа клієнту через SMTP
-    if notify_client and appointment_in.client_email and business and service:
+    if notify_client and appointment_in.client_email and business and service and not auto_approve:
+        from app.core.email import send_booking_pending_email
+        background_tasks.add_task(
+            send_booking_pending_email,
+            to_email=appointment_in.client_email,
+            client_name=appointment_in.client_name or "Клієнт",
+            business_name=business.name,
+            service_name=service.name,
+            booking_date=appointment.start_time.strftime("%d.%m.%Y"),
+            booking_time=appointment.start_time.strftime("%H:%M"),
+            manage_url=f"{FRONTEND_URL}/my-booking/{appointment.id}?token={appointment.manage_token}",
+            master_name=master_display_name,
+            business_phone=business.phone or "",
+        )
+    elif notify_client and appointment_in.client_email and business and service:
         background_tasks.add_task(
             send_booking_confirmation_email,
             to_email=appointment_in.client_email,
@@ -1291,7 +1305,13 @@ async def update_appointment_status(
                      f"Запис {appointment.client_name or ''} {appointment.start_time:%d.%m %H:%M}: {_labels.get(new_status, new_status)}")
     from app.services.reminders import request_review_now
     _review_args = await request_review_now(db, appointment) if new_status == "completed" and _old_status != "completed" else None
-    await db.commit()
+    from app.services.booking_decisions import schedule_decision_email
+    await schedule_decision_email(db, background_tasks, appointment, _old_status, new_status)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час уже зайнятий іншим записом: підтвердити не вдалося.")
     if _review_args:
         from app.core.email import send_review_request
         background_tasks.add_task(send_review_request, *_review_args)

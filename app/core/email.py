@@ -123,6 +123,57 @@ async def send_booking_confirmation_email(
     await asyncio.to_thread(send_email_sync, to_email, f"Запис підтверджено — {business_name}", html)
 
 
+async def send_booking_pending_email(
+        to_email: str, client_name: str, business_name: str, service_name: str,
+        booking_date: str, booking_time: str, manage_url: str = "", master_name: str = "", business_phone: str = "",
+):
+    """
+    Клієнт щойно записався, але заклад підтверджує записи вручну: лист чесно каже «запит отримано, чекайте відповіді»,
+    а не «вас записано». Підтвердження чи відмову клієнт отримає окремим листом.
+    """
+    rows = info_row("Коли", f"{booking_date}, {booking_time}", big=True)
+    if master_name:
+        rows += info_row("Майстер", master_name)
+    rows += info_row("Послуга", service_name)
+    if business_phone:
+        rows += info_row("Телефон закладу", business_phone)
+    body = card(rows) + (button("Переглянути або скасувати", manage_url) if manage_url else "")
+    html = layout(
+        business_name=business_name,
+        title="Запит на запис отримано",
+        intro=f"{esc(client_name)}, дякуємо! Заклад підтверджує записи вручну: ми повідомимо вас окремим листом, щойно він відповість.",
+        body_html=body,
+        footer_note="Поки відповіді немає, час за вами зарезервовано, але запис ще не підтверджено.",
+    )
+    await asyncio.to_thread(send_email_sync, to_email, f"Запит на запис отримано — {business_name}", html)
+
+
+async def send_booking_decision_email(
+        to_email: str, approved: bool, client_name: str, business_name: str, service_name: str,
+        booking_date: str, booking_time: str, manage_url: str = "", master_name: str = "",
+        address: str = "", business_phone: str = "",
+):
+    """Відповідь закладу на запит: запис підтверджено або, на жаль, ні."""
+    rows = info_row("Коли", f"{booking_date}, {booking_time}", big=True)
+    if master_name:
+        rows += info_row("Майстер", master_name)
+    rows += info_row("Послуга", service_name)
+    if approved and address.strip(" ,"):
+        rows += info_row("Адреса", address.strip(" ,"))
+    if business_phone:
+        rows += info_row("Телефон закладу", business_phone)
+    if approved:
+        title, intro = "Запис підтверджено", f"{esc(client_name)}, заклад підтвердив ваш запис. Чекаємо на вас у зазначений час."
+        body = card(rows) + (button("Переглянути або скасувати", manage_url) if manage_url else "")
+        note = "Якщо плани зміняться — скасуйте візит завчасно, щоб хтось інший міг зайняти цей час."
+    else:
+        title, intro = "Запис не підтверджено", f"{esc(client_name)}, на жаль, заклад не зміг підтвердити цей запис. Оберіть, будь ласка, інший час."
+        body = card(rows)
+        note = "Вибачте за незручності. Ви можете записатися на інший час на сторінці закладу."
+    html = layout(business_name=business_name, title=title, intro=intro, body_html=body, footer_note=note)
+    await asyncio.to_thread(send_email_sync, to_email, f"{title} — {business_name}", html)
+
+
 async def send_booking_rescheduled_email(
         to_email: str,
         client_name: str,

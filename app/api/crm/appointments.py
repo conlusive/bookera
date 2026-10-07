@@ -302,8 +302,14 @@ async def update_crm_appointment_status(
     from app.services.reminders import request_review_now
     _review_args = await request_review_now(db, appointment) if new_status == "completed" and _old_status != "completed" else None
 
+    from app.services.booking_decisions import schedule_decision_email
+    await schedule_decision_email(db, background_tasks, appointment, _old_status, new_status)
+
     try:
         await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Цей час уже зайнятий іншим записом: підтвердити не вдалося.")
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Не вдалося оновити статус: {str(e)}")

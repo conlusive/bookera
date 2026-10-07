@@ -11,6 +11,7 @@ from app.models import Client, ClientLink, Business, PointsLedgerEntry, Appointm
 from app.services.monetization import award_points_for_new_client
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.services.client_stats import apply_stats, client_stats, phone_tail
+from app.services.client_identity import find_client
 from app.services.audit import changes_text, diff_changes, record as _audit
 
 CLIENT_LABELS = {
@@ -128,13 +129,10 @@ async def create_client(
     await assert_business_access(db, current_user, client_in.business_id)
     # Той самий номер - той самий клієнт. Інакше візити розпадались на дві
     # картки, і жодна не показувала правди.
-    tail = phone_tail(client_in.phone)
-    if tail:
-        same = (await db.execute(select(Client).where(
-            Client.business_id == client_in.business_id, Client.phone.like(f"%{tail}"),
-        ))).scalars().first()
-        if same:
-            raise HTTPException(status_code=409, detail=f"Клієнт із цим номером уже є: {same.name}")
+    same = await find_client(db, client_in.business_id, client_in.phone, client_in.email)
+    if same:
+        what = "номером" if phone_tail(client_in.phone) and phone_tail(same.phone) == phone_tail(client_in.phone) else "поштою"
+        raise HTTPException(status_code=409, detail=f"Клієнт із цим {what} уже є: {same.name}")
     client = Client(**client_in.model_dump())
     db.add(client)
     await db.flush()
@@ -170,6 +168,11 @@ async def update_client(
 ):
     client = await _get_owned_client(db, current_user, client_id)
     data = payload.model_dump(exclude_unset=True)
+    # Змінили номер чи пошту на ті, що вже є в іншої картки, - це вже дубль
+    if data.get("phone") or data.get("email"):
+        clash = await find_client(db, client.business_id, data.get("phone"), data.get("email"), exclude_id=client.id)
+        if clash:
+            raise HTTPException(status_code=409, detail=f"Такий номер чи пошта вже є в картці: {clash.name}. Обʼєднайте картки.")
     before = {f: getattr(client, f, None) for f in data}
     for field, value in data.items():
         setattr(client, field, value)

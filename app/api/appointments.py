@@ -28,6 +28,7 @@ from app.schemas.appointment import (
 from app.core.email import send_booking_confirmation_email, send_new_booking_to_staff
 from app.services.subscription import has_access
 from app.services.monetization import award_points_for_new_client
+from app.services.client_identity import get_or_create_client
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -820,25 +821,15 @@ async def create_appointment(
     resolved_client_id = appointment_in.client_id
     ask_marketing = False
     if resolved_client_id is None and appointment_in.client_phone and business:
-        existing_client = await db.execute(
-            select(Client).where(
-                Client.business_id == appointment_in.business_id,
-                Client.phone == appointment_in.client_phone,
-            )
+        # Той самий номер (у будь-якому записі) чи пошта - та сама картка; одночасні записи теж не дублюють її
+        crm_client, created_now = await get_or_create_client(
+            db, appointment_in.business_id,
+            name=appointment_in.client_name, phone=appointment_in.client_phone, email=appointment_in.client_email,
+            tags=["Онлайн-запис"],
+            # Онлайн-запис - лише за згодою: без галочки клієнт у розсилки не потрапляє
+            marketing_consent=bool(appointment_in.marketing_consent),
         )
-        crm_client = existing_client.scalars().first()
-        if not crm_client:
-            crm_client = Client(
-                business_id=appointment_in.business_id,
-                name=appointment_in.client_name or appointment_in.client_phone,
-                phone=appointment_in.client_phone,
-                email=appointment_in.client_email,
-                tags=["Онлайн-запис"],
-                # Онлайн-запис - лише за згодою: без галочки клієнт у розсилки не потрапляє
-                marketing_consent=bool(appointment_in.marketing_consent),
-            )
-            db.add(crm_client)
-            await db.flush()
+        if created_now:
             await award_points_for_new_client(db, business, appointment_in.client_phone, crm_client.id)
         elif appointment_in.marketing_consent and crm_client.marketing_consent is not True:
             # Згоду можна лише дати цим записом; мовчки забрати її (галочка не стоїть) - ні
@@ -847,6 +838,19 @@ async def create_appointment(
         # Питання про розсилку - вже ПІСЛЯ підтвердженого запису (вікно на сайті), а не галочкою в формі.
         # Питаємо лише тих, кого ще не питали й хто не погодився; пошта потрібна, інакше розсилати нічого.
         ask_marketing = bool(appointment_in.client_email) and crm_client.marketing_asked_at is None and crm_client.marketing_consent is not True
+
+    # Подвійний клік чи повторна відправка: людина вже записана на цю послугу в цей самий час - другого запису не буде
+    if resolved_client_id:
+        again = await db.execute(select(Appointment.id).where(
+            Appointment.business_id == appointment_in.business_id,
+            Appointment.client_id == resolved_client_id,
+            Appointment.service_id == appointment_in.service_id,
+            Appointment.start_time == appointment_in.start_time,
+            Appointment.status.in_(["confirmed", "pending_approval"]),
+            Appointment.id != (appointment.id if appointment else -1),
+        ).limit(1))
+        if again.first():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ви вже записані на цю послугу в цей час.")
 
     deposit_due = booking_rules.deposit_for(payments, final_price)
 

@@ -121,14 +121,15 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
     const d = new Date(iso); d.setHours(0, 0, 0, 0);
     return Math.round((startOfToday() - d.getTime()) / DAY);
   };
-  const GROUPS: { id: string; label: string; hint: string; remind: boolean }[] = [
-    { id: 'regular', label: 'Ходять регулярно', hint: 'Три й більше візитів, останній не давніше 90 днів', remind: false },
-    { id: 'new', label: 'Новоприбулі', hint: 'Додані за останні 30 днів, не більше одного візиту', remind: false },
-    { id: 'lapsed1m', label: 'Не були місяць', hint: 'Останній візит 30-89 днів тому, без запису наперед', remind: true },
-    { id: 'lapsed3m', label: 'Не були три місяці', hint: 'Останній візит 90-364 дні тому, без запису наперед', remind: true },
-    { id: 'lost', label: 'Втрачені', hint: 'Були один раз понад 60 днів тому й не повернулися', remind: true },
-    { id: 'lapsed1y', label: 'Не було понад рік', hint: 'Останній візит рік і більше тому', remind: true },
+  const GROUPS: { id: string; label: string; short: string; hint: string; remind: boolean; tone: string }[] = [
+    { id: 'regular', label: 'Ходять регулярно', short: '3+ візити, ходять досі', hint: 'Три й більше візитів, останній не давніше 90 днів.', remind: false, tone: '#10b981' },
+    { id: 'new', label: 'Новоприбулі', short: 'Додані за 30 днів', hint: 'Додані за останні 30 днів, не більше одного візиту.', remind: false, tone: '#3b82f6' },
+    { id: 'lapsed1m', label: 'Не були місяць', short: '30–89 днів без візиту', hint: 'Останній візит 30–89 днів тому й немає запису наперед.', remind: true, tone: '#f59e0b' },
+    { id: 'lapsed3m', label: 'Не були три місяці', short: '90–364 дні без візиту', hint: 'Останній візит 90–364 дні тому й немає запису наперед.', remind: true, tone: '#f97316' },
+    { id: 'lost', label: 'Втрачені', short: 'Один візит і не повернулись', hint: 'Були лише раз, понад 60 днів тому, і більше не приходили.', remind: true, tone: '#ef4444' },
+    { id: 'lapsed1y', label: 'Не було понад рік', short: 'Рік і більше без візиту', hint: 'Останній візит рік і більше тому.', remind: true, tone: '#94a3b8' },
   ];
+  const activeGroup = GROUPS.find(g => g.id === activeSegment);
   const segmentOf = (seg: string, c: any) => {
     const visits = c.visits_count || 0;
     const since = daysSince(c.last_visit_at);
@@ -620,8 +621,21 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .service-table td { color: #0f172a; }
         .service-table th { color: #64748b; }
         .cl-cake { display: inline-flex; vertical-align: -2px; margin-left: 0.35rem; color: #f59e0b; }
-        .cl-lapse { width: auto; min-width: 190px; max-width: 240px; margin-left: auto; cursor: pointer; }
-        .cl-remind span { margin-left: 0.35rem; background: rgba(255,255,255,0.2); border-radius: 999px; padding: 0 0.45rem; font-size: 0.75rem; }
+        .cl-groups { display: flex; gap: 0.6rem; overflow-x: auto; padding: 1rem 2rem 0.25rem; }
+        .cl-group { flex: 1 1 0; min-width: 152px; display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 0.75rem 0.9rem 0.8rem; border: 1px solid #eef1f4; background: #fff; border-radius: 14px; cursor: pointer; text-align: left; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }
+        .cl-group:hover { border-color: #cbd5e1; }
+        .cl-group.on { border-color: #0f172a; box-shadow: 0 0 0 1px #0f172a; }
+        .cl-group-n { font-size: 1.5rem; font-weight: 800; color: #0f172a; line-height: 1.1; font-variant-numeric: tabular-nums; }
+        .cl-group-t { display: inline-flex; align-items: flex-start; gap: 0.4rem; font-size: 0.84rem; font-weight: 700; color: #0f172a; margin-top: 0.15rem; line-height: 1.25; }
+        .cl-group-t i { width: 8px; height: 8px; border-radius: 50%; display: block; flex-shrink: 0; margin-top: 0.3rem; }
+        .cl-group-s { font-size: 0.74rem; color: #94a3b8; line-height: 1.3; }
+        .cl-context { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 2rem 0.25rem; flex-wrap: wrap; }
+        .cl-context-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .cl-context-text b { font-size: 1.05rem; color: #0f172a; }
+        .cl-context-text span { font-size: 0.82rem; color: #64748b; }
+        .cl-context-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+        .cl-lapse-wrap { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: #64748b; }
+        .cl-lapse { width: auto; min-width: 110px; cursor: pointer; padding-top: 0.45rem; padding-bottom: 0.45rem; }
         .cl-actions-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
         .cl-actions-top .clean-btn-ghost, .cl-actions-top .clean-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
         .cl-dup { color: #b45309 !important; border-color: #fcd34d !important; background: #fffbeb !important; }
@@ -655,7 +669,14 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         @media (max-width: 860px) {
           .cl-toolbar { padding: 0.75rem 1rem 0 !important; flex-direction: column; align-items: stretch !important; gap: 0.6rem !important; }
           .cl-search { width: 100% !important; }
-          .cl-lapse { width: 100%; max-width: none; margin-left: 0; font-size: 16px; }
+          .cl-groups { padding: 0.75rem 1rem 0.25rem !important; }
+          .cl-group { flex: 0 0 148px; }
+          .cl-context { padding: 0.75rem 1rem 0 !important; }
+          .cl-context-actions { width: 100%; flex-wrap: nowrap; }
+          .cl-lapse-wrap { flex: 1 1 0; min-width: 0; }
+          .cl-lapse { width: 100%; min-width: 0; }
+          .cl-remind { white-space: nowrap; flex-shrink: 0; }
+          .cl-lapse { font-size: 16px; }
           .cl-search .clean-input { font-size: 16px; padding-top: 0.65rem; padding-bottom: 0.65rem; }
           .cl-actions-top { justify-content: stretch; flex-wrap: nowrap; }
           .cl-actions-top > button { flex: 1 1 0; min-width: 0; padding-left: 0.5rem; padding-right: 0.5rem; white-space: nowrap; }
@@ -1078,20 +1099,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                  <span className="cl-search-ico"><Icons.Search /></span>
                  <input type="text" className="clean-input" value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Імʼя чи телефон…" />
               </div>
-              <select className="clean-input cl-lapse" value={lapseDays} onChange={e => { const v = Number(e.target.value); setLapseDays(v); if (v > 0) setActiveSegment('all'); }} title="Знайти тих, хто давно не був, щоб нагадати про себе" aria-label="Не були давно">
-                 <option value={0}>Не були: будь-коли</option>
-                 <option value={30}>Не були понад місяць</option>
-                 <option value={60}>Не були понад 2 місяці</option>
-                 <option value={90}>Не були понад 3 місяці</option>
-                 <option value={180}>Не були понад пів року</option>
-                 <option value={365}>Не були понад рік</option>
-              </select>
               <div className="cl-actions-top">
-                 {onRemind && ((lapseDays > 0) || GROUPS.some(g => g.id === activeSegment && g.remind)) && filteredAndSortedClients.length > 0 && (
-                   <button type="button" className="clean-btn cl-remind" onClick={() => onRemind(lapseDays > 0 ? `away_${lapseDays}` : activeSegment)} title="Перейти до розсилки з уже обраною групою">
-                     Нагадати <span>{filteredAndSortedClients.length}</span>
-                   </button>
-                 )}
                  {canManageBase && dupCount > 0 && (
                    <button type="button" className="clean-btn-ghost cl-dup" onClick={() => setIsDupOpen(true)} title="Картки з тим самим номером чи поштою">
                      <Icons.Duplicates /> Дублі <span>{dupCount}</span>
@@ -1110,17 +1118,48 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
            </div>
 
            {/* Сегменти - із лічильниками, щоб одразу було видно, скільки кого */}
-           <div className="hide-scrollbar cl-pills">
+           {/* Групи: картки з числом і поясненням - одразу видно, кого скільки й що це означає */}
+           <div className="cl-groups hide-scrollbar">
               {[
-                { id: 'all', label: 'Усі клієнти', hint: 'Уся база закладу' },
+                { id: 'all', label: 'Усі клієнти', short: 'Уся база закладу', tone: '#0f172a' },
                 ...GROUPS,
-                { id: 'vip', label: 'VIP', hint: 'З тегом VIP' },
-                { id: 'blacklist', label: 'Чорний список', hint: 'Не можуть записатись онлайн' },
-              ].filter(g => ['all', 'vip', 'blacklist'].includes(g.id) ? (g.id === 'all' || segmentCounts[g.id] > 0 || activeSegment === g.id) : true).map(g => (
-                <button key={g.id} type="button" title={g.hint} className={`category-pill ${activeSegment === g.id && lapseDays === 0 ? 'active' : ''}`} onClick={() => { setActiveSegment(g.id); setLapseDays(0); }}>
-                  {g.label} <span className="cl-count">{segmentCounts[g.id] || 0}</span>
-                </button>
-              ))}
+                ...(segmentCounts.vip > 0 || activeSegment === 'vip' ? [{ id: 'vip', label: 'VIP', short: 'З тегом VIP', tone: '#8b5cf6' }] : []),
+                ...(segmentCounts.blacklist > 0 || activeSegment === 'blacklist' ? [{ id: 'blacklist', label: 'Чорний список', short: 'Без онлайн-запису', tone: '#64748b' }] : []),
+              ].map(g => {
+                const on = activeSegment === g.id && lapseDays === 0;
+                return (
+                  <button key={g.id} type="button" className={`cl-group ${on ? 'on' : ''}`} onClick={() => { setActiveSegment(g.id); setLapseDays(0); }}>
+                    <span className="cl-group-n">{segmentCounts[g.id] || 0}</span>
+                    <span className="cl-group-t"><i style={{ background: g.tone }} />{g.label}</span>
+                    <span className="cl-group-s">{g.short}</span>
+                  </button>
+                );
+              })}
+           </div>
+
+           {/* Що зараз показано й що з цим можна зробити */}
+           <div className="cl-context">
+              <div className="cl-context-text">
+                <b>{lapseDays > 0 ? `Не були понад ${({ 30: 'місяць', 60: '2 місяці', 90: '3 місяці', 180: 'пів року', 365: 'рік' } as Record<number, string>)[lapseDays] || `${lapseDays} днів`}` : (activeGroup?.label || (activeSegment === 'vip' ? 'VIP' : activeSegment === 'blacklist' ? 'Чорний список' : 'Усі клієнти'))}</b>
+                <span>{filteredAndSortedClients.length} {(() => { const n = filteredAndSortedClients.length; return n % 10 === 1 && n % 100 !== 11 ? 'клієнт' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'клієнти' : 'клієнтів'; })()}{lapseDays > 0 ? ' · без візиту й без запису наперед' : activeGroup ? ` · ${activeGroup.hint}` : ' · оберіть групу вище або знайдіть тих, хто давно не був'}</span>
+              </div>
+              <div className="cl-context-actions">
+                 <label className="cl-lapse-wrap">
+                    <select className="clean-input cl-lapse" value={lapseDays} onChange={e => { const v = Number(e.target.value); setLapseDays(v); if (v > 0) setActiveSegment('all'); }} aria-label="Не були давно">
+                       <option value={0}>Не були понад…</option>
+                       <option value={30}>Не були понад місяць</option>
+                       <option value={60}>Не були понад 2 місяці</option>
+                       <option value={90}>Не були понад 3 місяці</option>
+                       <option value={180}>Не були понад пів року</option>
+                       <option value={365}>Не були понад рік</option>
+                    </select>
+                 </label>
+                 {onRemind && (lapseDays > 0 || !!activeGroup?.remind) && filteredAndSortedClients.length > 0 && (
+                   <button type="button" className="clean-btn cl-remind" onClick={() => onRemind(lapseDays > 0 ? `away_${lapseDays}` : activeSegment)} title="Відкрити розсилку з цією групою">
+                     Нагадати листом
+                   </button>
+                 )}
+              </div>
            </div>
 
            <div className="cl-grid">
@@ -1202,18 +1241,6 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
              {/* Бічна колонка - як у «Послугах»: стан бази, гроші, дні народження, підказка */}
              <aside className="custom-scroll cl-side">
-               <div className="widget-card">
-                 <div className="widget-title">Групи</div>
-                 <button type="button" className={`cl-side-row ${activeSegment === 'all' && lapseDays === 0 ? 'on' : ''}`} onClick={() => { setActiveSegment('all'); setLapseDays(0); }}>
-                   <span>Усі клієнти</span><b>{segmentCounts.all || 0}</b>
-                 </button>
-                 {GROUPS.map(g => (
-                   <button key={g.id} type="button" title={g.hint} className={`cl-side-row ${activeSegment === g.id && lapseDays === 0 ? 'on' : ''}`} onClick={() => { setActiveSegment(g.id); setLapseDays(0); }}>
-                     <span>{g.label}</span><b style={{ color: g.remind && segmentCounts[g.id] ? '#d97706' : '#0f172a' }}>{segmentCounts[g.id] || 0}</b>
-                   </button>
-                 ))}
-               </div>
-
                <div className="widget-card">
                  <div className="widget-title">Гроші</div>
                  <div className="cl-side-row static"><span>Витратили разом</span><b>{Math.round(sideStats.spent).toLocaleString('uk-UA')} ₴</b></div>

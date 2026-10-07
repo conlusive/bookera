@@ -17,6 +17,7 @@ from app.models import Appointment, Business, Client, Service, User
 from app.schemas.appointment import AppointmentResponse, AppointmentRescheduleRequest, ManualAppointmentCreate
 from app.core.email import send_booking_rescheduled_email
 from app.services.monetization import award_points_for_new_client
+from app.services.client_identity import get_or_create_client
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -127,20 +128,11 @@ async def create_manual_appointment(
         if not client_res.scalars().first():
             raise HTTPException(status_code=404, detail="Клієнта не знайдено в цьому закладі")
     elif payload.client_phone:
-        existing = await db.execute(
-            select(Client).where(Client.business_id == payload.business_id, Client.phone == payload.client_phone)
+        client, created_now = await get_or_create_client(
+            db, payload.business_id, name=payload.client_name, phone=payload.client_phone, email=payload.client_email,
+            marketing_consent=payload.marketing_consent,
         )
-        client = existing.scalars().first()
-        if not client:
-            client = Client(
-                business_id=payload.business_id,
-                name=payload.client_name or payload.client_phone,
-                phone=payload.client_phone,
-                email=payload.client_email,
-                marketing_consent=payload.marketing_consent,
-            )
-            db.add(client)
-            await db.flush()
+        if created_now:
             await award_points_for_new_client(db, business, payload.client_phone, client.id)
         client_id = client.id
 

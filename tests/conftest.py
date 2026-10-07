@@ -86,3 +86,26 @@ def auth_headers():
     def _make(user_id: str, role: str = "business_owner"):
         return {"Authorization": f"Bearer {make_token(user_id, role)}"}
     return _make
+
+@pytest_asyncio.fixture
+async def legacy_duplicates():
+    """
+    Для тестів, що перевіряють ОБʼЄДНАННЯ старих дублів: у базі діють унікальні індекси клієнтів, тож на час тесту
+    їх знімаємо, а після - прибираємо дані й повертаємо індекси як було.
+    """
+    from sqlalchemy import text
+    engine = create_async_engine(DB_URL)
+    async with engine.begin() as conn:
+        await conn.execute(text("DROP INDEX IF EXISTS uq_clients_business_phone"))
+        await conn.execute(text("DROP INDEX IF EXISTS uq_clients_business_email"))
+    yield
+    from tests import conftest as _c  # noqa: F401
+    async with engine.begin() as conn:
+        await conn.execute(text("TRUNCATE appointments, services, users, businesses, clients, staff_invites, business_hours, reviews, inventory_items, expenses, client_links, service_addons CASCADE"))
+        await conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_clients_business_phone ON clients (business_id, (RIGHT(regexp_replace(phone, '\\D', '', 'g'), 9))) "
+            "WHERE phone IS NOT NULL AND length(regexp_replace(phone, '\\D', '', 'g')) >= 9"))
+        await conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_clients_business_email ON clients (business_id, (lower(btrim(email)))) "
+            "WHERE email IS NOT NULL AND btrim(email) <> ''"))
+    await engine.dispose()

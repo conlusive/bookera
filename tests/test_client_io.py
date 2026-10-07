@@ -73,7 +73,7 @@ async def test_export_is_real_excel(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_merge_moves_everything(client, auth_headers):
+async def test_merge_moves_everything(client, auth_headers, legacy_duplicates):
     """Обʼєднання переносить записи, сімейні звʼязки й бали; поля доповнюються."""
     bid, h = await _biz(client, auth_headers, "mrg")
     conn = await asyncpg.connect(DB)

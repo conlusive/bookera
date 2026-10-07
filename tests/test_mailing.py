@@ -31,9 +31,16 @@ def test_token_roundtrip_and_tamper():
     assert mailing.parse_unsubscribe_token(f"{other.split('.')[0]}.{sig}") is None
 
 
-async def test_unsubscribe_flow_and_audience(client, auth_headers):
+async def test_unsubscribe_flow_and_audience(client, auth_headers, legacy_duplicates):
     h = auth_headers("mail-unsub")
-    bid = await _biz_with_clients(client, h, ["a@test.com", "b@test.com", "A@test.com"])
+    # Нових дублів пошти вже не створити; старі (до унікальних індексів) у базі можуть бути - розсилка їх не множить
+    bid = await _biz_with_clients(client, h, ["a@test.com", "b@test.com"])
+    import asyncpg
+    conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/bookera_test")
+    try:
+        await conn.execute("INSERT INTO clients (business_id, name, phone, email) VALUES ($1, 'Клієнт 2', '+380671110002', 'A@test.com')", bid)
+    finally:
+        await conn.close()
     aud = (await client.get("/crm/campaigns/audience", params={"business_id": bid}, headers=h)).json()
     assert aud["all"] == 2, "дубль пошти (інший регістр) рахується один раз"
 

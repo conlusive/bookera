@@ -33,6 +33,14 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
   const [activeSegment, setActiveSegment] = useState<string>('all');
   // «Не були понад N днів» - довільний поріг для нагадування (0 - вимкнено)
   const [lapseDays, setLapseDays] = useState(0);
+  const [lapseMenuOpen, setLapseMenuOpen] = useState(false);
+  const LAPSE_LABELS: Record<number, string> = { 30: 'місяць', 60: '2 місяці', 90: '3 місяці', 180: 'пів року', 365: 'рік' };
+  useEffect(() => {
+    if (!lapseMenuOpen) return;
+    const close = () => setLapseMenuOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [lapseMenuOpen]);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'recent', direction: 'desc' });
 
   // Дані для редагування
@@ -621,21 +629,24 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .service-table td { color: #0f172a; }
         .service-table th { color: #64748b; }
         .cl-cake { display: inline-flex; vertical-align: -2px; margin-left: 0.35rem; color: #f59e0b; }
-        .cl-groups { display: flex; gap: 0.6rem; overflow-x: auto; padding: 1rem 2rem 0.25rem; }
-        .cl-group { flex: 1 1 0; min-width: 152px; display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 0.75rem 0.9rem 0.8rem; border: 1px solid #eef1f4; background: #fff; border-radius: 14px; cursor: pointer; text-align: left; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }
-        .cl-group:hover { border-color: #cbd5e1; }
-        .cl-group.on { border-color: #0f172a; box-shadow: 0 0 0 1px #0f172a; }
-        .cl-group-n { font-size: 1.5rem; font-weight: 800; color: #0f172a; line-height: 1.1; font-variant-numeric: tabular-nums; }
-        .cl-group-t { display: inline-flex; align-items: flex-start; gap: 0.4rem; font-size: 0.84rem; font-weight: 700; color: #0f172a; margin-top: 0.15rem; line-height: 1.25; }
-        .cl-group-t i { width: 8px; height: 8px; border-radius: 50%; display: block; flex-shrink: 0; margin-top: 0.3rem; }
-        .cl-group-s { font-size: 0.74rem; color: #94a3b8; line-height: 1.3; }
-        .cl-context { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 2rem 0.25rem; flex-wrap: wrap; }
-        .cl-context-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-        .cl-context-text b { font-size: 1.05rem; color: #0f172a; }
-        .cl-context-text span { font-size: 0.82rem; color: #64748b; }
-        .cl-context-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-        .cl-lapse-wrap { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: #64748b; }
-        .cl-lapse { width: auto; min-width: 110px; cursor: pointer; padding-top: 0.45rem; padding-bottom: 0.45rem; }
+        .cl-chips { display: flex; align-items: center; gap: 0.4rem; overflow-x: auto; padding: 0.9rem 2rem 0.2rem; }
+        .cl-chip { display: inline-flex; align-items: center; gap: 0.4rem; flex-shrink: 0; height: 32px; padding: 0 0.8rem; border: 1px solid #e8ecf0; background: #fff; color: #334155; border-radius: 999px; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.15s, border-color 0.15s; }
+        .cl-chip:hover { border-color: #cbd5e1; }
+        .cl-chip i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+        .cl-chip em { font-style: normal; font-size: 0.75rem; color: #94a3b8; font-variant-numeric: tabular-nums; }
+        .cl-chip.on { background: #0f172a; border-color: #0f172a; color: #fff; }
+        .cl-chip.on em { color: rgba(255,255,255,0.65); }
+        .cl-context-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+        .cl-lapse-menu { position: relative; flex-shrink: 0; }
+        .cl-lapse-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 28px rgba(15,23,42,0.12); padding: 4px; min-width: 170px; display: flex; flex-direction: column; }
+        .cl-lapse-pop button { border: none; background: transparent; text-align: left; font-family: inherit; font-size: 0.88rem; color: #0f172a; padding: 0.5rem 0.7rem; border-radius: 8px; cursor: pointer; }
+        .cl-lapse-pop button:hover { background: #f4f6f8; }
+        .cl-lapse-pop button.on { font-weight: 700; }
+        .cl-lapse-pop button.reset { color: #64748b; border-top: 1px solid #f1f5f9; border-radius: 0 0 8px 8px; margin-top: 2px; }
+        .cl-context { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.55rem 2rem 0.15rem; }
+        .cl-context p { margin: 0; font-size: 0.82rem; color: #64748b; min-width: 0; line-height: 1.4; }
+        .cl-context p b { color: #0f172a; font-size: 0.9rem; }
+        .cl-remind { flex-shrink: 0; height: 32px; padding: 0 0.9rem; border: none; border-radius: 999px; background: #0f172a; color: #fff; font-family: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
         .cl-actions-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
         .cl-actions-top .clean-btn-ghost, .cl-actions-top .clean-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
         .cl-dup { color: #b45309 !important; border-color: #fcd34d !important; background: #fffbeb !important; }
@@ -669,14 +680,11 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         @media (max-width: 860px) {
           .cl-toolbar { padding: 0.75rem 1rem 0 !important; flex-direction: column; align-items: stretch !important; gap: 0.6rem !important; }
           .cl-search { width: 100% !important; }
-          .cl-groups { padding: 0.75rem 1rem 0.25rem !important; }
-          .cl-group { flex: 0 0 148px; }
-          .cl-context { padding: 0.75rem 1rem 0 !important; }
-          .cl-context-actions { width: 100%; flex-wrap: nowrap; }
-          .cl-lapse-wrap { flex: 1 1 0; min-width: 0; }
-          .cl-lapse { width: 100%; min-width: 0; }
-          .cl-remind { white-space: nowrap; flex-shrink: 0; }
-          .cl-lapse { font-size: 16px; }
+          .cl-chips { padding: 0.6rem 1rem 0.1rem !important; }
+          .cl-context { padding: 0.45rem 1rem 0 !important; flex-wrap: wrap; }
+          .cl-context p { flex: 1 1 100%; }
+          .cl-context-actions { width: 100%; }
+          .cl-lapse-pop { right: auto; left: 0; }
           .cl-search .clean-input { font-size: 16px; padding-top: 0.65rem; padding-bottom: 0.65rem; }
           .cl-actions-top { justify-content: stretch; flex-wrap: nowrap; }
           .cl-actions-top > button { flex: 1 1 0; min-width: 0; padding-left: 0.5rem; padding-right: 0.5rem; white-space: nowrap; }
@@ -687,14 +695,20 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
           .service-table thead { display: none; }
           .service-table tr.service-row { display: grid; grid-template-columns: 1fr auto; column-gap: 0.75rem; row-gap: 0.35rem; align-items: center; padding: 0.8rem 0.9rem; margin-bottom: 0.5rem; border: 1px solid #f1f5f9; border-radius: 14px; }
           .service-table tr.service-row td { display: block; padding: 0 !important; border: none !important; border-radius: 0 !important; background: transparent !important; text-align: left !important; }
-          .service-table tr.service-row td:nth-child(1) { grid-column: 1 / -1; }
+          .service-table tr.service-row td:nth-child(1) { grid-column: 1; grid-row: 1; }
           .service-table tr.service-row td:nth-child(2) { grid-column: 1; }
           .service-table tr.service-row td:nth-child(3) { grid-column: 2; grid-row: 2; }
           .service-table tr.service-row td:nth-child(3)::before { content: 'Візитів: '; font-weight: 500; color: #94a3b8; font-size: 0.78rem; }
           .service-table tr.service-row td:nth-child(4), .service-table tr.service-row td:nth-child(5) { display: none; }
-          .cl-acts { grid-column: 1 / -1 !important; }
+          .cl-acts { grid-column: 2 !important; grid-row: 1; }
           .cl-acts > span { opacity: 1; }
-          .cl-acts a, .cl-acts button { width: 40px; height: 40px; }
+          .cl-acts a, .cl-acts button { width: 34px; height: 34px; }
+          .cl-acts > span { gap: 0.3rem !important; }
+          .service-table tr.service-row { padding: 0.65rem 0.8rem !important; margin-bottom: 0.4rem !important; }
+          /* Імпорт і експорт - іконками, головна дія «Додати» займає решту ширини */
+          .cl-actions-top .clean-btn { order: -1; flex: 1 1 auto !important; }
+          .cl-actions-top .clean-btn-ghost { flex: 0 0 42px !important; height: 42px !important; padding: 0 !important; justify-content: center; font-size: 0 !important; gap: 0 !important; }
+          .cl-actions-top .cl-dup { flex: 0 0 auto !important; font-size: 0.8rem !important; padding: 0 0.6rem !important; }
         }
         .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .cl-search { position: relative; width: 280px; max-width: 100%; }
@@ -1118,47 +1132,49 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
            </div>
 
            {/* Сегменти - із лічильниками, щоб одразу було видно, скільки кого */}
-           {/* Групи: картки з числом і поясненням - одразу видно, кого скільки й що це означає */}
-           <div className="cl-groups hide-scrollbar">
+           {/* Групи - легкі чипи з числом; пояснення обраної групи - в рядку нижче */}
+           <div className="cl-chips hide-scrollbar">
               {[
-                { id: 'all', label: 'Усі клієнти', short: 'Уся база закладу', tone: '#0f172a' },
+                { id: 'all', label: 'Усі', tone: '#0f172a' },
                 ...GROUPS,
-                ...(segmentCounts.vip > 0 || activeSegment === 'vip' ? [{ id: 'vip', label: 'VIP', short: 'З тегом VIP', tone: '#8b5cf6' }] : []),
-                ...(segmentCounts.blacklist > 0 || activeSegment === 'blacklist' ? [{ id: 'blacklist', label: 'Чорний список', short: 'Без онлайн-запису', tone: '#64748b' }] : []),
+                ...(segmentCounts.vip > 0 || activeSegment === 'vip' ? [{ id: 'vip', label: 'VIP', tone: '#8b5cf6' }] : []),
+                ...(segmentCounts.blacklist > 0 || activeSegment === 'blacklist' ? [{ id: 'blacklist', label: 'Чорний список', tone: '#64748b' }] : []),
               ].map(g => {
                 const on = activeSegment === g.id && lapseDays === 0;
                 return (
-                  <button key={g.id} type="button" className={`cl-group ${on ? 'on' : ''}`} onClick={() => { setActiveSegment(g.id); setLapseDays(0); }}>
-                    <span className="cl-group-n">{segmentCounts[g.id] || 0}</span>
-                    <span className="cl-group-t"><i style={{ background: g.tone }} />{g.label}</span>
-                    <span className="cl-group-s">{g.short}</span>
+                  <button key={g.id} type="button" className={`cl-chip ${on ? 'on' : ''}`} onClick={() => { setActiveSegment(g.id); setLapseDays(0); }}>
+                    {g.id !== 'all' && <i style={{ background: g.tone }} />}{g.label}<em>{segmentCounts[g.id] || 0}</em>
                   </button>
                 );
               })}
            </div>
 
-           {/* Що зараз показано й що з цим можна зробити */}
            <div className="cl-context">
-              <div className="cl-context-text">
-                <b>{lapseDays > 0 ? `Не були понад ${({ 30: 'місяць', 60: '2 місяці', 90: '3 місяці', 180: 'пів року', 365: 'рік' } as Record<number, string>)[lapseDays] || `${lapseDays} днів`}` : (activeGroup?.label || (activeSegment === 'vip' ? 'VIP' : activeSegment === 'blacklist' ? 'Чорний список' : 'Усі клієнти'))}</b>
-                <span>{filteredAndSortedClients.length} {(() => { const n = filteredAndSortedClients.length; return n % 10 === 1 && n % 100 !== 11 ? 'клієнт' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'клієнти' : 'клієнтів'; })()}{lapseDays > 0 ? ' · без візиту й без запису наперед' : activeGroup ? ` · ${activeGroup.hint}` : ' · оберіть групу вище або знайдіть тих, хто давно не був'}</span>
-              </div>
+              <p>
+                <b>{lapseDays > 0 ? `Не були понад ${LAPSE_LABELS[lapseDays] || `${lapseDays} дн.`}` : (activeGroup?.label || (activeSegment === 'vip' ? 'VIP' : activeSegment === 'blacklist' ? 'Чорний список' : 'Усі клієнти'))}</b>
+                {' · '}{filteredAndSortedClients.length} {(() => { const n = filteredAndSortedClients.length; return n % 10 === 1 && n % 100 !== 11 ? 'клієнт' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'клієнти' : 'клієнтів'; })()}
+                <span>{lapseDays > 0 ? ' · без візиту й без запису наперед' : activeGroup ? ` · ${activeGroup.hint}` : ''}</span>
+              </p>
               <div className="cl-context-actions">
-                 <label className="cl-lapse-wrap">
-                    <select className="clean-input cl-lapse" value={lapseDays} onChange={e => { const v = Number(e.target.value); setLapseDays(v); if (v > 0) setActiveSegment('all'); }} aria-label="Не були давно">
-                       <option value={0}>Не були понад…</option>
-                       <option value={30}>Не були понад місяць</option>
-                       <option value={60}>Не були понад 2 місяці</option>
-                       <option value={90}>Не були понад 3 місяці</option>
-                       <option value={180}>Не були понад пів року</option>
-                       <option value={365}>Не були понад рік</option>
-                    </select>
-                 </label>
-                 {onRemind && (lapseDays > 0 || !!activeGroup?.remind) && filteredAndSortedClients.length > 0 && (
-                   <button type="button" className="clean-btn cl-remind" onClick={() => onRemind(lapseDays > 0 ? `away_${lapseDays}` : activeSegment)} title="Відкрити розсилку з цією групою">
-                     Нагадати листом
-                   </button>
-                 )}
+              <div className="cl-lapse-menu" onClick={e => e.stopPropagation()}>
+                  <button type="button" className={`cl-chip ${lapseDays > 0 ? 'on' : ''}`} onClick={() => setLapseMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={lapseMenuOpen}>
+                    {lapseDays > 0 ? `Не були понад ${LAPSE_LABELS[lapseDays] || `${lapseDays} дн.`}` : 'Не були понад…'}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+                  {lapseMenuOpen && (
+                    <div className="cl-lapse-pop" role="menu">
+                      {[30, 60, 90, 180, 365].map(d => (
+                        <button key={d} type="button" role="menuitem" className={lapseDays === d ? 'on' : ''} onClick={() => { setLapseDays(d); setActiveSegment('all'); setLapseMenuOpen(false); }}>{LAPSE_LABELS[d]}</button>
+                      ))}
+                      {lapseDays > 0 && <button type="button" role="menuitem" className="reset" onClick={() => { setLapseDays(0); setLapseMenuOpen(false); }}>Скинути</button>}
+                    </div>
+                  )}
+                </div>
+                {onRemind && (lapseDays > 0 || !!activeGroup?.remind) && filteredAndSortedClients.length > 0 && (
+                  <button type="button" className="cl-remind" onClick={() => onRemind(lapseDays > 0 ? `away_${lapseDays}` : activeSegment)} title="Відкрити розсилку з цією групою">
+                    Нагадати листом
+                  </button>
+                )}
               </div>
            </div>
 

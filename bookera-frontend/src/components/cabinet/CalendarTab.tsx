@@ -1201,6 +1201,10 @@ const handleSaveShifts = async () => {
           ) !important;
           background-color: #ffffff !important;
         }
+        .cal-m-legend { display: none; }
+        .cal-m-group-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.9rem 0 0.35rem; }
+        .cal-m-group-head b { font-size: 0.95rem; color: #0f172a; }
+        .cal-m-group-head span:last-child { margin-left: auto; font-size: 0.78rem; color: #94a3b8; font-weight: 600; }
         .cal-m-agenda { display: none; }
         .cal-m-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eef1f4; }
         .cal-m-agenda-title { font-size: 1rem; font-weight: 700; color: #0f172a; }
@@ -1268,6 +1272,10 @@ const handleSaveShifts = async () => {
           .cal-m-dots b { font-size: 0.65rem; font-weight: 700; color: #64748b; margin-left: 2px; }
           /* Місяць на телефоні: рівні невисокі клітинки без рамок, число по центру, під ним крапки майстрів */
           .cal-m-wrap { overflow-y: auto !important; }
+          .cal-m-legend { display: flex !important; gap: 0.35rem; overflow-x: auto; padding: 0.35rem 0.75rem 0.1rem; scrollbar-width: none; flex-shrink: 0; }
+          .cal-m-legend::-webkit-scrollbar { display: none; }
+          .cal-m-legend button { display: inline-flex; align-items: center; gap: 0.4rem; border: none; background: transparent; padding: 0.25rem 0.55rem; font-size: 0.78rem; font-weight: 600; color: #475569; white-space: nowrap; cursor: pointer; }
+          .cal-m-legend i { width: 9px; height: 9px; border-radius: 50%; display: block; }
           .cal-m-grid { flex: none !important; overflow: visible !important; grid-auto-rows: 58px !important; align-content: start; padding: 0 0.25rem; }
           .cal-m-num { width: 30px !important; height: 30px !important; font-size: 1rem !important; }
           .cal-m-num.is-today { background: transparent !important; color: #0f172a !important; box-shadow: inset 0 0 0 1.5px #0f172a; }
@@ -2151,6 +2159,17 @@ const handleSaveShifts = async () => {
                  <div style={{ color: '#d92d20' }}>Сб</div><div style={{ color: '#d92d20' }}>Нд</div>
               </div>
 
+              {filterMaster === 'all' && (team || []).filter((m: any) => m.provides_services !== false).length >= 2 && (
+                /* Підказка до крапок: колір - майстер. Дотик по імені показує лише його записи */
+                <div className="cal-m-legend">
+                  {(team || []).filter((m: any) => m.provides_services !== false).map((m: any) => (
+                    <button key={m.id} type="button" onClick={() => setFilterMaster(String(m.id))}>
+                      <i style={{ background: getCardColor(String(m.id)).vividBg }} />{m.name || m.full_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="custom-scroll cal-m-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: 'minmax(130px, 1fr)', overflowY: 'auto' }}>
                   {blanks.map(blank => <div key={`blank-${blank}`} className="cal-m-blank" style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafafa' }}></div>)}
 
@@ -2248,9 +2267,14 @@ const handleSaveShifts = async () => {
                 const real = dayList.filter((a: any) => !isBlk(a));
                 const sum = real.filter((a: any) => a.status !== 'cancelled' && a.status !== 'no-show').reduce((t: number, a: any) => t + (Number(a.price) || 0), 0);
                 const key = `m:${sel.toDateString()}`;
-                const open = !!listExpanded[key];
-                const shown = open ? dayList : dayList.slice(0, 5);
                 const title = sel.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+                // Записи дня за майстрами: одразу зрозуміло, чиї вони
+                const known = (team || []).filter((m: any) => m.provides_services !== false);
+                const groups: { key: string; name: string; color: string; apps: any[] }[] = known
+                  .map((m: any) => ({ key: String(m.id), name: m.name || m.full_name || 'Майстер', color: getCardColor(String(m.id)).vividBg, apps: dayList.filter((a: any) => String(a.staff_id) === String(m.id)) }))
+                  .filter((g: any) => g.apps.length > 0);
+                const rest = dayList.filter((a: any) => !known.some((m: any) => String(m.id) === String(a.staff_id)));
+                if (rest.length) groups.push({ key: '__none', name: 'Без майстра', color: '#94a3b8', apps: rest });
                 return (
                   <div className="cal-m-agenda">
                     <div className="cal-m-agenda-head">
@@ -2260,37 +2284,48 @@ const handleSaveShifts = async () => {
                       </div>
                       <button type="button" onClick={() => { setCurrentDate(sel); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}>Відкрити день</button>
                     </div>
-                    {shown.map((app: any) => {
-                      const block = isBlk(app);
-                      const svc = services.find((x: any) => String(x.id) === String(app.service_id));
-                      const off = app.status === 'cancelled' || app.status === 'no-show';
-                      const st = statusStyle[app.status as string];
-                      const dur = fmtMin(minutesOf(app));
-                      const master = (team || []).find((m: any) => String(m.id) === String(app.staff_id))?.name || '';
+                    {groups.map(g => {
+                      const gOpen = !!listExpanded[`${key}:${g.key}`];
+                      const gShown = gOpen ? g.apps : g.apps.slice(0, 4);
                       return (
-                        <div key={app.id} className="cal-list-row with-master" onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
-                          style={{ opacity: off ? 0.55 : 1, boxShadow: `inset 3px 0 0 ${app.staff_id && !block ? getCardColor(String(app.staff_id)).vividBg : '#cbd5e1'}` }}>
-                          <div className="cl-time" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
-                            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{String(app.start_time).substring(0, 5)}</div>
-                            {app.end_time && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
+                        <div key={g.key} className="cal-m-group">
+                          <div className="cal-m-group-head">
+                            <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: g.color, flexShrink: 0 }} />
+                            <b>{g.name}</b>
+                            <span>{g.apps.filter((a: any) => !isBlk(a)).length > 0 ? `${g.apps.filter((a: any) => !isBlk(a)).length} зап.` : ''}</span>
                           </div>
-                          <div className="cl-client" style={{ fontWeight: 600, fontSize: '0.92rem', color: block ? '#64748b' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
-                          </div>
-                          <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
-                            {master && <span className="cl-m-only" style={{ color: getCardColor(String(app.staff_id)).pastelText, fontWeight: 600 }}> · {master}</span>}
-                          </div>
-                          <div className="cl-price" style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', textAlign: 'right' }}>{!block && app.price ? `${Number(app.price).toLocaleString('uk-UA')} ₴` : ''}</div>
-                          <div className="cl-status">{st && <span style={{ fontSize: '0.68rem', fontWeight: 600, color: st.color, background: st.bg, padding: '1px 7px', borderRadius: '999px', whiteSpace: 'nowrap' }}>{st.label}</span>}</div>
+                          {gShown.map((app: any) => {
+                            const block = isBlk(app);
+                            const svc = services.find((x: any) => String(x.id) === String(app.service_id));
+                            const off = app.status === 'cancelled' || app.status === 'no-show';
+                            const st = statusStyle[app.status as string];
+                            const dur = fmtMin(minutesOf(app));
+                            return (
+                              <div key={app.id} className="cal-list-row" onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
+                                style={{ opacity: off ? 0.55 : 1, boxShadow: `inset 3px 0 0 ${g.color}` }}>
+                                <div className="cl-time" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
+                                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{String(app.start_time).substring(0, 5)}</div>
+                                  {app.end_time && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
+                                </div>
+                                <div className="cl-client" style={{ fontWeight: 600, fontSize: '0.92rem', color: block ? '#64748b' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
+                                </div>
+                                <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
+                                </div>
+                                <div className="cl-price" style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', textAlign: 'right' }}>{!block && app.price ? `${Number(app.price).toLocaleString('uk-UA')} ₴` : ''}</div>
+                                <div className="cl-status">{st && <span style={{ fontSize: '0.68rem', fontWeight: 600, color: st.color, background: st.bg, padding: '1px 7px', borderRadius: '999px', whiteSpace: 'nowrap' }}>{st.label}</span>}</div>
+                              </div>
+                            );
+                          })}
+                          {g.apps.length > 4 && (
+                            <button type="button" className="cal-m-agenda-more" onClick={() => setListExpanded(prev => ({ ...prev, [`${key}:${g.key}`]: !gOpen }))}>
+                              {gOpen ? 'Згорнути' : `Показати ще ${g.apps.length - 4}`}
+                            </button>
+                          )}
                         </div>
                       );
                     })}
-                    {dayList.length > 5 && (
-                      <button type="button" className="cal-m-agenda-more" onClick={() => setListExpanded(prev => ({ ...prev, [key]: !open }))}>
-                        {open ? 'Згорнути' : `Показати ще ${dayList.length - 5}`}
-                      </button>
-                    )}
                   </div>
                 );
               })()}

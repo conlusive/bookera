@@ -1,4 +1,28 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git ls-remote*)",
+      "Bash(npm run typecheck*)",
+      "Bash(npm run lint*)",
+      "Bash(npm run test:unit*)",
+      "Bash(npx tsc --noEmit*)",
+      "Bash(env -u DATABASE_URL venv/bin/python -m pytest*)",
+      "Bash(lsof*)",
+      "Bash(ls*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./bookera-frontend/.env.local)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

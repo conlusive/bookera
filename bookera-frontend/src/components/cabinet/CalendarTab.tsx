@@ -1294,7 +1294,7 @@ const handleSaveShifts = async () => {
           .cl-client { grid-area: client; }
           .cl-svc { grid-area: svc; }
           .cl-price { grid-area: price; }
-          .cl-status { grid-area: status; justify-self: end; }
+          .cl-status { grid-area: status; justify-self: end; min-height: 1.6rem; }
         }
         @media (min-width: 861px) and (max-width: 1600px) { .cal-toolbar__count { display: none !important; } }
         .cal-toolbar__right { display: none !important; }

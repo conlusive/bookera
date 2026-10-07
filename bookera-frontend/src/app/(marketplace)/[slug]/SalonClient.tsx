@@ -592,9 +592,6 @@ export default function SalonClient({
   );
 
 
-  // Пропорції головного фото: висота галереї підлаштовується під нього, щоб воно вміщалось у кадр майже повністю
-  const [galleryAspect, setGalleryAspect] = useState(1.6);
-
   const galleryPhotos = useMemo(() => {
     if (!salon) return [];
     const photos = [];
@@ -1486,12 +1483,7 @@ const formatRole = (role?: string) => {
         .sl-hd-short, .sl-hd-find { display: none; }
         .sl-hd-find { width: 44px; height: 44px; align-items: center; justify-content: center; color: #111827; }
         /* ТЕЛЕФОН (лише до 860px, комп'ютер не змінюється) */
-        /* Галерея на всю ширину екрана, без рамок і заокруглень */
-        .sl-gallery { position: relative; display: grid; gap: 4px; width: 100%; height: clamp(300px, calc(var(--w, 66vw) / var(--a, 1.6)), 560px); margin: -14px 0 2.5rem; background: #f1f5f9; overflow: hidden; }
-        .sl-gallery-cell { position: relative; overflow: hidden; min-width: 0; height: 100%; }
-        .sl-gallery-side { display: grid; gap: 4px; min-width: 0; height: 100%; }
-        .sl-gallery-all { position: absolute; right: 1.5rem; bottom: 1.5rem; z-index: 2; border: none; border-radius: 10px; padding: 0.55rem 0.95rem; background: rgba(255,255,255,0.94); color: #111827; font-size: 0.85rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.14); backdrop-filter: blur(6px); }
-        .sl-gallery-all:hover { background: #fff; }
+        .sl-gallery-all { display: none; position: absolute; right: 1rem; bottom: 1rem; z-index: 2; border: none; border-radius: 10px; padding: 0.5rem 0.9rem; background: rgba(255,255,255,0.94); color: #111827; font-size: 0.82rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.16); }
         .sl-more { display: none; }
         .sl-map-title { display: none; }
         @media (max-width: 860px) {
@@ -1502,9 +1494,11 @@ const formatRole = (role?: string) => {
           .sl-hd-short { display: inline; }
           .sl-hd-find { display: inline-flex; }
           .sl-hd-right { width: auto !important; margin-left: auto; gap: 0.35rem !important; }
-          .sl-gallery { grid-template-columns: minmax(0, 1fr) !important; height: clamp(220px, calc(100vw / var(--a, 1.6)), 440px) !important; margin: -14px 0 1.5rem !important; }
-          .sl-gallery > .sl-gallery-side { display: none !important; }
-          .sl-gallery-all { right: 0.9rem !important; bottom: 0.9rem !important; }
+          /* Телефон: фото від краю до краю екрана (контейнер має відступи 1.25rem - прибираємо їх) */
+          .sl-gallery { position: relative; grid-template-columns: minmax(0, 1fr) !important; height: 300px !important; margin: 0 -1.25rem 1.5rem !important; width: auto !important; }
+          .sl-gallery > div:nth-child(n+2) { display: none !important; }
+          .sl-gallery > div:first-child { border-radius: 0 !important; box-shadow: none !important; }
+          .sl-gallery-all { display: block !important; }
           .sl-h1 { font-size: 1.85rem !important; }
           .sl-main { grid-template-columns: minmax(0, 1fr) !important; gap: 2rem !important; }
           .sl-stack { gap: 1.75rem !important; }
@@ -2208,31 +2202,27 @@ const formatRole = (role?: string) => {
       </header>
 
       {/* --- ОБКЛАДИНКА ТА ДЕТАЛІ ЗАЛАДУ --- */}
-      {/* Фото закладу від краю до краю екрана. Висота кадру береться з пропорцій головного фото,
-          тому воно заповнює кадр суцільно й обрізається мінімально */}
-      {galleryPhotos.length > 0 && (
-        <div className="sl-gallery" style={{ gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr', ['--a' as string]: galleryAspect, ['--w' as string]: galleryPhotos.length > 1 ? '66vw' : '100vw' } as React.CSSProperties}>
-          <div className="sl-gallery-cell">
-            <Image {...imageLoadProps(galleryPhotos[0])} priority src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 860px) 100vw, 66vw" style={{ objectFit: 'cover', objectPosition: 'center 40%' }} className="gallery-main"
-              onLoad={(e) => { const im = e.currentTarget; if (im.naturalWidth && im.naturalHeight) setGalleryAspect(Math.min(2.2, Math.max(1, im.naturalWidth / im.naturalHeight))); }}
-              onClick={() => setCurrentImageIndex(0)} />
-          </div>
-          {galleryPhotos.length > 1 && (
-            <div className="sl-gallery-side" style={{ gridTemplateRows: galleryPhotos.length > 2 ? 'repeat(2, 1fr)' : '1fr' }}>
-              {galleryPhotos.slice(1, 3).map((photo, idx) => (
-                <div key={idx} className="sl-gallery-cell">
-                  <Image {...imageLoadProps(photo)} priority src={photo} alt={`Фото ${idx + 1}`} fill sizes="33vw" style={{ objectFit: 'cover', objectPosition: 'center 40%' }} className="gallery-main" onClick={() => setCurrentImageIndex(idx + 1)} />
-                </div>
-              ))}
-            </div>
-          )}
-          {galleryPhotos.length > 1 && (
-            <button type="button" className="sl-gallery-all" onClick={() => setCurrentImageIndex(0)}>Усі фото · {galleryPhotos.length}</button>
-          )}
-        </div>
-      )}
-
       <section className="container">
+        {galleryPhotos.length > 0 && (
+          <div className="sl-gallery" style={{ display: 'grid', gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr', gap: '1rem', width: '100%', height: '420px', marginBottom: '2.5rem' }}>
+            <div style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', position: 'relative' }}>
+              <Image {...imageLoadProps(galleryPhotos[0])} priority src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 768px) 100vw, 66vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(0)} />
+            </div>
+            {galleryPhotos.length > 1 && (
+              <div style={{ display: 'grid', gridTemplateRows: galleryPhotos.length > 2 ? 'repeat(2, 1fr)' : '1fr', gap: '1rem', height: '100%' }}>
+                {galleryPhotos.slice(1, 3).map((photo, idx) => (
+                  <div key={idx} style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 10px 20px rgba(0,0,0,0.05)', position: 'relative', height: '100%' }}>
+                    <Image {...imageLoadProps(photo)} priority src={photo} alt={`Фото ${idx + 1}`} fill sizes="(max-width: 768px) 100vw, 33vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(idx + 1)} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {galleryPhotos.length > 1 && (
+              <button type="button" className="sl-gallery-all" onClick={() => setCurrentImageIndex(0)}>Усі фото · {galleryPhotos.length}</button>
+            )}
+          </div>
+        )}
+
         {bookingBlockedText && (
           <div role="status" style={{ marginBottom: '1.5rem', padding: '0.9rem 1.2rem', borderRadius: '14px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: '0.92rem', fontWeight: 600 }}>
             {bookingBlockedText}. Спробуйте пізніше або зв’яжіться із закладом.

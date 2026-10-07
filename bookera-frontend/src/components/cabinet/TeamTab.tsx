@@ -672,6 +672,11 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
           .team-head h1 { font-size: 1.4rem !important; overflow-wrap: anywhere; }
           .team-tabs { gap: 1.4rem !important; margin-bottom: 1.5rem !important; }
           .team-grid { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
+          /* Графік по днях: рядок на дві лінії - день з перемикачем, нижче дві години на всю ширину */
+          .team-shift-row { flex-wrap: wrap; padding: 0.8rem 1rem !important; row-gap: 0.55rem; }
+          .team-shift-day { width: 100% !important; }
+          .team-shift-times { width: 100%; gap: 0.5rem !important; }
+          .team-shift-times input[type="time"] { flex: 1 1 0; min-width: 0; width: auto !important; }
           .team-detail input, .team-detail select, .team-detail textarea { font-size: 16px; }
         }
         @keyframes spin {
@@ -1166,8 +1171,8 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                         const salonEnd = salonDay?.end ? formatHHMM(salonDay.end) : '20:00';
 
                         return (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderBottom: idx !== staffShifts.length - 1 ? `1px solid ${colors.surface}` : 'none' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '220px' }}>
+                          <div key={idx} className="team-shift-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: '#fff', borderBottom: idx !== staffShifts.length - 1 ? `1px solid ${colors.surface}` : 'none' }}>
+                            <div className="team-shift-day" style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '220px' }}>
                               <div onClick={() => {
                                  if (!canEditSchedule) return;
                                  if (salonDay && !salonDay.active && !schedule.active) {
@@ -1208,7 +1213,7 @@ export default function TeamTab({ business, team = [], setTeam, services = [], u
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div className="team-shift-times" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                               {schedule.active ? (
                                 <>
                                   <input

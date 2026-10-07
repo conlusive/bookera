@@ -264,7 +264,7 @@ export default function InventoryTab({ business }: any) {
               </div>
             </div>
           )}
-          <button type="button" className="clean-btn" onClick={() => (mode === 'expenses'
+          <button type="button" className="clean-btn iv-add" onClick={() => (mode === 'expenses'
             ? setExpModal({ category: 'Оренда', amount: '', description: '', expense_date: today, recurrence: 'none' })
             : setItemModal({ name: '', unit: 'шт', quantity: '', cost_per_unit: '', low_stock_threshold: '' }))}>
             + {mode === 'expenses' ? 'Витрата' : 'Товар'}
@@ -604,6 +604,16 @@ export default function InventoryTab({ business }: any) {
         .iv-side { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
         .iv-side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 1.2rem 1.2rem 0.4rem; }
         .iv-side .iv-hint { flex: none; margin: 0.4rem 1.2rem 1.2rem; }
+        /* Телефон: у верхньому рядку вкладки «Витрати / Склад» і кнопка додавання, нижче пошук і період */
+        @media (max-width: 860px) {
+          .iv-toolbar { padding: 0.75rem 1rem 0; row-gap: 0.6rem; }
+          .iv-left, .iv-right { display: contents; }
+          .iv-seg { order: 1; }
+          .iv-add { order: 2; margin-left: auto; }
+          .iv-search { order: 3; flex: 1 1 100% !important; width: 100% !important; max-width: none !important; }
+          .iv-search .clean-input { font-size: 16px; }
+          .iv-period { order: 4; flex: 1 1 100% !important; justify-content: space-between; }
+        }
         @media (max-width: 1100px) { .iv-grid { grid-template-columns: 1fr; } .iv-side { display: none; } .iv-main { border-right: none; } }
 
         .service-table { 

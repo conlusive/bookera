@@ -342,7 +342,14 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
           .sf-hero > div:nth-child(2) { display: none; }
           .sf-title-input { font-size: 1.8rem !important; width: 100% !important; min-width: 0 !important; }
           .sf-title-wrap { min-width: 0 !important; width: 100%; }
-          .sf-cols { grid-template-columns: minmax(0, 1fr) !important; gap: 2rem !important; }
+          /* Порядок як на сторінці салону для клієнта: послуги, команда, карта, зручності, про заклад, графік.
+             Обидві колонки розкладаємо в один потік і впорядковуємо блоки через order. */
+          .sf-cols { display: flex !important; flex-direction: column; gap: 1.75rem !important; }
+          .sf-left, .sf-right { display: contents !important; }
+          .sf-o-services { order: 1; } .sf-o-team { order: 2; } .sf-o-map { order: 3; } .sf-o-amen { order: 4; }
+          .sf-o-about { order: 5; } .sf-o-hours { order: 6; }
+          .sf-blk { background: none !important; box-shadow: none !important; border: none !important; border-top: 1px solid #f1f5f9 !important; border-radius: 0 !important; padding: 1.5rem 0 0 !important; overflow: visible !important; }
+          .sf-blk.sf-o-services { border-top: none !important; padding-top: 0 !important; }
           .sf-cols > div { gap: 2rem !important; }
           .sf-card { padding: 1.25rem !important; border-radius: 18px !important; }
           .sf-two { grid-template-columns: 1fr !important; }
@@ -464,10 +471,10 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
             {/* Сітка 2 колонки: Основний вміст та Правий сайдбар */}
             <div className="sf-cols" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)', gap: '4rem', alignItems: 'start' }}>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
+              <div className="sf-left" style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem' }}>
 
                 {/* ПРАЙС-ЛИСТ */}
-                <div className="editable-block sf-card" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                <div className="editable-block sf-card sf-blk sf-o-services" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.7)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1D1D1F', margin: 0, letterSpacing: '-0.02em' }}>
                       Послуги
@@ -542,7 +549,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 </div>
 
                 {/* Блок Про нас */}
-                <div style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                <div className="sf-blk sf-o-about" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                   <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '1rem', color: '#1D1D1F', letterSpacing: '-0.01em' }}>Про заклад</h2>
                   <textarea
                     ref={textareaRef}
@@ -557,7 +564,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                 </div>
 
                 {/* Графік роботи: редагується там само, де й календар (вікно «Графік»). */}
-                <div className="editable-block sf-card" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', position: 'relative' }}>
+                <div className="editable-block sf-card sf-blk sf-o-hours" style={{ background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', position: 'relative' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: '800', margin: 0, color: '#1D1D1F', letterSpacing: '-0.01em' }}>Графік роботи</h2>
                     {openNow && (
@@ -581,7 +588,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
               </div>
 
               {/* Сайдбар (Команда, Карта та Зручності) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'sticky', top: '90px' }}>
+              <div className="sf-right" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'sticky', top: '90px' }}>
 
                 {/* Блок Команда.
                     Показуємо ЗАВЖДИ, навіть вимкнений - приглушеним і
@@ -589,7 +596,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
                     назад можна було лише через модальне вікно, де ще
                     треба здогадатись, що воно там. */}
                 {(
-                  <div className="editable-block" style={{ opacity: layoutConfig.showTeam ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                  <div className="editable-block sf-blk sf-o-team" style={{ opacity: layoutConfig.showTeam ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                       <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: '#1D1D1F' }}>Наша команда</h3>
                       <button
@@ -637,7 +644,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
                 {/* Блок Карта */}
                 {(
-                  <div className="editable-block" style={{ opacity: layoutConfig.showMap ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                  <div className="editable-block sf-blk sf-o-map" style={{ opacity: layoutConfig.showMap ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: 0, overflow: 'hidden', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     <div style={{ height: '200px', width: '100%', position: 'relative', overflow: 'hidden', background: '#e2e8f0' }}>
                       <div style={{ position: 'absolute', top: '-160px', left: '-160px', width: 'calc(100% + 320px)', height: 'calc(100% + 320px)' }}>
                         {map ? <iframe
@@ -679,7 +686,7 @@ export default function StorefrontTab({ business, services, team, Icons, setActi
 
                 {/* БЛОК ЗРУЧНОСТІ ПІД КАРТОЮ */}
                 {(
-                  <div className="editable-block" style={{ opacity: layoutConfig.showAmenities ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                  <div className="editable-block sf-blk sf-o-amen" style={{ opacity: layoutConfig.showAmenities ? 1 : 0.45, background: '#ffffff', borderRadius: '24px', padding: '2rem', border: '1px solid rgba(226, 232, 240, 0.6)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
                     {/* Кнопку «Налаштувати ⚙» прибрано: блок редагується
                         при наведенні, як решта на цій сторінці. Окрема
                         кнопка біля одного заголовка виглядала винятком

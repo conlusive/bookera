@@ -1172,6 +1172,14 @@ const handleSaveShifts = async () => {
           .cal-toolbar__right button { padding: 0.55rem 0.45rem !important; font-size: 0.8rem !important; }
           .cal-toolbar__rest { gap: 0.25rem !important; }
           .cal-time-input { width: 150px !important; }
+          /* Колонка з годинами лишається на місці, коли день гортають убік */
+          .cal-day-wrap .cal-time-col { position: sticky; left: 0; z-index: 4; }
+          /* Робочі години: день з перемикачем, нижче дві години на всю ширину */
+          .cal-shift-row { flex-wrap: wrap; row-gap: 0.5rem; }
+          .cal-shift-day { width: 100% !important; }
+          .cal-shift-times { width: 100%; }
+          .cal-shift-times > div { width: 100%; }
+          .cal-shift-times input[type="time"] { flex: 1 1 0; min-width: 0; width: auto !important; font-size: 16px; }
           .cal-m-head, .cal-m-grid { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
           .cal-m-head { font-size: 0.65rem !important; letter-spacing: 0 !important; padding: 0.7rem 0 !important; }
           .cal-m-grid { grid-auto-rows: minmax(64px, 1fr) !important; }
@@ -1592,10 +1600,15 @@ const handleSaveShifts = async () => {
         <div className="animated-calendar" key={currentDate.toISOString() + calendarView} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* --- ДЕНЬ --- */}
+          {calendarView === 'day' && (
+            /* Шапка з іменами й сітка гортаються вбік РАЗОМ: коли в колонках багато майстрів,
+               їх не стискаємо, а даємо провести пальцем (або коліщатком) ліворуч-праворуч.
+               Мінімальна ширина колонки - 140px; на ПК, де місця вистачає, нічого не змінюється. */
+            <div className="cal-day-wrap" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflowX: 'auto', overflowY: 'auto', ['--day-min' as string]: `${76 + Math.max(dayColumns ? dayColumns.length : 1, 1) * 140}px` } as React.CSSProperties}>
           {calendarView === 'day' && dayColumns && (
             /* Шапка колонок: без неї смуги нічого не означають.
                Липка, щоб імена не їхали вгору під час прокрутки дня. */
-            <div style={{ display: 'flex', paddingLeft: '68px', paddingRight: '8px', borderBottom: '1px solid #EDF1EC', background: '#fff', position: 'sticky', top: 0, zIndex: 5, flexShrink: 0 }}>
+            <div style={{ display: 'flex', paddingLeft: '68px', paddingRight: '8px', borderBottom: '1px solid #EDF1EC', background: '#fff', position: 'sticky', top: 0, zIndex: 5, flexShrink: 0, minWidth: 'max(100%, var(--day-min, 0px))', boxSizing: 'border-box' }}>
               {[...dayColumns, ...(getAppointmentsForDay(currentDate).some((a: any) => a.status !== 'blocked' && a.color !== 'blocked' && (!a.staff_id || !dayColumns.some((m: any) => String(m.id) === String(a.staff_id)))) ? [{ id: '__none', name: 'Без майстра' }] : [])].map((m: any) => (
                 <div
                   key={m.id}
@@ -1610,7 +1623,7 @@ const handleSaveShifts = async () => {
           )}
 
           {calendarView === 'day' && (
-            <div className="custom-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minWidth: '600px' }}>
+            <div style={{ flex: 'none', display: 'flex', flexDirection: 'column', minWidth: 'max(100%, var(--day-min, 0px))', boxSizing: 'border-box' }}>
               <div style={{ position: 'relative', height: `${gridTotalHours * 60}px`, flexShrink: 0, zIndex: 1 }}>
                 {hoursArray.map((hour, i) => {
                   const displayHour = hour % 24;
@@ -1765,6 +1778,8 @@ const handleSaveShifts = async () => {
                 <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={isToday} />
               </div>
               <div style={{ flex: 1, display: 'flex', minHeight: '4rem' }}><div style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}></div><div className="non-working-bg" style={{ flex: 1 }}></div></div>
+            </div>
+          )}
             </div>
           )}
 
@@ -2530,15 +2545,15 @@ const handleSaveShifts = async () => {
 
             <div className="custom-scroll" style={{ padding: '1.25rem 1.4rem', maxHeight: '75vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {shifts.map((shift, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 1rem', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', width: '130px' }}>
+                <div key={idx} className="cal-shift-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 1rem', background: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div className="cal-shift-day" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', width: '130px' }}>
                     <div onClick={() => { const newShifts = [...shifts]; newShifts[idx].active = !shift.active; setShifts(newShifts); }} style={{ width: '38px', height: '22px', borderRadius: '11px', background: shift.active ? '#10b981' : '#cbd5e1', position: 'relative', cursor: 'pointer', transition: '0.3s', flexShrink: 0 }}>
                       <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: shift.active ? '18px' : '2px', transition: '0.3s', boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}></div>
                     </div>
                     <div style={{ fontWeight: '600', color: shift.active ? '#0f172a' : '#94a3b8', fontSize: '0.9rem' }}>{shift.day}</div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <div className="cal-shift-times" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                     {shift.active ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <input type="time" value={shift.start} onChange={(e) => { const newShifts = [...shifts]; newShifts[idx].start = e.target.value; setShifts(newShifts); }} style={{ padding: '0.35rem 0.5rem', border: '1px solid #cbd5e1', borderRadius: '6px', fontWeight: '600', color: '#0f172a', fontSize: '0.85rem', width: '75px', textAlign: 'center', outline: 'none' }} />

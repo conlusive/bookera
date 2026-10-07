@@ -524,7 +524,17 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .page-transition { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .toast-animate { animation: fadeIn 0.3s ease forwards; }
 
-        .light-input { width: 100%; padding: 0.65rem 0.9rem; border-radius: 10px; border: 1px solid #e2e8f0; background: #fafafa; font-size: 0.9rem; color: #0f172a; outline: none; transition: all 0.2s; }
+        .cl-bal { display: flex; justify-content: space-between; align-items: baseline; border: 1px solid #eef1f4; border-radius: 12px; padding: 0.8rem 1rem; }
+        .cl-bal span { font-size: 0.8rem; color: #64748b; font-weight: 600; }
+        .cl-bal b { font-size: 1.5rem; font-weight: 800; }
+        .cl-pick { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; padding-right: 0.5rem; }
+        .cl-pick-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.55rem 0; border-bottom: 1px solid #f1f5f9; }
+        .cl-pick-row span { display: flex; flex-direction: column; min-width: 0; }
+        .cl-pick-row b { font-size: 0.9rem; color: #0f172a; }
+        .cl-pick-row small { font-size: 0.76rem; color: #94a3b8; }
+        .cl-pick-row .fm-btn { height: 32px; padding: 0 0.8rem; font-size: 0.8rem; }
+        .cl-pick-empty { text-align: center; padding: 1.5rem; color: #94a3b8; font-size: 0.88rem; }
+        .light-input { width: 100%; padding: 0.65rem 0.9rem; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.9rem; color: #0f172a; outline: none; transition: all 0.2s; }
         .light-input:focus { background: #fff; border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.05); }
 
         .light-btn { background: #0f172a; color: #fff; border: none; padding: 0.55rem 1.1rem; border-radius: 10px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
@@ -1297,66 +1307,61 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
 
       )}
 
-      {/* МОДАЛКА БАЛАНСУ */}
-      {isBalanceModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setIsBalanceModalOpen(false)}>
-           <div className="toast-animate" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '360px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                 <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Керування депозитом <HelpTip>Передоплата саме цього клієнта: наприклад, вимагати її завжди, якщо він уже не приходив.</HelpTip></h3>
-                 <button onClick={() => setIsBalanceModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+      {/* Депозит клієнта і пошук для сімейного звʼязку - той самий шаблон вікна (FormModal), що в «Новому клієнті» й «Акціях» */}
+      <FormModal
+        open={isBalanceModalOpen}
+        onClose={() => setIsBalanceModalOpen(false)}
+        title="Депозит клієнта"
+        subtitle="Передоплата саме цього клієнта: наприклад, вимагати її завжди, якщо він уже не приходив"
+        primary={{ label: 'Підтвердити', onClick: () => void handleUpdateBalance() }}
+        width={440}
+      >
+        <FormSection>
+          <div className="cl-bal">
+            <span>Поточний баланс</span>
+            <b style={{ color: (viewingClient?.balance || 0) < 0 ? '#ef4444' : '#0f172a' }}>{viewingClient?.balance || 0} ₴</b>
+          </div>
+          <div className="fm-chips">
+            <button type="button" className={`fm-chip ${balanceOperation === 'add' ? 'on' : ''}`} onClick={() => setBalanceOperation('add')}>Поповнити</button>
+            <button type="button" className={`fm-chip ${balanceOperation === 'subtract' ? 'on' : ''}`} onClick={() => setBalanceOperation('subtract')}>Списати</button>
+          </div>
+          <Field label="Сума, ₴">
+            <input className="fm-input" data-field="balance-amount" type="number" inputMode="decimal" value={balanceAmount} onChange={e => setBalanceAmount(e.target.value)} placeholder="Наприклад: 500" />
+          </Field>
+        </FormSection>
+      </FormModal>
+
+      <FormModal
+        open={isFamilyModalOpen}
+        onClose={() => setIsFamilyModalOpen(false)}
+        title="Повʼязати клієнта"
+        subtitle="Родина чи близькі: їхні картки будуть поруч"
+        primary={{ label: 'Готово', onClick: () => setIsFamilyModalOpen(false) }}
+        secondary={{ label: 'Закрити', onClick: () => setIsFamilyModalOpen(false) }}
+        width={460}
+      >
+        {viewingClient && (() => {
+          const found = clientsList.filter((c: any) =>
+            c.id !== viewingClient.id && !(viewingClient.linked_client_ids || []).includes(c.id) &&
+            String(c?.name ?? '').toLowerCase().includes(String(familySearch ?? '').toLowerCase()));
+          return (
+            <FormSection>
+              <Field label="Імʼя клієнта">
+                <input className="fm-input" type="text" value={familySearch} onChange={e => setFamilySearch(e.target.value)} placeholder="Почніть вводити імʼя" autoFocus />
+              </Field>
+              <div className="cl-pick custom-scroll">
+                {found.slice(0, 30).map((c: any) => (
+                  <div key={c.id} className="cl-pick-row">
+                    <span><b>{c.name}</b>{c.phone && <small>{c.phone}</small>}</span>
+                    <button type="button" className="fm-btn ghost" onClick={() => handleLinkClient(c.id)}>Додати</button>
+                  </div>
+                ))}
+                {found.length === 0 && <div className="cl-pick-empty">Нікого не знайдено</div>}
               </div>
-
-              <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '1rem', textAlign: 'center', marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
-                 <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Поточний баланс</div>
-                 <div style={{ fontSize: '1.8rem', fontWeight: '800', color: (viewingClient?.balance || 0) < 0 ? '#ef4444' : '#6F9273', marginTop: '0.2rem' }}>{viewingClient?.balance || 0} ₴</div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', background: '#f1f5f9', padding: '4px', borderRadius: '10px' }}>
-                 <button onClick={() => setBalanceOperation('add')} className={`seg-tab ${balanceOperation === 'add' ? 'active' : ''}`} style={{ flex: 1 }}>Поповнити</button>
-                 <button onClick={() => setBalanceOperation('subtract')} className={`seg-tab ${balanceOperation === 'subtract' ? 'active' : ''}`} style={{ flex: 1 }}>Списати</button>
-              </div>
-
-              <div style={{ marginBottom: '1.5rem' }}>
-                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#64748b', marginBottom: '0.4rem' }}>Сума (₴)</label>
-                 <input data-field="balance-amount" type="number" value={balanceAmount} onChange={e => setBalanceAmount(e.target.value)} className="light-input" placeholder="Наприклад: 500" style={{ fontSize: '1.1rem', padding: '0.8rem 1rem' }} autoFocus />
-              </div>
-
-              <button onClick={handleUpdateBalance} className="light-btn" style={{ width: '100%', padding: '0.8rem', fontSize: '0.95rem' }}>Підтвердити</button>
-           </div>
-        </div>
-      )}
-
-      {/* МОДАЛКА ПОШУКУ ТА ДОДАВАННЯ ДО СІМ'Ї */}
-      {isFamilyModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }} onClick={() => setIsFamilyModalOpen(false)}>
-           <div className="toast-animate" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '400px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                 <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>Пошук клієнта</h3>
-                 <button onClick={() => setIsFamilyModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
-              </div>
-
-              <input type="text" value={familySearch} onChange={e => setFamilySearch(e.target.value)} className="light-input" placeholder="Введіть ім'я..." style={{ marginBottom: '1rem' }} autoFocus />
-
-              <div className="custom-scroll" style={{ maxHeight: '250px', overflowY: 'auto' }}>
-                 {clientsList.filter((c: any) =>
-                     c.id !== viewingClient.id && // Не показувати себе
-                     !(viewingClient.linked_client_ids || []).includes(c.id) && // Не показувати вже доданих
-                     String(c?.name ?? '').toLowerCase().includes(String(familySearch ?? '').toLowerCase())
-                 ).map((c: any) => (
-                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem', borderBottom: '1px solid #f1f5f9' }}>
-                       <span style={{ fontWeight: '600', color: '#0f172a' }}>{c.name}</span>
-                       <button className="light-btn-sec" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }} onClick={() => handleLinkClient(c.id)}>
-                          Додати
-                       </button>
-                    </div>
-                 ))}
-                 {clientsList.filter((c: any) => c.id !== viewingClient.id && !(viewingClient.linked_client_ids || []).includes(c.id) && String(c?.name ?? '').toLowerCase().includes(String(familySearch ?? '').toLowerCase())).length === 0 && (
-                     <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.9rem' }}>Нікого не знайдено</div>
-                 )}
-              </div>
-           </div>
-        </div>
-      )}
+            </FormSection>
+          );
+        })()}
+      </FormModal>
 
       {business?.id && (
         <>
@@ -1408,18 +1413,15 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
       </FormModal>
 
 
-      {confirmDialog && (
-         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.3)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }} onClick={() => setConfirmDialog(null)}>
-            <div className="toast-animate" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '16px', maxWidth: '340px', textAlign: 'center', padding: '2rem', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
-               <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0f172a', margin: '0 0 0.5rem 0' }}>{confirmDialog.title}</h3>
-               <p style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: '1.4', marginBottom: '1.5rem' }}>{confirmDialog.text}</p>
-               <div style={{ display: 'flex', gap: '0.6rem' }}>
-                  <button onClick={() => setConfirmDialog(null)} className="light-btn-sec" style={{ flex: 1 }}>Скасувати</button>
-                  <button onClick={confirmDialog.onConfirm} className="light-btn" style={{ flex: 1, background: '#ef4444', justifyContent: 'center' }}>Видалити</button>
-               </div>
-            </div>
-         </div>
-      )}
+      <FormModal
+        open={!!confirmDialog}
+        onClose={() => setConfirmDialog(null)}
+        title={confirmDialog?.title || ''}
+        primary={{ label: 'Видалити', danger: true, onClick: () => confirmDialog?.onConfirm() }}
+        width={420}
+      >
+        <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.5, color: '#475569' }}>{confirmDialog?.text}</p>
+      </FormModal>
 
     </div>
   );

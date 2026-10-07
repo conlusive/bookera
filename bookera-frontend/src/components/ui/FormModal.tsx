@@ -18,7 +18,7 @@ import { ReactNode, useEffect, useRef, useState } from 'react';
  * Поля - через <FormSection> і <Field>, стилі інпутів - клас fm-input.
  */
 
-type Action = { label: string; onClick: () => void; loading?: boolean; disabled?: boolean };
+type Action = { label: string; onClick: () => void; loading?: boolean; disabled?: boolean; danger?: boolean };
 
 export default function FormModal({
   open, onClose, title, subtitle, children, primary, secondary, danger, width = 640,
@@ -85,7 +85,7 @@ export default function FormModal({
           {!confirming && (
             <span className="fm-actions">
               <button type="button" className="fm-btn ghost" onClick={secondary?.onClick || onClose} disabled={busy}>{secondary?.label || 'Скасувати'}</button>
-              <button type="button" className="fm-btn primary" onClick={primary.onClick} disabled={busy || primary.disabled}>
+              <button type="button" className={`fm-btn ${primary.danger ? 'danger' : 'primary'}`} onClick={primary.onClick} disabled={busy || primary.disabled}>
                 {busy ? 'Зберігаємо…' : primary.label}
               </button>
             </span>

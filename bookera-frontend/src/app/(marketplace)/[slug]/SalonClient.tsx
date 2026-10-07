@@ -592,6 +592,9 @@ export default function SalonClient({
   );
 
 
+  // Пропорції головного фото: висота галереї підлаштовується під нього, щоб воно вміщалось у кадр майже повністю
+  const [galleryAspect, setGalleryAspect] = useState(1.6);
+
   const galleryPhotos = useMemo(() => {
     if (!salon) return [];
     const photos = [];
@@ -1484,8 +1487,9 @@ const formatRole = (role?: string) => {
         .sl-hd-find { width: 44px; height: 44px; align-items: center; justify-content: center; color: #111827; }
         /* ТЕЛЕФОН (лише до 860px, комп'ютер не змінюється) */
         /* Галерея на всю ширину екрана, без рамок і заокруглень */
-        .sl-gallery { position: relative; display: grid; gap: 4px; width: 100%; height: clamp(320px, 36vw, 500px); margin: -14px 0 2.5rem; background: #f1f5f9; overflow: hidden; }
+        .sl-gallery { position: relative; display: grid; gap: 4px; width: 100%; height: clamp(300px, calc(66vw / var(--a, 1.6)), 560px); margin: -14px 0 2.5rem; background: #f1f5f9; overflow: hidden; }
         .sl-gallery-cell { position: relative; overflow: hidden; min-width: 0; height: 100%; }
+        .sl-gallery-bg { object-fit: cover; filter: blur(22px) saturate(1.1); transform: scale(1.25); opacity: 0.95; }
         .sl-gallery-side { display: grid; gap: 4px; min-width: 0; height: 100%; }
         .sl-gallery-all { position: absolute; right: 1.5rem; bottom: 1.5rem; z-index: 2; border: none; border-radius: 10px; padding: 0.55rem 0.95rem; background: rgba(255,255,255,0.94); color: #111827; font-size: 0.85rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.14); backdrop-filter: blur(6px); }
         .sl-gallery-all:hover { background: #fff; }
@@ -1499,7 +1503,7 @@ const formatRole = (role?: string) => {
           .sl-hd-short { display: inline; }
           .sl-hd-find { display: inline-flex; }
           .sl-hd-right { width: auto !important; margin-left: auto; gap: 0.35rem !important; }
-          .sl-gallery { grid-template-columns: minmax(0, 1fr) !important; height: 300px !important; margin: -14px 0 1.5rem !important; }
+          .sl-gallery { grid-template-columns: minmax(0, 1fr) !important; height: clamp(220px, calc(100vw / var(--a, 1.6)), 440px) !important; margin: -14px 0 1.5rem !important; }
           .sl-gallery > .sl-gallery-side { display: none !important; }
           .sl-gallery-all { right: 0.9rem !important; bottom: 0.9rem !important; }
           .sl-h1 { font-size: 1.85rem !important; }
@@ -2205,17 +2209,22 @@ const formatRole = (role?: string) => {
       </header>
 
       {/* --- ОБКЛАДИНКА ТА ДЕТАЛІ ЗАЛАДУ --- */}
-      {/* Фото закладу від краю до краю екрана; на телефоні - одне велике фото на всю ширину */}
+      {/* Фото закладу від краю до краю екрана. Фото вміщається повністю (contain), а вільне місце
+          заповнює його ж розмита копія - без білих смуг і без відрізаних країв */}
       {galleryPhotos.length > 0 && (
-        <div className="sl-gallery" style={{ gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr' }}>
+        <div className="sl-gallery" style={{ gridTemplateColumns: galleryPhotos.length > 1 ? '2fr 1fr' : '1fr', ['--a' as string]: galleryAspect } as React.CSSProperties}>
           <div className="sl-gallery-cell">
-            <Image {...imageLoadProps(galleryPhotos[0])} priority src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 860px) 100vw, 66vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(0)} />
+            <Image {...imageLoadProps(galleryPhotos[0])} src={galleryPhotos[0]} alt="" aria-hidden fill sizes="64px" className="sl-gallery-bg" />
+            <Image {...imageLoadProps(galleryPhotos[0])} priority src={galleryPhotos[0]} alt="Обкладинка закладу" fill sizes="(max-width: 860px) 100vw, 66vw" style={{ objectFit: 'contain' }} className="gallery-main"
+              onLoad={(e) => { const im = e.currentTarget; if (im.naturalWidth && im.naturalHeight) setGalleryAspect(Math.min(2.2, Math.max(1, im.naturalWidth / im.naturalHeight))); }}
+              onClick={() => setCurrentImageIndex(0)} />
           </div>
           {galleryPhotos.length > 1 && (
             <div className="sl-gallery-side" style={{ gridTemplateRows: galleryPhotos.length > 2 ? 'repeat(2, 1fr)' : '1fr' }}>
               {galleryPhotos.slice(1, 3).map((photo, idx) => (
                 <div key={idx} className="sl-gallery-cell">
-                  <Image {...imageLoadProps(photo)} priority src={photo} alt={`Фото ${idx + 1}`} fill sizes="33vw" style={{ objectFit: 'cover' }} className="gallery-main" onClick={() => setCurrentImageIndex(idx + 1)} />
+                  <Image {...imageLoadProps(photo)} src={photo} alt="" aria-hidden fill sizes="64px" className="sl-gallery-bg" />
+                  <Image {...imageLoadProps(photo)} priority src={photo} alt={`Фото ${idx + 1}`} fill sizes="33vw" style={{ objectFit: 'contain' }} className="gallery-main" onClick={() => setCurrentImageIndex(idx + 1)} />
                 </div>
               ))}
             </div>

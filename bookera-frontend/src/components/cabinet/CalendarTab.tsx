@@ -1183,6 +1183,10 @@ const handleSaveShifts = async () => {
           ) !important;
           background-color: #ffffff !important;
         }
+        .fab-button { position: fixed; right: 1.5rem; bottom: 1.5rem; width: 56px; height: 56px; border-radius: 50%; border: none; background: #0f172a; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28); cursor: pointer; z-index: 30; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .fab-button:hover { transform: scale(1.06); box-shadow: 0 10px 28px rgba(15, 23, 42, 0.34); }
+        .fab-button:active { transform: scale(0.96); }
+        .fab-button svg { width: 24px; height: 24px; }
         .cal-list-inner { padding: 0 1.75rem 6rem; }
         .cal-list-row { padding-left: 0.75rem !important; padding-right: 0.25rem !important; display: grid; grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.6fr) 7rem 8.5rem; column-gap: 1.25rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f4f6f8; cursor: pointer; }
         @media (hover: hover) { .cal-list-row:hover { background: #fafbfc; } }
@@ -1190,6 +1194,7 @@ const handleSaveShifts = async () => {
         .cl-status { text-align: right; }
         .cl-m-only { display: none; }
         @media (max-width: 860px) {
+          .fab-button { right: 1rem; bottom: 1rem; }
           .cal-list-inner { padding: 0 1rem 6rem; }
           .cal-list-row { grid-template-columns: 3.4rem minmax(0, 1fr) auto; grid-template-areas: "time client price" "time svc status"; column-gap: 0.75rem; row-gap: 2px; padding: 0.65rem 0; }
           .cal-list-row.with-master { grid-template-columns: 3.4rem minmax(0, 1fr) auto; }
@@ -1699,7 +1704,7 @@ const handleSaveShifts = async () => {
             const isBlockApp = (a: any) => a.status === 'blocked' || a.color === 'blocked' || !a.service_id;
             const byTime = (list: any[]) => [...list].sort((a: any, b: any) => String(a.start_time).localeCompare(String(b.start_time)));
             type Section = { key: string; title: string; sub?: string; dot?: string; today?: boolean; apps: any[]; empty: string };
-            const collapsible = calendarView !== 'day';
+            const collapsible = true;  // і дні (тиждень, місяць), і майстри (день) згортаються по кліку на заголовок
             let sections: Section[] = [];
             const withMaster = calendarView !== 'day';
             const masterName = (a: any) => (team || []).find((m: any) => String(m.id) === String(a.staff_id))?.name || '';
@@ -1750,7 +1755,7 @@ const handleSaveShifts = async () => {
                     const open = !!listExpanded[expKey];
                     // День у тижні/місяці: за замовчуванням відкритий лише сьогоднішній (або перший із записами, якщо сьогодні поза періодом)
                     const hasToday = sections.some(x => x.today);
-                    const defaultOpen = !!sec.today || (!hasToday && sec.key === (sections.find(x => x.apps.length > 0)?.key));
+                    const defaultOpen = calendarView === 'day' || !!sec.today || (!hasToday && sec.key === (sections.find(x => x.apps.length > 0)?.key));
                     const dayOpen = collapsible ? (agendaOpen[expKey] ?? defaultOpen) : true;
                     const shown = dayOpen ? (open ? sec.apps : sec.apps.slice(0, LIST_CAP)) : [];
                     const hidden = dayOpen ? sec.apps.length - shown.length : 0;
@@ -2208,7 +2213,7 @@ const handleSaveShifts = async () => {
       </div>
 
       {/* --- КНОПКА НОВОГО ЗАПИСУ --- */}
-      <button className="fab-button" title="Новий запис" onClick={() => { setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: '10:00', block_reason: '', duration: 60 }); setIsBlockMode(false); setIsApptModalOpen(true); }}>
+      <button className="fab-button" title="Новий запис" onClick={() => { setApptForm({ client_name: '', client_phone: '+380', service_id: '', staff_id: filterMaster !== 'all' ? filterMaster : '', date: toLocalDateStr(currentDate), time: checkSameDay(toLocalDateStr(new Date()), currentDate) ? `${String(Math.min(23, new Date().getHours() + 1)).padStart(2, '0')}:00` : '10:00', block_reason: '', duration: 60 }); setIsBlockMode(false); setIsApptModalOpen(true); }}>
         <Icons.Plus />
       </button>
 

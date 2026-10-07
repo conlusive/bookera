@@ -726,6 +726,13 @@ const handleSaveShifts = async () => {
   const openBookingDetails = (app: any, e: React.MouseEvent) => { e.stopPropagation(); setSelectedBooking(app); setIsBookingDetailsModalOpen(true); };
   const handleContextMenu = (e: React.MouseEvent, app: any) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, app }); };
 
+  // Ширина дня в тижні залежить від того, скільки записів одночасно: у завантажений день колонка ширша,
+  // щоб картки не стискались до смужок (решту прокручує горизонтальний скрол)
+  const weekTemplate = () => `${weekDays.map((d: Date) => {
+    const cols = Math.min(5, Math.max(1, ...processOverlaps(getAppointmentsForDay(d)).map((a: any) => a.colCount || 1)));
+    return `minmax(${Math.max(112, cols * 84)}px, ${cols}fr)`;
+  }).join(' ')}`;
+
   // У низьких картках повне ім'я не вміщується: «Анжеліка Войтович-Левицька» → «Анжеліка В.»
   const shortClientName = (name?: string) => {
     const parts = (name || '').trim().split(/\s+/);
@@ -1204,6 +1211,7 @@ const handleSaveShifts = async () => {
         .cal-ac-head { align-items: center; justify-content: space-between; gap: 0.4rem; width: 100%; min-width: 0; }
         .cal-ac-name { font-weight: 700; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cal-ac-time { display: inline-flex; align-items: center; gap: 0.2rem; flex-shrink: 0; font-weight: 700; opacity: 0.7; order: 3; }
+        .cal-ac-range { font-size: 0.72rem; font-weight: 700; opacity: 0.6; line-height: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; order: 1; }
         .cal-ac-svc { min-width: 0; opacity: 0.85; font-weight: 500; font-size: 0.75rem; line-height: 14px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; word-break: break-word; order: 2; }
         .cal-ac-master { min-width: 0; opacity: 0.65; font-size: 0.72rem; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; order: 4; }
         .cal-app-card[style*="row"] .cal-ac-name { flex: 0 1 auto; max-width: 42%; order: 1; }
@@ -1325,6 +1333,8 @@ const handleSaveShifts = async () => {
           .cal-m-head { border-bottom: none !important; padding: 0.55rem 0 0.35rem !important; margin: 0 0.25rem; }
           /* Тиждень: сім колонок з мінімальною шириною, гортається вбік; години й шапка лишаються на місці */
           .cal-week-head, .cal-week-body { min-width: 800px; }
+          .cal-wk-card { container-type: inline-size; }
+          @container (max-width: 44px) { .cal-wk-card > * { display: none !important; } }
           .cal-week-wrap .cal-time-col { position: sticky; left: 0; z-index: 13; width: 44px !important; }
           .cal-week-wrap .cal-week-head .cal-time-col { z-index: 14; }
           .cal-week-hcell { padding: 0.55rem 0.2rem !important; }
@@ -2020,14 +2030,14 @@ const handleSaveShifts = async () => {
                   const leftPercent = (app.colStart ?? 0) * 100;
                   const widthPercent = (app.colSpan ?? 1) * 100;
                   // Висота картки ділиться між рядками: ім'я, послуга (до 3 рядків), майстер - лише якщо лишилось місце
-                  const roomPx = Math.max(app.heightPx || 60, 14) - 16 - 18;
+                  const roomPx = Math.max(app.heightPx || 60, 14) - ((app.heightPx || 60) < 72 ? 10 : 16) - 18 - 14;
                   const showMaster = !isBlock && !isCompact && roomPx - 14 >= 14;
                   const svcLines = 1 + Math.max(0, Math.min(2, Math.floor((roomPx - 14 - (showMaster ? 14 : 0)) / 14)));
 
                   return (
                     <div
                       key={app.id}
-                      title={isBlock ? blockTitle : `${app.client_name} · ${serviceName}${addonNames ? ` + ${addonNames}` : ''} · ${app.start_time.substring(0, 5)} · ${staffName}`}
+                      title={isBlock ? blockTitle : `${app.client_name} · ${serviceName}${addonNames ? ` + ${addonNames}` : ''} · ${app.start_time.substring(0, 5)} → ${String(app.end_time || '').substring(0, 5)} · ${staffName}`}
                       draggable={!isBlock}
                       onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(app.id)); }}
                       onContextMenu={(e) => handleContextMenu(e, app)}
@@ -2043,7 +2053,7 @@ const handleSaveShifts = async () => {
                         border: isBlock ? '1px solid #cbd5e1' : 'none',
                         borderLeft: isBlock ? '4px solid #94a3b8' : `3px solid ${mColors.vividBg}`,
                         borderRadius: '8px',
-                        padding: isTiny ? '0 0.5rem' : isCompact ? '0.2rem 0.6rem' : '0.5rem 0.75rem',
+                        padding: isTiny ? '0 0.5rem' : isCompact ? '0.2rem 0.6rem' : (app.heightPx || 60) < 72 ? '0.3rem 0.75rem' : '0.5rem 0.75rem',
                         display: 'flex',
                         flexDirection: isCompact ? 'row' : 'column',
                         alignItems: isCompact ? 'center' : 'flex-start',
@@ -2073,9 +2083,10 @@ const handleSaveShifts = async () => {
                           <div className="cal-ac-head" style={{ display: isCompact ? 'contents' : 'flex' }}>
                             <span className="cal-ac-name">{isCompact ? shortClientName(app.client_name) : app.client_name}</span>
                             <span className="cal-ac-time" style={{ fontSize: isTiny ? '0.65rem' : '0.75rem' }}>
-                              <span className="cal-ac-t">{app.start_time.substring(0, 5)}</span>{getStatusIcon(app.status)}
+                              {isCompact && <span className="cal-ac-t">{app.start_time.substring(0, 5)}</span>}{getStatusIcon(app.status)}
                             </span>
                           </div>
+                          {!isCompact && <div className="cal-ac-range">{app.start_time.substring(0, 5)} → {String(app.end_time || '').substring(0, 5)}</div>}
                           <div className="cal-ac-svc" style={{ WebkitLineClamp: isCompact ? 1 : svcLines }}>
                             {serviceName}{addonNames ? ` + ${addonNames}` : ''}
                           </div>
@@ -2097,9 +2108,9 @@ const handleSaveShifts = async () => {
           {/* --- ТИЖДЕНЬ --- */}
           {calendarView === 'week' && dayLayout === 'grid' && (
             <div className="custom-scroll cal-week-wrap" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-              <div className="cal-week-head" style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0, position: 'sticky', top: 0, zIndex: 12 }}>
+              <div className="cal-week-head" style={{ width: 'max-content', minWidth: '100%', display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0, position: 'sticky', top: 0, zIndex: 12 }}>
                 <div className="cal-time-col" style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#ffffff' }}></div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: weekTemplate(), flex: 1 }}>
                   {weekDays.map((day, i) => (
                     <div key={i} className="cal-week-hcell" style={{ padding: '1rem', textAlign: 'center', borderRight: i !== 6 ? '1px solid #e2e8f0' : 'none' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>{['Нд', 'Пн', 'Вв', 'Ср', 'Чт', 'Пт', 'Сб'][day.getDay()]}</div>
@@ -2110,7 +2121,7 @@ const handleSaveShifts = async () => {
               </div>
 
               <div style={{ flex: 'none' }}>
-                <div className="cal-week-body" style={{ position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
+                <div className="cal-week-body" style={{ width: 'max-content', minWidth: '100%', position: 'relative', display: 'flex', minHeight: `${(gridEndHour - gridStartHour) * 60}px` }}>
                   <div className="cal-time-col" style={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#fff', position: 'sticky', left: 0, zIndex: 10 }}>
                     {Array.from({ length: gridEndHour - gridStartHour }).map((_, i) => (
                       <div key={i} style={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '0.5rem 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: '600', borderBottom: '1px solid transparent' }}>{gridStartHour + i}:00</div>
@@ -2119,7 +2130,7 @@ const handleSaveShifts = async () => {
 
                   {isCurrentWeek && <CurrentTimeIndicator gridStartHour={gridStartHour} gridTotalHours={gridTotalHours} isToday={true} />}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: weekTemplate(), flex: 1 }}>
                     {weekDays.map((weekDay, i) => {
                       const dayApps = getAppointmentsForDay(weekDay);
                       const dayShift = effectiveShifts[weekDay.getDay() === 0 ? 6 : weekDay.getDay() - 1];
@@ -2142,49 +2153,52 @@ const handleSaveShifts = async () => {
                             const isTiny = app.heightPx <= 25;
                             const widthPercent = 100 / (app.colCount || 1);
                             const leftPercent = (app.colIndex || 0) * widthPercent;
+                            const addonNames = (app.addon_service_ids || [])
+                              .map((id: number) => services.find((s: any) => String(s.id) === String(id))?.name)
+                              .filter(Boolean)
+                              .join(', ');
+                            const svcText = `${service?.name || ''}${addonNames ? ` + ${addonNames}` : ''}`;
+                            const range = `${app.start_time.substring(0, 5)} → ${String(app.end_time || '').substring(0, 5)}`;
+                            // Рядок часу - лише коли картка висока: ім'я, час, потім послуга на решту висоти
+                            const svcLines = Math.max(1, Math.min(3, Math.floor((app.heightPx - 16 - 15 - 13) / 12)));
 
                             return (
                               <div
                                 key={app.id}
+                                title={isBlock ? (app.block_reason || app.service_name || 'Перерва') : `${app.client_name} · ${svcText} · ${range}`}
                                 draggable={!isBlock}
                                 onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(app.id)); }}
-                                className={`${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
+                                className={`cal-wk-card ${isBlock ? 'non-working-bg' : ''} ${app.status ? 'status-' + app.status : ''}`}
                                 onClick={(e) => { e.stopPropagation(); openBookingDetails(app, e); }}
                                 style={{
-                                  position: 'absolute', top: `${app.topPx}px`, left: `calc(${leftPercent}% + 2px)`, width: `calc(${widthPercent}% - 4px)`, height: `${app.heightPx}px`,
+                                  position: 'absolute', top: `${app.topPx}px`, left: `calc(${leftPercent}% + 2px)`, width: `calc(${widthPercent}% - 4px)`, height: `${Math.max(app.heightPx - 1, 14)}px`,
                                   background: isBlock ? 'transparent' : (mColors.pastelBg),
                                   borderRadius: '8px',
-                                  padding: isTiny ? '0.1rem 0.4rem' : (isCompact ? '0.2rem 0.5rem' : '0.4rem 0.6rem'),
+                                  padding: isTiny ? '0 0.4rem' : (isCompact ? '0.15rem 0.5rem' : '0.35rem 0.5rem'),
                                   display: 'flex', flexDirection: isCompact ? 'row' : 'column', alignItems: isCompact ? 'center' : 'flex-start',
-                                  gap: isCompact ? '0.3rem' : '2px',
+                                  gap: isCompact ? '0.3rem' : '1px',
                                   color: isBlock ? '#64748b' : (mColors.pastelText),
-                                  fontSize: isTiny ? '0.65rem' : '0.75rem',
+                                  fontSize: isTiny ? '0.64rem' : '0.74rem', lineHeight: isTiny ? 1.1 : undefined,
                                   cursor: isBlock ? 'pointer' : 'grab', zIndex: 5 + (app.colIndex || 0),
                                   borderLeft: isBlock ? '2px dashed #cbd5e1' : `3px solid ${mColors.vividBg}`,
                                   overflow: 'hidden', boxShadow: isBlock ? 'none' : '0 1px 3px rgba(0,0,0,0.03)', boxSizing: 'border-box'
                                 }}
                               >
-                                <div style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flexShrink: 1, width: '100%' }}>
-                                  {isBlock ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
+                                <div style={{ display: isCompact ? 'contents' : 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.25rem', width: '100%', minWidth: 0 }}>
+                                  <span style={{ fontWeight: 700, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(isCompact ? { flex: '0 1 auto', maxWidth: '55%' } : {}) }}>
+                                    {isBlock ? (app.block_reason || app.service_name || 'Перерва') : (isCompact ? shortClientName(app.client_name) : app.client_name)}
+                                  </span>
+                                  {!isBlock && <span style={{ flexShrink: 0, display: 'inline-flex', order: 3 }}>{getStatusIcon(app.status)}</span>}
                                 </div>
-                                {!isBlock && !isCompact && <div style={{ opacity: 0.6, fontSize: '0.65rem', fontWeight: 700 }}>{app.start_time.substring(0, 5)}</div>}
-                                {!isBlock && (() => {
-                                  const addonNames = (app.addon_service_ids || [])
-                                    .map((id: number) => services.find((s: any) => String(s.id) === String(id))?.name)
-                                    .filter(Boolean)
-                                    .join(', ');
-                                  return (
-                                    <div style={{
-                                      opacity: 0.8, overflow: 'hidden', fontWeight: '500', fontSize: isTiny ? '0.6rem' : '0.7rem', lineHeight: '13px', minWidth: 0, flexShrink: 1, width: '100%',
-                                      ...(isCompact
-                                        ? { whiteSpace: 'nowrap', textOverflow: 'ellipsis' }
-                                        : { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: Math.max(1, Math.min(3, Math.floor((app.heightPx - 40) / 13))), wordBreak: 'break-word' }),
-                                    }}>
-                                      {isCompact ? `• ${service?.name || ''}` : service?.name}
-                                      {addonNames ? ` + ${addonNames}` : ''}
-                                    </div>
-                                  );
-                                })()}
+                                {!isBlock && !isCompact && <div style={{ opacity: 0.6, fontSize: '0.66rem', fontWeight: 700, lineHeight: '13px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{range}</div>}
+                                {!isBlock && (
+                                  <div style={{
+                                    opacity: 0.85, overflow: 'hidden', fontWeight: 500, fontSize: isTiny ? '0.6rem' : '0.7rem', lineHeight: '12px', minWidth: 0, order: 2,
+                                    ...(isCompact
+                                      ? { flex: '1 1 0', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }
+                                      : { width: '100%', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: svcLines, wordBreak: 'break-word' }),
+                                  }}>{svcText}</div>
+                                )}
                               </div>
                             );
                           })}

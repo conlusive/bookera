@@ -33,6 +33,13 @@ e2e tests: `npm run test:e2e` (Playwright, `bookera-frontend/e2e/`, desktop + mo
 ### Environment
 Backend `.env` (see `.env.example`, heavily commented) — required: `DATABASE_URL` (must be `postgresql+asyncpg://`, Supabase transaction pooler), `SUPABASE_URL`, `ALLOWED_ORIGINS`, `FRONTEND_URL`. Frontend `.env.local` (see `.env.example.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`. Without SMTP creds emails are only logged (`[Email Mock]`); without `WFP_*` keys subscription "pay" extends the subscription immediately.
 
+## Working autonomously (checks and guardrails)
+
+- **Hooks (`.claude/settings.json`, scripts in `.claude/hooks/`)**: `guard-bash.py` blocks `pytest` unless it runs as `env -u DATABASE_URL ...` (or with a `DATABASE_URL` that names a `*test*` database), and blocks `source .env` combined with pytest/seed/cleanup — tests TRUNCATE tables and have wiped real data before. `post-edit-check.sh` runs `tsc --noEmit` after editing `bookera-frontend/src/**/*.ts(x)` and `py_compile` after editing any `.py`; a failure comes back as an error, fix it before moving on. Do not bypass or disable them. The guard only looks at the real command (heredoc bodies and quoted text are ignored), so mentioning these words in commit messages or docs is fine.
+- **Before calling a change done**: UI change → typecheck, then look at it at 1440 px and 390 px (the `playwright-tester` subagent, or a throw-away sandbox: fake Supabase auth + `uvicorn` on the `*_test` DB + a `next dev --webpack` copy on :3100). Backend change → run the related tests on the test DB (`env -u DATABASE_URL venv/bin/python -m pytest tests/test_x.py`). New migration → hand-review it, add `ENABLE ROW LEVEL SECURITY`, add new tables to the `conftest.py` TRUNCATE list.
+- **Sandbox hygiene**: servers started for testing (ports 3100 / 8001 / 54321) are killed when done; never touch the user's own dev servers on :3000 / :8000 unless asked. Never `git push` without the user's explicit go-ahead; commit messages in English.
+- **Screenshots from the user often do not arrive** — say so and work from the text description instead of guessing.
+
 ## Backend architecture
 
 - **Layering**: `app/api/` (routers) → `app/services/` (business logic) → `app/models/` (SQLAlchemy 2.0 async) with `app/schemas/` (Pydantic). `app/api/crm/` holds the owner/staff cabinet endpoints (`/crm/...`); the top-level `app/api/*.py` modules are public/marketplace, client wallet, master tools, etc. All routers are registered in `main.py` — a new router must be `include_router`'d there.

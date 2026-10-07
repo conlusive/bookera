@@ -952,9 +952,15 @@ function ProfileContent() {
           .pf-aside .nav-item.active svg { color: #fff; }
         }
         @media (max-width: 520px) {
-          .pf-row { gap: 0.9rem !important; flex-wrap: wrap; }
-          .pf-time { width: auto !important; }
-          .pf-actions { padding-left: 0 !important; }
+          /* Візит: зверху час зліва і ціна з датою справа, нижче на всю ширину послуга, заклад і майстер */
+          .pf-card { padding: 0 1rem !important; border-radius: 16px !important; }
+          .pf-item { padding: 1.1rem 0 !important; }
+          .pf-row { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "time side" "mid mid"; gap: 0.6rem 0.75rem !important; }
+          .pf-time { grid-area: time; width: auto !important; }
+          .pf-side { grid-area: side; }
+          .pf-mid { grid-area: mid; }
+          .pf-actions { padding-left: 0 !important; margin-top: 0.85rem !important; }
+          .pf-actions > * { flex: 1 1 auto; justify-content: center; text-align: center; }
           .segmented-tabs { display: flex; width: 100%; }
           .segmented-btn { flex: 1; padding: 0.45rem 0.4rem; }
         }
@@ -1241,7 +1247,7 @@ function ProfileContent() {
                               із рамкою: у списку з десяти це десять
                               прямокутників, які око читає як стіну.
                               Тонкі лінії між рядками спокійніші. */}
-                          <div style={{
+                          <div className="pf-card" style={{
                             background: '#fff',
                             // Світліша рамка й більше заокруглення: 14px на
                             // великому блоці виглядає різко, 18 - спокійно.
@@ -1291,6 +1297,7 @@ function ProfileContent() {
                               return (
                                 <div
                                   key={app.id}
+                                  className="pf-item"
                                   style={{
                                     padding: hasActions ? '1.75rem 0 1.5rem' : '1.75rem 0',
                                     borderBottom: itemIdx < group.items.length - 1 ? '1px solid #F5F5F7' : 'none',
@@ -1320,7 +1327,7 @@ function ProfileContent() {
                                     </div>
 
                                     {/* Середня колонка: Назва послуг, заклад і майстер */}
-                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="pf-mid" style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{
                                         fontSize: '1.0625rem', fontWeight: 600, color: '#1D1D1F',
                                         letterSpacing: '-0.01em', lineHeight: 1.4,
@@ -1339,7 +1346,7 @@ function ProfileContent() {
                                     </div>
 
                                     {/* Права колонка: Ціна, дата та статус */}
-                                    <div style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                    <div className="pf-side" style={{ flexShrink: 0, textAlign: 'right', paddingTop: '1px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                                       {app.price ? (
                                         <div style={{
                                           fontSize: '1.0625rem', fontWeight: 600, color: '#1D1D1F',

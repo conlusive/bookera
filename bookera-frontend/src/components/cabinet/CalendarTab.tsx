@@ -1289,6 +1289,7 @@ const handleSaveShifts = async () => {
           .cal-list-row.with-master { grid-template-columns: 3.4rem minmax(0, 1fr) auto; }
           .cl-master { display: none !important; }
           .cl-m-only { display: inline; }
+          .cl-dur { display: none; }
           .cl-time { grid-area: time; }
           .cl-client { grid-area: client; }
           .cl-svc { grid-area: svc; }
@@ -1303,11 +1304,13 @@ const handleSaveShifts = async () => {
           .cal-toolbar { flex-wrap: wrap !important; padding: 0.5rem 0.75rem !important; row-gap: 0.35rem !important; column-gap: 0.25rem !important; }
           .cal-toolbar__rest, .cal-toolbar__rightwrap { display: contents !important; }
           .cal-toolbar__left { order: 1; flex: 1 1 auto !important; flex-shrink: 1 !important; min-width: 0; }
-          .cal-gear { order: 2; margin-left: auto; padding: 8px !important; }
-          .cal-master-wrap { order: 3; }
+          /* Верхній рядок: дата, далі вигляд (сітка/список) і шестерня поруч; нижній: майстри ліворуч, період праворуч */
+          .cal-layout-icons { order: 2; margin-left: auto; }
+          .cal-layout-icons button { padding: 0.4rem 0.3rem 0.3rem !important; }
+          .cal-gear { order: 3; padding: 8px 6px !important; }
+          .cal-master-wrap { order: 4; }
           .cal-toolbar__right { display: none !important; }
-          .cal-view-menu { order: 4; margin-left: auto; }
-          .cal-layout-icons { order: 5; }
+          .cal-view-menu { order: 5; margin-left: auto; }
           .cal-toolbar__count, .cal-toolbar__search { display: none !important; }
           .cal-toolbar__right { gap: 0 !important; }
           .cal-toolbar__right button { padding: 0.45rem 0.26rem !important; font-size: 0.76rem !important; }
@@ -1896,7 +1899,7 @@ const handleSaveShifts = async () => {
                                 {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
                               </div>
                               <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
+                                {block ? '' : (svc?.name || app.service_name)}{!block && dur && <span className="cl-dur"> · {dur}</span>}
                                 {master && <span className="cl-m-only" style={{ color: getCardColor(String(app.staff_id)).pastelText, fontWeight: 600 }}> · {master}</span>}
                               </div>
                               {withMaster && (
@@ -2392,7 +2395,7 @@ const handleSaveShifts = async () => {
                                   {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
                                 </div>
                                 <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
+                                  {block ? '' : (svc?.name || app.service_name)}{!block && dur && <span className="cl-dur"> · {dur}</span>}
                                 </div>
                                 <div className="cl-price" style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', textAlign: 'right' }}>{!block && app.price ? `${Number(app.price).toLocaleString('uk-UA')} ₴` : ''}</div>
                                 <div className="cl-status">{st && <span style={{ fontSize: '0.68rem', fontWeight: 600, color: st.color, background: st.bg, padding: '1px 7px', borderRadius: '999px', whiteSpace: 'nowrap' }}>{st.label}</span>}</div>

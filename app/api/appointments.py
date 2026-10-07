@@ -400,6 +400,7 @@ def _is_slot_race(exc: DBAPIError) -> bool:
 async def lock_time_slot(
     request: LockSlotRequest,
     db: AsyncSession = Depends(get_db),
+    _user: CurrentUser = Depends(get_current_user),  # бронювання лише для зареєстрованих
     _rl=Depends(rate_limit("lock", max_requests=20, window_seconds=60)),
 ):
     now = get_utc_now()
@@ -525,7 +526,7 @@ async def lock_time_slot(
 
 
 @router.post("/unlock")
-async def unlock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(get_db), _rl=Depends(rate_limit("unlock", max_requests=60, window_seconds=60))):
+async def unlock_time_slot(request: LockSlotRequest, db: AsyncSession = Depends(get_db), _user: CurrentUser = Depends(get_current_user), _rl=Depends(rate_limit("unlock", max_requests=60, window_seconds=60))):
     if request.session_token:
         await db.execute(
             delete(Appointment).where(
@@ -544,6 +545,7 @@ async def create_appointment(
     appointment_in: AppointmentCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _user: CurrentUser = Depends(get_current_user),  # запис лише для зареєстрованих, як і в інтерфейсі
     _rl=Depends(rate_limit("book", max_requests=12, window_seconds=600))
 ):
     now = get_utc_now()

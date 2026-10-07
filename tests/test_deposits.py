@@ -174,3 +174,17 @@ async def test_payout_details_are_not_public(client, auth_headers):
     assert "4111" not in public and "payout_details" not in public
     fin = (await client.get(f"/crm/businesses/{bid}/finance", headers=h)).json()
     assert fin["payout_details"]["masked"] == "4111 **** 1111", "навіть власнику реквізити віддаються лише маскою"
+
+
+@pytest.mark.asyncio
+async def test_booking_requires_login(client, auth_headers):
+    """Запис і резерв слота - лише для зареєстрованих: гість не може записати чужу пошту прямим запитом."""
+    h = auth_headers("login-owner-1")
+    bid, sid = await _salon(client, h, "Login Salon")
+    body = {"business_id": bid, "service_id": sid, "start_time": _slot(2, 9), "session_token": "anon1"}
+    anon = {"x-test-anon": "1"}
+    assert (await client.post("/appointments/lock", json=body, headers=anon)).status_code == 401
+    assert (await client.post("/appointments/unlock", json=body, headers=anon)).status_code == 401
+    full = {**body, "client_name": "Гість", "client_phone": "+380671119090", "client_email": "g@t.com"}
+    assert (await client.post("/appointments", json=full, headers=anon)).status_code == 401
+    assert (await client.post("/appointments", json=full)).status_code == 200  # зареєстрований клієнт записується

@@ -738,6 +738,13 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
   }, []);
 
   const toggleFavorite = async (bizId: number) => {
+    // Улюблені - лише для зареєстрованих, як і на сторінці закладу: гостю показуємо вхід, нічого не зберігаючи.
+    const { data: { session: favSession } } = await supabase.auth.getSession();
+    if (!favSession) {
+      setIsLoginView(true);
+      setIsAuthModalOpen(true);
+      return;
+    }
     const before = favorites;
     const makeFavorite = !before.includes(bizId);
     // Сердечко змінюється одразу - людина не чекає на мережу.

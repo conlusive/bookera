@@ -67,7 +67,17 @@ async def clean_db():
 async def client(clean_db):
     os.environ["DATABASE_URL"] = DB_URL
     from main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def _as_registered_guest(request):
+        # Запис і резерв слота - лише для користувача, що увійшов. Більшість тестів лише «записує клієнта»,
+        # тож за замовчуванням підставляємо звичайного клієнта; заголовок X-Test-Anon вимикає підстановку.
+        if request.url.path in ("/appointments", "/appointments/lock", "/appointments/unlock") and request.method == "POST":
+            if "x-test-anon" in request.headers:
+                del request.headers["x-test-anon"]
+            elif "authorization" not in request.headers:
+                request.headers["Authorization"] = f"Bearer {make_token('test-guest', 'client')}"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test",
+                           event_hooks={"request": [_as_registered_guest]}) as c:
         yield c
 
 

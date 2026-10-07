@@ -113,7 +113,7 @@ export default function BusinessShowcase() {
         .bz-shot { display: block; width: 100%; height: auto; }
         /* Телефон: знімок заповнює екран повністю, низ рамки ховається за краєм секції */
         .bz-phone {
-          position: absolute; left: -1.5rem; bottom: -4rem; width: clamp(150px, 16vw, 200px);
+          position: absolute; left: -1.5rem; bottom: -7.2rem; width: clamp(130px, 14vw, 165px);
           padding: 7px; border-radius: 36px; background: #16211A;
           box-shadow: 0 30px 60px -18px rgba(22, 33, 26, 0.55), inset 0 0 0 1.5px rgba(255,255,255,0.12);
         }

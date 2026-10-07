@@ -726,6 +726,12 @@ const handleSaveShifts = async () => {
   const openBookingDetails = (app: any, e: React.MouseEvent) => { e.stopPropagation(); setSelectedBooking(app); setIsBookingDetailsModalOpen(true); };
   const handleContextMenu = (e: React.MouseEvent, app: any) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, app }); };
 
+  // У низьких картках повне ім'я не вміщується: «Анжеліка Войтович-Левицька» → «Анжеліка В.»
+  const shortClientName = (name?: string) => {
+    const parts = (name || '').trim().split(/\s+/);
+    return parts.length > 1 ? `${parts[0]} ${parts[1][0]}.` : (name || '');
+  };
+
   const getStatusIcon = (status: string) => {
     if (status === 'completed') return <span title="Завершено" style={{color: '#16a34a', display: 'flex', alignItems: 'center'}}><Icons.CheckCircle /></span>;
     if (status === 'late') return <span title="Запізнюється" style={{color: '#d97706', display: 'flex', alignItems: 'center'}}><Icons.AlertCircle /></span>;
@@ -1200,7 +1206,10 @@ const handleSaveShifts = async () => {
         .cal-ac-time { display: inline-flex; align-items: center; gap: 0.2rem; flex-shrink: 0; font-weight: 700; opacity: 0.7; order: 3; }
         .cal-ac-svc { min-width: 0; opacity: 0.85; font-weight: 500; font-size: 0.75rem; line-height: 14px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; word-break: break-word; order: 2; }
         .cal-ac-master { min-width: 0; opacity: 0.65; font-size: 0.72rem; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; order: 4; }
-        .cal-app-card[style*="row"] .cal-ac-name { flex: 0 1 auto; max-width: 55%; order: 1; }
+        .cal-app-card[style*="row"] .cal-ac-name { flex: 0 1 auto; max-width: 42%; order: 1; }
+        .cal-app-card[style*="row"] .cal-ac-svc { min-width: 3ch; }
+        .cal-ac-svc::first-line { font-weight: 500; }
+        @container (max-width: 260px) { .cal-app-card[style*="row"] .cal-ac-t { display: none; } }
         .cal-app-card[style*="row"] .cal-ac-svc { flex: 1 1 0; display: block; white-space: nowrap; text-overflow: ellipsis; }
         @container (max-width: 130px) { .cal-ac-time, .cal-ac-master { display: none; } }
 
@@ -2011,7 +2020,7 @@ const handleSaveShifts = async () => {
                   const leftPercent = (app.colStart ?? 0) * 100;
                   const widthPercent = (app.colSpan ?? 1) * 100;
                   // Висота картки ділиться між рядками: ім'я, послуга (до 3 рядків), майстер - лише якщо лишилось місце
-                  const roomPx = Math.max(app.heightPx || 60, 25) - 16 - 18;
+                  const roomPx = Math.max(app.heightPx || 60, 14) - 16 - 18;
                   const showMaster = !isBlock && !isCompact && roomPx - 14 >= 14;
                   const svcLines = 1 + Math.max(0, Math.min(2, Math.floor((roomPx - 14 - (showMaster ? 14 : 0)) / 14)));
 
@@ -2026,7 +2035,7 @@ const handleSaveShifts = async () => {
                       style={{
                         position: 'absolute',
                         top: `${app.topPx}px`,
-                        height: `${Math.max(app.heightPx || 30, 25)}px`,
+                        height: `${Math.max((app.heightPx || 30) - 1, 14)}px`,
                         left: `calc(68px + (100% - 76px) * ${leftPercent / 100})`,
                         width: `calc((100% - 76px) * ${widthPercent / 100} - 6px)`,
                         backgroundColor: isBlock ? '#ffffff' : mColors.pastelBg,
@@ -2034,12 +2043,12 @@ const handleSaveShifts = async () => {
                         border: isBlock ? '1px solid #cbd5e1' : 'none',
                         borderLeft: isBlock ? '4px solid #94a3b8' : `3px solid ${mColors.vividBg}`,
                         borderRadius: '8px',
-                        padding: isTiny ? '0.1rem 0.5rem' : isCompact ? '0.3rem 0.6rem' : '0.5rem 0.75rem',
+                        padding: isTiny ? '0 0.5rem' : isCompact ? '0.2rem 0.6rem' : '0.5rem 0.75rem',
                         display: 'flex',
                         flexDirection: isCompact ? 'row' : 'column',
                         alignItems: isCompact ? 'center' : 'flex-start',
                         gap: isCompact ? '0.5rem' : '2px',
-                        fontSize: isTiny ? '0.7rem' : '0.8rem',
+                        fontSize: isTiny ? '0.68rem' : '0.8rem', lineHeight: isTiny ? 1.1 : undefined,
                         cursor: 'pointer',
                         zIndex: isBlock ? 6 : (5 + (app.colIndex || 0)),
                         overflow: 'hidden',
@@ -2062,9 +2071,9 @@ const handleSaveShifts = async () => {
                       ) : (
                         <>
                           <div className="cal-ac-head" style={{ display: isCompact ? 'contents' : 'flex' }}>
-                            <span className="cal-ac-name">{app.client_name}</span>
+                            <span className="cal-ac-name">{isCompact ? shortClientName(app.client_name) : app.client_name}</span>
                             <span className="cal-ac-time" style={{ fontSize: isTiny ? '0.65rem' : '0.75rem' }}>
-                              {app.start_time.substring(0, 5)} {getStatusIcon(app.status)}
+                              <span className="cal-ac-t">{app.start_time.substring(0, 5)}</span>{getStatusIcon(app.status)}
                             </span>
                           </div>
                           <div className="cal-ac-svc" style={{ WebkitLineClamp: isCompact ? 1 : svcLines }}>

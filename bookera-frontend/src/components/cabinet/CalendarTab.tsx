@@ -40,6 +40,13 @@ export default function CalendarTab({ business, team = [], services = [], refres
   // День можна дивитись сіткою (за годинами) або списком за майстрами - список зручніший на телефоні.
   const [dayLayout, setDayLayout] = useState<'grid' | 'list'>('grid');
   const [listExpanded, setListExpanded] = useState<Record<string, boolean>>({});
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const close = () => setViewMenuOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [viewMenuOpen]);
   // Пошук клієнта по всіх записах: знайти, коли людина записана, було
   // неможливо - доводилось гортати календар вручну.
   const [clientSearch, setClientSearch] = useState('');
@@ -1168,7 +1175,21 @@ const handleSaveShifts = async () => {
           ) !important;
           background-color: #ffffff !important;
         }
+        .cal-list-inner { padding: 0 1.75rem 6rem; }
+        .cal-list-row { display: grid; grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.6fr) 7rem 8.5rem; column-gap: 1.25rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f4f6f8; cursor: pointer; }
+        .cal-list-row:hover { background: #fafbfc; }
+        .cl-status { text-align: right; }
+        @media (max-width: 860px) {
+          .cal-list-inner { padding: 0 1rem 6rem; }
+          .cal-list-row { grid-template-columns: 3.4rem minmax(0, 1fr) auto; grid-template-areas: "time client price" "time svc status"; column-gap: 0.75rem; row-gap: 2px; padding: 0.65rem 0; }
+          .cl-time { grid-area: time; }
+          .cl-client { grid-area: client; }
+          .cl-svc { grid-area: svc; }
+          .cl-price { grid-area: price; }
+          .cl-status { grid-area: status; justify-self: end; }
+        }
         @media (min-width: 861px) and (max-width: 1600px) { .cal-toolbar__count { display: none !important; } }
+        @media (min-width: 861px) { .cal-view-menu { display: none !important; } }
         @media (max-width: 860px) {
           .cal-left { display: none !important; }
           /* Панель у два рядки: зверху дата зі стрілками і шестерня, знизу майстри й вигляд */
@@ -1177,7 +1198,9 @@ const handleSaveShifts = async () => {
           .cal-toolbar__left { order: 1; flex: 1 1 auto !important; flex-shrink: 1 !important; min-width: 0; }
           .cal-gear { order: 2; margin-left: auto; padding: 8px !important; }
           .cal-master-wrap { order: 3; }
-          .cal-toolbar__right { order: 4; margin-left: auto; }
+          .cal-toolbar__right { display: none !important; }
+          .cal-view-menu { order: 4; margin-left: auto; }
+          .cal-layout-icons { order: 5; }
           .cal-toolbar__count, .cal-toolbar__search { display: none !important; }
           .cal-toolbar__right { gap: 0 !important; }
           .cal-toolbar__right button { padding: 0.45rem 0.26rem !important; font-size: 0.76rem !important; }
@@ -1571,17 +1594,13 @@ const handleSaveShifts = async () => {
             {/* Перемикач виглядів та іконка налаштувань (завжди зафіксовані праворуч) */}
             <div className="cal-toolbar__rightwrap" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
               <div className="cal-toolbar__right" style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'transparent' }}>
-                {([['day', 'День', 'grid'], ['day', 'Список', 'list'], ['week', 'Тиждень', 'grid'], ['month', 'Місяць', 'grid']] as const).map(([view, label, layout]) => {
-                  // «День» і «Список» - один день, два вигляди: сітка за годинами або список за майстрами
-                  const isActive = calendarView === view && (view !== 'day' || dayLayout === layout);
+                {([['day', 'День'], ['week', 'Тиждень'], ['month', 'Місяць']] as const).map(([view, label]) => {
+                  const isActive = calendarView === view;
                   return (
                     <button
-                      key={label}
-                      onClick={() => {
-                        setCalendarView(view);
-                        localStorage.setItem('bookera_calendarView', view);
-                        if (view === 'day') { setDayLayout(layout); try { localStorage.setItem('bookera_dayLayout', layout); } catch { /* */ } }
-                      }}
+                      key={view}
+                      className="cal-view-tab"
+                      onClick={() => { setCalendarView(view); localStorage.setItem('bookera_calendarView', view); }}
                       style={{
                         padding: '0.35rem 0.65rem', fontSize: '0.82rem', fontWeight: isActive ? '700' : '500',
                         color: isActive ? '#0f172a' : '#64748b', background: isActive ? '#f1f5f9' : 'transparent',
@@ -1595,6 +1614,43 @@ const handleSaveShifts = async () => {
                   );
                 })}
               </div>
+
+              {/* Телефон: День / Тиждень / Місяць згорнуті в один випадний вибір, щоб не займати місце */}
+              <div className="cal-view-menu" style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                <button type="button" onClick={() => setViewMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={viewMenuOpen}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', border: 'none', background: '#f1f5f9', color: '#0f172a', borderRadius: '8px', padding: '0.4rem 0.6rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+                  {calendarView === 'day' ? 'День' : calendarView === 'week' ? 'Тиждень' : 'Місяць'}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                {viewMenuOpen && (
+                  <div role="menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(15,23,42,0.12)', padding: '4px', zIndex: 40, minWidth: '120px' }}>
+                    {([['day', 'День'], ['week', 'Тиждень'], ['month', 'Місяць']] as const).map(([view, label]) => (
+                      <button key={view} type="button" role="menuitem"
+                        onClick={() => { setCalendarView(view); localStorage.setItem('bookera_calendarView', view); setViewMenuOpen(false); }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', border: 'none', background: calendarView === view ? '#f1f5f9' : 'transparent', color: '#0f172a', fontWeight: calendarView === view ? 700 : 500, fontSize: '0.9rem', padding: '0.55rem 0.7rem', borderRadius: '7px', cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Сітка / список для дня - лише іконки */}
+              {calendarView === 'day' && (
+                <div className="cal-layout-icons" role="group" aria-label="Вигляд дня" style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px', flexShrink: 0 }}>
+                  {([['grid', 'Сітка за годинами'], ['list', 'Список за майстрами']] as const).map(([mode, label]) => (
+                    <button key={mode} type="button" title={label} aria-label={label} aria-pressed={dayLayout === mode}
+                      onClick={() => { setDayLayout(mode); try { localStorage.setItem('bookera_dayLayout', mode); } catch { /* */ } }}
+                      style={{ border: 'none', cursor: 'pointer', borderRadius: '6px', padding: '0.3rem 0.45rem', display: 'flex', alignItems: 'center', background: dayLayout === mode ? '#fff' : 'transparent', color: dayLayout === mode ? '#0f172a' : '#94a3b8', boxShadow: dayLayout === mode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
+                      {mode === 'grid' ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <button
                 type="button"
@@ -1655,7 +1711,7 @@ const handleSaveShifts = async () => {
             const fmtMin = (m: number | null) => !m ? '' : m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? ` ${m % 60} хв` : ''}` : `${m} хв`;
             return (
               <div className="cal-list custom-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: '#fff' }}>
-                <div style={{ maxWidth: '720px', margin: '0 auto', padding: '0 1rem 6rem' }}>
+                <div className="cal-list-inner">
                   {lanes.map(lane => {
                     const real = lane.apps.filter((a: any) => !isBlockApp(a));
                     const sum = real.filter((a: any) => a.status !== 'cancelled' && a.status !== 'no-show').reduce((t: number, a: any) => t + (Number(a.price) || 0), 0);
@@ -1680,24 +1736,22 @@ const handleSaveShifts = async () => {
                           const st = statusStyle[app.status as string];
                           const dur = fmtMin(minutesOf(app));
                           return (
-                            <div key={app.id} onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
-                              style={{ display: 'grid', gridTemplateColumns: '3.4rem minmax(0, 1fr) auto', columnGap: '0.75rem', alignItems: 'center', padding: '0.65rem 0', borderBottom: '1px solid #f4f6f8', cursor: 'pointer', opacity: off ? 0.55 : 1 }}>
-                              <div style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
+                            <div key={app.id} className="cal-list-row" onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
+                              style={{ opacity: off ? 0.55 : 1 }}>
+                              <div className="cl-time" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
                                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{String(app.start_time).substring(0, 5)}</div>
                                 {app.end_time && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
                               </div>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 600, fontSize: '0.92rem', color: block ? '#64748b' : '#0f172a', textDecoration: app.status === 'no-show' ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
-                                </div>
-                                {!block && (
-                                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {[svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
-                                  </div>
-                                )}
+                              <div className="cl-client" style={{ fontWeight: 600, fontSize: '0.92rem', color: block ? '#64748b' : '#0f172a', textDecoration: app.status === 'no-show' ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
                               </div>
-                              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                                {!block && app.price ? <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>{Number(app.price).toLocaleString('uk-UA')} ₴</span> : null}
+                              <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
+                              </div>
+                              <div className="cl-price" style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', textAlign: 'right' }}>
+                                {!block && app.price ? `${Number(app.price).toLocaleString('uk-UA')} ₴` : ''}
+                              </div>
+                              <div className="cl-status">
                                 {st && <span style={{ fontSize: '0.68rem', fontWeight: 600, color: st.color, background: st.bg, padding: '1px 7px', borderRadius: '999px', whiteSpace: 'nowrap' }}>{st.label}</span>}
                               </div>
                             </div>

@@ -19,6 +19,7 @@ __all__ = [
     "Appointment", "AppointmentStatus", "BookingSourceEnum",
     "Review", "InventoryItem", "Expense", "ServiceMaterial", "InventoryMovement", "Task",
     "PointsLedgerEntry", "PointsReasonEnum", "ReferralCommission",
-    "RadarBoost", "GiftCertificate", "Payment", "SalonPayout", "StaffPayout",
+    "RadarBoost", "GiftCertificate", "Payment", "SalonPayout", "StaffPayout", "Promotion",
 ]
+from app.models.promotion import Promotion
 from app.models.master_tools import StaffRequest, PortfolioItem, AuditEvent

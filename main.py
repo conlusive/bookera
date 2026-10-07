@@ -26,6 +26,7 @@ from app.api.crm import (
     appointments as crm_appointments,
     stats as crm_stats,
     monetization as crm_monetization,
+    promotions as crm_promotions,
 )
 from app.core.database import engine, AsyncSessionLocal
 from app.core.logging_config import logger
@@ -243,6 +244,7 @@ app.include_router(crm_extras.router)
 app.include_router(crm_appointments.router)
 app.include_router(crm_stats.router)
 app.include_router(crm_monetization.router)
+app.include_router(crm_promotions.router)
 app.include_router(unsubscribe.router)
 
 

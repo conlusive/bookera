@@ -793,10 +793,17 @@ async def create_appointment(
 
     total_minutes = (service.duration_minutes if service else 60) + addon_minutes
 
+    # Акція закладу (знижка на послугу / у певні дні й години): рахує сервер за годиною ПОЧАТКУ візиту.
+    # Найбільша з підхожих акцій, знижки не складаються; подарунковий сертифікат віднімається вже від ціни після акції.
+    from app.services import promotions as promo_service
+    final_price = (Decimal(str(service.price or 0)) if service else Decimal("0")) + addon_price
+    promo = promo_service.best_for(await promo_service.active_promotions(db, appointment_in.business_id), appointment_in.service_id, appointment_in.start_time.replace(tzinfo=None)) if service else None
+    if promo:
+        final_price = promo_service.discounted(final_price, promo.discount_percent)
+
     # Застосування подарункового сертифіката - зменшує ціну, не робить
     # бронювання безкоштовним понад залишок сертифіката.
     applied_certificate = None
-    final_price = (Decimal(str(service.price or 0)) if service else Decimal("0")) + addon_price
     if appointment_in.gift_certificate_code and service:
         cert_res = await db.execute(
             select(GiftCertificate).where(

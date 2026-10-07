@@ -61,11 +61,11 @@ export default function BusinessShowcase() {
         <div className="bz-stage" aria-hidden>
           <div className="bz-browser bz-a" style={{ ['--d' as string]: '0.15s' }}>
             <div className="bz-bar"><i /><i /><i /><span>bookera.app/cabinet</span></div>
-            <Image src="/home/cabinet-calendar-v1.jpg" alt="" width={2350} height={1650} sizes="(max-width: 1100px) 90vw, 640px" className="bz-shot" />
+            <Image src="/home/cabinet-calendar-v2.jpg" alt="" width={2880} height={1879} sizes="(max-width: 1100px) 90vw, 640px" className="bz-shot" />
           </div>
           <div className="bz-phone bz-a" style={{ ['--d' as string]: '0.35s' }}>
             <div className="bz-screen">
-              <Image src="/home/cabinet-mobile-v1.jpg" alt="" width={1170} height={2532} sizes="200px" className="bz-shot" />
+              <Image src="/home/cabinet-mobile-v2.jpg" alt="" width={1170} height={2410} sizes="200px" className="bz-shot" />
             </div>
           </div>
           <div className="bz-toast bz-a" style={{ ['--d' as string]: '0.7s' }}>

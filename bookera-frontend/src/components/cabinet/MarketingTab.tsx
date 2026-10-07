@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import PromotionsPanel from '@/components/cabinet/PromotionsPanel';
 import { api, CampaignRow, RadarOverview, RadarPackage } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { notify } from '@/lib/feedback';
@@ -25,7 +26,7 @@ import HelpTip from '@/components/ui/HelpTip';
  * вкладці був вигаданою «аналітикою розкладу»; лояльність - заглушка.
  */
 
-type View = 'radar' | 'campaigns' | 'links';
+type View = 'radar' | 'campaigns' | 'promos' | 'links';
 type Audience = string;
 
 const AUDIENCES: { id: Audience; label: string; hint: string }[] = [
@@ -50,7 +51,7 @@ const TEMPLATES = (name: string, link: string) => [
   { id: 'news', label: 'Новинка', subject: `Новинка в ${name}`, message: `У нас з'явилась нова послуга. Деталі розповімо при записі або відповімо на цей лист.${link ? `\n\nЗапис: ${link}` : ''}` },
 ];
 
-export default function MarketingTab({ business, preset }: { business: any; preset?: { audience: string; at: number } | null }) {
+export default function MarketingTab({ business, preset, services = [] }: { business: any; preset?: { audience: string; at: number } | null; services?: any[] }) {
   const [view, setView] = useState<View>('radar');
   const bid = Number(business?.id);
 
@@ -231,6 +232,8 @@ export default function MarketingTab({ business, preset }: { business: any; pres
 
   const hint = view === 'radar'
     ? { t: 'Радар — це реклама', x: 'Заклад отримує бали в позиції та позначку «Реклама» на картці. Комісії за Радар немає: 10% беруться лише з першого візиту нового клієнта, що прийшов з вітрини.' }
+    : view === 'promos'
+    ? { t: 'Як працюють акції', x: 'Знижку рахує сервер за годиною початку візиту. Якщо підходить кілька акцій, діє найбільша, вони не складаються. Подарунковий сертифікат віднімається від ціни вже після акції.' }
     : view === 'campaigns'
       ? { t: 'Лист із вашим посиланням', x: 'Шаблони вже містять пряме посилання: клієнти, що запишуться з розсилки, не рахуються як клієнти вітрини — комісії за них немає.' }
       : { t: 'Куди ставити посилання', x: 'Шапка Instagram, Telegram, візитка, QR на дверях. Усі, хто запишеться за прямим посиланням, — ваші клієнти без комісії.' };
@@ -240,7 +243,7 @@ export default function MarketingTab({ business, preset }: { business: any; pres
       {/* --- ПАНЕЛЬ --- */}
       <div className="mk-toolbar">
         <div className="mk-seg" role="tablist">
-          {([['radar', 'Радар'], ['campaigns', 'Розсилки'], ['links', 'Посилання']] as [View, string][]).map(([id, label]) => (
+          {([['radar', 'Радар'], ['promos', 'Акції'], ['campaigns', 'Розсилки'], ['links', 'Посилання']] as [View, string][]).map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>
               {label}
               {id === 'radar' && radar?.active && <span className="mk-live" title="Радар активний" />}
@@ -359,6 +362,9 @@ export default function MarketingTab({ business, preset }: { business: any; pres
                 </>
               )
             )}
+
+            {/* ================= АКЦІЇ ================= */}
+            {view === 'promos' && <PromotionsPanel businessId={bid} services={services} />}
 
             {/* ================= РОЗСИЛКИ ================= */}
             {view === 'campaigns' && (

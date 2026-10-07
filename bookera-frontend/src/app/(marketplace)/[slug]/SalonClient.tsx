@@ -15,7 +15,7 @@ import Image from 'next/image';
 import { imageLoadProps } from '@/lib/images';
 import { createClient } from '@/lib/supabase/client';
 import { Icons } from '@/components/shared';
-import { api, SlotStatusItem } from '@/lib/api';
+import { api, SlotStatusItem, PromotionRow, PriceQuote } from '@/lib/api';
 import { authErrorText, passwordProblem, CONFIRM_EMAIL_NOTICE } from '@/lib/auth-errors';
 import { useToast } from '@/context/ToastContext';
 import { isBusinessRole } from '@/lib/roles';
@@ -310,14 +310,27 @@ export default function SalonClient({
     return ALL_AMENITIES.filter(a => list.includes(a.id));
   }, [salon?.layout_config, salon?.amenities]);
 
+  // Акції закладу: чинні - для позначок у списку послуг, ціна з акцією для конкретного часу - з сервера (та сама, що буде в записі)
+  const [promos, setPromos] = useState<PromotionRow[]>([]);
+  useEffect(() => { if (salon?.id) void api.getPublicPromotions(salon.id).then(setPromos).catch(() => setPromos([])); }, [salon?.id]);
+  const [quote, setQuote] = useState<PriceQuote | null>(null);
+  useEffect(() => {
+    if (!salon?.id || !selectedService || !selectedDate || !selectedTime) { setQuote(null); return; }
+    let cancelled = false;
+    void api.getQuote(salon.id, selectedService.id, `${selectedDate}T${selectedTime}:00`, selectedAddonIds)
+      .then(q => { if (!cancelled) setQuote(q); }).catch(() => { if (!cancelled) setQuote(null); });
+    return () => { cancelled = true; };
+  }, [salon?.id, selectedService, selectedAddonIds, selectedDate, selectedTime]);
+
   const totalCalculatedPrice = useMemo(() => {
     const base = Number(selectedService?.price || 0);
     const addons = (selectedService?.addons || [])
       .filter((a: any) => selectedAddonIds.includes(a.id))
       .reduce((sum: number, a: any) => sum + Number(a.price || 0), 0);
-    const discount = certState?.valid ? Math.min(certState.amount, base + addons) : 0;
-    return Math.max(0, base + addons - discount);
-  }, [selectedService, selectedAddonIds, certState]);
+    const subtotal = quote ? quote.final_price : base + addons;
+    const discount = certState?.valid ? Math.min(certState.amount, subtotal) : 0;
+    return Math.max(0, Math.round((subtotal - discount) * 100) / 100);
+  }, [selectedService, selectedAddonIds, certState, quote]);
 
   // Завдаток, який заклад вимагає при записі (сервер вираховує те саме правило й вимагатиме саме його)
   const [onlinePayments, setOnlinePayments] = useState(false);
@@ -1512,7 +1525,7 @@ const formatRole = (role?: string) => {
           .service-pill-top > div:first-child { flex: 1 1 auto; min-width: 0; }
           .service-pill-top > div:first-child > div:first-child { font-size: 1rem !important; margin-bottom: 0.2rem !important; }
           .service-pill-act { flex-direction: column !important; align-items: flex-end !important; gap: 0.35rem !important; flex-shrink: 0; }
-          .service-pill-act > div { font-size: 1rem !important; }
+          .service-pill-act > div, .service-price b { font-size: 1rem !important; }
           .service-pill-act .service-btn { padding: 0.4rem 1.05rem !important; font-size: 0.85rem !important; border-radius: 11px !important; }
           /* Пошук і порядок: заголовок, нижче в одному ряду поле пошуку й кнопка порядку */
           .sl-svc-head { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem 0.6rem !important; border-bottom: none !important; padding-bottom: 0 !important; margin-bottom: 0.9rem !important; }
@@ -1550,6 +1563,10 @@ const formatRole = (role?: string) => {
         .section-title { font-size: 1.5rem; font-weight: 800; color: #1D1D1F; margin: 0; letter-spacing: -0.02em; }
         .service-pill { background-color: transparent; border-bottom: 1px solid #f1f5f9; padding: 1.5rem 0; display: flex; flex-direction: column; gap: 0.8rem; }
         .service-pill:last-child { border-bottom: none; }
+        .service-price { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+        .service-price b { font-weight: 800; color: #1D1D1F; font-size: 1.25rem; }
+        .service-price s { color: #94a3b8; font-size: 0.85rem; }
+        .promo-tag { font-style: normal; font-size: 0.72rem; font-weight: 700; color: #15803d; background: #ecfdf3; border-radius: 999px; padding: 1px 8px; }
         .service-pill-top { display: flex; justify-content: space-between; align-items: center; width: 100%; }
         .service-btn { background: #000000; color: #ffffff; padding: 0.6rem 1.4rem; border-radius: 14px; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
         .service-btn:hover { background: #1C1C1E; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.15); }
@@ -2438,7 +2455,23 @@ const formatRole = (role?: string) => {
                               </div>
                             </div>
                             <div className="service-pill-act" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                              <div style={{ fontWeight: '800', color: '#1D1D1F', fontSize: '1.25rem', whiteSpace: 'nowrap' }}>{service.price} ₴</div>
+                              {(() => {
+                                // Акція на послугу: без обмежень за годинами - одразу нова ціна, з обмеженнями - позначка з умовами
+                                const mine = promos.filter(p => !p.service_ids?.length || p.service_ids.includes(service.id));
+                                const best = mine.reduce<PromotionRow | null>((a, p) => (!a || p.discount_percent > a.discount_percent ? p : a), null);
+                                const always = best && !best.time_from && !best.weekdays?.length && !best.date_from;
+                                const now = best && always ? Math.round(Number(service.price) * (100 - best.discount_percent)) / 100 : null;
+                                return (
+                                  <div className="service-price">
+                                    {now !== null ? (
+                                      <><s>{service.price} ₴</s><b>{now} ₴</b></>
+                                    ) : (
+                                      <b>{service.price} ₴</b>
+                                    )}
+                                    {best && !always && <em className="promo-tag" title={best.name}>{best.label}</em>}
+                                  </div>
+                                );
+                              })()}
                               <button className="service-btn" onClick={() => openModal(service)}>Вибрати</button>
                             </div>
                           </div>
@@ -3807,6 +3840,12 @@ const formatRole = (role?: string) => {
                       </div>
 
                       <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: '1rem', marginTop: '1rem' }}>
+                        {quote?.promotion && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', color: '#15803d', marginBottom: '0.5rem' }}>
+                            <span>Акція «{quote.promotion.name}» −{quote.promotion.discount_percent}%</span>
+                            <span>−{quote.discount_amount} ₴</span>
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                           <span style={{ fontSize: '1rem', fontWeight: '600', color: '#1D1D1F' }}>До сплати</span>
                           <span style={{ fontSize: '1.65rem', fontWeight: '800', color: '#1D1D1F', letterSpacing: '-0.02em' }}>{totalCalculatedPrice} ₴</span>

@@ -398,6 +398,16 @@ export interface CampaignRow {
   status: 'queued' | 'sending' | 'done'; created_at: string;
 }
 
+export interface PromotionRow {
+  id: number; name: string; discount_percent: number; service_ids: number[] | null; weekdays: number[] | null;
+  time_from: string | null; time_to: string | null; date_from: string | null; date_to: string | null; is_active: boolean; label: string;
+}
+export type PromotionInput = Omit<PromotionRow, 'id' | 'label'>;
+export interface PriceQuote {
+  base_price: number; final_price: number; discount_amount: number;
+  promotion: { id: number; name: string; discount_percent: number; label: string } | null;
+}
+
 async function publicFetch(path: string, options: RequestInit & { revalidate?: number } = {}) {
   const { revalidate, ...rest } = options;
   // Живий GET у браузері (без кешу сторінки): ділимо запит між компонентами
@@ -1074,6 +1084,29 @@ export const api = {
   },
 
   /** Останні розсилки закладу з результатом відправки. */
+  /** Акції закладу (кабінет). */
+  async listPromotions(token: string, businessId: number): Promise<PromotionRow[]> {
+    return authFetch(`/crm/promotions?business_id=${businessId}`, token);
+  },
+  async createPromotion(token: string, businessId: number, body: PromotionInput): Promise<PromotionRow> {
+    return authFetch(`/crm/promotions?business_id=${businessId}`, token, { method: 'POST', body: JSON.stringify(body) });
+  },
+  async updatePromotion(token: string, id: number, body: PromotionInput): Promise<PromotionRow> {
+    return authFetch(`/crm/promotions/${id}`, token, { method: 'PUT', body: JSON.stringify(body) });
+  },
+  async deletePromotion(token: string, id: number): Promise<void> {
+    await authFetch(`/crm/promotions/${id}`, token, { method: 'DELETE' });
+  },
+  /** Чинні акції закладу - для позначок на вітрині. */
+  async getPublicPromotions(businessId: number): Promise<PromotionRow[]> {
+    return publicFetch(`/public/promotions?business_id=${businessId}`);
+  },
+  /** Ціна візиту з акцією - та сама, що збережеться в записі. */
+  async getQuote(businessId: number, serviceId: number, startTime: string, addonIds: number[] = []): Promise<PriceQuote> {
+    const addons = addonIds.length ? `&addon_service_ids=${addonIds.join(',')}` : '';
+    return publicFetch(`/public/quote?business_id=${businessId}&service_id=${serviceId}&start_time=${encodeURIComponent(startTime)}${addons}`);
+  },
+
   async getCampaigns(token: string, businessId: number): Promise<CampaignRow[]> {
     return authFetch(`/crm/campaigns?business_id=${businessId}`, token);
   },

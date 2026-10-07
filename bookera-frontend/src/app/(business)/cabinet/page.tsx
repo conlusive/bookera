@@ -1503,7 +1503,7 @@ export default function BusinessCabinet() {
 
         {activeTab === 'Team' && <TeamTab business={business} team={team} setTeam={setTeam} services={services} userProfile={userProfile} appointments={appointments} setActiveTab={setActiveTab} setFilterMaster={setFilterMaster} globalShifts={shifts} />}
 
-        {activeTab === 'Marketing' && <MarketingTab business={business} preset={marketingPreset} />}
+        {activeTab === 'Marketing' && <MarketingTab business={business} preset={marketingPreset} services={services} />}
 
         {activeTab === 'Settings' && <SettingsTab business={business} Icons={Icons} onNavigate={setActiveTab} initialView={settingsTarget} />}
 

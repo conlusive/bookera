@@ -42,13 +42,8 @@ const SETTINGS_CARDS: Record<string, { id: string; title: string; desc: string; 
   finance: { id: 'finance', title: 'Фінанси та виплати', desc: 'Завдатки, комісія, реквізити й виплати.', icon: SvgCreditCard, color: '#0ea5e9', bg: '#f0f9ff' },
   billing: { id: 'billing', title: 'Підписка', desc: 'Скільки діє доступ, оплата й історія.', icon: SvgShieldCheck, color: '#8b5cf6', bg: '#f5f3ff' },
 };
-// Розділи за змістом: що це за заклад, як приймаємо записи, кому й що повідомляємо, гроші
-const SETTINGS_GROUPS: { title: string; ids: string[] }[] = [
-  { title: 'Заклад', ids: ['profile'] },
-  { title: 'Запис клієнтів', ids: ['booking', 'payments', 'security'] },
-  { title: 'Сповіщення', ids: ['notifications'] },
-  { title: 'Гроші й доступ', ids: ['finance', 'billing'] },
-];
+// Порядок карток: про заклад, правила запису, сповіщення, гроші
+const SETTINGS_ORDER = ['profile', 'booking', 'payments', 'security', 'notifications', 'finance', 'billing'];
 const businessSettingsCards = Object.values(SETTINGS_CARDS);
 
 export default function SettingsTab({ business, onNavigate, initialView }: SettingsTabProps) {
@@ -97,30 +92,15 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
     latitude: null as number | null, longitude: null as number | null,
   });
 
-  // 🟢 1. Відновлення розділу при завантаженні без перезаписування в localStorage
+  // Розділ відкривається лише коли його попросили явно (наприклад, перехід «до оплати» з іншої вкладки).
+  // Інакше завжди починаємо із загального списку категорій: вийшли з налаштувань і повернулись - знову він.
   useEffect(() => {
-    try {
-      if (initialView && initialView !== 'main' && ['profile', 'payments', 'finance', 'billing', 'notifications', 'booking', 'security'].includes(initialView)) {
-        setSettingsView(initialView as any);
-        localStorage.setItem('bookera_settings_view', initialView);
-      } else {
-        const saved = localStorage.getItem('bookera_settings_view');
-        const validViews = ['main', 'profile', 'payments', 'finance', 'billing', 'notifications', 'booking', 'security'];
-        if (saved && validViews.includes(saved)) {
-          setSettingsView(saved as any);
-        }
-      }
-    } catch {}
+    if (initialView && initialView !== 'main' && ['profile', 'payments', 'finance', 'billing', 'notifications', 'booking', 'security'].includes(initialView)) {
+      setSettingsView(initialView as any);
+    }
+    try { localStorage.removeItem('bookera_settings_view'); } catch {}
     setIsReady(true);
   }, [initialView]);
-
-  // 🟢 2. Запис у localStorage ТІЛЬКИ коли клікнули розділ (після перевірки на старті)
-  useEffect(() => {
-    if (!isReady) return;
-    try {
-      localStorage.setItem('bookera_settings_view', settingsView);
-    } catch {}
-  }, [settingsView, isReady]);
 
   // 🟢 3. Завантаження даних бізнесу (залежить лише від business?.id, щоб не скидати змінені поля)
   const hasCoords = contactSettings.latitude != null && contactSettings.longitude != null;
@@ -378,26 +358,21 @@ export default function SettingsTab({ business, onNavigate, initialView }: Setti
                   <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.35rem', letterSpacing: '-0.03em' }}>Налаштування</h2>
                   <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Системні параметри, безпека та правила вашого закладу.</p>
                 </div>
-                {SETTINGS_GROUPS.map(group => (
-                  <section key={group.title} style={{ marginBottom: '2rem' }}>
-                    <h3 style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 0.8rem' }}>{group.title}</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem' }}>
-                      {group.ids.map(id => {
-                        const card = SETTINGS_CARDS[id];
-                        const IconComponent = card.icon;
-                        return (
-                          <div key={card.id} onClick={() => setSettingsView(card.id as any)} className="settings-card">
-                            <div className="settings-icon-wrapper" style={{ background: card.bg, color: card.color }}><IconComponent /></div>
-                            <div>
-                              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.35rem' }}>{card.title}</h3>
-                              <p style={{ color: '#64748b', fontSize: '0.88rem', margin: 0, lineHeight: 1.4 }}>{card.desc}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ))}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.25rem' }}>
+                  {SETTINGS_ORDER.map(id => {
+                    const card = SETTINGS_CARDS[id];
+                    const IconComponent = card.icon;
+                    return (
+                      <div key={card.id} onClick={() => setSettingsView(card.id as any)} className="settings-card">
+                        <div className="settings-icon-wrapper" style={{ background: card.bg, color: card.color }}><IconComponent /></div>
+                        <div>
+                          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.4rem' }}>{card.title}</h3>
+                          <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: 1.4 }}>{card.desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <header className="sx-head">

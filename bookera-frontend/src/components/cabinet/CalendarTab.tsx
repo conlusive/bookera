@@ -1194,6 +1194,16 @@ const handleSaveShifts = async () => {
   return (
     <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden' }}>
       <style>{`
+        .cal-app-card { container-type: inline-size; }
+        .cal-ac-head { align-items: center; justify-content: space-between; gap: 0.4rem; width: 100%; min-width: 0; }
+        .cal-ac-name { font-weight: 700; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cal-ac-time { display: inline-flex; align-items: center; gap: 0.2rem; flex-shrink: 0; font-weight: 700; opacity: 0.7; order: 3; }
+        .cal-ac-svc { min-width: 0; opacity: 0.85; font-weight: 500; font-size: 0.75rem; line-height: 14px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; word-break: break-word; order: 2; }
+        .cal-ac-master { min-width: 0; opacity: 0.65; font-size: 0.72rem; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; order: 4; }
+        .cal-app-card[style*="row"] .cal-ac-name { flex: 0 1 auto; max-width: 55%; order: 1; }
+        .cal-app-card[style*="row"] .cal-ac-svc { flex: 1 1 0; display: block; white-space: nowrap; text-overflow: ellipsis; }
+        @container (max-width: 130px) { .cal-ac-time, .cal-ac-master { display: none; } }
+
         /* 🟩 ІДЕАЛЬНА ШТРИХОВКА для неробочих годин */
         .non-working-bg {
           background-image: repeating-linear-gradient(
@@ -2000,10 +2010,15 @@ const handleSaveShifts = async () => {
                   const isTiny = (app.heightPx || 60) <= 25;
                   const leftPercent = (app.colStart ?? 0) * 100;
                   const widthPercent = (app.colSpan ?? 1) * 100;
+                  // Висота картки ділиться між рядками: ім'я, послуга (до 3 рядків), майстер - лише якщо лишилось місце
+                  const roomPx = Math.max(app.heightPx || 60, 25) - 16 - 18;
+                  const showMaster = !isBlock && !isCompact && roomPx - 14 >= 14;
+                  const svcLines = 1 + Math.max(0, Math.min(2, Math.floor((roomPx - 14 - (showMaster ? 14 : 0)) / 14)));
 
                   return (
                     <div
                       key={app.id}
+                      title={isBlock ? blockTitle : `${app.client_name} · ${serviceName}${addonNames ? ` + ${addonNames}` : ''} · ${app.start_time.substring(0, 5)} · ${staffName}`}
                       draggable={!isBlock}
                       onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(app.id)); }}
                       onContextMenu={(e) => handleContextMenu(e, app)}
@@ -2046,20 +2061,16 @@ const handleSaveShifts = async () => {
                         </div>
                       ) : (
                         <>
-                          <div style={{ fontWeight: '700', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', width: '100%', minWidth: 0 }}>
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-                              {serviceName}{addonNames ? ` + ${addonNames}` : ''} {isCompact && <span style={{ fontWeight: '500', opacity: 0.8, marginLeft: '0.4rem' }}>{app.client_name}</span>}
-                            </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', flexShrink: 0, fontSize: isTiny ? '0.65rem' : '0.75rem', fontWeight: '700', opacity: 0.7 }}>
+                          <div className="cal-ac-head" style={{ display: isCompact ? 'contents' : 'flex' }}>
+                            <span className="cal-ac-name">{app.client_name}</span>
+                            <span className="cal-ac-time" style={{ fontSize: isTiny ? '0.65rem' : '0.75rem' }}>
                               {app.start_time.substring(0, 5)} {getStatusIcon(app.status)}
                             </span>
                           </div>
-                          {!isCompact && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '0.1rem', opacity: 0.8, fontSize: '0.75rem', fontWeight: '500', minWidth: 0 }}>
-                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '1rem', minWidth: 0 }}>{app.client_name}</span>
-                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}>{staffName}</span>
-                            </div>
-                          )}
+                          <div className="cal-ac-svc" style={{ WebkitLineClamp: isCompact ? 1 : svcLines }}>
+                            {serviceName}{addonNames ? ` + ${addonNames}` : ''}
+                          </div>
+                          {showMaster && <div className="cal-ac-master">{staffName}</div>}
                         </>
                       )}
                     </div>
@@ -2147,13 +2158,19 @@ const handleSaveShifts = async () => {
                                 <div style={{ fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flexShrink: 1, width: '100%' }}>
                                   {isBlock ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
                                 </div>
+                                {!isBlock && !isCompact && <div style={{ opacity: 0.6, fontSize: '0.65rem', fontWeight: 700 }}>{app.start_time.substring(0, 5)}</div>}
                                 {!isBlock && (() => {
                                   const addonNames = (app.addon_service_ids || [])
                                     .map((id: number) => services.find((s: any) => String(s.id) === String(id))?.name)
                                     .filter(Boolean)
                                     .join(', ');
                                   return (
-                                    <div style={{ opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: '500', fontSize: isTiny ? '0.6rem' : '0.7rem', minWidth: 0, flexShrink: 1, width: '100%' }}>
+                                    <div style={{
+                                      opacity: 0.8, overflow: 'hidden', fontWeight: '500', fontSize: isTiny ? '0.6rem' : '0.7rem', lineHeight: '13px', minWidth: 0, flexShrink: 1, width: '100%',
+                                      ...(isCompact
+                                        ? { whiteSpace: 'nowrap', textOverflow: 'ellipsis' }
+                                        : { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: Math.max(1, Math.min(3, Math.floor((app.heightPx - 40) / 13))), wordBreak: 'break-word' }),
+                                    }}>
                                       {isCompact ? `• ${service?.name || ''}` : service?.name}
                                       {addonNames ? ` + ${addonNames}` : ''}
                                     </div>

@@ -256,6 +256,10 @@ async def get_available_slots(
 
     masters_res = await db.execute(masters_query)
     active_masters = masters_res.scalars().all()
+    if master_id in ("0", "", None, "null"):
+        # «Будь-який майстер»: лише ті, хто виконує цю послугу (як і при резерві слота)
+        offering = [m for m in active_masters if _offers_service(m, service)]
+        active_masters = offering if offering or not active_masters else []
 
     # 1.5 Отримуємо всі записи на цей день
     day_start = datetime.combine(target_date, time(0, 0, 0))
@@ -385,6 +389,111 @@ async def get_available_slots(
     )
 
 
+
+async def _team_for_booking(db: AsyncSession, business_id: int):
+    """Майстри закладу для запису: за членством (як у /available-slots) плюс «старі» за User.business_id."""
+    from app.models import StaffMembership
+    memberships = {
+        m.user_id: m for m in (await db.execute(
+            select(StaffMembership).where(
+                StaffMembership.business_id == business_id,
+                StaffMembership.is_active.is_(True),
+                StaffMembership.role.in_(["master", "vendor"]),
+            )
+        )).scalars().all()
+    }
+    masters = (await db.execute(
+        select(User).where(
+            or_(
+                User.id.in_(list(memberships) or [""]),
+                and_(User.business_id == business_id, or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)),
+            ),
+            User.is_active.is_(True),
+        ).order_by(User.id)
+    )).scalars().all()
+    return masters, memberships
+
+
+def _offers_service(master, service) -> bool:
+    """Чи виконує майстер послугу: прапорець «надає послуги» і, якщо список послуг заповнений, вона в ньому."""
+    if getattr(master, "provides_services", True) is False:
+        return False
+    assigned = getattr(master, "assigned_services", None)
+    if isinstance(assigned, list) and assigned:
+        try:
+            return int(service.id) in {int(x) for x in assigned}
+        except (TypeError, ValueError):
+            return True
+    return True
+
+
+async def _pick_master(
+    db: AsyncSession, business_id: int, service, start: datetime, end: datetime, now: datetime,
+    *, buffer_minutes: int = 0, session_token: Optional[str] = None, only_master_id: Optional[str] = None,
+):
+    """
+    Вибір майстра для запису - одна логіка для резерву слота й створення запису, узгоджена з /available-slots.
+
+    Повертає (master_id, has_masters). Майстер підходить, якщо він надає цю послугу, працює за своїм графіком
+    у цей час і не має накладок (підтверджені, очікують, особистий час, чужі резерви й перерви). Власний резерв
+    цієї ж сесії не заважає. Із кількох вільних береться той, у кого цього дня найменше записів - щоб «будь-який
+    майстер» не вантажив завжди першого за списком. has_masters=False - у закладі немає майстрів (запис за закладом).
+    """
+    start = start.replace(tzinfo=None)
+    end = end.replace(tzinfo=None)
+    masters, memberships = await _team_for_booking(db, business_id)
+    if only_master_id is not None:
+        candidates = [m for m in masters if str(m.id) == str(only_master_id)]
+        if not candidates:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Майстра не знайдено")
+    else:
+        candidates = [m for m in masters if _offers_service(m, service)]
+        if masters and not candidates:
+            return None, True
+    if not masters:
+        return None, False
+
+    day_start = datetime.combine(start.date(), time(0, 0))
+    day_apps = (await db.execute(
+        select(Appointment).where(
+            Appointment.business_id == business_id,
+            Appointment.start_time >= day_start,
+            Appointment.start_time < day_start + timedelta(days=1),
+            or_(
+                Appointment.status.in_(["confirmed", "pending_approval", "time_off"]),
+                and_(Appointment.status == "blocked", or_(Appointment.expires_at.is_(None), Appointment.expires_at > now)),
+            ),
+        )
+    )).scalars().all()
+    if session_token:
+        day_apps = [a for a in day_apps if not (a.status == "blocked" and a.session_token == session_token)]
+
+    occupied_end = end + timedelta(minutes=buffer_minutes)
+    smins, emins = start.hour * 60 + start.minute, start.hour * 60 + start.minute + int((end - start).total_seconds() // 60)
+    free = []
+    for m in candidates:
+        mem = memberships.get(str(m.id))
+        shifts = mem.shifts if mem is not None and mem.shifts is not None else m.shifts
+        if not _on_shift(shifts, start.date(), smins, emins):
+            continue
+        if any(str(a.master_id) == str(m.id) and a.start_time < occupied_end and a.end_time > start for a in day_apps):
+            continue
+        free.append(m)
+    if not free:
+        return None, True
+    load: dict[str, int] = {}
+    for a in day_apps:
+        if a.master_id and a.status in ("confirmed", "pending_approval"):
+            load[str(a.master_id)] = load.get(str(a.master_id), 0) + 1
+    free.sort(key=lambda m: (load.get(str(m.id), 0), str(m.id)))
+    return str(free[0].id), True
+
+
+def _buffer_of(business) -> int:
+    raw = (business.booking_settings or {}).get("buffer_minutes") if business else None
+    return int(raw) if isinstance(raw, (int, float)) and 0 <= raw <= 60 else 0
+
+
 # === 2. БЛОКУВАННЯ ТА РОЗБЛОКУВАННЯ ===
 
 def _is_slot_race(exc: DBAPIError) -> bool:
@@ -426,62 +535,20 @@ async def lock_time_slot(
     )
 
     master_id = str(getattr(request, "master_id", "0"))
-    assigned_master_id = master_id
+    assigned_master_id = normalize_master_id(master_id)
 
     if not service.is_group:
-        if master_id in ("0", "", "None", "null"):
-            masters_result = await db.execute(
-                select(User).where(
-                    User.business_id == request.business_id,
-                    or_(User.role == RoleEnum.MASTER, User.role == RoleEnum.VENDOR)
-                )
-            )
-            active_masters = masters_result.scalars().all()
-            assigned_master_id = None
-
-            for master in active_masters:
-                overlap = await db.execute(
-                    select(Appointment).where(
-                        Appointment.business_id == request.business_id,
-                        Appointment.master_id == str(master.id),
-                        Appointment.start_time < requested_end_time,
-                        Appointment.end_time > request.start_time,
-                        or_(
-                            Appointment.status == "confirmed",
-                            and_(
-                Appointment.status == "blocked",
-                # Постійні блокування (обід, перерва) не мають expires_at,
-                # і порівняння NULL > now завжди хибне - через це клієнт
-                # міг записатись на час, який заклад заблокував.
-                or_(Appointment.expires_at.is_(None), Appointment.expires_at > now),
-            ),
-                        ),
-                    )
-                )
-                if not overlap.scalars().first():
-                    assigned_master_id = str(master.id)
-                    break
-        else:
-            overlap = await db.execute(
-                select(Appointment).where(
-                    Appointment.business_id == request.business_id,
-                    Appointment.master_id == master_id,
-                    Appointment.start_time < requested_end_time,
-                    Appointment.end_time > request.start_time,
-                    or_(
-                        Appointment.status == "confirmed",
-                        and_(
-                Appointment.status == "blocked",
-                # Постійні блокування (обід, перерва) не мають expires_at,
-                # і порівняння NULL > now завжди хибне - через це клієнт
-                # міг записатись на час, який заклад заблокував.
-                or_(Appointment.expires_at.is_(None), Appointment.expires_at > now),
-            ),
-                    ),
-                )
-            )
-            if overlap.scalars().first():
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
+        biz_for_lock = (await db.execute(select(Business).where(Business.id == request.business_id))).scalars().first()
+        picked, has_masters = await _pick_master(
+            db, request.business_id, service, request.start_time, requested_end_time, now,
+            buffer_minutes=_buffer_of(biz_for_lock), session_token=request.session_token,
+            only_master_id=assigned_master_id,
+        )
+        if has_masters and not picked:
+            # Усі підхожі майстри зайняті або не працюють: резерв без майстра дав би «подвійний запис» поза БД-захистом
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
+        if has_masters:
+            assigned_master_id = picked
 
     # Очищуємо старі незавершені блоки цієї ж браузерної сесії
     if request.session_token:
@@ -786,10 +853,21 @@ async def create_appointment(
     if not appointment:
         # Створюємо прямий запис, якщо блоку не було
         requested_end_time = appointment_in.start_time + timedelta(minutes=total_minutes)
+        # Без резерву майстра обирає сервер за тими ж правилами, що й при резерві слота
+        direct_master = normalize_master_id(appointment_in.master_id)
+        if service and not service.is_group:
+            picked, has_masters = await _pick_master(
+                db, appointment_in.business_id, service, appointment_in.start_time, requested_end_time, now,
+                buffer_minutes=_buffer_of(business), session_token=appointment_in.session_token, only_master_id=direct_master,
+            )
+            if has_masters and not picked:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Цей час щойно зайняли.")
+            if has_masters:
+                direct_master = picked
         appointment = Appointment(
             business_id=appointment_in.business_id,
             service_id=appointment_in.service_id,
-            master_id=normalize_master_id(appointment_in.master_id),
+            master_id=direct_master,
             client_id=resolved_client_id,
             session_token=appointment_in.session_token,
             start_time=appointment_in.start_time,
@@ -814,6 +892,9 @@ async def create_appointment(
     else:
         appointment.status = "confirmed" if auto_approve else "pending_approval"
         appointment.expires_at = None
+        # Резерв тримав лише основну послугу: додаткові послуги подовжують візит і мають лишитись у записі
+        appointment.end_time = appointment.start_time + timedelta(minutes=total_minutes)
+        appointment.addon_service_ids = addon_ids or None
         appointment.client_id = resolved_client_id
         appointment.price = final_price
         appointment.client_name = appointment_in.client_name
@@ -916,6 +997,8 @@ async def create_appointment(
             business_phone=business.phone or "",
         )
 
+    # Кого призначено - клієнт, який обрав «будь-який майстер», має це побачити одразу
+    appointment.master_name = master_display_name or None
     return appointment
 
 

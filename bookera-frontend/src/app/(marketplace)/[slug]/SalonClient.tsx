@@ -297,6 +297,7 @@ export default function SalonClient({
   const [isCheckingCert, setIsCheckingCert] = useState(false);
   const [pendingBookingId, setPendingBookingId] = useState<number | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [bookedMasterName, setBookedMasterName] = useState('');
   const [timeLeft, setTimeLeft] = useState<number>(600);
 
   const [slotItems, setSlotItems] = useState<SlotStatusItem[]>([]);
@@ -1122,6 +1123,7 @@ const formatRole = (role?: string) => {
       } else {
         showToast('Запис успішно підтверджено!', 'success');
       }
+      setBookedMasterName(String((created as any).master_name || ''));
       setBookingSuccess(true);
       if (created.ask_marketing_consent) {
         // Спершу людина бачить підтвердження, і лише потім питаємо про розсилку
@@ -3327,6 +3329,11 @@ const formatRole = (role?: string) => {
                   <p style={{ color: '#86868B', fontSize: '0.95rem', maxWidth: '380px', lineHeight: '1.5', margin: 0 }}>
                     Чекаємо на вас <strong>{fmtLongDate(selectedDate)}</strong> о <strong>{selectedTime}</strong>.
                   </p>
+                  {bookedMasterName && (
+                    <p style={{ color: '#86868B', fontSize: '0.95rem', margin: '0.35rem 0 0 0' }}>
+                      Ваш майстер: <strong style={{ color: '#1D1D1F' }}>{bookedMasterName}</strong>
+                    </p>
+                  )}
                 </div>
 
               ) : currentStep === 1 ? (

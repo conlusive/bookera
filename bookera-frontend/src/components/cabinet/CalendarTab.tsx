@@ -20,6 +20,19 @@ const CheckIcon = () => (
 const TASK_COLORS = ['#fdf4ff', '#f0fdf4', '#fffbeb', '#f0f9ff', '#fff1f2'];
 const TASK_BORDERS = ['#f5d0fe', '#bbf7d0', '#fde68a', '#bae6fd', '#fecdd3'];
 
+const statusStyle: Record<string, { label: string; color: string; bg: string }> = {
+  completed: { label: 'Завершено', color: '#3F6F4B', bg: '#EAF4EC' },
+  cancelled: { label: 'Скасовано', color: '#64748b', bg: '#f1f5f9' },
+  'no-show': { label: 'Не прийшов', color: '#B42318', bg: '#FEECEA' },
+  pending: { label: 'Очікує', color: '#8A5A00', bg: '#FFF4DC' },
+};
+const minutesOf = (a: any) => {
+  const t = (v: any) => { const m = String(v || '').match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const st = t(a.start_time), en = t(a.end_time);
+  return st !== null && en !== null && en > st ? en - st : (a.duration || null);
+};
+const fmtMin = (m: number | null) => !m ? '' : m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? ` ${m % 60} хв` : ''}` : `${m} хв`;
+
 export default function CalendarTab({ business, team = [], services = [], refreshClients, userProfile }: any) {
   // Години роботи закладу - лише власник і адміністратор.
   const canEditSalonHours = isOwnerRole(userProfile?.role) || userProfile?.role === 'admin';
@@ -41,6 +54,8 @@ export default function CalendarTab({ business, team = [], services = [], refres
   const [dayLayout, setDayLayout] = useState<'grid' | 'list'>('grid');
   const [listExpanded, setListExpanded] = useState<Record<string, boolean>>({});
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  // Місяць на телефоні (як у Apple Календарі): дотик по дню лише вибирає його, записи дня - під сіткою
+  const [monthSel, setMonthSel] = useState<Date | null>(null);
   // Тиждень і місяць у списку: дні згорнуті, крім сьогоднішнього; клік по дню відкриває/закриває його
   const [agendaOpen, setAgendaOpen] = useState<Record<string, boolean>>({});
   useEffect(() => {
@@ -784,6 +799,9 @@ const handleSaveShifts = async () => {
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
   const blanks = Array.from({ length: firstDay }, (_, i) => i);
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const selectedMonthDay = (monthSel && monthSel.getFullYear() === currentYear && monthSel.getMonth() === currentMonth)
+    ? monthSel
+    : (now.getFullYear() === currentYear && now.getMonth() === currentMonth ? now : new Date(currentYear, currentMonth, 1));
 
   const isToday = currentDate.toDateString() === now.toDateString();
   const currentDayIndex = currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1;
@@ -1183,6 +1201,12 @@ const handleSaveShifts = async () => {
           ) !important;
           background-color: #ffffff !important;
         }
+        .cal-m-agenda { display: none; }
+        .cal-m-agenda-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eef1f4; }
+        .cal-m-agenda-title { font-size: 1rem; font-weight: 700; color: #0f172a; }
+        .cal-m-agenda-sub { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
+        .cal-m-agenda-head button { border: 1px solid #e2e8f0; background: #fff; color: #0f172a; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .cal-m-agenda-more { width: 100%; padding: 0.7rem 0; border: none; background: transparent; color: #475569; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
         .fab-button { position: fixed; right: 1.5rem; bottom: 1.5rem; width: 56px; height: 56px; border-radius: 50%; border: none; background: #0f172a; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28); cursor: pointer; z-index: 30; transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .fab-button:hover { transform: scale(1.06); box-shadow: 0 10px 28px rgba(15, 23, 42, 0.34); }
         .fab-button:active { transform: scale(0.96); }
@@ -1243,7 +1267,14 @@ const handleSaveShifts = async () => {
           .cal-m-dots i { width: 6px; height: 6px; border-radius: 50%; display: block; }
           .cal-m-dots b { font-size: 0.65rem; font-weight: 700; color: #64748b; margin-left: 2px; }
           /* Місяць на телефоні: рівні невисокі клітинки без рамок, число по центру, під ним крапки майстрів */
-          .cal-m-grid { grid-auto-rows: 62px !important; align-content: start; padding: 0 0.25rem; }
+          .cal-m-wrap { overflow-y: auto !important; }
+          .cal-m-grid { flex: none !important; overflow: visible !important; grid-auto-rows: 58px !important; align-content: start; padding: 0 0.25rem; }
+          .cal-m-num { width: 30px !important; height: 30px !important; font-size: 1rem !important; }
+          .cal-m-num.is-today { background: transparent !important; color: #0f172a !important; box-shadow: inset 0 0 0 1.5px #0f172a; }
+          .cal-m-num.is-sel { background: #0f172a !important; color: #fff !important; box-shadow: none; }
+          .cal-m-dots i { width: 7px !important; height: 7px !important; }
+          .cal-m-dots b { font-size: 0.75rem !important; color: #334155 !important; margin-left: 3px; }
+          .cal-m-agenda { display: block !important; border-top: 1px solid #eef1f4; margin-top: 0.5rem; padding: 0.9rem 1rem 6rem; background: #fff; }
           .month-view-cell { border: none !important; border-bottom: 1px solid #f3f5f7 !important; padding: 0.35rem 0 0.2rem !important; justify-content: flex-start; gap: 3px; }
           .month-view-cell > div:first-child { margin-bottom: 0 !important; }
           .cal-m-blank { background: transparent !important; border: none !important; }
@@ -1737,18 +1768,6 @@ const handleSaveShifts = async () => {
               // Місяць: лише дні із записами, інакше список на 30 порожніх рядків
               if (calendarView === 'month') sections = sections.filter(sec => sec.apps.length > 0);
             }
-            const statusStyle: Record<string, { label: string; color: string; bg: string }> = {
-              completed: { label: 'Завершено', color: '#3F6F4B', bg: '#EAF4EC' },
-              cancelled: { label: 'Скасовано', color: '#64748b', bg: '#f1f5f9' },
-              'no-show': { label: 'Не прийшов', color: '#B42318', bg: '#FEECEA' },
-              pending: { label: 'Очікує', color: '#8A5A00', bg: '#FFF4DC' },
-            };
-            const minutesOf = (a: any) => {
-              const t = (v: any) => { const m = String(v || '').match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
-              const st = t(a.start_time), en = t(a.end_time);
-              return st !== null && en !== null && en > st ? en - st : (a.duration || null);
-            };
-            const fmtMin = (m: number | null) => !m ? '' : m >= 60 ? `${Math.floor(m / 60)} год${m % 60 ? ` ${m % 60} хв` : ''}` : `${m} хв`;
             if (sections.length === 0) {
               return <div className="cal-list" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.95rem', background: '#fff' }}>У цьому місяці записів немає</div>;
             }
@@ -2126,7 +2145,7 @@ const handleSaveShifts = async () => {
 
           {/* --- МІСЯЦЬ --- */}
           {calendarView === 'month' && dayLayout === 'grid' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+            <div className="cal-m-wrap" style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#fff', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
               <div className="cal-m-head" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #f1f5f9', textAlign: 'center', fontWeight: '600', color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '1rem 0', flexShrink: 0 }}>
                  <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div>
                  <div style={{ color: '#d92d20' }}>Сб</div><div style={{ color: '#d92d20' }}>Нд</div>
@@ -2138,12 +2157,17 @@ const handleSaveShifts = async () => {
                   {days.map(day => {
                       const dObj = new Date(currentYear, currentMonth, day);
                       const isMDayToday = dObj.toDateString() === now.toDateString();
+                      const isMSel = selectedMonthDay.toDateString() === dObj.toDateString();
                       const hasOverdue = hasOverdueTasks(dObj);
                       const dayApps = getAppointmentsForDay(dObj);
                       const dayLoad = getDayLoad(dObj);
 
                       return (
-                          <div key={day} className="month-view-cell" onClick={() => { setCurrentDate(dObj); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}
+                          <div key={day} className="month-view-cell" onClick={() => {
+                                 // Телефон: лише вибрати день (записи нижче); ПК: відкрити день, як раніше
+                                 if (typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches) { setMonthSel(dObj); return; }
+                                 setCurrentDate(dObj); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day');
+                               }}
                                onDragOver={e => e.preventDefault()} onDrop={e => handleDropAppointment(e, dObj)}
                                style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: '0.5rem', display: 'flex', flexDirection: 'column' }}>
 
@@ -2154,7 +2178,7 @@ const handleSaveShifts = async () => {
                                       <span className="cal-m-count" style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '600' }}>{dayApps.filter((a: any) => a.status !== 'blocked').length} зап.</span>
                                     )}
                                   </div>
-                                  <span style={{ fontWeight: isMDayToday ? '700' : '500',
+                                  <span className={`cal-m-num${isMDayToday ? ' is-today' : ''}${isMSel ? ' is-sel' : ''}`} style={{ fontWeight: isMDayToday ? '700' : '500',
                                     // Вихідні червоним, як у системному календарі.
                                     // Це не декор: у календарі, куди дивляться щодня,
                                     // межа тижня має читатись без підрахунку стовпців.
@@ -2215,6 +2239,61 @@ const handleSaveShifts = async () => {
                       )
                   })}
               </div>
+
+              {/* Телефон: записи вибраного дня під сіткою (на ПК блок прихований) */}
+              {(() => {
+                const sel = selectedMonthDay;
+                const dayList = [...getAppointmentsForDay(sel)].sort((a: any, b: any) => String(a.start_time).localeCompare(String(b.start_time)));
+                const isBlk = (a: any) => a.status === 'blocked' || a.color === 'blocked' || !a.service_id;
+                const real = dayList.filter((a: any) => !isBlk(a));
+                const sum = real.filter((a: any) => a.status !== 'cancelled' && a.status !== 'no-show').reduce((t: number, a: any) => t + (Number(a.price) || 0), 0);
+                const key = `m:${sel.toDateString()}`;
+                const open = !!listExpanded[key];
+                const shown = open ? dayList : dayList.slice(0, 5);
+                const title = sel.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
+                return (
+                  <div className="cal-m-agenda">
+                    <div className="cal-m-agenda-head">
+                      <div>
+                        <div className="cal-m-agenda-title">{title.charAt(0).toUpperCase() + title.slice(1)}</div>
+                        <div className="cal-m-agenda-sub">{real.length > 0 ? `${real.length} ${real.length === 1 ? 'запис' : real.length < 5 ? 'записи' : 'записів'}${sum ? ` · ${sum.toLocaleString('uk-UA')} ₴` : ''}` : 'Записів немає'}</div>
+                      </div>
+                      <button type="button" onClick={() => { setCurrentDate(sel); setCalendarView('day'); localStorage.setItem('bookera_calendarView', 'day'); }}>Відкрити день</button>
+                    </div>
+                    {shown.map((app: any) => {
+                      const block = isBlk(app);
+                      const svc = services.find((x: any) => String(x.id) === String(app.service_id));
+                      const off = app.status === 'cancelled' || app.status === 'no-show';
+                      const st = statusStyle[app.status as string];
+                      const dur = fmtMin(minutesOf(app));
+                      const master = (team || []).find((m: any) => String(m.id) === String(app.staff_id))?.name || '';
+                      return (
+                        <div key={app.id} className="cal-list-row with-master" onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
+                          style={{ opacity: off ? 0.55 : 1, boxShadow: `inset 3px 0 0 ${app.staff_id && !block ? getCardColor(String(app.staff_id)).vividBg : '#cbd5e1'}` }}>
+                          <div className="cl-time" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{String(app.start_time).substring(0, 5)}</div>
+                            {app.end_time && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
+                          </div>
+                          <div className="cl-client" style={{ fontWeight: 600, fontSize: '0.92rem', color: block ? '#64748b' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {block ? (app.block_reason || app.service_name || 'Перерва') : app.client_name}
+                          </div>
+                          <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
+                            {master && <span className="cl-m-only" style={{ color: getCardColor(String(app.staff_id)).pastelText, fontWeight: 600 }}> · {master}</span>}
+                          </div>
+                          <div className="cl-price" style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', textAlign: 'right' }}>{!block && app.price ? `${Number(app.price).toLocaleString('uk-UA')} ₴` : ''}</div>
+                          <div className="cl-status">{st && <span style={{ fontSize: '0.68rem', fontWeight: 600, color: st.color, background: st.bg, padding: '1px 7px', borderRadius: '999px', whiteSpace: 'nowrap' }}>{st.label}</span>}</div>
+                        </div>
+                      );
+                    })}
+                    {dayList.length > 5 && (
+                      <button type="button" className="cal-m-agenda-more" onClick={() => setListExpanded(prev => ({ ...prev, [key]: !open }))}>
+                        {open ? 'Згорнути' : `Показати ще ${dayList.length - 5}`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

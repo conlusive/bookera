@@ -704,7 +704,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
           .cl-lapse-short { display: inline; }
           .cl-lapse-pop { right: auto; left: 0; }
           .cl-search .clean-input { font-size: 16px; padding-top: 0; padding-bottom: 0; height: 42px; }
-          .cl-toolbar-left .cl-chip { height: 42px; }
+          .cl-toolbar-left .cl-chip { height: 42px; border-radius: 10px; }
           .cl-actions-top { justify-content: stretch; flex-wrap: nowrap; }
           .cl-actions-top > button { flex: 1 1 0; min-width: 0; padding-left: 0.5rem; padding-right: 0.5rem; white-space: nowrap; }
           .cl-pills { padding: 0.75rem 1rem !important; }
@@ -732,8 +732,8 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
         .cl-toolbar { padding: 0.8rem 2rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
         .cl-search { position: relative; width: 280px; max-width: 100%; }
         .cl-search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: flex; pointer-events: none; }
-        .cl-search .clean-input { padding-left: 2.4rem; border-radius: 999px; height: 38px; box-sizing: border-box; }
-        .cl-toolbar-left .cl-chip { height: 38px; padding: 0 1rem; }
+        .cl-search .clean-input { padding-left: 2.4rem; border-radius: 10px; height: 40px; box-sizing: border-box; }
+        .cl-toolbar-left .cl-chip { height: 40px; padding: 0 1rem; border-radius: 10px; }
         .cl-pills { display: flex; gap: 8px; overflow-x: auto; padding: 1rem 2rem; border-bottom: 1px solid #f1f5f9; }
         .cl-count { margin-left: 0.35rem; font-size: 0.72rem; opacity: .6; font-variant-numeric: tabular-nums; }
         .cl-who { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }

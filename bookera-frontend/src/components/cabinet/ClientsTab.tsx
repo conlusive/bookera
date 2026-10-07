@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { Icons } from '@/components/shared';
 import HelpTip from '@/components/ui/HelpTip';
+import HintCard from '@/components/ui/HintCard';
 import { notify } from '@/lib/feedback';
 import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
 import BirthdayInput from '@/components/ui/BirthdayInput';
@@ -1289,12 +1290,7 @@ export default function ClientsTab({ business, clientsList, setClientsList, fetc
                  </div>
                )}
 
-               <div className="cl-hint">
-                 <div className="cl-hint-t"><Icons.Sparkles /> Підказка</div>
-                 <b>{sideHint.title}</b>
-                 <p>{sideHint.text}</p>
-                 {sideHint.action && <button type="button" onClick={sideHint.action.run}>{sideHint.action.label} →</button>}
-               </div>
+               <HintCard title={sideHint.title} action={sideHint.action}>{sideHint.text}</HintCard>
              </aside>
            </div>
         </div>

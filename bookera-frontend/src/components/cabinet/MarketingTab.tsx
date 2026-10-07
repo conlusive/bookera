@@ -9,6 +9,7 @@ import { notify } from '@/lib/feedback';
 import { goToCheckout } from '@/lib/checkout';
 import FormModal from '@/components/ui/FormModal';
 import HelpTip from '@/components/ui/HelpTip';
+import HintCard from '@/components/ui/HintCard';
 
 /**
  * Маркетинг - три розділи, і кожен робить те, що написано:
@@ -364,11 +365,10 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
                       </div>
                     ))}
                   </div>
-                  <p className="mk-note">Короткі пакети дорожчі за день: їх беруть під разову акцію. Чим довший пакет, тим дешевший день.</p>
 
                   {w && (
-                    <>
-                      <h3 className="mk-h">Як це працює <HelpTip>Позицію в «Рекомендованих» рахує сервер: усі числа на цій сторінці взято з нього, а не з інтерфейсу.</HelpTip></h3>
+                    <details className="mk-more">
+                      <summary>Як рахується позиція</summary>
                       <div className="mk-weights">
                         <div className="mk-bar" role="img" aria-label="Із чого складається позиція">
                           <i style={{ flex: w.quality_max, background: '#94a3b8' }} />
@@ -384,7 +384,7 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
                         </ul>
                         <p>«Найближчі»: заклад із Радаром рахується ближчим на {radar.rules?.radar_bonus_km} км. «Рекомендовані»: до +{w.radar} балів із {w.quality_max + w.proximity_max + w.free_slots + w.radar} (слабшому закладу менше, сильнішому більше). Радар — підсилення, а не заміна якості: він піднімає вас над рівними, але не над помітно кращими. «Дешевші»: Радар не змінює ціну, але виграє, коли ціни однакові. У «Дешевших» і «Рекомендованих» спершу йдуть заклади в радіусі {radar.rules?.nearby_radius_km} км, і Радар додає ці {radar.rules?.radar_bonus_km} км «ближче»: з {Number(radar.rules?.nearby_radius_km) + Number(radar.rules?.radar_bonus_km)} км ви вже в блоці «Поруч із вами». На картці стоїть позначка «Реклама». Слабкий заклад не стане першим лише за гроші: якість важить найбільше.</p>
                       </div>
-                    </>
+                    </details>
                   )}
 
                   {radar.history.length > 0 && (
@@ -441,7 +441,7 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
                       </label>
                       <textarea className="clean-input mk-sms" maxLength={300} placeholder="Короткий текст для SMS" value={smsText} onChange={e => setSmsText(e.target.value)} />
                       <div className="mk-sms-row">
-                        <span>SMS з BookEra ще не надсилаємо: скопіюйте текст і відправте зі свого телефона чи месенджера.</span>
+                        <span>SMS поки лише копіюються — відправте самі.</span>
                         <button type="button" className="clean-btn-ghost" disabled={!smsText.trim()} onClick={() => { void navigator.clipboard?.writeText(smsText); setSmsCopied(true); setTimeout(() => setSmsCopied(false), 1800); }}>{smsCopied ? 'Скопійовано ✓' : 'Копіювати SMS'}</button>
                       </div>
                       <div className="mk-send-row">
@@ -593,11 +593,7 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
               </div>
             )}
           </div>
-          <div className="mk-hint">
-            <div className="mk-hint-t">✦ Підказка</div>
-            <b>{hint.t}</b>
-            <p>{hint.x}</p>
-          </div>
+          <HintCard flush title={hint.t}>{hint.x}</HintCard>
         </aside>
       </div>
 
@@ -640,6 +636,7 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
         .mk-seg { display: inline-flex; background: #f1f5f9; border-radius: 10px; padding: 3px; }
         .mk-seg button { position: relative; height: 32px; padding: 0 1rem; border: none; background: transparent; border-radius: 8px; font-size: 0.8rem; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; }
         .mk-seg button:hover { color: #0f172a; }
+        @media (max-width: 760px) { .mk-toolbar { padding: 0.7rem 1rem !important; } .mk-seg { width: 100%; } .mk-seg button { flex: 1 1 auto; padding: 0 0.35rem; font-size: 0.76rem; } }
         .mk-seg button.on { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
         .mk-live { position: absolute; top: 6px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
         .mk-balance { font-size: 0.85rem; color: #64748b; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 999px; padding: 0.35rem 0.9rem; }
@@ -712,6 +709,12 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
         .mk-points:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; }
         .mk-points:disabled { color: #94a3b8; background: #f8fafc; cursor: not-allowed; }
 
+        .mk-more { margin-top: 1.4rem; }
+        .mk-more summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; color: #64748b; list-style: none; padding: 0.4rem 0; }
+        .mk-more summary::-webkit-details-marker { display: none; }
+        .mk-more summary::after { content: ' ▾'; color: #94a3b8; }
+        .mk-more[open] summary::after { content: ' ▴'; }
+        .mk-more .mk-weights { margin-top: 0.6rem; }
         .mk-weights { border: 1px solid #f1f5f9; border-radius: 14px; padding: 1.1rem 1.2rem; background: #fff; }
         .mk-bar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; gap: 2px; margin-bottom: 1rem; }
         .mk-bar i { display: block; }

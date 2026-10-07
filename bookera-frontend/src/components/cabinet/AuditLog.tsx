@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, AuditEvent, AuditSummary } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import HelpTip from '@/components/ui/HelpTip';
+import HintCard from '@/components/ui/HintCard';
 
 /**
  * «Журнал дій» - хто, що й коли змінив у закладі.
@@ -337,11 +338,7 @@ export default function AuditLog({ businessId }: { businessId: number }) {
               </div>
             )}
           </div>
-          <div className="al-hint">
-            <div className="al-hint-t">✦ Підказка</div>
-            <b>Хто бачить журнал</b>
-            <p>Власник бачить усе, адміністратор — без дій власника. Приватні поля (нотатки, алергії) в журнал не потрапляють: лише «змінено». <HelpTip>Натисніть на запис зі стрілкою, щоб побачити, що саме змінилось: «було → стало».</HelpTip></p>
-          </div>
+          <HintCard flush title="Хто бачить журнал">Власник бачить усе, адміністратор — без дій власника. Приватні поля (нотатки, алергії) в журнал не потрапляють: лише «змінено». Натисніть на запис зі стрілкою, щоб побачити, що саме змінилось: «було → стало».</HintCard>
         </aside>
       </div>
 

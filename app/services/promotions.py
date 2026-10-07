@@ -10,8 +10,10 @@ from decimal import Decimal
 from typing import Iterable, List, Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging_config import logger
 from app.models import Promotion
 
 WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "нд")
@@ -73,6 +75,16 @@ def label(p: Promotion) -> str:
 
 
 async def active_promotions(db: AsyncSession, business_id: int) -> List[Promotion]:
+    """
+    Чинні акції закладу. Якщо таблиці акцій у базі ще немає (міграцію не застосовано), це не привід ламати запис
+    чи вітрину: повертаємо порожній список і лишаємо запис у журналі. Запит іде в «збереженій точці», щоб
+    помилка не позначила всю транзакцію як зламану.
+    """
     today = date.today()
-    rows = (await db.execute(select(Promotion).where(Promotion.business_id == business_id, Promotion.is_active.is_(True)))).scalars().all()
+    try:
+        async with db.begin_nested():
+            rows = (await db.execute(select(Promotion).where(Promotion.business_id == business_id, Promotion.is_active.is_(True)))).scalars().all()
+    except DBAPIError as exc:
+        logger.error("Акції недоступні (чи застосовано міграцію 6a2b3c4d5e71?): %s", exc.orig)
+        return []
     return [p for p in rows if not (p.date_to and p.date_to < today)]

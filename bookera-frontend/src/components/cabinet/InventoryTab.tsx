@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import HintCard from '@/components/ui/HintCard';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { notify } from '@/lib/feedback';
 import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
@@ -418,11 +419,7 @@ export default function InventoryTab({ business }: any) {
             </>
           )}
           </div>
-          <div className="iv-hint">
-            <div className="iv-hint-t">✦ Підказка</div>
-            <b>{hint.t}</b>
-            <p>{hint.x}</p>
-          </div>
+          <HintCard flush title={hint.t}>{hint.x}</HintCard>
         </aside>
       </div>
 

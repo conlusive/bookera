@@ -176,7 +176,7 @@ export default function SocialPanel({ business, directUrl }: { business: any; di
       <div className="sp-form">
         <div className="sp-head">
           <h2>Соцмережі</h2>
-          <p>Створіть картинку для посту чи сторіс і опублікуйте у своєму Instagram, Facebook чи Telegram. Внизу буде назва закладу й BookEra.</p>
+          <p>Картинка для посту чи сторіс.</p>
         </div>
 
         <label className="sp-lbl">Формат</label>
@@ -212,7 +212,6 @@ export default function SocialPanel({ business, directUrl }: { business: any; di
           <button type="button" className={photo ? 'on' : ''} onClick={() => fileRef.current?.click()}>{photo ? 'Змінити фото' : 'Своє фото'}</button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { onPhoto(e.target.files?.[0]); e.target.value = ''; }} />
         </div>
-        <p className="sp-note">Фото лишається у вашому браузері й нікуди не завантажується.</p>
       </div>
 
       <div className="sp-out">

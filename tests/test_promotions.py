@@ -84,3 +84,22 @@ async def test_validation_and_access(client, auth_headers):
     assert upd.status_code == 200 and upd.json()["discount_percent"] == 20
     assert (await client.delete(f"/crm/promotions/{pid}", headers=h)).status_code == 204
     assert (await client.get("/crm/promotions", params={"business_id": bid}, headers=h)).json() == []
+
+
+@pytest.mark.asyncio
+async def test_missing_promotions_table_does_not_break_booking(client, auth_headers):
+    """Базу ще не оновлено (немає таблиці акцій): запис і вітрина працюють без акцій, кабінет чесно каже, що треба оновити базу."""
+    import asyncpg
+    h = auth_headers("promo-5")
+    bid, a, _ = await _salon(client, h)
+    conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/bookera_test")
+    try:
+        await conn.execute("ALTER TABLE promotions RENAME TO promotions_hidden")
+        booked = await _book(client, bid, a, _day().replace(hour=12), "m1", "+380671110099")
+        assert float(booked["price"]) == 1000
+        assert (await client.get("/public/promotions", params={"business_id": bid})).json() == []
+        listing = await client.get("/crm/promotions", params={"business_id": bid}, headers=h)
+        assert listing.status_code == 503 and "оновити" in listing.json()["detail"]
+    finally:
+        await conn.execute("ALTER TABLE promotions_hidden RENAME TO promotions")
+        await conn.close()

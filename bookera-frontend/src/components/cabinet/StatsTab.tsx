@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, Analytics } from '@/lib/api';
+import HintCard from '@/components/ui/HintCard';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { notify } from '@/lib/feedback';
 import FormModal from '@/components/ui/FormModal';
@@ -429,11 +430,7 @@ export default function StatsTab({ business, onNavigate }: { business: any; serv
               </div>
             )}
           </div>
-          <div className="st-hint">
-            <div className="st-hint-t">✦ Підказка</div>
-            <b>{hint.t}</b>
-            <p>{hint.x}</p>
-          </div>
+          <HintCard flush title={hint.t}>{hint.x}</HintCard>
         </aside>
       </div>
 

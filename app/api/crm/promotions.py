@@ -6,6 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -105,7 +106,10 @@ async def list_promotions(
     business_id: int = Query(...), db: AsyncSession = Depends(get_db), current_user: CurrentUser = Depends(get_current_user),
 ):
     await assert_section(db, current_user, business_id, "analytics")
-    rows = (await db.execute(select(Promotion).where(Promotion.business_id == business_id).order_by(Promotion.id.desc()))).scalars().all()
+    try:
+        rows = (await db.execute(select(Promotion).where(Promotion.business_id == business_id).order_by(Promotion.id.desc()))).scalars().all()
+    except DBAPIError:
+        raise HTTPException(status_code=503, detail="Акції ще не підключені: базу даних потрібно оновити (alembic upgrade head)")
     return [PromotionOut.of(p) for p in rows]
 
 

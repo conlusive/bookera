@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, PromotionInput, PromotionRow } from '@/lib/api';
+import { api, Analytics, PromotionInput, PromotionRow } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
 import { notify } from '@/lib/feedback';
 import FormModal, { Field, FormSection } from '@/components/ui/FormModal';
@@ -25,8 +25,56 @@ const presets: { title: string; text: string; make: () => PromotionInput }[] = [
   { title: 'Будні вдень', text: 'Пн–Пт з 12:00 до 16:00 − 20%', make: () => ({ ...empty(), name: 'Будній день', discount_percent: 20, weekdays: [0, 1, 2, 3, 4], time_from: '12:00', time_to: '16:00' }) },
 ];
 
+type Idea = { title: string; reason: string; make: () => PromotionInput };
+const WEEKDAY_FULL = ['понеділок', 'вівторок', 'середа', 'четвер', 'пʼятниця', 'субота', 'неділя'];
+const WEEKDAY_IN = ['понеділок', 'вівторок', 'середу', 'четвер', 'пʼятницю', 'суботу', 'неділю'];
+const pad = (n: number) => String(n).padStart(2, '0');
+const plural = (n: number, one: string, few: string, many: string) => (n % 10 === 1 && n % 100 !== 11 ? one : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? few : many);
+
+/** Ідеї з реальних даних закладу за останні 90 днів: найтихіший день, найтихіші години, давні клієнти. Без даних - лише загальні заготовки. */
+function ideasFrom(a: Analytics | null): Idea[] {
+  if (!a) return [];
+  const heat = a.load?.heatmap || [];
+  const total = (a.load?.weekday_totals || []).reduce((x, y) => x + y, 0);
+  if (total < 8) return [];
+  const out: Idea[] = [];
+  const days = a.load.weekday_totals;
+  const open = days.map((n, i) => ({ n, i })).filter(d => d.n > 0);
+  if (open.length >= 3) {
+    const q = open.reduce((m, d) => (d.n < m.n ? d : m), open[0]);
+    out.push({
+      title: `Заповнити ${WEEKDAY_IN[q.i]}`, reason: `${WEEKDAY_FULL[q.i][0].toUpperCase()}${WEEKDAY_FULL[q.i].slice(1)} найтихіший: ${q.n} ${plural(q.n, 'візит', 'візити', 'візитів')} за 90 днів`,
+      make: () => ({ ...empty(), name: `Тихий ${WEEKDAY_FULL[q.i]}`, discount_percent: 15, weekdays: [q.i] }),
+    });
+  }
+  const hours = Array.from({ length: 24 }, (_, h) => heat.reduce((s, row) => s + (row[h] || 0), 0));
+  const worked = hours.map((n, h) => ({ n, h })).filter(x => x.n > 0);
+  if (worked.length >= 4) {
+    const first = worked[0].h, last = worked[worked.length - 1].h;
+    let best: { h: number; n: number } | null = null;
+    for (let h = first; h + 1 <= last; h++) {
+      const n = hours[h] + hours[h + 1];
+      if (!best || n < best.n) best = { h, n };
+    }
+    if (best) out.push({
+      title: `Тихі години ${pad(best.h)}:00–${pad(best.h + 2)}:00`, reason: `У цей час найменше записів: ${best.n} за 90 днів`,
+      make: () => ({ ...empty(), name: 'Тихі години', discount_percent: 20, time_from: `${pad(best!.h)}:00`, time_to: `${pad(Math.min(best!.h + 2, 23))}:00` }),
+    });
+  }
+  if ((a.clients?.lapsed || 0) > 0) {
+    const n = a.clients.lapsed;
+    out.push({
+      title: 'Повернути давніх клієнтів', reason: `${n} ${plural(n, 'клієнт', 'клієнти', 'клієнтів')} давно не були. Акція на 2 тижні + лист у «Розсилках»`,
+      make: () => { const to = new Date(); to.setDate(to.getDate() + 14); return { ...empty(), name: 'Повернення', discount_percent: 10, date_to: to.toISOString().slice(0, 10) }; },
+    });
+  }
+  return out;
+}
+
 export default function PromotionsPanel({ businessId, services }: { businessId: number; services: any[] }) {
   const [rows, setRows] = useState<PromotionRow[] | null>(null);
+  const [unavailable, setUnavailable] = useState('');
+  const [ideas, setIdeas] = useState<Idea[]>([]);
   const [editing, setEditing] = useState<{ id: number | null; form: PromotionInput } | null>(null);
   const [saving, setSaving] = useState(false);
   // «Обрані» можна вибрати ще до того, як відмічено першу послугу
@@ -34,10 +82,19 @@ export default function PromotionsPanel({ businessId, services }: { businessId: 
   const openEditor = (id: number | null, f: PromotionInput) => { setPickServices(!!f.service_ids?.length); setEditing({ id, form: f }); };
 
   const load = useCallback(async () => {
-    try { setRows(await api.listPromotions(await getAuthToken(), businessId)); }
-    catch (e: any) { setRows([]); notify(e?.message || 'Не вдалося завантажити акції', 'error'); }
+    try { setRows(await api.listPromotions(await getAuthToken(), businessId)); setUnavailable(''); }
+    catch (e: any) { setRows([]); setUnavailable(e?.message || 'Не вдалося завантажити акції'); }
   }, [businessId]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 90);
+        const f = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        setIdeas(ideasFrom(await api.getAnalytics(await getAuthToken(), businessId, f(from), f(to))));
+      } catch { /* без даних - лише загальні заготовки */ }
+    })();
+  }, [businessId]);
 
   const serviceName = useCallback((id: number) => services.find((s: any) => Number(s.id) === id)?.name || `№${id}`, [services]);
   const scope = (p: PromotionInput) => !p.service_ids?.length ? 'Усі послуги' : p.service_ids.map(serviceName).join(', ');
@@ -100,41 +157,50 @@ export default function PromotionsPanel({ businessId, services }: { businessId: 
       <div className="pr-head">
         <div>
           <h2>Акції</h2>
-          <p>Знижка на послугу чи на все одразу, на весь день або в певні години. Клієнти бачать її на вашій сторінці й у запису.</p>
+          <p>Знижка на послуги — на день або в певні години.</p>
         </div>
         {rows && rows.length > 0 && <button type="button" className="clean-btn" onClick={() => openEditor(null, empty())}>+ Нова акція</button>}
       </div>
 
       {rows === null ? (
         <div className="pr-empty"><span>Завантаження…</span></div>
-      ) : rows.length === 0 ? (
-        <div className="pr-start">
-          <b>Почніть із готового варіанту</b>
-          <div className="pr-presets">
-            {presets.map(p => (
-              <button key={p.title} type="button" onClick={() => openEditor(null, p.make())}>
-                <strong>{p.title}</strong><span>{p.text}</span>
+      ) : unavailable ? (
+        <div className="pr-empty"><b>Акції тимчасово недоступні</b><span>{unavailable}</span></div>
+      ) : (
+        <>
+          {rows.length > 0 && (
+            <ul className="pr-list">
+              {rows.map(p => (
+                <li key={p.id} className={p.is_active ? '' : 'off'}>
+                  <button type="button" className="pr-badge" onClick={() => openEditor(p.id, { ...p })} title="Змінити">−{p.discount_percent}%</button>
+                  <div className="pr-main" onClick={() => openEditor(p.id, { ...p })}>
+                    <b>{p.name}</b>
+                    <span>{scope(p)} · {when(p)}</span>
+                  </div>
+                  <label className="pr-switch" title={p.is_active ? 'Вимкнути' : 'Увімкнути'}>
+                    <input type="checkbox" checked={p.is_active} onChange={() => void toggle(p)} />
+                    <i />
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="pr-ideas">
+            <h3>{ideas.length ? 'Ідеї для вашого закладу' : rows.length ? 'Заготовки' : 'З чого почати'}</h3>
+            {ideas.map(idea => (
+              <button key={idea.title} type="button" className="pr-idea" onClick={() => openEditor(null, idea.make())}>
+                <span><b>{idea.title}</b><small>{idea.reason}</small></span><em>+ Створити</em>
               </button>
             ))}
+            {(ideas.length === 0 || rows.length === 0) && presets.map(p => (
+              <button key={p.title} type="button" className="pr-idea" onClick={() => openEditor(null, p.make())}>
+                <span><b>{p.title}</b><small>{p.text}</small></span><em>+ Створити</em>
+              </button>
+            ))}
+            <button type="button" className="pr-link" onClick={() => openEditor(null, empty())}>Створити свою</button>
           </div>
-          <button type="button" className="pr-link" onClick={() => openEditor(null, empty())}>або створіть свою</button>
-        </div>
-      ) : (
-        <ul className="pr-list">
-          {rows.map(p => (
-            <li key={p.id} className={p.is_active ? '' : 'off'}>
-              <button type="button" className="pr-badge" onClick={() => openEditor(p.id, { ...p })} title="Змінити">−{p.discount_percent}%</button>
-              <div className="pr-main" onClick={() => openEditor(p.id, { ...p })}>
-                <b>{p.name}</b>
-                <span>{scope(p)} · {when(p)}</span>
-              </div>
-              <label className="pr-switch" title={p.is_active ? 'Вимкнути' : 'Увімкнути'}>
-                <input type="checkbox" checked={p.is_active} onChange={() => void toggle(p)} />
-                <i />
-              </label>
-            </li>
-          ))}
-        </ul>
+        </>
       )}
 
       <FormModal
@@ -229,6 +295,16 @@ export default function PromotionsPanel({ businessId, services }: { businessId: 
         .pr-empty { padding: 3rem; text-align: center; color: #94a3b8; }
         .pr-start { border: 1px dashed #dbe2ea; border-radius: 16px; padding: 1.4rem; display: flex; flex-direction: column; gap: 0.9rem; align-items: flex-start; }
         .pr-start > b { color: #0f172a; font-size: 0.95rem; }
+        .pr-ideas { margin-top: 1.4rem; display: flex; flex-direction: column; gap: 0.1rem; align-items: stretch; }
+        .pr-ideas h3 { margin: 0 0 0.4rem; font-size: 0.78rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+        .pr-idea { display: flex; align-items: center; justify-content: space-between; gap: 1rem; text-align: left; border: none; border-bottom: 1px solid #f1f5f9; background: none; padding: 0.7rem 0; cursor: pointer; font-family: inherit; }
+        .pr-idea span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .pr-idea b { font-size: 0.9rem; color: #0f172a; }
+        .pr-idea small { font-size: 0.78rem; color: #64748b; }
+        .pr-idea em { font-style: normal; font-size: 0.8rem; font-weight: 700; color: #475569; white-space: nowrap; }
+        .pr-idea:hover em { color: #0f172a; }
+        .pr-ideas .pr-link { align-self: flex-start; margin-top: 0.7rem; }
+        .pr-empty b { display: block; color: #0f172a; margin-bottom: 0.25rem; }
         .pr-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; width: 100%; }
         .pr-presets button { text-align: left; border: 1px solid #e8ecf0; background: #fff; border-radius: 12px; padding: 0.85rem 1rem; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; gap: 0.2rem; transition: border-color .15s; }
         .pr-presets button:hover { border-color: #0f172a; }

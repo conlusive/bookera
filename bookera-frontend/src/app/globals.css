@@ -340,3 +340,6 @@
 /* Вікно на весь екран відкрите: сторінка за ним не прокручується (ModalScrollLock) */
 html.modal-scroll-locked { overflow: hidden; }
 html.modal-scroll-locked body { overflow: hidden; padding-right: var(--scrollbar-comp, 0px); }
+
+/* Поля введення тексту не розтягуються: розмір задає макет, а не рука користувача */
+textarea { resize: none !important; }

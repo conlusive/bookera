@@ -252,12 +252,13 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
   };
 
   const qrUrl = links ? `https://api.qrserver.com/v1/create-qr-code/?size=512x512&margin=12&data=${encodeURIComponent(links.direct_url)}` : '';
-  const downloadQr = async () => {
+  const qrMarketUrl = links ? `https://api.qrserver.com/v1/create-qr-code/?size=512x512&margin=12&data=${encodeURIComponent(links.marketplace_url)}` : '';
+  const downloadQr = async (url: string, filename: string) => {
     try {
-      const blob = await (await fetch(qrUrl)).blob();
+      const blob = await (await fetch(url)).blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `qr-${business?.slug || 'booking'}.png`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch { notify('Не вдалося завантажити QR-код', 'error'); }
@@ -497,34 +498,28 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
             {/* ================= ПОСИЛАННЯ ================= */}
             {view === 'links' && (
               <div className="mk-links">
-                <section className="mk-link-card">
-                  <div className="mk-link-main">
-                    <h3>Пряме посилання <span className="mk-free">без комісії</span></h3>
-                    <p>Ваш особистий запис. Кладіть його в Instagram, Telegram, візитку — клієнт, що записався звідси, ваш назавжди.</p>
-                    <div className="mk-url">
-                      <input readOnly className="clean-input" value={links?.direct_url || 'Завантаження…'} onFocus={e => e.currentTarget.select()} />
-                      <button type="button" className="clean-btn" disabled={!links} onClick={() => links && copy('direct', links.direct_url)}>{copied === 'direct' ? 'Скопійовано ✓' : 'Копіювати'}</button>
+                {([
+                  { key: 'direct', title: 'Пряме посилання', tag: 'без комісії', free: true, text: 'Ваш особистий запис. Кладіть його в Instagram, Telegram, візитку — клієнт, що записався звідси, ваш назавжди.', url: links?.direct_url, qr: qrUrl },
+                  { key: 'market', title: 'Посилання вітрини', tag: `комісія ${commission}%`, free: false, text: 'Так вас знаходять у каталозі BookEra. Комісія — лише з першого завершеного візиту нового клієнта, що прийшов звідси; повторні візити без комісії.', url: links?.marketplace_url, qr: qrMarketUrl },
+                ] as const).map(l => (
+                  <section key={l.key} className="mk-link-card">
+                    <div className="mk-link-main">
+                      <h3>{l.title} <span className={`mk-free ${l.free ? '' : 'paid'}`}>{l.tag}</span></h3>
+                      <p>{l.text}</p>
+                      <div className="mk-url">
+                        <input readOnly className="clean-input" value={l.url || 'Завантаження…'} onFocus={e => e.currentTarget.select()} />
+                        <button type="button" className="clean-btn" disabled={!links} onClick={() => l.url && copy(l.key as 'direct' | 'market', l.url)}>{copied === l.key ? 'Скопійовано ✓' : 'Копіювати'}</button>
+                      </div>
                     </div>
-                  </div>
-                  {links && (
-                    <div className="mk-qr">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={qrUrl} alt="QR-код прямого посилання" width={132} height={132} />
-                      <button type="button" className="mk-link-btn" onClick={() => void downloadQr()}>Завантажити QR</button>
-                    </div>
-                  )}
-                </section>
-
-                <section className="mk-link-card plain">
-                  <div className="mk-link-main">
-                    <h3>Посилання вітрини</h3>
-                    <p>Так вас знаходять у каталозі BookEra. За нового клієнта, що прийшов звідси, стягується комісія {commission}% із його першого завершеного візиту. Повторні візити — без комісії.</p>
-                    <div className="mk-url">
-                      <input readOnly className="clean-input" value={links?.marketplace_url || 'Завантаження…'} onFocus={e => e.currentTarget.select()} />
-                      <button type="button" className="clean-btn-ghost" disabled={!links} onClick={() => links && copy('market', links.marketplace_url)}>{copied === 'market' ? 'Скопійовано ✓' : 'Копіювати'}</button>
-                    </div>
-                  </div>
-                </section>
+                    {links && (
+                      <div className="mk-qr">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={l.qr} alt={`QR-код: ${l.title}`} width={132} height={132} />
+                        <button type="button" className="mk-link-btn" onClick={() => void downloadQr(l.qr, `qr-${l.key}-${business?.slug || 'booking'}.png`)}>Завантажити QR</button>
+                      </div>
+                    )}
+                  </section>
+                ))}
               </div>
             )}
           </div>
@@ -592,8 +587,8 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
                 <p className="mk-note">Комісія — лише з першого завершеного візиту нового клієнта з вітрини, не за запис. Розсилки, QR, власні й повторні клієнти її не мають.</p>
               </div>
             )}
+          <HintCard title={hint.t}>{hint.x}</HintCard>
           </div>
-          <HintCard flush title={hint.t}>{hint.x}</HintCard>
         </aside>
       </div>
 
@@ -768,12 +763,12 @@ export default function MarketingTab({ business, preset, services = [] }: { busi
         .mk-ok { margin-top: 0.8rem; padding: 0.7rem 1rem; border-radius: 10px; background: #f0fdf4; color: #166534; font-size: 0.85rem; font-weight: 600; }
 
         /* Посилання */
-        .mk-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1rem; align-items: start; }
+        .mk-links { display: flex; flex-direction: column; gap: 1rem; max-width: 760px; }
         .mk-link-card { display: flex; gap: 1.4rem; align-items: center; justify-content: space-between; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.3rem 1.4rem; background: #fff; flex-wrap: wrap; }
-        .mk-link-card.plain { background: #f8fafc; }
         .mk-link-main { flex: 1; min-width: 260px; }
         .mk-link-main h3 { margin: 0 0 0.3rem; font-size: 1.05rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 0.6rem; }
         .mk-link-main p { margin: 0 0 0.9rem; font-size: 0.85rem; line-height: 1.5; color: #64748b; }
+        .mk-free.paid { color: #475569; background: #f1f5f9; }
         .mk-free { font-size: 0.7rem; font-weight: 700; color: #059669; background: #ecfdf5; border-radius: 999px; padding: 0.15rem 0.55rem; }
         .mk-url { display: flex; gap: 0.5rem; }
         .mk-qr { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }

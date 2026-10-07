@@ -22,7 +22,7 @@ export default function HintCard({ title, children, action, flush = false }: { t
         </div>
       )}
       <style dangerouslySetInnerHTML={{ __html: `
-        .hintcard { background: #f8f7ff; border: 1px solid #ece9fb; border-radius: 12px; margin-top: auto; }
+        .hintcard { background: #f8f7ff; border: 1px solid #ece9fb; border-radius: 12px; margin-top: 0.8rem; }
         .hintcard.flush { margin: auto 1.2rem 1.2rem; }
         .hintcard-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.6rem 0.85rem; border: none; background: none; font-family: inherit; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #7c3aed; cursor: pointer; }
         .hintcard-head span { display: inline-flex; align-items: center; gap: 0.4rem; }

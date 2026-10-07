@@ -429,8 +429,8 @@ export default function StatsTab({ business, onNavigate }: { business: any; serv
                 <div className="st-row"><span>Заплановано далі</span><b>{cur.upcoming}</b></div>
               </div>
             )}
+          <HintCard title={hint.t}>{hint.x}</HintCard>
           </div>
-          <HintCard flush title={hint.t}>{hint.x}</HintCard>
         </aside>
       </div>
 

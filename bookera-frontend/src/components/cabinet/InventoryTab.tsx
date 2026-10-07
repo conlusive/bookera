@@ -418,8 +418,8 @@ export default function InventoryTab({ business }: any) {
               )}
             </>
           )}
+          <HintCard title={hint.t}>{hint.x}</HintCard>
           </div>
-          <HintCard flush title={hint.t}>{hint.x}</HintCard>
         </aside>
       </div>
 

@@ -1177,10 +1177,7 @@ const handleSaveShifts = async () => {
           .cal-toolbar__search { flex: 1 1 90px !important; }
           .cal-toolbar__search input { height: 36px !important; font-size: 16px !important; }
           .cal-toolbar__right button { padding: 0.5rem 0.3rem !important; font-size: 0.78rem !important; }
-          /* На телефоні показуємо лише той вигляд, на який можна перемкнутись: одна іконка замість двох */
-          .cal-layout-toggle { background: transparent !important; padding: 0 !important; }
-          .cal-layout-toggle button[aria-pressed="true"] { display: none !important; }
-          .cal-layout-toggle button { padding: 0.35rem 0.4rem !important; background: #f1f5f9 !important; }
+          .cal-layout-pill { padding: 0.3rem 0.6rem !important; font-size: 0.78rem !important; }
           .cal-toolbar__right button { padding: 0.5rem 0.22rem !important; }
           .cal-master-btn { padding: 0.35rem 0.2rem !important; font-size: 0.8rem !important; gap: 0.2rem !important; }
           .cal-toolbar__rest { gap: 0.1rem !important; }
@@ -1459,6 +1456,23 @@ const handleSaveShifts = async () => {
                   : `${currentDate.toLocaleString('uk-UA', { weekday: 'short' })}, ${currentDate.getDate()} ${currentDate.toLocaleString('uk-UA', { month: 'short' })}`
               }
             </div>
+            {calendarView === 'day' && (
+              /* Кнопка називає той вигляд, на який перемикає: з іконкою й словом зрозуміло, що день можна дивитись інакше */
+              <button
+                type="button"
+                className="cal-layout-pill"
+                title={dayLayout === 'grid' ? 'Показати списком за майстрами' : 'Показати сіткою за годинами'}
+                onClick={() => { const next = dayLayout === 'grid' ? 'list' : 'grid'; setDayLayout(next); try { localStorage.setItem('bookera_dayLayout', next); } catch { /* */ } }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', borderRadius: '999px', padding: '0.3rem 0.75rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
+              >
+                {dayLayout === 'grid' ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
+                )}
+                {dayLayout === 'grid' ? 'Список' : 'Сітка'}
+              </button>
+            )}
           </div>
 
           <div className="cal-toolbar__rest" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
@@ -1594,22 +1608,6 @@ const handleSaveShifts = async () => {
                   );
                 })}
               </div>
-
-              {calendarView === 'day' && (
-                <div className="cal-layout-toggle" role="group" aria-label="Вигляд дня" style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px', flexShrink: 0 }}>
-                  {([['grid', 'Сітка'], ['list', 'Список']] as const).map(([mode, label]) => (
-                    <button key={mode} type="button" title={label} aria-label={label} aria-pressed={dayLayout === mode}
-                      onClick={() => { setDayLayout(mode); try { localStorage.setItem('bookera_dayLayout', mode); } catch { /* */ } }}
-                      style={{ border: 'none', cursor: 'pointer', borderRadius: '6px', padding: '0.3rem 0.45rem', display: 'flex', alignItems: 'center', background: dayLayout === mode ? '#fff' : 'transparent', color: dayLayout === mode ? '#0f172a' : '#94a3b8', boxShadow: dayLayout === mode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
-                      {mode === 'grid' ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="18" rx="1.5"/></svg>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
 
               <button
                 type="button"

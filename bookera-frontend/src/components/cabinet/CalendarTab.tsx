@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Icons, MASTER_COLORS, toLocalDateStr, checkSameDay, CurrentTimeIndicator } from '@/components/shared';
+import { Icons, masterPalette, toLocalDateStr, checkSameDay, CurrentTimeIndicator } from '@/components/shared';
 import { isOwnerRole } from '@/lib/roles';
 import { api } from '@/lib/api';
 import { getAuthToken } from '@/lib/auth-token-client';
@@ -720,10 +720,12 @@ const handleSaveShifts = async () => {
 
   const getMasterColor = (staffId: string) => {
     if (!staffId) return { pastelBg: '#f1f5f9', pastelBorder: '#cbd5e1', pastelText: '#475569', vividBg: '#64748b', vividBorder: '#475569' };
-    const masterIndex = team.findIndex((m: any) => String(m.id) === String(staffId));
-    if (masterIndex === -1) return MASTER_COLORS[0];
-    return MASTER_COLORS[masterIndex % MASTER_COLORS.length];
+    // Номер за відсортованим списком id: колір не залежить від порядку команди у відповіді сервера
+    const masterIndex = masterOrder.indexOf(String(staffId));
+    if (masterIndex === -1) return masterPalette(0);
+    return masterPalette(masterIndex);
   };
+  const masterOrder = useMemo(() => (team || []).map((m: any) => String(m.id)).sort(), [team]);
 
   // Колір картки - завжди за майстром: у салоні з кількома людьми саме
   // це найшвидше відповідає на питання «чий це запис».
@@ -1182,7 +1184,7 @@ const handleSaveShifts = async () => {
           background-color: #ffffff !important;
         }
         .cal-list-inner { padding: 0 1.75rem 6rem; }
-        .cal-list-row { display: grid; grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.6fr) 7rem 8.5rem; column-gap: 1.25rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f4f6f8; cursor: pointer; }
+        .cal-list-row { padding-left: 0.75rem !important; padding-right: 0.25rem !important; display: grid; grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.6fr) 7rem 8.5rem; column-gap: 1.25rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #f4f6f8; cursor: pointer; }
         @media (hover: hover) { .cal-list-row:hover { background: #fafbfc; } }
         .cal-list-row.with-master { grid-template-columns: 5rem minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 0.9fr) 7rem 8.5rem; }
         .cl-status { text-align: right; }
@@ -1538,7 +1540,7 @@ const handleSaveShifts = async () => {
                       onClick={() => { setFilterMaster(m.id); setIsMasterFilterOpen(false); }}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 0.8rem', fontSize: '0.9rem', fontWeight: String(filterMaster) === String(m.id) ? '700' : '500', color: String(filterMaster) === String(m.id) ? '#0f172a' : '#475569', cursor: 'pointer', borderRadius: '8px', background: String(filterMaster) === String(m.id) ? '#f1f5f9' : 'transparent', marginBottom: '0.1rem' }}
                     >
-                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: String(filterMaster) === String(m.id) ? '#0f172a' : '#e2e8f0', color: String(filterMaster) === String(m.id) ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: '800', flexShrink: 0 }}>
+                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: String(filterMaster) === String(m.id) ? getCardColor(String(m.id)).vividBg : getCardColor(String(m.id)).pastelBg, color: String(filterMaster) === String(m.id) ? '#fff' : getCardColor(String(m.id)).pastelText, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: '800', flexShrink: 0 }}>
                         {getUserInitials(m.name)}
                       </div>
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</span>
@@ -1778,7 +1780,7 @@ const handleSaveShifts = async () => {
                           const master = withMaster ? masterName(app) : '';
                           return (
                             <div key={app.id} className={`cal-list-row${withMaster ? ' with-master' : ''}`} onClick={(e) => openBookingDetails(app, e)} role="button" tabIndex={0}
-                              style={{ opacity: off ? 0.55 : 1 }}>
+                              style={{ opacity: off ? 0.55 : 1, boxShadow: `inset 3px 0 0 ${app.staff_id && !block ? getCardColor(String(app.staff_id)).vividBg : '#cbd5e1'}` }}>
                               <div className="cl-time" style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.25 }}>
                                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{String(app.start_time).substring(0, 5)}</div>
                                 {app.end_time && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{String(app.end_time).substring(0, 5)}</div>}
@@ -1788,9 +1790,14 @@ const handleSaveShifts = async () => {
                               </div>
                               <div className="cl-svc" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {block ? '' : [svc?.name || app.service_name, dur].filter(Boolean).join(' · ')}
-                                {master && <span className="cl-m-only"> · {master}</span>}
+                                {master && <span className="cl-m-only" style={{ color: getCardColor(String(app.staff_id)).pastelText, fontWeight: 600 }}> · {master}</span>}
                               </div>
-                              {withMaster && <div className="cl-master" style={{ fontSize: '0.8rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{master}</div>}
+                              {withMaster && (
+                                <div className="cl-master" style={{ fontSize: '0.8rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  {master && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: getCardColor(String(app.staff_id)).vividBg, flexShrink: 0 }} />}
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{master}</span>
+                                </div>
+                              )}
                               <div className="cl-price" style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', textAlign: 'right' }}>
                                 {!block && app.price ? `${Number(app.price).toLocaleString('uk-UA')} ₴` : ''}
                               </div>
@@ -1830,6 +1837,7 @@ const handleSaveShifts = async () => {
                   title={m.id !== '__none' ? 'Показати лише цього майстра' : undefined}
                   style={{ flex: 1, minWidth: 0, padding: '0.5rem 0.4rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: 600, color: m.id === '__none' ? '#A5AEA3' : '#2E3A30', cursor: m.id === '__none' ? 'default' : 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                 >
+                  {m.id !== '__none' && <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: getCardColor(String(m.id)).vividBg, marginRight: '0.4rem', verticalAlign: 'middle' }} />}
                   {m.name}
                 </div>
               ))}

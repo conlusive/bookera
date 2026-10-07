@@ -163,6 +163,28 @@ export const MASTER_COLORS = [
   { pastelBg: '#f3f4f6', pastelBorder: '#d1d5db', pastelText: '#111827', vividBg: '#6b7280', vividBorder: '#4b5563' },
 ];
 
+/**
+ * Колір майстра за його порядковим номером у команді - без обмеження на розмір команди.
+ * Перші 12 - добірні кольори. Далі колір генерується «золотим кутом» (137.5° по колу відтінків):
+ * сусідні номери завжди далеко один від одного, а кожне нове коло змінює насиченість і світлість,
+ * тому навіть у команді з 40 людей кольори не зливаються і не повторюються.
+ */
+export const masterPalette = (index: number) => {
+  if (index < MASTER_COLORS.length) return MASTER_COLORS[Math.max(0, index)];
+  const n = index - MASTER_COLORS.length;
+  const hue = Math.round((n * 137.508 + 20) % 360);
+  const tier = Math.floor(n / 6) % 3;                 // 0 - соковитий, 1 - темніший, 2 - світліший
+  const sat = [68, 58, 74][tier];
+  const vivid = [48, 38, 58][tier];
+  return {
+    pastelBg: `hsl(${hue} 80% 92%)`,
+    pastelBorder: `hsl(${hue} 70% 76%)`,
+    pastelText: `hsl(${hue} 60% 20%)`,
+    vividBg: `hsl(${hue} ${sat}% ${vivid}%)`,
+    vividBorder: `hsl(${hue} ${sat}% ${vivid - 10}%)`,
+  };
+};
+
 export const toLocalDateStr = (d: Date) => {
   const offset = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - offset).toISOString().split('T')[0];

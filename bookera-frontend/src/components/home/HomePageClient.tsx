@@ -23,6 +23,7 @@ import NearbyPrompt, { useNearbyPrompt } from '@/components/home/NearbyPrompt';
 import SectionHeader from '@/components/home/SectionHeader';
 import BusinessShowcase from '@/components/home/BusinessShowcase';
 import HowItWorks from '@/components/home/HowItWorks';
+import ClientFaq from '@/components/home/ClientFaq';
 import { rankBusinesses, type RankResult, type SortContext, type SortMode, type SortScope } from '@/lib/storefront-sort';
 import ProfileMenu from '@/components/ui/ProfileMenu';
 import SiteFooter from '@/components/ui/SiteFooter';
@@ -2487,6 +2488,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           Три тези, і кожна ПОКАЗАНА живою мініатюрою поруч із текстом.
           Тексти збережено дослівно - змінилась лише подача. */}
       <HowItWorks />
+
+      {/* ПИТАННЯ КЛІЄНТІВ - якір /#faq із футера. */}
+      <ClientFaq />
 
       {/* ДЛЯ БІЗНЕСУ - на весь екран, відео-тло, текст рядками. */}
       <BusinessShowcase />

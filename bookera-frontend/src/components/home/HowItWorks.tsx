@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Check, Mail, Star } from 'lucide-react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
+import Link from 'next/link';
+import { ArrowRight, CalendarCheck, CalendarClock, CalendarX2, Check, Clock3, Images, Mail, MessageSquareText, PhoneOff, Star } from 'lucide-react';
 
 /**
  * Як працює продукт - три тези, і кожна ПОКАЗАНА, а не описана.
@@ -401,7 +402,19 @@ function Stars({ size }: { size: number }) {
 
 /* ------------------------------------------------------------------ */
 
-const ROWS = [
+type Fact = { Icon: ComponentType<{ size?: number; strokeWidth?: number }>; text: string };
+type Row = {
+  eyebrow: string;
+  title: [string, string];
+  paragraphs: string[];
+  /** Три короткі факти під текстом - те, що око вихоплює, коли абзаци пропускає. */
+  facts: Fact[];
+  /** Дія наприкінці рядка: href - перехід, без href - до списку закладів на цій сторінці. */
+  cta: { label: string; href?: string };
+  Demo: ComponentType<{ play: boolean }>;
+};
+
+const ROWS: Row[] = [
   {
     eyebrow: 'Запис',
     title: ['Зручно бронюйте', 'візити онлайн'],
@@ -409,6 +422,12 @@ const ROWS = [
       'Хочете записатися до перукаря, барбера, на манікюр чи в масажний салон у вашому районі? Шукаєте місце, де найкращі спеціалісти подбають про вашу красу?',
       'BookEra — це сервіс миттєвого бронювання, де можна легко й швидко знаходити вільні дати та записуватися. Більше жодних телефонних дзвінків.',
     ],
+    facts: [
+      { Icon: Clock3, text: 'Вільний час наживо' },
+      { Icon: CalendarCheck, text: 'Запис цілодобово' },
+      { Icon: PhoneOff, text: 'Без дзвінків' },
+    ],
+    cta: { label: 'Знайти вільний час' },
     Demo: BookingDemo,
   },
   {
@@ -418,6 +437,12 @@ const ROWS = [
       'Керуйте своїми візитами звідусіль. Переносьте записи або скасовуйте бронювання без незручних телефонних дзвінків та пояснень.',
       'Ми знаємо, що у вас щодня безліч справ! Тому BookEra надсилатиме вам автоматичні нагадування про майбутні візити, аби ви нічого не пропустили.',
     ],
+    facts: [
+      { Icon: Mail, text: 'Нагадування на пошту' },
+      { Icon: CalendarClock, text: 'Перенесення онлайн' },
+      { Icon: CalendarX2, text: 'Скасування без дзвінка' },
+    ],
+    cta: { label: 'Мої записи', href: '/account/profile' },
     Demo: ReminderDemo,
   },
   {
@@ -427,11 +452,28 @@ const ROWS = [
       "У BookEra ви знайдете найкращі заклади для здоров'я та салони краси у вашому регіоні.",
       'Дізнайтеся більше про них — переглядайте профілі, читайте реальні відгуки інших клієнтів та ознайомлюйтеся з їхніми роботами перед тим, як записатись.',
     ],
+    facts: [
+      { Icon: Star, text: 'Рейтинг закладів' },
+      { Icon: MessageSquareText, text: 'Відгуки клієнтів' },
+      { Icon: Images, text: 'Фото робіт' },
+    ],
+    cta: { label: 'Переглянути заклади' },
     Demo: ReviewsDemo,
   },
 ];
 
-function Row({ row, index }: { row: typeof ROWS[number]; index: number }) {
+/**
+ * До списку закладів на цій же сторінці. Блок «поруч» буває прихованим
+ * (немає закладів) - тоді нагору, до пошуку в шапці.
+ */
+function scrollToSalons(e: React.MouseEvent) {
+  e.preventDefault();
+  const el = document.getElementById('salons-section');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  else window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function Row({ row, index }: { row: Row; index: number }) {
   const { ref, inView } = useInView<HTMLDivElement>();
   // Рядки чергуються: текст ліворуч, потім праворуч. Три однакові
   // рядки поспіль читаються як таблиця, чергування дає ритм.
@@ -441,18 +483,28 @@ function Row({ row, index }: { row: typeof ROWS[number]; index: number }) {
   return (
     <div ref={ref} className={`row ${reversed ? 'reversed' : ''} ${inView ? 'in' : ''}`}>
       <div className="text">
-        <div className="eyebrow"><span className="num">{String(index + 1).padStart(2, '0')}</span><i />{row.eyebrow}</div>
+        <div className="eyebrow"><span className="num">{String(index + 1).padStart(2, '0')}</span>{row.eyebrow}</div>
         <h3>
           {row.title[0]}
           <br />
           <span className="soft">{row.title[1]}</span>
         </h3>
         {row.paragraphs.map((p, i) => <p key={i}>{p}</p>)}
+
+        <ul className="facts">
+          {row.facts.map(({ Icon, text }) => (
+            <li key={text}><span><Icon size={13} strokeWidth={2.4} /></span>{text}</li>
+          ))}
+        </ul>
+
+        {row.cta.href
+          ? <Link href={row.cta.href} className="cta">{row.cta.label}<ArrowRight size={16} /></Link>
+          : <a href="#salons-section" onClick={scrollToSalons} className="cta">{row.cta.label}<ArrowRight size={16} /></a>}
       </div>
 
-      {/* Сцена - та сама мова, що й у блоці BookEra Business: м'яке тло
-          з кольорами майстрів. Кольори - градієнтами, які малюються один
-          раз; розмиті плями поверх них перемальовувались при прокрутці. */}
+      {/* Сцена - рівна пастельна плашка без градієнтів, як у Booksy чи
+          Fresha: увага на предметі, а не на тлі. У кожного рядка свій
+          приглушений колір - кольори майстрів із календаря. */}
       <div className={`visual tone-${index + 1}`}>
         <Demo play={inView} />
       </div>
@@ -491,18 +543,25 @@ export default function HowItWorks() {
         }
         .how .row.in .text { opacity: 1; transform: none; }
 
-        /* Номер кроку тонкою лінією - три рядки читаються як одна історія. */
+        /* Номер кроку - три рядки читаються як одна історія. */
         .how .eyebrow {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 0.65rem;
+          gap: 0.55rem;
           font-size: 0.8125rem;
           font-weight: 600;
           color: #4F7A55;
           margin-bottom: 1.1rem;
         }
-        .how .eyebrow .num { color: #9AA79C; font-variant-numeric: tabular-nums; }
-        .how .eyebrow i { width: 22px; height: 1px; background: #C9D5CB; }
+        .how .eyebrow .num {
+          padding: 0.2rem 0.5rem;
+          border-radius: 999px;
+          background: #E7F0E8;
+          color: #3E6444;
+          font-size: 0.72rem;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+        }
         .how h3 {
           font-size: clamp(2rem, 3.6vw, 2.75rem);
           font-weight: 700;
@@ -520,6 +579,29 @@ export default function HowItWorks() {
           max-width: 470px;
         }
 
+        .how .facts { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0 1.75rem; padding: 0; }
+        .how .facts li {
+          display: inline-flex; align-items: center; gap: 0.45rem;
+          padding: 0.38rem 0.8rem 0.38rem 0.4rem;
+          border-radius: 999px; background: #fff; border: 1px solid #E3ECE4;
+          font-size: 0.85rem; font-weight: 500; color: #2B3A30;
+        }
+        .how .facts li span {
+          width: 22px; height: 22px; border-radius: 50%;
+          background: #EEF5EF; color: #3E6444;
+          display: inline-flex; align-items: center; justify-content: center;
+        }
+
+        .how .cta {
+          display: inline-flex; align-items: center; gap: 0.45rem;
+          font-size: 0.95rem; font-weight: 600; color: #16211A;
+          text-decoration: underline; text-underline-offset: 4px; text-decoration-color: rgba(22, 33, 26, 0.3);
+          transition: text-decoration-color 0.2s ease;
+        }
+        .how .cta svg { transition: transform 0.25s var(--ease); }
+        .how .cta:hover { text-decoration-color: #16211A; }
+        .how .cta:hover svg { transform: translateX(3px); }
+
         /* --- Сцена --- */
         .how .visual {
           position: relative;
@@ -532,16 +614,11 @@ export default function HowItWorks() {
           padding: clamp(3rem, 5vw, 4.5rem) clamp(1.5rem, 4vw, 3.5rem);
           border-radius: 32px;
           min-height: 500px;
-          box-shadow: inset 0 0 0 1px rgba(22, 33, 26, 0.05);
-          background:
-            radial-gradient(90% 60% at 50% 0%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 60%),
-            radial-gradient(65% 55% at 88% 8%, var(--t1) 0%, rgba(255, 255, 255, 0) 70%),
-            radial-gradient(65% 55% at 8% 100%, var(--t2) 0%, rgba(255, 255, 255, 0) 70%),
-            #F2F6F2;
+          background: var(--tone);
         }
-        .how .tone-1 { --t1: rgba(191, 216, 195, 0.85); --t2: rgba(217, 216, 245, 0.6); }
-        .how .tone-2 { --t1: rgba(191, 216, 195, 0.85); --t2: rgba(251, 231, 198, 0.75); }
-        .how .tone-3 { --t1: rgba(251, 231, 198, 0.75); --t2: rgba(217, 216, 245, 0.6); }
+        .how .tone-1 { --tone: #E9F0EA; }
+        .how .tone-2 { --tone: #F4EEE4; }
+        .how .tone-3 { --tone: #EEEDF6; }
 
         /* --- Спільна картка мініатюри --- */
         .how .demo-card {
@@ -835,6 +912,8 @@ export default function HowItWorks() {
           .how .row { gap: 1.4rem; padding: 2rem 0; }
           .how .text p:nth-of-type(n+2) { display: none; }
           .how h3 { margin-bottom: 0.9rem; }
+          .how .facts { margin: 1rem 0 1.1rem; gap: 0.4rem; }
+          .how .facts li { font-size: 0.8rem; }
           .how .visual { min-height: 0; padding: 2.25rem 1.1rem; border-radius: 24px; }
           .how .demo-card { padding: 1.25rem; }
           .how .device { max-width: 240px; border-radius: 44px; }
@@ -844,7 +923,7 @@ export default function HowItWorks() {
 
         @media (prefers-reduced-motion: reduce) {
           .how .text, .how .demo-card, .how .device, .how .notif,
-          .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .demo-cursor, .how .bar-fill {
+          .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .demo-cursor, .how .bar-fill, .how .cta svg {
             transition: none !important;
           }
         }

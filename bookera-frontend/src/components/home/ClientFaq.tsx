@@ -130,7 +130,8 @@ export default function ClientFaq() {
           --ink: #16211A;
           --muted: #5B6A5F;
           --line: #DCE3DC;
-          padding: clamp(3rem, 6vw, 5.5rem) 0 clamp(3.5rem, 7vw, 6rem);
+          /* Зверху мало: над блоком уже є нижній відступ «Порад стилю». */
+          padding: clamp(1rem, 2.5vw, 2rem) 0 clamp(3.5rem, 7vw, 6rem);
           scroll-margin-top: 90px;
         }
         .faq-grid {

@@ -2489,9 +2489,6 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           Тексти збережено дослівно - змінилась лише подача. */}
       <HowItWorks />
 
-      {/* ПИТАННЯ КЛІЄНТІВ - якір /#faq із футера. */}
-      <ClientFaq />
-
       {/* ДЛЯ БІЗНЕСУ - на весь екран, відео-тло, текст рядками. */}
       <BusinessShowcase />
 
@@ -2506,6 +2503,9 @@ export default function HomePageClient({ initialBusinesses, rankingRules = null 
           <StyleTipsCarousel />
         </div>
       </section>
+
+      {/* ПИТАННЯ КЛІЄНТІВ - останнім перед футером; якір /#faq із футера. */}
+      <ClientFaq />
 
       {/* ЧОРНИЙ ФУТЕР ІЗ КОТИКОМ */}
       <SiteFooter />

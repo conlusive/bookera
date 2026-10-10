@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ComponentType } from 'react';
-import Link from 'next/link';
-import { ArrowRight, CalendarCheck, CalendarClock, CalendarX2, Check, Clock3, Images, Mail, MessageSquareText, PhoneOff, Star } from 'lucide-react';
+import { Check, Mail, Star } from 'lucide-react';
 
 /**
  * Як працює продукт - три тези, і кожна ПОКАЗАНА, а не описана.
@@ -11,8 +10,10 @@ import { ArrowRight, CalendarCheck, CalendarClock, CalendarX2, Check, Clock3, Im
  * вибір часу й підтвердження, лист-нагадування, рейтинг, що
  * наповнюється. Людина бачить, як це працює, за дві секунди.
  *
- * Подача стримана: один предмет на сцені, без плашок і наліпок
- * навколо. Кожна додаткова вставка відбирає увагу в головного.
+ * Кожен пункт - одна картка: текст і сцена разом, як розворот журналу.
+ * Окремо текст на білому й окремо кольоровий прямокутник поруч
+ * читалися як два непов'язані блоки. Факти - простим списком із
+ * лініями: пігулки з іконками в кружечках виглядали шаблонно.
  *
  * ПЛАВНІСТЬ. Анімуються лише transform і opacity - їх малює відеокарта,
  * не перераховуючи сторінку. Розмитих плям (filter: blur) і скла
@@ -402,15 +403,12 @@ function Stars({ size }: { size: number }) {
 
 /* ------------------------------------------------------------------ */
 
-type Fact = { Icon: ComponentType<{ size?: number; strokeWidth?: number }>; text: string };
 type Row = {
   eyebrow: string;
   title: [string, string];
   paragraphs: string[];
   /** Три короткі факти під текстом - те, що око вихоплює, коли абзаци пропускає. */
-  facts: Fact[];
-  /** Дія наприкінці рядка: href - перехід, без href - до списку закладів на цій сторінці. */
-  cta: { label: string; href?: string };
+  facts: string[];
   Demo: ComponentType<{ play: boolean }>;
 };
 
@@ -423,11 +421,10 @@ const ROWS: Row[] = [
       'BookEra — це сервіс миттєвого бронювання, де можна легко й швидко знаходити вільні дати та записуватися. Більше жодних телефонних дзвінків.',
     ],
     facts: [
-      { Icon: Clock3, text: 'Вільний час наживо' },
-      { Icon: CalendarCheck, text: 'Запис цілодобово' },
-      { Icon: PhoneOff, text: 'Без дзвінків' },
+      'Вільний час наживо',
+      'Запис цілодобово',
+      'Без дзвінків',
     ],
-    cta: { label: 'Знайти вільний час' },
     Demo: BookingDemo,
   },
   {
@@ -438,11 +435,10 @@ const ROWS: Row[] = [
       'Ми знаємо, що у вас щодня безліч справ! Тому BookEra надсилатиме вам автоматичні нагадування про майбутні візити, аби ви нічого не пропустили.',
     ],
     facts: [
-      { Icon: Mail, text: 'Нагадування на пошту' },
-      { Icon: CalendarClock, text: 'Перенесення онлайн' },
-      { Icon: CalendarX2, text: 'Скасування без дзвінка' },
+      'Нагадування на пошту',
+      'Перенесення онлайн',
+      'Скасування без дзвінка',
     ],
-    cta: { label: 'Мої записи', href: '/account/profile' },
     Demo: ReminderDemo,
   },
   {
@@ -453,25 +449,13 @@ const ROWS: Row[] = [
       'Дізнайтеся більше про них — переглядайте профілі, читайте реальні відгуки інших клієнтів та ознайомлюйтеся з їхніми роботами перед тим, як записатись.',
     ],
     facts: [
-      { Icon: Star, text: 'Рейтинг закладів' },
-      { Icon: MessageSquareText, text: 'Відгуки клієнтів' },
-      { Icon: Images, text: 'Фото робіт' },
+      'Рейтинг закладів',
+      'Відгуки клієнтів',
+      'Фото робіт',
     ],
-    cta: { label: 'Переглянути заклади' },
     Demo: ReviewsDemo,
   },
 ];
-
-/**
- * До списку закладів на цій же сторінці. Блок «поруч» буває прихованим
- * (немає закладів) - тоді нагору, до пошуку в шапці.
- */
-function scrollToSalons(e: React.MouseEvent) {
-  e.preventDefault();
-  const el = document.getElementById('salons-section');
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  else window.scrollTo({ top: 0, behavior: 'smooth' });
-}
 
 function Row({ row, index }: { row: Row; index: number }) {
   const { ref, inView } = useInView<HTMLDivElement>();
@@ -483,28 +467,24 @@ function Row({ row, index }: { row: Row; index: number }) {
   return (
     <div ref={ref} className={`row ${reversed ? 'reversed' : ''} ${inView ? 'in' : ''}`}>
       <div className="text">
-        <div className="eyebrow"><span className="num">{String(index + 1).padStart(2, '0')}</span>{row.eyebrow}</div>
-        <h3>
-          {row.title[0]}
-          <br />
-          <span className="soft">{row.title[1]}</span>
-        </h3>
-        {row.paragraphs.map((p, i) => <p key={i}>{p}</p>)}
+        <div>
+          <div className="eyebrow">{row.eyebrow}</div>
+          <h3>
+            {row.title[0]}
+            <br />
+            <span className="soft">{row.title[1]}</span>
+          </h3>
+          {row.paragraphs.map((p, i) => <p key={i}>{p}</p>)}
+        </div>
 
         <ul className="facts">
-          {row.facts.map(({ Icon, text }) => (
-            <li key={text}><span><Icon size={13} strokeWidth={2.4} /></span>{text}</li>
-          ))}
+          {row.facts.map(text => <li key={text}>{text}</li>)}
         </ul>
-
-        {row.cta.href
-          ? <Link href={row.cta.href} className="cta">{row.cta.label}<ArrowRight size={16} /></Link>
-          : <a href="#salons-section" onClick={scrollToSalons} className="cta">{row.cta.label}<ArrowRight size={16} /></a>}
       </div>
 
-      {/* Сцена - рівна пастельна плашка без градієнтів, як у Booksy чи
-          Fresha: увага на предметі, а не на тлі. У кожного рядка свій
-          приглушений колір - кольори майстрів із календаря. */}
+      {/* Сцена - рівна приглушена плашка всередині картки, з відступом
+          від її краю: «картка в картці». У кожного пункту свій колір -
+          кольори майстрів із календаря. */}
       <div className={`visual tone-${index + 1}`}>
         <Demo play={inView} />
       </div>
@@ -514,93 +494,83 @@ function Row({ row, index }: { row: Row; index: number }) {
 
 export default function HowItWorks() {
   return (
-    <section className="how">
+    <section className="how" aria-labelledby="how-title">
       <div className="container">
-        {ROWS.map((row, i) => <Row key={i} row={row} index={i} />)}
+        <header className="how-head">
+          <div className="how-label">Для клієнтів</div>
+          <h2 id="how-title">Як працює BookEra</h2>
+        </header>
+        <div className="cards">
+          {ROWS.map((row, i) => <Row key={i} row={row} index={i} />)}
+        </div>
       </div>
 
       <style jsx global>{`
-        .how { padding: 3rem 0 6rem; }
-
-        .how .row {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-          gap: clamp(3rem, 6vw, 6rem);
-          align-items: center;
-          padding: clamp(3rem, 6vw, 5rem) 0;
-        }
-        .how .row.reversed .text { order: 2; }
-        .how .row.reversed .visual { order: 1; }
+        .how { padding: 4rem 0 6rem; }
 
         /* Одна крива на всю секцію: швидкий старт, довге м'яке гальмування. */
         .how { --ease: cubic-bezier(0.22, 1, 0.36, 1); }
 
-        /* Текст виринає разом зі своїм рядком - по черзі з мініатюрою. */
-        .how .text {
+        .how-head { text-align: center; margin: 0 auto clamp(2rem, 4vw, 3rem); }
+        .how-label { font-size: 0.8125rem; font-weight: 600; color: #6F7A71; margin-bottom: 0.6rem; }
+        .how-head h2 {
+          margin: 0; font-size: clamp(2rem, 4vw, 3rem); font-weight: 700;
+          line-height: 1.05; letter-spacing: -0.035em; color: #16211A;
+        }
+
+        .how .cards { display: flex; flex-direction: column; gap: 1rem; }
+
+        /* Картка пункту: світло-сіра, текст і сцена в одній рамці. */
+        .how .row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          align-items: stretch;
+          padding: 10px;
+          border-radius: 30px;
+          background: #F5F5F3;
+          box-shadow: inset 0 0 0 1px rgba(22, 33, 26, 0.04);
           opacity: 0;
-          transform: translate3d(0, 20px, 0);
+          transform: translate3d(0, 24px, 0);
           transition: opacity 0.7s ease, transform 0.9s var(--ease);
         }
-        .how .row.in .text { opacity: 1; transform: none; }
+        .how .row.in { opacity: 1; transform: none; }
+        .how .row.reversed .text { order: 2; }
+        .how .row.reversed .visual { order: 1; }
 
-        /* Номер кроку - три рядки читаються як одна історія. */
-        .how .eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.55rem;
-          font-size: 0.8125rem;
-          font-weight: 600;
-          color: #4F7A55;
-          margin-bottom: 1.1rem;
+        /* Текст угорі, факти внизу - як підпис під журнальним розворотом. */
+        .how .text {
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          gap: 2rem;
+          padding: clamp(1.75rem, 3.5vw, 3rem);
         }
-        .how .eyebrow .num {
-          padding: 0.2rem 0.5rem;
-          border-radius: 999px;
-          background: #E7F0E8;
-          color: #3E6444;
-          font-size: 0.72rem;
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
-        }
+        .how .eyebrow { font-size: 0.8125rem; font-weight: 600; color: #4F7A55; margin-bottom: 0.9rem; }
         .how h3 {
-          font-size: clamp(2rem, 3.6vw, 2.75rem);
+          font-size: clamp(1.75rem, 3vw, 2.4rem);
           font-weight: 700;
-          line-height: 1.06;
-          letter-spacing: -0.035em;
+          line-height: 1.08;
+          letter-spacing: -0.03em;
           color: #16211A;
-          margin: 0 0 1.5rem;
+          margin: 0 0 1.25rem;
         }
         .how h3 .soft { color: #8A978D; }
         .how .text p {
-          font-size: 1.0625rem;
+          font-size: 1rem;
           line-height: 1.65;
           color: #55655A;
-          margin: 0 0 1rem;
-          max-width: 470px;
+          margin: 0 0 0.9rem;
+          max-width: 460px;
         }
 
-        .how .facts { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0 1.75rem; padding: 0; }
+        .how .facts { list-style: none; margin: 0; padding: 0; max-width: 460px; }
         .how .facts li {
-          display: inline-flex; align-items: center; gap: 0.45rem;
-          padding: 0.38rem 0.8rem 0.38rem 0.4rem;
-          border-radius: 999px; background: #fff; border: 1px solid #E3ECE4;
-          font-size: 0.85rem; font-weight: 500; color: #2B3A30;
+          padding: 0.8rem 0;
+          border-top: 1px solid #E3E5E1;
+          font-size: 0.9375rem;
+          font-weight: 500;
+          color: #2B3A30;
         }
-        .how .facts li span {
-          width: 22px; height: 22px; border-radius: 50%;
-          background: #EEF5EF; color: #3E6444;
-          display: inline-flex; align-items: center; justify-content: center;
-        }
-
-        .how .cta {
-          display: inline-flex; align-items: center; gap: 0.45rem;
-          font-size: 0.95rem; font-weight: 600; color: #16211A;
-          text-decoration: underline; text-underline-offset: 4px; text-decoration-color: rgba(22, 33, 26, 0.3);
-          transition: text-decoration-color 0.2s ease;
-        }
-        .how .cta svg { transition: transform 0.25s var(--ease); }
-        .how .cta:hover { text-decoration-color: #16211A; }
-        .how .cta:hover svg { transform: translateX(3px); }
 
         /* --- Сцена --- */
         .how .visual {
@@ -611,9 +581,9 @@ export default function HowItWorks() {
           display: flex;
           justify-content: center;
           align-items: center;
-          padding: clamp(3rem, 5vw, 4.5rem) clamp(1.5rem, 4vw, 3.5rem);
-          border-radius: 32px;
-          min-height: 500px;
+          padding: clamp(2.5rem, 4.5vw, 4rem) clamp(1.25rem, 3.5vw, 3rem);
+          border-radius: 22px;
+          min-height: 480px;
           background: var(--tone);
         }
         .how .tone-1 { --tone: #E9F0EA; }
@@ -753,7 +723,9 @@ export default function HowItWorks() {
           position: relative;
           box-sizing: border-box;
           width: 100%;
-          max-width: 290px;
+          /* Нижчий за картки сусідніх пунктів не буде, але й не витягує
+             свою картку вдвічі вищою за них. */
+          max-width: 250px;
           aspect-ratio: 9 / 19;
           min-height: 0;
           border-radius: 50px;
@@ -806,7 +778,7 @@ export default function HowItWorks() {
         /* Тонкий і великий, як справжній годинник екрана блокування. */
         .how .lock-time {
           text-align: center;
-          font-size: 4.1rem;
+          font-size: 3.6rem;
           font-weight: 300;
           line-height: 1;
           letter-spacing: -0.04em;
@@ -899,7 +871,7 @@ export default function HowItWorks() {
         .how .quote p { margin: 0.75rem 0 0; font-size: 0.95rem; line-height: 1.55; color: #3A3A3C; }
 
         @media (max-width: 860px) {
-          .how .row { grid-template-columns: minmax(0, 1fr); gap: 2.5rem; }
+          .how .row { grid-template-columns: minmax(0, 1fr); }
           /* На телефоні текст завжди першим: чергування на одній
              колонці лише плутає порядок читання. */
           .how .row.reversed .text { order: 1; }
@@ -908,13 +880,13 @@ export default function HowItWorks() {
 
         /* Телефон: один абзац замість двох і менше повітря між блоками. */
         @media (max-width: 640px) {
-          .how { padding: 1rem 0 2rem; }
-          .how .row { gap: 1.4rem; padding: 2rem 0; }
+          .how { padding: 2.5rem 0 3rem; }
+          .how .row { padding: 8px; border-radius: 26px; }
+          .how .text { padding: 1.4rem 1.1rem 1.25rem; gap: 1.25rem; }
           .how .text p:nth-of-type(n+2) { display: none; }
           .how h3 { margin-bottom: 0.9rem; }
-          .how .facts { margin: 1rem 0 1.1rem; gap: 0.4rem; }
-          .how .facts li { font-size: 0.8rem; }
-          .how .visual { min-height: 0; padding: 2.25rem 1.1rem; border-radius: 24px; }
+          .how .facts li { padding: 0.65rem 0; font-size: 0.875rem; }
+          .how .visual { min-height: 0; padding: 2rem 1rem; border-radius: 20px; }
           .how .demo-card { padding: 1.25rem; }
           .how .device { max-width: 240px; border-radius: 44px; }
           .how .screen { border-radius: 35px; }
@@ -922,8 +894,8 @@ export default function HowItWorks() {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .how .text, .how .demo-card, .how .device, .how .notif,
-          .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .demo-cursor, .how .bar-fill, .how .cta svg {
+          .how .row, .how .demo-card, .how .device, .how .notif,
+          .how .confirm, .how .quote, .how .slot, .how .slot-glide, .how .demo-cursor, .how .bar-fill {
             transition: none !important;
           }
         }
